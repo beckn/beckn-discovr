@@ -1,0 +1,124 @@
+# Kafka configuration for Docker
+spring:
+  application:
+    name: discovery-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:discovery-service}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        spring.json.add.type.headers: false
+    listener:
+      ack-mode: manual_immediate
+      concurrency: 3
+      missing-topics-fatal: false
+  
+  # PostgreSQL datasource configuration
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:postgres}:${POSTGRES_PORT:5432}/${POSTGRES_DB:catalog_db}
+    username: ${POSTGRES_USER:catalog_user}
+    password: ${POSTGRES_PASSWORD:catalog123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${POSTGRES_MAX_POOL_SIZE:10}
+      minimum-idle: 5
+      connection-timeout: 30000
+      data-source-properties:
+        preparedStatementCacheQueries: ${POSTGRES_PS_CACHE_QUERIES:256}
+        preparedStatementCacheSizeMiB: ${POSTGRES_PS_CACHE_SIZE_MIB:16}
+
+# Discovery Service Configuration for Docker
+discovery:
+  kafka:
+    request-topic: ${KAFKA_REQUEST_TOPIC:catalog.v2.discovery.requests}
+    response-topic: ${KAFKA_RESPONSE_TOPIC:catalog.discovery.response}
+  
+  nlweb:
+    base-url: ${NLWEB_BASE_URL:http://nlweb-service:8000}
+    ask-endpoint: ${NLWEB_ASK_ENDPOINT:/ask}
+    timeout-seconds: ${NLWEB_TIMEOUT_SECONDS:30}
+    streaming: ${NLWEB_STREAMING:false}
+    score-threshold: ${NLWEB_SCORE_THRESHOLD:80}
+    max-retries: ${NLWEB_MAX_RETRIES:3}
+    retry-delay-ms: ${NLWEB_RETRY_DELAY_MS:1000}
+  
+  # PostgreSQL configuration
+  postgresql:
+    host: ${POSTGRES_HOST:postgres}
+    port: ${POSTGRES_PORT:5432}
+    database: ${POSTGRES_DB:catalog_db}
+    username: ${POSTGRES_USER:catalog_user}
+    password: ${POSTGRES_PASSWORD:catalog123}
+    # Catalog-level attributes to extract from catalog.payload
+    catalog-attributes-to-extract:
+      - "beckn:offers"
+
+# Management and monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,readiness,liveness
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    kafka:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        step: 10s
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        discovery.requests.duration: true
+        discovery.nlweb.duration: true
+        discovery.processing.duration: true
+        discovery.publishing.duration: true
+    tags:
+      application: discovery-service
+      environment: docker
+  tracing:
+    enabled: false
+  info:
+    env:
+      enabled: true
+    java:
+      enabled: true
+    build:
+      enabled: true
+
+# Logging configuration
+logging:
+  level:
+    org.beckn.discover: ${LOGGING_LEVEL_ORG_BECKN_DISCOVER:INFO}
+    org.springframework.kafka: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA:ERROR}
+    org.apache.kafka: ${LOGGING_LEVEL_ORG_APACHE_KAFKA:ERROR}
+    root: ${LOGGING_LEVEL_ROOT:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{bapId},%X{transactionId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{bapId},%X{transactionId}] %logger{36} - %msg%n"
+  file:
+    name: /app/logs/discovery-service.log
+
+# Server configuration
+server:
+  port: 8080
+  # servlet:
+  #   context-path: /discovery-service
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain

@@ -1,0 +1,210 @@
+package org.beckn.discover.model;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+import java.util.List;
+
+/**
+ * Item DTO
+ * 
+ * Represents an item within a catalog from the discovery response.
+ */
+public class Item {
+
+    @NotBlank(message = "@context is required")
+    @JsonProperty("@context")
+    private String context;
+
+    @NotBlank(message = "@type is required")
+    @JsonProperty("@type")
+    private String type;
+
+    @NotBlank(message = "beckn:id is required")
+    @JsonProperty("beckn:id")
+    private String id;
+
+    @NotNull(message = "beckn:descriptor is required")
+    @Valid
+    @JsonProperty("beckn:descriptor")
+    private Descriptor descriptor;
+
+    @JsonProperty("beckn:category")
+    private CategoryCode category;
+
+    @JsonProperty("beckn:availableAt")
+    private List<Location> availableAt;
+
+    @JsonProperty("beckn:availabilityWindow")
+    private List<TimePeriod> availabilityWindow;
+
+    @JsonProperty("beckn:rateable")
+    private Boolean rateable;
+
+    @JsonProperty("beckn:rating")
+    private Rating rating;
+
+    @JsonProperty("beckn:isActive")
+    private Boolean isActive;
+
+    @JsonProperty("beckn:networkId")
+    private List<String> networkId;
+
+    @JsonProperty("beckn:acceptedPaymentMethod")
+    private List<String> acceptedPaymentMethod;
+
+    @NotNull(message = "beckn:provider is required")
+    @Valid
+    @JsonProperty("beckn:provider")
+    private Provider provider;
+
+    @NotNull(message = "beckn:itemAttributes is required")
+    @Valid
+    @JsonProperty("beckn:itemAttributes")
+    private Attributes itemAttributes;
+
+    // Default constructor
+    public Item() {
+    }
+
+    // Constructor with required fields
+    public Item(String context, String type, String id, Descriptor descriptor, Provider provider,
+            Attributes itemAttributes) {
+        this.context = context;
+        this.type = type;
+        this.id = id;
+        this.descriptor = descriptor;
+        this.provider = provider;
+        this.itemAttributes = itemAttributes;
+    }
+
+    // Getters and Setters
+    public String getContext() {
+        return context;
+    }
+
+    public void setContext(String context) {
+        this.context = context;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public Descriptor getDescriptor() {
+        return descriptor;
+    }
+
+    public void setDescriptor(Descriptor descriptor) {
+        this.descriptor = descriptor;
+    }
+
+    public CategoryCode getCategory() {
+        return category;
+    }
+
+    public void setCategory(CategoryCode category) {
+        this.category = category;
+    }
+
+    public List<Location> getAvailableAt() {
+        return availableAt;
+    }
+
+    public void setAvailableAt(List<Location> availableAt) {
+        this.availableAt = availableAt;
+    }
+
+    public List<TimePeriod> getAvailabilityWindow() {
+        return availabilityWindow;
+    }
+
+    public void setAvailabilityWindow(List<TimePeriod> availabilityWindow) {
+        this.availabilityWindow = availabilityWindow;
+    }
+
+    public Boolean getRateable() {
+        return rateable;
+    }
+
+    public void setRateable(Boolean rateable) {
+        this.rateable = rateable;
+    }
+
+    public Rating getRating() {
+        return rating;
+    }
+
+    public void setRating(Rating rating) {
+        this.rating = rating;
+    }
+
+    public Boolean getIsActive() {
+        return isActive;
+    }
+
+    public void setIsActive(Boolean isActive) {
+        this.isActive = isActive;
+    }
+
+    public List<String> getNetworkId() {
+        return networkId;
+    }
+
+    public void setNetworkId(List<String> networkId) {
+        this.networkId = networkId;
+    }
+
+    public List<String> getAcceptedPaymentMethod() {
+        return acceptedPaymentMethod;
+    }
+
+    public void setAcceptedPaymentMethod(List<String> acceptedPaymentMethod) {
+        this.acceptedPaymentMethod = acceptedPaymentMethod;
+    }
+
+    public Provider getProvider() {
+        return provider;
+    }
+
+    public void setProvider(Provider provider) {
+        this.provider = provider;
+    }
+
+    public Attributes getItemAttributes() {
+        return itemAttributes;
+    }
+
+    public void setItemAttributes(Attributes itemAttributes) {
+        this.itemAttributes = itemAttributes;
+    }
+
+    @Override
+    public String toString() {
+        return "Item{" +
+                "context='" + context + '\'' +
+                ", type='" + type + '\'' +
+                ", id='" + id + '\'' +
+                ", descriptor=" + descriptor +
+                ", category=" + category +
+                ", provider=" + provider +
+                ", itemAttributes=" + itemAttributes +
+                ", isActive=" + isActive +
+                ", acceptedPaymentMethod=" + acceptedPaymentMethod +
+                '}';
+    }
+}

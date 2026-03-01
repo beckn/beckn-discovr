@@ -1,0 +1,178 @@
+package org.beckn.discover.model;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+import java.util.List;
+
+/**
+ * Catalog DTO
+ * 
+ * Represents a catalog containing items from the discovery response.
+ */
+public class Catalog {
+
+    @NotBlank(message = "@context is required")
+    @JsonProperty("@context")
+    private String context;
+
+    @NotBlank(message = "@type is required")
+    @JsonProperty("@type")
+    private String type;
+
+    @NotBlank(message = "beckn:id is required")
+    @JsonProperty("beckn:id")
+    private String id;
+
+    @NotNull(message = "beckn:descriptor is required")
+    @Valid
+    @JsonProperty("beckn:descriptor")
+    private Descriptor descriptor;
+
+    @JsonProperty("beckn:providerId")
+    private String providerId;
+
+    @JsonProperty("beckn:bppId")
+    private String bppId;
+
+    @JsonProperty("beckn:bppUri")
+    private String bppUri;
+
+    @JsonProperty("beckn:validity")
+    private TimePeriod validity;
+
+    @NotNull(message = "beckn:items is required")
+    @Valid
+    @JsonProperty("beckn:items")
+    private List<Item> items;
+
+    @JsonProperty("beckn:offers")
+    private List<Object> offers;
+
+    // Default constructor
+    public Catalog() {}
+
+    // Constructor with required fields
+    public Catalog(String context, String type, String id, Descriptor descriptor, List<Item> items) {
+        this.context = context;
+        this.type = type;
+        this.id = id;
+        this.descriptor = descriptor;
+        this.items = items;
+    }
+
+    /** Returns a shallow copy of this catalog with the given items list. */
+    public Catalog copyWithItems(List<Item> newItems) {
+        Catalog copy = new Catalog();
+        copy.context = this.context;
+        copy.type = this.type;
+        copy.id = this.id;
+        copy.descriptor = this.descriptor;
+        copy.providerId = this.providerId;
+        copy.bppId = this.bppId;
+        copy.bppUri = this.bppUri;
+        copy.validity = this.validity;
+        copy.offers = this.offers;
+        copy.items = newItems;
+        return copy;
+    }
+
+    // Getters and Setters
+    public String getContext() {
+        return context;
+    }
+
+    public void setContext(String context) {
+        this.context = context;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public Descriptor getDescriptor() {
+        return descriptor;
+    }
+
+    public void setDescriptor(Descriptor descriptor) {
+        this.descriptor = descriptor;
+    }
+
+    public String getProviderId() {
+        return providerId;
+    }
+
+    public void setProviderId(String providerId) {
+        this.providerId = providerId;
+    }
+
+    public TimePeriod getValidity() {
+        return validity;
+    }
+
+    public void setValidity(TimePeriod validity) {
+        this.validity = validity;
+    }
+
+    public List<Item> getItems() {
+        return items;
+    }
+
+    public void setItems(List<Item> items) {
+        this.items = items;
+    }
+
+    public List<Object> getOffers() {
+        return offers;
+    }
+
+    public void setOffers(List<Object> offers) {
+        this.offers = offers;
+    }
+
+    public String getBppId() {
+        return bppId;
+    }
+
+    public void setBppId(String bppId) {
+        this.bppId = bppId;
+    }
+
+    public String getBppUri() {
+        return bppUri;
+    }
+
+    public void setBppUri(String bppUri) {
+        this.bppUri = bppUri;
+    }
+
+    @Override
+    public String toString() {
+        return "Catalog{" +
+                "context='" + context + '\'' +
+                ", type='" + type + '\'' +
+                ", id='" + id + '\'' +
+                ", descriptor=" + descriptor +
+                ", providerId='" + providerId + '\'' +
+                ", bppId='" + bppId + '\'' +
+                ", bppUri='" + bppUri + '\'' +
+                ", validity=" + validity +
+                ", items=" + items +
+                ", offers=" + offers +
+                '}';
+    }
+}

@@ -1,0 +1,19 @@
+{
+  "context": {
+    "message_id": "550e8400-e29b-41d4-a716-446655440000",
+    "transaction_id": "a9aaecca-10b7-4d19-b640-b047a7c62196",
+    "bap_id": "example-bap.com",
+    "timestamp": "2024-01-15T10:30:00Z",
+    "action": "discover",
+    "version": "2.0.0",
+    "domain": "ev-charging",
+    "schema_context": [
+      "not-a-url",
+      "random text",
+      "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"
+    ]
+  },
+  "message": {
+    "text_search": "ev charging stations"
+  }
+}

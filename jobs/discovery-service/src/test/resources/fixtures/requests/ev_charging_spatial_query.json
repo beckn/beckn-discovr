@@ -1,0 +1,37 @@
+{
+  "context": {
+    "domain": "beckn.one:mobility:ev-charging:*",
+    "action": "discover",
+    "version": "2.0.0",
+    "country": "IND",
+    "city": "std:BLR",
+    "bap_id": "https://evcharging-bap.example.com",
+    "bap_uri": "https://evcharging-bap.example.com/callback",
+    "network_id": [
+      "bap.net/ev-charging"
+    ],
+    "schema_context": [
+      "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"
+    ],
+    "transaction_id": "22c8d7b5-d1cd-4e3d-8f1d-f6b9b8c167df",
+    "message_id": "8b1e4cb2-01f1-4ab6-a6ea-2a2d30fd8e0d",
+    "ttl": "PT10M",
+    "timestamp": "2025-10-14T10:30:00.000Z"
+  },
+  "message": {
+    "spatial": [
+      {
+        "op": "s_dwithin",
+        "targets": "$.catalogs[*].\"beckn:items\"[*].\"beckn:availableAt\"[*].\"geo\"",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.5946,
+            12.9716
+          ]
+        },
+        "distanceMeters": 1000
+      }
+    ]
+  }
+}

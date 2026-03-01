@@ -1,0 +1,63 @@
+spring:
+  application:
+    name: discovery-service-test
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: discovery-service-test
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        spring.json.add.type.headers: false
+    listener:
+      ack-mode: manual_immediate
+      concurrency: 1
+      missing-topics-fatal: false
+
+# Discovery Service Configuration
+discovery:
+  kafka:
+    request-topic: catalog.v2.discovery.requests
+    response-topic: catalog.discovery.response
+  
+  nlweb:
+    base-url: http://localhost:8000
+    ask-endpoint: /ask
+    timeout-seconds: 30
+    streaming: false
+    score-threshold: 80
+
+  # Schema Validation Configuration
+  schema:
+    url: ${SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/beckn.yaml}
+    cache-ttl-hours: ${SCHEMA_CACHE_TTL_HOURS:1}
+    fetch-timeout-seconds: ${SCHEMA_FETCH_TIMEOUT_SECONDS:30}
+    max-retries: ${SCHEMA_FETCH_MAX_RETRIES:3}
+    retry-delay-ms: ${SCHEMA_FETCH_RETRY_DELAY_MS:1000}  
+
+  # Registry Authentication Configuration
+  registry-auth:
+    enabled: false
+    registry-token: ""
+    cache-ttl-seconds: 300
+    retry-attempts: 3
+    timeout-seconds: 10
+
+# Logging Configuration
+logging:
+  level:
+    org.beckn.discover: DEBUG
+    org.springframework.kafka: ERROR
+    org.apache.kafka: ERROR
+    root: WARN
+
+# Server Configuration
+server:
+  port: 0  # Random port for tests
