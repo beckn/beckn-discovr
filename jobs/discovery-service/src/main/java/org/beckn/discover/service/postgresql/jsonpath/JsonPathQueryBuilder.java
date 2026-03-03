@@ -34,25 +34,15 @@ public class JsonPathQueryBuilder {
     public QuerySpec build(String filters, List<String> schemaTypes, List<String> schemaContextUrls, int limit) {
         String processedFilter = jsonPathConverter.processFilter(filters);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
+        String postgresFilter = toPostgresFilter(processedFilter);
 
-        if (hasSelectionPath) {
-            // WHERE: exists(path) for row matching (works for catalog/item/offer paths).
-            // SELECT: filter-result column with same path (returns matched elements for offer-like results).
-            String postgresFilter = toPostgresFilter(processedFilter);
-            QuerySpec query = QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT_WITH_FILTER_RESULT, processedFilter)
+        var template = hasSelectionPath
+                ? QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT_WITH_FILTER_RESULT, processedFilter)
+                : QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
+        QuerySpec query = template
                 .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
                 .schemaFilters(schemaTypes, schemaContextUrls)
                 .build(limit);
-            logger.debug("Built JSONPath query with filter-result column, {} parameters, limit {}", query.parameters().size(), limit);
-            return query;
-        }
-
-        // No filter or relative condition: use exists() in WHERE, no filter-result column.
-        String postgresFilter = toPostgresFilter(processedFilter);
-        QuerySpec query = QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT)
-            .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
-            .schemaFilters(schemaTypes, schemaContextUrls)
-            .build(limit);
         logger.debug("Built JSONPath query with {} parameters, limit {}", query.parameters().size(), limit);
         return query;
     }

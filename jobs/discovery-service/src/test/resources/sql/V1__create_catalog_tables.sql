@@ -75,8 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_item_context_url ON item(context_url);
 CREATE INDEX IF NOT EXISTS idx_item_payload_gin ON item USING GIN (payload jsonb_path_ops);
 
 -- Pre-parsed geometry rows written by catalog-publish-job / GeometryExtractor.
--- One row per (item, location-path); geom is either a Point (from "gps" fields) or Polygon.
--- The GiST index is the sole index used by SpatialQueryBuilder at query time.
+-- path format: $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo (absolute path from request targets).
 CREATE TABLE IF NOT EXISTS item_location_collection (
     item_id TEXT NOT NULL REFERENCES item(id) ON DELETE CASCADE,
     path    TEXT NOT NULL,

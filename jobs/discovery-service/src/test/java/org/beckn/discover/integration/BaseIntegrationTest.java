@@ -227,10 +227,11 @@ public abstract class BaseIntegrationTest {
             }
         } else {
             // Fallback: seed geometry for the EV charging test fixture.
-            // The GPS coordinate "12.9716,77.5946" (lat,lon) is stored as Point(lon,lat).
+            // Path format matches catalog-publish-job and request targets.
             // Used by spatialQueryUsesPostgisTargets — s_dwithin with radius 1000m.
-            insertItemLocationGeom("ev-charger-ccs2-001", "$/beckn:availableAt[0]/geo/gps", 77.5946, 12.9716);
-            insertItemLocationGeom("ev-charger-ccs2-002", "$/beckn:availableAt[0]/geo/gps", 77.5700, 12.9800);
+            String path = "$.catalogs[*].\"beckn:items\"[*].\"beckn:availableAt\"[*].\"geo\"";
+            insertItemLocationGeom("ev-charger-ccs2-001", path, 77.5946, 12.9716);
+            insertItemLocationGeom("ev-charger-ccs2-002", path, 77.5700, 12.9800);
         }
     }
 
@@ -254,7 +255,7 @@ public abstract class BaseIntegrationTest {
      * </p>
      *
      * @param itemId the FK into {@code item.id}
-     * @param path   the path token (e.g. {@code $/beckn:availableAt[0]/geo/gps})
+     * @param path   the path token (e.g. {@code $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo})
      * @param lon    longitude (x), in degrees
      * @param lat    latitude (y), in degrees
      */

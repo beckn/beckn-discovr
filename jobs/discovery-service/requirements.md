@@ -139,12 +139,12 @@ updated_at  TIMESTAMPTZ  ← ORDER BY
 ### `item_location_collection` table
 ```
 item_id  TEXT FK → item(id) ON DELETE CASCADE
-path     TEXT             (e.g. "$/beckn:availableAt[0]/geo/gps")
+path     TEXT             (e.g. "$.catalogs[*].beckn:items[*].beckn:availableAt[*].geo")
 geom     GEOMETRY(Geometry, 4326)  ← GiST index
 PRIMARY KEY (item_id, path)
 ```
 
-Written by `catalog-publish-job / GeometryExtractor`. One row per GPS point or polygon found anywhere in the item payload.
+Written by `catalog-publish-job / GeometryExtractor`. Path format matches request spatial targets (absolute path).
 
 ---
 

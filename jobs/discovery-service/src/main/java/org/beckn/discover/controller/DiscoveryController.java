@@ -109,10 +109,10 @@ public class DiscoveryController {
         logger.info("Validating request against schema");
         DiscoveryValidationService.ValidationResult result = validationService.validateDiscoverRequest(requestNode);
         if (!result.isValid()) {
-            String errors = String.join("; ", result.getErrors());
             String paths = result.getPaths().isEmpty() ? "root" : String.join(", ", result.getPaths());
-            logger.warn("Schema validation failed: {} (paths: {})", errors, paths);
-            throw new IllegalArgumentException("Schema validation failed: " + errors + " (paths: " + paths + ")");
+            String msg = "Schema validation failed: " + String.join("; ", result.getErrors()) + " (paths: " + paths + ")";
+            logger.warn(msg);
+            throw new IllegalArgumentException(msg);
         }
         logger.info("Schema validation passed");
     }

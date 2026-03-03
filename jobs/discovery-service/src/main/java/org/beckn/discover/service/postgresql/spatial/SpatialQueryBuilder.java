@@ -257,35 +257,55 @@ public class SpatialQueryBuilder {
             return false;
         }
 
-        // Template and geo-fragment selection — all function names from compile-time constants
-        String existsTemplate;
-        String geoFragment;
-        List<Object> params = new ArrayList<>(2);
-        params.add(geoJson); // ? for ST_GeomFromGeoJSON(?)
+        // Resolve targets — filter by ilc.path when specified (pass-through, no conversion)
+        List<String> paths = toPathList(c.getTargets());
+        boolean usePathFilter = !paths.isEmpty();
 
-        if (spatialOp.useGeography()) {
-            geoFragment    = QueryBuilderHelper.GEOJSON_GEOGRAPHY;
-            existsTemplate = spatialOp.hasDistance()
-                    ? QueryBuilderHelper.SPATIAL_EXISTS_CONDITION_DIST_GEOGRAPHY
-                    : QueryBuilderHelper.SPATIAL_EXISTS_CONDITION_GEOGRAPHY;
+        String pathCondition;
+        List<Object> pathParams = new ArrayList<>();
+        if (usePathFilter) {
+            pathCondition = paths.size() == 1
+                    ? "ilc.path = ?"
+                    : "ilc.path IN (" + "?, ".repeat(paths.size() - 1) + "?)";
+            pathParams.addAll(paths);
         } else {
-            geoFragment    = QueryBuilderHelper.GEOJSON_GEOMETRY;
-            existsTemplate = spatialOp.hasDistance()
-                    ? QueryBuilderHelper.SPATIAL_EXISTS_CONDITION_DIST
-                    : QueryBuilderHelper.SPATIAL_EXISTS_CONDITION;
+            pathCondition = QueryBuilderHelper.SPATIAL_PATH_ANY;
         }
 
+        String geoFragment = spatialOp.useGeography()
+                ? QueryBuilderHelper.GEOJSON_GEOGRAPHY
+                : QueryBuilderHelper.GEOJSON_GEOMETRY;
+        String geomCast = spatialOp.useGeography() ? "::geography" : "";
+        String distanceSuffix = spatialOp.hasDistance() ? ", ?" : "";
+
+        List<Object> params = new ArrayList<>(pathParams.size() + 2);
+        params.addAll(pathParams);
+        params.add(geoJson);
         if (spatialOp.hasDistance()) {
-            params.add(c.getDistanceMeters()); // ? for distance value
+            params.add(c.getDistanceMeters());
         }
 
-        // String.format receives only compile-time constants (stFunction, geoFragment)
-        String condition = String.format(existsTemplate, spatialOp.stFunction(), geoFragment);
+        String condition = String.format(QueryBuilderHelper.SPATIAL_EXISTS,
+                pathCondition, spatialOp.stFunction(), geomCast, geoFragment, distanceSuffix);
         template.condition(condition, params.toArray());
 
-        log.debug("spatial.condition.added op={} fn={} geography={} distanceMeters={}",
+        log.debug("spatial.condition.added op={} fn={} geography={} distanceMeters={} pathFilter={}",
                 op, spatialOp.stFunction(), spatialOp.useGeography(),
-                spatialOp.hasDistance() ? c.getDistanceMeters() : "n/a");
+                spatialOp.hasDistance() ? c.getDistanceMeters() : "n/a", usePathFilter);
         return true;
+    }
+
+    /** Extracts path strings from targets (string or list). Pass-through, no conversion. */
+    private List<String> toPathList(Object targets) {
+        List<String> out = new ArrayList<>();
+        if (targets == null) return out;
+        if (targets instanceof String s) {
+            if (StringUtils.hasText(s)) out.add(s.trim());
+        } else if (targets instanceof List<?> list) {
+            for (Object o : list) {
+                if (o instanceof String s && StringUtils.hasText(s)) out.add(s.trim());
+            }
+        }
+        return out;
     }
 }

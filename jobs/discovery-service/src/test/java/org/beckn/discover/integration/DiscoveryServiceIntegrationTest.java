@@ -141,6 +141,15 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
     void spatialQueryUsesPostgisTargets() {
         DiscoverRequest request = loadRequestFixture("fixtures/requests/ev_charging_spatial_query.json");
         assertRequestValid(request);
+        Assertions.assertThat(request.getMessage().getSpatial())
+                .as("Request must have spatial constraint with targets")
+                .isNotEmpty()
+                .first()
+                .satisfies(sc -> {
+                    Assertions.assertThat(sc.getTargets()).isNotNull();
+                    Assertions.assertThat(sc.getOperation()).isEqualTo("s_dwithin");
+                    Assertions.assertThat(sc.getDistanceMeters()).isEqualTo(1000);
+                });
 
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
 
@@ -149,30 +158,83 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertResponseContextValid(response.getContext(), request.getContext());
 
         // Validate catalogs
-        Assertions.assertThat(response.getCatalogs()).hasSize(1);
+        Assertions.assertThat(response.getCatalogs())
+                .as("Spatial query with targets must return exactly one catalog")
+                .hasSize(1);
         var catalog = response.getCatalogs().get(0);
         assertCatalogValid(catalog);
-        
-        // Validate items
+
+        // Validate items — strong assertion: only the item whose geometry at the targeted path matches
         Assertions.assertThat(catalog.getItems())
+                .as("Must return exactly ev-charger-ccs2-001 (within 1000m at availableAt path)")
+                .hasSize(1)
                 .extracting(Item::getId)
                 .containsExactly("ev-charger-ccs2-001");
         Assertions.assertThat(catalog.getItems().get(0).getContext())
                 .contains("schema/core/v2/context.jsonld");
 
-        // Validate geolocation data
+        // Validate geolocation data — coordinates must match item_location_collection for the targeted path
         var firstItem = catalog.getItems().get(0);
         Assertions.assertThat(firstItem.getProvider().getId()).isEqualTo("ecopower-charging");
         Assertions.assertThat(firstItem.getAvailableAt())
-                .as("Item must have location data")
+                .as("Item must have location data from availableAt path")
                 .isNotEmpty()
                 .hasSize(1);
-        
+
         var geo = firstItem.getAvailableAt().get(0).getGeo();
-        Assertions.assertThat(geo).isNotNull();
+        Assertions.assertThat(geo)
+                .as("Geo must not be null")
+                .isNotNull();
         Assertions.assertThat(geo.getCoordinates())
-                .as("Coordinates should match database values [longitude, latitude]")
+                .as("Coordinates must match item_location_collection [longitude, latitude] for $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo")
                 .containsExactly(77.5946, 12.9716);
+    }
+
+    /**
+     * Verifies that spatial queries filter by ilc.path: only geometries at the specified
+     * target path are considered. An item with geometry at multiple paths (e.g. availableAt
+     * and serviceArea) is returned only when the geometry at the targeted path satisfies
+     * the spatial condition.
+     *
+     * <p>Fixture: ev-charger-ccs2-001 has geometry at two paths:
+     * <ul>
+     *   <li>availableAt: (77.5946, 12.9716) — within 1000m of center</li>
+     *   <li>serviceArea: (70.0, 10.0) — far outside 1000m</li>
+     * </ul>
+     *
+     * <p>Assertions:
+     * <ul>
+     *   <li>targets=availableAt → item returned (path geometry within radius)</li>
+     *   <li>targets=serviceArea → item NOT returned (path geometry outside radius)</li>
+     * </ul>
+     */
+    @Test
+    void spatialPathFilter_onlyReturnsItemsWhenTargetPathSatisfiesSpatialCondition() {
+        // Query with targets=availableAt — geometry at (77.5946, 12.9716) is within 1000m of center
+        DiscoverRequest requestAvailableAt = loadRequestFixture(
+                "fixtures/requests/spatial_targets_available_at_within_radius.json");
+        assertRequestValid(requestAvailableAt);
+
+        DiscoverResponse responseAvailableAt = discoveryService.processDiscoveryRequest(requestAvailableAt);
+
+        Assertions.assertThat(responseAvailableAt.getCatalogs())
+                .as("targets=availableAt: geometry within radius — must return catalog")
+                .hasSize(1);
+        Assertions.assertThat(responseAvailableAt.getCatalogs().get(0).getItems())
+                .as("targets=availableAt: must return ev-charger-ccs2-001")
+                .extracting(Item::getId)
+                .containsExactly("ev-charger-ccs2-001");
+
+        // Query with targets=serviceArea — geometry at (70.0, 10.0) is outside 1000m of center
+        DiscoverRequest requestServiceArea = loadRequestFixture(
+                "fixtures/requests/spatial_targets_service_area_outside_radius.json");
+        assertRequestValid(requestServiceArea);
+
+        DiscoverResponse responseServiceArea = discoveryService.processDiscoveryRequest(requestServiceArea);
+
+        Assertions.assertThat(responseServiceArea.getCatalogs())
+                .as("targets=serviceArea: geometry outside radius — must NOT return any catalog (path filter applied)")
+                .isEmpty();
     }
 
     @Test

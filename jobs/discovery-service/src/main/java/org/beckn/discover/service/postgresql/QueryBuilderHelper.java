@@ -70,58 +70,19 @@ public final class QueryBuilderHelper {
     // ============================
 
     /**
-     * Correlated EXISTS subquery for topological spatial filtering (planar, no
-     * distance).
-     *
-     * <p>
-     * Usage:
-     * {@code String.format(SPATIAL_EXISTS_CONDITION, stFunction, geoFragment)}<br>
-     * Example output:
-     * {@code EXISTS (SELECT 1 FROM item_location_collection ilc WHERE ilc.item_id = i.id AND ST_Within(ilc.geom, ST_SetSRID(ST_GeomFromGeoJSON(?::text), 4326)))}
-     * </p>
+     * Correlated EXISTS subquery for spatial filtering.
+     * <p>Format args: pathCondition, stFunction, geomCast, geoFragment, distanceSuffix
+     * <ul>
+     *   <li>pathCondition: {@code "TRUE"} or {@code "ilc.path = ?"} or {@code "ilc.path IN (?, ?)"}</li>
+     *   <li>geomCast: {@code ""} (planar) or {@code "::geography"}</li>
+     *   <li>distanceSuffix: {@code ""} or {@code ", ?"}</li>
+     * </ul>
      */
-    public static final String SPATIAL_EXISTS_CONDITION = "EXISTS (SELECT 1 FROM item_location_collection ilc "
-            + "WHERE ilc.item_id = i.id AND %s(ilc.geom, %s))";
+    public static final String SPATIAL_EXISTS = "EXISTS (SELECT 1 FROM item_location_collection ilc "
+            + "WHERE ilc.item_id = i.id AND %s AND %s(ilc.geom%s, %s%s))";
 
-    /**
-     * Correlated EXISTS subquery for topological spatial filtering (planar, no
-     * distance),
-     * geography variant. Casts {@code ilc.geom} to {@code geography} for
-     * metre-accurate results.
-     *
-     * <p>
-     * Usage:
-     * {@code String.format(SPATIAL_EXISTS_CONDITION_GEOGRAPHY, stFunction, geoFragment)}
-     * </p>
-     */
-    public static final String SPATIAL_EXISTS_CONDITION_GEOGRAPHY = "EXISTS (SELECT 1 FROM item_location_collection ilc "
-            + "WHERE ilc.item_id = i.id AND %s(ilc.geom::geography, %s))";
-
-    /**
-     * Correlated EXISTS subquery for distance-based spatial filtering (e.g.
-     * ST_DWithin, planar).
-     *
-     * <p>
-     * The caller appends one additional bind parameter for the distance value
-     * after the GeoJSON parameter.
-     * </p>
-     */
-    public static final String SPATIAL_EXISTS_CONDITION_DIST = "EXISTS (SELECT 1 FROM item_location_collection ilc "
-            + "WHERE ilc.item_id = i.id AND %s(ilc.geom, %s, ?))";
-
-    /**
-     * Correlated EXISTS subquery for distance-based spatial filtering, geography
-     * variant
-     * (uses metre-accurate distance). {@code ilc.geom} is cast to
-     * {@code geography}.
-     *
-     * <p>
-     * The caller appends one additional bind parameter for the distance value
-     * after the GeoJSON parameter.
-     * </p>
-     */
-    public static final String SPATIAL_EXISTS_CONDITION_DIST_GEOGRAPHY = "EXISTS (SELECT 1 FROM item_location_collection ilc "
-            + "WHERE ilc.item_id = i.id AND %s(ilc.geom::geography, %s, ?))";
+    /** Path condition when no targets: match any geometry. */
+    public static final String SPATIAL_PATH_ANY = "TRUE";
 
     /**
      * User-supplied GeoJSON geometry cast as geographic type (SRID 4326, units =

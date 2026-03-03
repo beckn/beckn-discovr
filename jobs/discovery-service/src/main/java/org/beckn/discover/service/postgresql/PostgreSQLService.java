@@ -97,39 +97,13 @@ public class PostgreSQLService {
         if (!request.hasFilters()) {
             throw new IllegalArgumentException("Filter expression cannot be null or empty");
         }
-
         log.debug("jsonpath.query.start transactionId={}", request.transactionId());
-        Instant start = Instant.now();
-
-        try {
-            QueryBuilderHelper.QuerySpec query = jsonPathQueryBuilder.build(
-                    request.filters(),
-                    request.schemaTypes(),
-                    request.schemaContextUrls(),
-                    resultLimit());
-
-            logExplainIfEnabled(query, "jsonpath");
-
-            List<Map<String, Object>> rows = jdbcClient.sql(query.sql())
-                    .params(query.parameters())
-                    .query()
-                    .listOfRows();
-
-            long ms = elapsed(start);
-            log.info("jsonpath.query.success rows={} durationMs={} transactionId={}",
-                    rows.size(), ms, request.transactionId());
-            perfLog.info("jsonpath.query durationMs={} rows={} transactionId={}",
-                    ms, rows.size(), request.transactionId());
-            return rows;
-
-        } catch (IllegalArgumentException e) {
-            throw e; // bypass retry
-        } catch (Exception e) {
-            long ms = elapsed(start);
-            log.error("jsonpath.query.failed durationMs={} transactionId={} error={}",
-                    ms, request.transactionId(), e.getMessage(), e);
-            throw new Exception("PostgreSQL JSONPath query failed", e);
-        }
+        QueryBuilderHelper.QuerySpec query = jsonPathQueryBuilder.build(
+                request.filters(),
+                request.schemaTypes(),
+                request.schemaContextUrls(),
+                resultLimit());
+        return executeQuery(query, "jsonpath", request.transactionId(), "PostgreSQL JSONPath query failed");
     }
 
     // ── Path C: Spatial ──────────────────────────────────────────────────────
@@ -146,44 +120,16 @@ public class PostgreSQLService {
      */
     public List<Map<String, Object>> executeSpatialQuery(QueryRequest request) throws Exception {
         log.info("spatial.query.start transactionId={}", request.transactionId());
-        Instant start = Instant.now();
-
         Optional<QueryBuilderHelper.QuerySpec> queryOpt = spatialQueryBuilder.build(
                 request.spatial(),
                 request.schemaTypes(),
                 request.schemaContextUrls(),
                 resultLimit());
-
         if (queryOpt.isEmpty()) {
             log.debug("spatial.query.skip reason=no-conditions transactionId={}", request.transactionId());
             return new ArrayList<>();
         }
-
-        QueryBuilderHelper.QuerySpec query = queryOpt.get();
-        log.debug("spatial.query.execute params={} transactionId={}",
-                query.parameters().size(), request.transactionId());
-
-        try {
-            logExplainIfEnabled(query, "spatial");
-
-            List<Map<String, Object>> rows = jdbcClient.sql(query.sql())
-                    .params(query.parameters())
-                    .query()
-                    .listOfRows();
-
-            long ms = elapsed(start);
-            log.info("spatial.query.success rows={} durationMs={} transactionId={}",
-                    rows.size(), ms, request.transactionId());
-            perfLog.info("spatial.query durationMs={} rows={} transactionId={}",
-                    ms, rows.size(), request.transactionId());
-            return rows;
-
-        } catch (Exception e) {
-            long ms = elapsed(start);
-            log.error("spatial.query.failed durationMs={} transactionId={} error={}",
-                    ms, request.transactionId(), e.getMessage(), e);
-            throw new Exception("Spatial query failed", e);
-        }
+        return executeQuery(queryOpt.get(), "spatial", request.transactionId(), "Spatial query failed");
     }
 
     // ── Path A: Combined ─────────────────────────────────────────────────────
@@ -201,46 +147,20 @@ public class PostgreSQLService {
      */
     public Optional<List<Map<String, Object>>> executeCombinedQuery(QueryRequest request) throws Exception {
         log.info("combined.query.start transactionId={}", request.transactionId());
-        Instant start = Instant.now();
-
         Optional<QueryBuilderHelper.QuerySpec> queryOpt = spatialQueryBuilder.buildCombined(
                 request.spatial(),
                 request.filters(),
                 request.schemaTypes(),
                 request.schemaContextUrls(),
                 resultLimit());
-
         if (queryOpt.isEmpty()) {
             log.debug("combined.query.skip reason=no-spatial-conditions transactionId={}",
                     request.transactionId());
             return Optional.empty(); // ← caller must fall back to parallel
         }
-
-        QueryBuilderHelper.QuerySpec query = queryOpt.get();
-        log.debug("combined.query.execute params={} transactionId={}",
-                query.parameters().size(), request.transactionId());
-
-        try {
-            logExplainIfEnabled(query, "combined");
-
-            List<Map<String, Object>> rows = jdbcClient.sql(query.sql())
-                    .params(query.parameters())
-                    .query()
-                    .listOfRows();
-
-            long ms = elapsed(start);
-            log.info("combined.query.success rows={} durationMs={} transactionId={}",
-                    rows.size(), ms, request.transactionId());
-            perfLog.info("combined.query durationMs={} rows={} transactionId={}",
-                    ms, rows.size(), request.transactionId());
-
-            return Optional.of(rows); // ← may be an empty list; caller must NOT re-run
-        } catch (Exception e) {
-            long ms = elapsed(start);
-            log.error("combined.query.failed durationMs={} transactionId={} error={}",
-                    ms, request.transactionId(), e.getMessage(), e);
-            throw new Exception("Combined JSONPath + spatial query failed", e);
-        }
+        List<Map<String, Object>> rows = executeQuery(queryOpt.get(), "combined", request.transactionId(),
+                "Combined JSONPath + spatial query failed");
+        return Optional.of(rows); // ← may be an empty list; caller must NOT re-run
     }
 
     // ── Utilities ────────────────────────────────────────────────────────────
@@ -253,6 +173,30 @@ public class PostgreSQLService {
 
     private static long elapsed(Instant start) {
         return Duration.between(start, Instant.now()).toMillis();
+    }
+
+    private List<Map<String, Object>> executeQuery(QueryBuilderHelper.QuerySpec query, String queryType,
+            String transactionId, String errorMessage) throws Exception {
+        Instant start = Instant.now();
+        log.debug("{}.query.execute params={} transactionId={}", queryType, query.parameters().size(), transactionId);
+        try {
+            logExplainIfEnabled(query, queryType);
+            List<Map<String, Object>> rows = jdbcClient.sql(query.sql())
+                    .params(query.parameters())
+                    .query()
+                    .listOfRows();
+            long ms = elapsed(start);
+            log.info("{}.query.success rows={} durationMs={} transactionId={}",
+                    queryType, rows.size(), ms, transactionId);
+            perfLog.info("{}.query durationMs={} rows={} transactionId={}",
+                    queryType, ms, rows.size(), transactionId);
+            return rows;
+        } catch (Exception e) {
+            long ms = elapsed(start);
+            log.error("{}.query.failed durationMs={} transactionId={} error={}",
+                    queryType, ms, transactionId, e.getMessage(), e);
+            throw new Exception(errorMessage, e);
+        }
     }
 
     /**

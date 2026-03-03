@@ -28,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 /**
@@ -211,30 +212,9 @@ public class DiscoveryService {
     private DiscoverResponse pathAParallel(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
 
-        Map<String, String> mdcCopy = MDC.getCopyOfContextMap();
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
-
-        CompletableFuture<List<Catalog>> filterFuture = CompletableFuture.supplyAsync(() -> {
-            restoreMDC(mdcCopy);
-            try {
-                return queryEngine.executeFilterQuery(qr);
-            } catch (Exception e) {
-                throw new CompletionException("filter-query failed", e);
-            } finally {
-                MDC.clear();
-            }
-        }, queryExecutor);
-
-        CompletableFuture<List<Catalog>> spatialFuture = CompletableFuture.supplyAsync(() -> {
-            restoreMDC(mdcCopy);
-            try {
-                return queryEngine.executeSpatialQuery(qr);
-            } catch (Exception e) {
-                throw new CompletionException("spatial-query failed", e);
-            } finally {
-                MDC.clear();
-            }
-        }, queryExecutor);
+        CompletableFuture<List<Catalog>> filterFuture = runAsyncWithMdc(() -> queryEngine.executeFilterQuery(qr));
+        CompletableFuture<List<Catalog>> spatialFuture = runAsyncWithMdc(() -> queryEngine.executeSpatialQuery(qr));
 
         try {
             CompletableFuture.allOf(filterFuture, spatialFuture).get(timeoutSec, TimeUnit.SECONDS);
@@ -301,19 +281,8 @@ public class DiscoveryService {
      */
     private DiscoverResponse pathD(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
-        Map<String, String> mdcCopy = MDC.getCopyOfContextMap();
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
-
-        CompletableFuture<List<Catalog>> searchFuture = CompletableFuture.supplyAsync(() -> {
-            restoreMDC(mdcCopy);
-            try {
-                return textSearchEngine.search(qr.textSearch(), qr);
-            } catch (Exception e) {
-                throw new CompletionException("text-search failed", e);
-            } finally {
-                MDC.clear();
-            }
-        }, queryExecutor);
+        CompletableFuture<List<Catalog>> searchFuture = runAsyncWithMdc(() -> textSearchEngine.search(qr.textSearch(), qr));
 
         List<Catalog> catalogs;
         try {
@@ -415,6 +384,21 @@ public class DiscoveryService {
     private static void validateRequest(DiscoverRequest request) {
         Objects.requireNonNull(request, "DiscoverRequest must not be null");
         Objects.requireNonNull(request.getContext(), "DiscoverRequest.context must not be null");
+    }
+
+    /** Runs a callable asynchronously with MDC propagation and error handling. */
+    private CompletableFuture<List<Catalog>> runAsyncWithMdc(Callable<List<Catalog>> callable) {
+        Map<String, String> mdcCopy = MDC.getCopyOfContextMap();
+        return CompletableFuture.supplyAsync(() -> {
+            restoreMDC(mdcCopy);
+            try {
+                return callable.call();
+            } catch (Exception e) {
+                throw new CompletionException(e.getMessage(), e);
+            } finally {
+                MDC.clear();
+            }
+        }, queryExecutor);
     }
 
     // ── MDC management ────────────────────────────────────────────────────────
