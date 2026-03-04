@@ -88,11 +88,11 @@ services:
     restart: unless-stopped
 
   # Discovery Service V2
-  discovery-service-v2:
+  discovery-service:
     build:
       context: ./jobs/discovery-service
       dockerfile: Dockerfile
-    container_name: discovery-service-v2
+    container_name: discovery-service
     ports:
       - "8082:8080"
     environment:
