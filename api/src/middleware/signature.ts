@@ -1,30 +1,17 @@
-/**
- * Signature verification for on_discover requests (configurable).
- * Stub: when enabled, always returns success. Replace with real Beckn HTTP signature
- * verification (e.g. BLAKE-512 + Ed25519) later.
- */
+/** Signature verification (configurable). Stub: always success; replace with Beckn HTTP sig later. */
 
 import type { Request, Response, NextFunction } from 'express';
 import type { Config } from '../config';
 
-export async function verifySignature(_req: Request): Promise<{ verified: boolean; reason?: string }> {
-  // Stub: always succeed. Later: parse Authorization header, resolve key, verify digest.
-  return { verified: true };
-}
+export const verifySignature = async (_req: Request): Promise<{ verified: boolean; reason?: string }> => ({ verified: true });
 
-export function requireSignature(req: Request, res: Response, next: NextFunction): void {
-  const config = (req.app.locals as { config?: Config }).config;
-  if (!config?.signatureVerificationEnabled) {
+export async function requireSignature(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!(req.app.locals as { config?: Config }).config?.signatureVerificationEnabled) return next();
+  try {
+    const sig = await verifySignature(req);
+    if (!sig.verified) return void res.status(400).json({ error: 'Signature verification failed', reason: sig.reason });
     next();
-    return;
+  } catch (e) {
+    next(e);
   }
-  verifySignature(req)
-    .then((sig) => {
-      if (!sig.verified) {
-        res.status(400).json({ error: 'Signature verification failed', reason: sig.reason });
-        return;
-      }
-      next();
-    })
-    .catch(next);
 }

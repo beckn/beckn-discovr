@@ -1,53 +1,32 @@
-/**
- * POST /on_discover controller: produce validated body to Kafka and respond.
- * Validation and signature are handled by middleware.
- */
+/** POST /on_discover: produce body to Kafka. Validation/signature in middleware. */
 
 import type { Request, Response } from 'express';
 import type { Config } from '../config';
 import type { Logger } from 'pino';
 import { sendToKafka } from '../lib/kafka';
-import {
-  httpRequestsTotal,
-  httpRequestDurationSeconds,
-  kafkaSendFailuresTotal,
-  kafkaSendSuccessTotal,
-} from '../lib/metrics';
+import { httpRequestsTotal, httpRequestDurationSeconds, kafkaSendFailuresTotal, kafkaSendSuccessTotal } from '../lib/metrics';
 
-function getTransactionId(body: Record<string, unknown>): string | null {
-  const ctx = body?.context as { transaction_id?: string } | undefined;
-  return ctx?.transaction_id ?? null;
-}
+const getTransactionId = (body: Record<string, unknown>) => (body?.context as { transaction_id?: string } | undefined)?.transaction_id ?? null;
 
 const discoveryController = {
   async onDiscover(req: Request, res: Response): Promise<void> {
-    const config = (req.app.locals as { config: Config }).config;
-    const logger = (req.app.locals as { logger: Logger }).logger;
-    const method = req.method;
-    const path = req.path;
+    const { config, logger } = req.app.locals as { config: Config; logger: Logger };
+    const { method, path } = req;
     const start = Date.now();
-
     try {
       const body = req.body as Record<string, unknown>;
-      const payload = JSON.stringify(body);
       const transactionId = getTransactionId(body);
-      const key = transactionId;
-
-      await sendToKafka(config, payload, key);
+      await sendToKafka(config, JSON.stringify(body), transactionId);
       kafkaSendSuccessTotal.inc();
       logger.info({ path, transactionId }, 'Produced to Kafka');
-
       res.status(202).json({ status: 'accepted' });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
       logger.error({ path, err }, 'on_discover error');
       kafkaSendFailuresTotal.inc();
-      res.status(503).json({ error: 'Failed to produce message', message });
+      res.status(503).json({ error: 'Failed to produce message', message: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
-      const duration = (Date.now() - start) / 1000;
-      const status = res.statusCode;
-      httpRequestDurationSeconds.observe({ method, path }, duration);
-      httpRequestsTotal.inc({ method, path, status: String(status) });
+      httpRequestDurationSeconds.observe({ method, path }, (Date.now() - start) / 1000);
+      httpRequestsTotal.inc({ method, path, status: String(res.statusCode) });
     }
   },
 };

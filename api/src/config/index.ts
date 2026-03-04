@@ -1,18 +1,11 @@
-/**
- * Application config from environment. Validates required vars on load.
- */
+/** Config from env. Validates required vars on load. */
 
-function getEnv(key: string, defaultValue?: string): string {
-  const value = process.env[key] ?? defaultValue;
-  if (value === undefined || value === '') {
-    throw new Error(`Missing required env: ${key}`);
-  }
-  return value;
-}
-
-function getEnvOptional(key: string, defaultValue: string): string {
-  return process.env[key] ?? defaultValue;
-}
+const getEnv = (key: string, defaultVal?: string): string => {
+  const v = process.env[key] ?? defaultVal;
+  if (v === undefined || v === '') throw new Error(`Missing required env: ${key}`);
+  return v;
+};
+const opt = (key: string, d: string) => process.env[key] ?? d;
 
 export interface Config {
   port: number;
@@ -28,32 +21,18 @@ export interface Config {
 }
 
 export function loadConfig(): Config {
-  const port = parseInt(getEnvOptional('PORT', '3000'), 10);
-  if (Number.isNaN(port) || port < 1 || port > 65535) {
-    throw new Error('Invalid PORT');
-  }
-
-  const bootstrapServers = getEnv('KAFKA_BOOTSTRAP_SERVERS');
-  const topic = getEnv('KAFKA_ON_DISCOVER_TOPIC');
-  const clientId = getEnvOptional('KAFKA_CLIENT_ID', 'on-discover-api');
-
-  const sigEnabled = getEnvOptional('SIGNATURE_VERIFICATION_ENABLED', 'false').toLowerCase() === 'true';
-  const logLevel = getEnvOptional('LOG_LEVEL', 'info');
-  const nodeEnv = getEnvOptional('NODE_ENV', 'development');
-
-  // Schema path: at runtime we run from dist/, so schemas live at repo root of api (parent of dist)
-  const schemaPath = getEnvOptional('SCHEMA_PATH', '');
-
+  const port = parseInt(opt('PORT', '3000'), 10);
+  if (Number.isNaN(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
   return {
     port,
     kafka: {
-      bootstrapServers,
-      topic,
-      clientId,
+      bootstrapServers: getEnv('KAFKA_BOOTSTRAP_SERVERS'),
+      topic: getEnv('KAFKA_ON_DISCOVER_TOPIC'),
+      clientId: opt('KAFKA_CLIENT_ID', 'on-discover-api'),
     },
-    signatureVerificationEnabled: sigEnabled,
-    logLevel,
-    nodeEnv,
-    schemaPath,
+    signatureVerificationEnabled: opt('SIGNATURE_VERIFICATION_ENABLED', 'false').toLowerCase() === 'true',
+    logLevel: opt('LOG_LEVEL', 'info'),
+    nodeEnv: opt('NODE_ENV', 'development'),
+    schemaPath: opt('SCHEMA_PATH', ''),
   };
 }

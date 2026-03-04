@@ -1,7 +1,4 @@
-/**
- * API routes (e.g. POST /on_discover); more endpoints can be added here.
- * Schema validation: add validateOnDiscoverRequest from '../middleware/validateSchema' to the chain to re-enable.
- */
+/** Routes. Add validateOnDiscoverRequest to chain to re-enable schema validation. */
 
 import express from 'express';
 import discoveryController from '../controller/discoveryController';
