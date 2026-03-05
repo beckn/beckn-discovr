@@ -1,0 +1,170 @@
+package org.beckn.discover.service.elasticsearch;
+
+import org.beckn.discover.model.Attributes;
+import org.beckn.discover.model.Catalog;
+import org.beckn.discover.model.CategoryCode;
+import org.beckn.discover.model.Descriptor;
+import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Provider;
+import org.beckn.discover.model.Rating;
+import org.beckn.discover.service.response.CatalogProcessor;
+import org.beckn.discover.util.DiscoveryConstants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * Assembles ES hit source maps (flat documents indexed by catalog-publish-job)
+ * into {@link Catalog} objects grouped by {@code catalog_id}.
+ *
+ * <p>Each ES hit is one item document. Multiple hits from the same catalog are
+ * grouped into a single {@link Catalog} with multiple {@link Item}s.
+ * After grouping, each catalog is normalised via {@link CatalogProcessor#processCatalog}.</p>
+ */
+@Component
+@ConditionalOnProperty(name = "discovery.text-search.engine", havingValue = "elasticsearch")
+public class EsSearchAssembler {
+
+    private static final Logger log = LoggerFactory.getLogger(EsSearchAssembler.class);
+
+    private static final String ITEM_CONTEXT    = "https://becknprotocol.io/schemas/core/v1/Item/schema-context.jsonld";
+    private static final String ATTR_CONTEXT    = "https://becknprotocol.io/schemas/core/v1/Item/schema-context.jsonld";
+
+    private final CatalogProcessor catalogProcessor;
+
+    public EsSearchAssembler(CatalogProcessor catalogProcessor) {
+        this.catalogProcessor = catalogProcessor;
+    }
+
+    /**
+     * @param hits list of raw ES hit source maps
+     * @param transactionId for logging correlation
+     * @return assembled and normalised catalogs; never null
+     */
+    @SuppressWarnings("unchecked")
+    public List<Catalog> assemble(List<Map<String, Object>> hits, String transactionId) {
+        if (hits.isEmpty()) return List.of();
+
+        // Group by catalog_id — preserves insertion order for deterministic output
+        Map<String, Catalog> byCatalogId = new LinkedHashMap<>();
+
+        for (Map<String, Object> doc : hits) {
+            try {
+                String catalogId = str(doc, "catalog_id");
+                if (catalogId == null) { log.warn("es.assembler.missing-catalog-id txId={}", transactionId); continue; }
+
+                byCatalogId.computeIfAbsent(catalogId, id -> buildCatalog(id, doc))
+                           .getItems().add(buildItem(doc));
+            } catch (Exception e) {
+                log.warn("es.assembler.hit.failed txId={} error={}", transactionId, e.getMessage());
+            }
+        }
+
+        List<Catalog> result = new ArrayList<>(byCatalogId.size());
+        for (Catalog raw : byCatalogId.values()) {
+            Catalog processed = catalogProcessor.processCatalog(raw);
+            if (processed != null) result.add(processed);
+        }
+
+        log.debug("es.assembler.done hits={} catalogs={} txId={}", hits.size(), result.size(), transactionId);
+        return result;
+    }
+
+    // ── Builders ─────────────────────────────────────────────────────────────
+
+    private static Catalog buildCatalog(String catalogId, Map<String, Object> doc) {
+        Catalog catalog = new Catalog();
+        catalog.setContext(DiscoveryConstants.DEFAULT_CATALOG_CONTEXT);
+        catalog.setType(DiscoveryConstants.BECKN_CATALOG_TYPE);
+        catalog.setId(catalogId);
+        catalog.setBppId(str(doc, "bpp_id"));
+        catalog.setBppUri(str(doc, "bpp_uri"));
+        catalog.setDescriptor(new Descriptor("beckn:Descriptor"));
+        catalog.setItems(new ArrayList<>());
+
+        Object offersRaw = doc.get("offers");
+        if (offersRaw instanceof List<?> offerList && !offerList.isEmpty())
+            catalog.setOffers((List<Object>) offerList);
+
+        return catalog;
+    }
+
+    private static Item buildItem(Map<String, Object> doc) {
+        Item item = new Item();
+        item.setContext(ITEM_CONTEXT);
+        item.setType(DiscoveryConstants.BECKN_ITEM_TYPE);
+        item.setId(str(doc, "item_id"));
+        item.setDescriptor(buildDescriptor(doc));
+        item.setCategory(buildCategory(doc));
+        item.setRating(buildRating(doc));
+        item.setRateable(bool(doc, "item_rateable"));
+        item.setIsActive(bool(doc, "item_is_active"));
+        item.setProvider(buildProvider(doc));
+        item.setItemAttributes(buildAttributes(doc));
+        return item;
+    }
+
+    private static Descriptor buildDescriptor(Map<String, Object> doc) {
+        Descriptor d = new Descriptor("beckn:Descriptor");
+        d.setName(str(doc, "item_name"));
+        d.setShortDesc(str(doc, "item_short_desc"));
+        d.setLongDesc(str(doc, "item_long_desc"));
+        return d;
+    }
+
+    private static CategoryCode buildCategory(Map<String, Object> doc) {
+        String code = str(doc, "item_category_code");
+        if (code == null) return null;
+        CategoryCode cat = new CategoryCode("schema:CategoryCode", code);
+        cat.setName(str(doc, "item_category_name"));
+        return cat;
+    }
+
+    private static Rating buildRating(Map<String, Object> doc) {
+        Object ratingValue = doc.get("item_rating_value");
+        Object ratingCount = doc.get("item_rating_count");
+        if (ratingValue == null && ratingCount == null) return null;
+        Rating r = new Rating("beckn:Rating");
+        if (ratingValue instanceof Number n) r.setRatingValue(n.doubleValue());
+        if (ratingCount instanceof Number n) r.setRatingCount(n.intValue());
+        return r;
+    }
+
+    private static Provider buildProvider(Map<String, Object> doc) {
+        String providerId = str(doc, "item_provider_id");
+        if (providerId == null) return null;
+        Descriptor desc = new Descriptor("beckn:Descriptor");
+        desc.setName(str(doc, "item_provider_name"));
+        return new Provider(providerId, desc);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Attributes buildAttributes(Map<String, Object> doc) {
+        Object attrsRaw = doc.get("item_attributes");
+        if (attrsRaw instanceof Map<?, ?> map) {
+            Attributes attrs = new Attributes(ATTR_CONTEXT, "beckn:Item");
+            ((Map<String, Object>) map).forEach(attrs::setAttribute);
+            return attrs;
+        }
+        return new Attributes(ATTR_CONTEXT, "beckn:Item");
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static String str(Map<String, Object> doc, String key) {
+        Object v = doc.get(key);
+        return v instanceof String s && !s.isBlank() ? s : null;
+    }
+
+    private static Boolean bool(Map<String, Object> doc, String key) {
+        Object v = doc.get(key);
+        return v instanceof Boolean b ? b : null;
+    }
+}
