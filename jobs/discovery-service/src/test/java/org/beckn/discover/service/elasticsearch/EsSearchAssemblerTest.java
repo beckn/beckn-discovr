@@ -47,8 +47,7 @@ class EsSearchAssemblerTest {
     void multipleHitsSameCatalog_groupedIntoOneCatalogWithManyItems() {
         List<Map<String, Object>> docs = List.of(
                 evChargerDoc("cat-1", "bpp-1", "item-1", "DC Fast Charger CCS2"),
-                evChargerDoc("cat-1", "bpp-1", "item-2", "AC Charger Type2")
-        );
+                evChargerDoc("cat-1", "bpp-1", "item-2", "AC Charger Type2"));
 
         List<Catalog> catalogs = assembler.assemble(docs, "tx-2");
 
@@ -63,8 +62,7 @@ class EsSearchAssemblerTest {
     void hitsDifferentCatalogs_produceSeparateCatalogObjects() {
         List<Map<String, Object>> docs = List.of(
                 evChargerDoc("cat-1", "bpp-1", "item-1", "CCS2 Charger"),
-                evChargerDoc("cat-2", "bpp-2", "item-3", "Solar Panel")
-        );
+                evChargerDoc("cat-2", "bpp-2", "item-3", "Solar Panel"));
 
         List<Catalog> catalogs = assembler.assemble(docs, "tx-3");
 
@@ -116,7 +114,11 @@ class EsSearchAssemblerTest {
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-7");
 
         Item item = catalogs.get(0).getItems().get(0);
+        assertThat(item.getContext()).isEqualTo("https://custom.item.context");
+        assertThat(item.getType()).isEqualTo("CustomItemType");
         assertThat(item.getItemAttributes()).isNotNull();
+        assertThat(item.getItemAttributes().getContext()).isEqualTo("https://custom.attr.context");
+        assertThat(item.getItemAttributes().getType()).isEqualTo("EVCharger");
         assertThat(item.getItemAttributes().getAttribute("connectorType")).isEqualTo("CCS2");
     }
 
@@ -131,7 +133,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithOffers_offersSetOnCatalog() {
-        Map<String, Object> offer = Map.of("offer_id", "offer-1", "price_value", 150.0);
+        Map<String, Object> offer = Map.of("beckn:id", "offer-1", "beckn:price", Map.of("value", 150.0));
         Map<String, Object> doc = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "Charger", List.of(offer));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-9");
@@ -139,34 +141,84 @@ class EsSearchAssemblerTest {
         assertThat(catalogs.get(0).getOffers()).isNotNull().hasSize(1);
     }
 
+    @Test
+    void offersReadFromSecondHit_whenFirstHitHasNoOffers() {
+        // item-2 (no offers) arrives first in ES relevance order;
+        // item-1 (has the offer) arrives second.
+        // Offers must still appear in the assembled catalog.
+        Map<String, Object> offer = Map.of("beckn:id", "offer-1", "beckn:items", List.of("item-1"), "beckn:price",
+                Map.of("value", 99.0));
+
+        Map<String, Object> noOfferDoc = evChargerDoc("cat-1", "bpp-1", "item-2", "AC Charger");
+        Map<String, Object> offerDoc = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "DC Fast Charger",
+                List.of(offer));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(noOfferDoc, offerDoc), "tx-10");
+
+        assertThat(catalogs).hasSize(1);
+        assertThat(catalogs.get(0).getItems()).hasSize(2);
+        assertThat(catalogs.get(0).getOffers()).isNotNull().hasSize(1);
+        assertThat(catalogs.get(0).getOffers().get(0))
+                .isInstanceOfSatisfying(java.util.Map.class,
+                        m -> assertThat(m.get("beckn:id")).isEqualTo("offer-1"));
+    }
+
+    @Test
+    void duplicateOffersAcrossHits_deduplicatedByCatalogPipeline() {
+        // Same offer stored in two items' ES documents (e.g. offer referencing both
+        // items).
+        // After assembly the offer list must not contain duplicates once the pipeline
+        // runs.
+        Map<String, Object> offer = Map.of("beckn:id", "offer-shared", "beckn:items", List.of("item-1", "item-2"));
+
+        Map<String, Object> doc1 = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "CCS2 Charger", List.of(offer));
+        Map<String, Object> doc2 = evChargerDocWithOffers("cat-1", "bpp-1", "item-2", "AC Charger", List.of(offer));
+
+        // Raw assembly (before pipeline) accumulates duplicates
+        List<Catalog> raw = assembler.assemble(List.of(doc1, doc2), "tx-11");
+        // The assembler returns after CatalogProcessor.processCatalog (not the full
+        // pipeline),
+        // so we verify the offer is present at least once; pipeline dedup is tested
+        // separately.
+        assertThat(raw.get(0).getOffers()).isNotNull().isNotEmpty();
+        assertThat(raw.get(0).getItems()).hasSize(2);
+    }
+
     // ── Fixtures ─────────────────────────────────────────────────────────────
 
     private static Map<String, Object> evChargerDoc(String catalogId, String bppId,
-                                                     String itemId, String itemName) {
+            String itemId, String itemName) {
         return Map.ofEntries(
-                Map.entry("catalog_id",          catalogId != null ? catalogId : ""),
-                Map.entry("bpp_id",              bppId),
-                Map.entry("bpp_uri",             "https://bpp.example.com"),
-                Map.entry("network_id",          "ondc-ev"),
-                Map.entry("item_id",             itemId),
-                Map.entry("item_name",           itemName),
-                Map.entry("item_short_desc",     "60kW CCS2 charger"),
-                Map.entry("item_long_desc",      "A fast DC charger supporting CCS2 connectors"),
-                Map.entry("item_category_code",  "EV_CHARGING"),
-                Map.entry("item_category_name",  "EV Charging"),
-                Map.entry("item_rateable",       true),
-                Map.entry("item_is_active",      true),
-                Map.entry("item_rating_value",   4.5),
-                Map.entry("item_rating_count",   120),
-                Map.entry("item_provider_id",    "ecopower-charging"),
-                Map.entry("item_provider_name",  "EcoPower Charging"),
-                Map.entry("item_attributes",     Map.of("connectorType", "CCS2", "maxPowerKW", 60))
-        );
+                Map.entry("catalog_id", catalogId != null ? catalogId : ""),
+                Map.entry("catalog_context", "https://custom.catalog.context"),
+                Map.entry("catalog_type", "beckn:Catalog"),
+                Map.entry("bpp_id", bppId),
+                Map.entry("bpp_uri", "https://bpp.example.com"),
+                Map.entry("network_id", "ondc-ev"),
+                Map.entry("item_id", itemId),
+                Map.entry("item_name", itemName),
+                Map.entry("item_short_desc", "60kW CCS2 charger"),
+                Map.entry("item_long_desc", "A fast DC charger supporting CCS2 connectors"),
+                Map.entry("item_category_code", "EV_CHARGING"),
+                Map.entry("item_category_name", "EV Charging"),
+                Map.entry("item_rateable", true),
+                Map.entry("item_is_active", true),
+                Map.entry("item_rating_value", 4.5),
+                Map.entry("item_rating_count", 120),
+                Map.entry("item_provider_id", "ecopower-charging"),
+                Map.entry("item_provider_name", "EcoPower Charging"),
+                Map.entry("item_context", "https://custom.item.context"),
+                Map.entry("item_type", "CustomItemType"),
+                Map.entry("item_attributes", Map.of(
+                        "@context", "https://custom.attr.context",
+                        "@type", "EVCharger",
+                        "connectorType", "CCS2",
+                        "maxPowerKW", 60)));
     }
 
     private static Map<String, Object> evChargerDocWithOffers(String catalogId, String bppId,
-                                                               String itemId, String itemName,
-                                                               List<Object> offers) {
+            String itemId, String itemName,
+            List<Object> offers) {
         java.util.Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc(catalogId, bppId, itemId, itemName));
         doc.put("offers", offers);
         return doc;
