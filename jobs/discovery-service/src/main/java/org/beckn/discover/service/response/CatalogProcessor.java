@@ -24,21 +24,24 @@ import java.util.stream.Collectors;
 
 /**
  * Provides catalog and item normalization, validation, and utility operations
- * used by the {@link CatalogPipeline}, assemblers, and {@link ResponseProcessor}.
+ * used by the {@link CatalogPipeline}, assemblers, and
+ * {@link ResponseProcessor}.
  *
  * <h3>Responsibilities</h3>
  * <ul>
- *   <li>Normalize items and catalogs (set type / context defaults).</li>
- *   <li>Validate catalogs and items before response assembly.</li>
- *   <li>Merge catalogs by provider (NLWeb-specific; called by
- *       {@link org.beckn.discover.service.nlweb.NLWebAssembler}).</li>
- *   <li>Offer deduplication, item / offer cross-filtering (called by
- *       {@link CatalogPipeline}).</li>
- *   <li>Schema context filtering (called by {@link CatalogPipeline}).</li>
+ * <li>Normalize items and catalogs (set type / context defaults).</li>
+ * <li>Validate catalogs and items before response assembly.</li>
+ * <li>Merge catalogs by provider (NLWeb-specific; called by
+ * {@link org.beckn.discover.service.nlweb.NLWebAssembler}).</li>
+ * <li>Offer deduplication, item / offer cross-filtering (called by
+ * {@link CatalogPipeline}).</li>
+ * <li>Schema context filtering (called by {@link CatalogPipeline}).</li>
  * </ul>
  *
- * <p>PostgreSQL assemblers do not use {@link #mergeCatalogsByProvider} — SQL
- * groups by {@code catalog_id} at query time.</p>
+ * <p>
+ * PostgreSQL assemblers do not use {@link #mergeCatalogsByProvider} — SQL
+ * groups by {@code catalog_id} at query time.
+ * </p>
  */
 @Component
 public class CatalogProcessor {
@@ -54,7 +57,8 @@ public class CatalogProcessor {
      * @return the catalog (possibly mutated), or {@code null} if invalid
      */
     public Catalog processCatalog(Catalog catalog) {
-        if (catalog == null) return null;
+        if (catalog == null)
+            return null;
 
         if (DiscoveryServiceUtil.isBlank(catalog.getId())) {
             log.warn("catalog.process.skip reason=missing-id");
@@ -90,16 +94,20 @@ public class CatalogProcessor {
      * @return the item (possibly mutated), or {@code null} if invalid
      */
     public Item processItem(Item item) {
-        if (item == null) return null;
+        if (item == null)
+            return null;
 
         if (DiscoveryServiceUtil.isBlank(item.getId())) {
             log.warn("item.process.skip reason=missing-id");
             return null;
         }
 
-        if (item.getItemAttributes() != null) normalizeAttributes(item.getItemAttributes());
-        if (item.getProvider()       != null) normalizeProvider(item.getProvider());
-        if (item.getDescriptor()     != null) normalizeDescriptor(item.getDescriptor());
+        if (item.getItemAttributes() != null)
+            normalizeAttributes(item.getItemAttributes());
+        if (item.getProvider() != null)
+            normalizeProvider(item.getProvider());
+        if (item.getDescriptor() != null)
+            normalizeDescriptor(item.getDescriptor());
 
         return item;
     }
@@ -116,7 +124,8 @@ public class CatalogProcessor {
             log.warn("provider.process.skip reason=missing-id");
             return;
         }
-        if (provider.getDescriptor() != null) normalizeDescriptor(provider.getDescriptor());
+        if (provider.getDescriptor() != null)
+            normalizeDescriptor(provider.getDescriptor());
     }
 
     private void normalizeDescriptor(Descriptor descriptor) {
@@ -129,13 +138,16 @@ public class CatalogProcessor {
     /**
      * Merges catalogs that share the same provider into a single catalog.
      *
-     * <p>This is specific to the NLWeb / Elasticsearch response path where the
+     * <p>
+     * This is specific to the NLWeb / Elasticsearch response path where the
      * API may return multiple catalog objects for the same provider.
      * PostgreSQL groups by {@code catalog_id} in SQL, so this method is a
-     * no-op for PostgreSQL-assembled catalogs.</p>
+     * no-op for PostgreSQL-assembled catalogs.
+     * </p>
      */
     public List<Catalog> mergeCatalogsByProvider(List<Catalog> catalogs) {
-        if (catalogs == null || catalogs.isEmpty()) return List.of();
+        if (catalogs == null || catalogs.isEmpty())
+            return List.of();
 
         Map<String, Catalog> merged = new HashMap<>(catalogs.size());
 
@@ -161,7 +173,8 @@ public class CatalogProcessor {
     }
 
     private String providerKey(Catalog catalog) {
-        if (DiscoveryServiceUtil.isNotBlank(catalog.getProviderId())) return catalog.getProviderId();
+        if (DiscoveryServiceUtil.isNotBlank(catalog.getProviderId()))
+            return catalog.getProviderId();
         if (catalog.getItems() != null) {
             return catalog.getItems().stream()
                     .map(Item::getProvider).filter(Objects::nonNull)
@@ -179,8 +192,10 @@ public class CatalogProcessor {
     }
 
     private void mergeItems(Catalog target, Catalog source) {
-        if (source.getItems() == null || source.getItems().isEmpty()) return;
-        if (target.getItems() == null) target.setItems(new ArrayList<>());
+        if (source.getItems() == null || source.getItems().isEmpty())
+            return;
+        if (target.getItems() == null)
+            target.setItems(new ArrayList<>());
 
         Set<String> existing = target.getItems().stream()
                 .map(Item::getId).filter(Objects::nonNull).collect(Collectors.toSet());
@@ -189,8 +204,10 @@ public class CatalogProcessor {
                 .filter(item -> item.getId() != null && !existing.contains(item.getId()))
                 .forEach(target.getItems()::add);
 
-        if (target.getDescriptor() == null) target.setDescriptor(source.getDescriptor());
-        if (target.getProviderId() == null) target.setProviderId(source.getProviderId());
+        if (target.getDescriptor() == null)
+            target.setDescriptor(source.getDescriptor());
+        if (target.getProviderId() == null)
+            target.setProviderId(source.getProviderId());
     }
 
     private void applyPostMergeDefaults(Catalog catalog) {
@@ -207,7 +224,8 @@ public class CatalogProcessor {
      * No-op when the catalog has ≤1 offer.
      */
     public void deduplicateOffers(Catalog catalog) {
-        if (catalog.getOffers() == null || catalog.getOffers().size() <= 1) return;
+        if (catalog.getOffers() == null || catalog.getOffers().size() <= 1)
+            return;
 
         List<Object> unique = catalog.getOffers().stream()
                 .filter(Objects::nonNull)
@@ -224,8 +242,10 @@ public class CatalogProcessor {
     private static String offerId(Object offer) {
         if (offer instanceof Map<?, ?> map) {
             Object id = map.get("beckn:id");
-            if (id == null) id = map.get("id");
-            if (id != null) return id.toString();
+            if (id == null)
+                id = map.get("id");
+            if (id != null)
+                return id.toString();
         }
         return String.valueOf(System.identityHashCode(offer));
     }
@@ -235,15 +255,18 @@ public class CatalogProcessor {
      * No-op when no offers are present.
      */
     public void filterItemsByOfferReferences(Catalog catalog) {
-        if (catalog.getOffers() == null || catalog.getOffers().isEmpty()) return;
-        if (catalog.getItems() == null || catalog.getItems().isEmpty()) return;
+        if (catalog.getOffers() == null || catalog.getOffers().isEmpty())
+            return;
+        if (catalog.getItems() == null || catalog.getItems().isEmpty())
+            return;
 
         Set<String> referencedIds = catalog.getOffers().stream()
                 .filter(Objects::nonNull)
                 .flatMap(o -> offerItemIds(o).stream())
                 .collect(Collectors.toSet());
 
-        if (referencedIds.isEmpty()) return;
+        if (referencedIds.isEmpty())
+            return;
 
         int before = catalog.getItems().size();
         catalog.setItems(catalog.getItems().stream()
@@ -259,7 +282,8 @@ public class CatalogProcessor {
      * No-op when no offers are present.
      */
     public void filterOffersByItemIds(Catalog catalog) {
-        if (catalog.getOffers() == null || catalog.getOffers().isEmpty()) return;
+        if (catalog.getOffers() == null || catalog.getOffers().isEmpty())
+            return;
         if (catalog.getItems() == null || catalog.getItems().isEmpty()) {
             catalog.setOffers(new ArrayList<>());
             return;
@@ -273,15 +297,21 @@ public class CatalogProcessor {
                 .collect(Collectors.toList()));
     }
 
-    /** Extracts item ID references from an offer map ({@code beckn:items} or {@code items}). */
+    /**
+     * Extracts item ID references from an offer map ({@code beckn:items} or
+     * {@code items}).
+     */
     public static Set<String> offerItemIds(Object offer) {
-        if (!(offer instanceof Map<?, ?> map)) return Collections.emptySet();
+        if (!(offer instanceof Map<?, ?> map))
+            return Collections.emptySet();
         Object itemsObj = map.get("beckn:items");
-        if (itemsObj == null) itemsObj = map.get("items");
+        if (itemsObj == null)
+            itemsObj = map.get("items");
         if (itemsObj instanceof List<?> list) {
             return list.stream().filter(Objects::nonNull).map(Object::toString).collect(Collectors.toSet());
         }
-        if (itemsObj instanceof String s) return Set.of(s);
+        if (itemsObj instanceof String s)
+            return Set.of(s);
         return Collections.emptySet();
     }
 
@@ -293,9 +323,11 @@ public class CatalogProcessor {
      * No-op when {@code schemaContextUrls} is empty.
      */
     public void filterCatalogsBySchemaContext(List<Catalog> catalogs, List<String> schemaContextUrls) {
-        if (schemaContextUrls == null || schemaContextUrls.isEmpty()) return;
+        if (schemaContextUrls == null || schemaContextUrls.isEmpty())
+            return;
         catalogs.forEach(catalog -> {
-            if (catalog.getItems() == null) return;
+            if (catalog.getItems() == null)
+                return;
             catalog.setItems(catalog.getItems().stream()
                     .filter(item -> matchesSchema(item, schemaContextUrls))
                     .collect(Collectors.toList()));
@@ -303,18 +335,23 @@ public class CatalogProcessor {
     }
 
     private boolean matchesSchema(Item item, List<String> schemaContextUrls) {
-        if (item.getItemAttributes() == null || item.getItemAttributes().getContext() == null) return false;
-        String itemCtx  = item.getItemAttributes().getContext();
+        if (item.getItemAttributes() == null || item.getItemAttributes().getContext() == null)
+            return false;
+        String itemCtx = item.getItemAttributes().getContext();
         String itemType = item.getItemAttributes().getType();
 
         for (String schemaUrl : schemaContextUrls) {
-            if (DiscoveryServiceUtil.isBlank(schemaUrl)) continue;
-            String base     = DiscoveryServiceUtil.extractBaseUrl(schemaUrl);
+            if (DiscoveryServiceUtil.isBlank(schemaUrl))
+                continue;
+            String base = DiscoveryServiceUtil.extractBaseUrl(schemaUrl);
             String required = DiscoveryServiceUtil.extractFragment(schemaUrl);
-            if (!itemCtx.equals(base)) continue;
-            if (DiscoveryServiceUtil.isBlank(required)) return true;
+            if (!itemCtx.equals(base))
+                continue;
+            if (DiscoveryServiceUtil.isBlank(required))
+                return true;
             if (DiscoveryServiceUtil.isNotBlank(itemType)
-                    && DiscoveryServiceUtil.extractLocalType(itemType).equals(required)) return true;
+                    && DiscoveryServiceUtil.extractLocalType(itemType).equals(required))
+                return true;
         }
         return false;
     }
@@ -323,7 +360,10 @@ public class CatalogProcessor {
 
     /** Validates a catalog before including it in a response. */
     public boolean validateCatalog(Catalog catalog) {
-        if (catalog == null) { log.warn("catalog.validate.fail reason=null"); return false; }
+        if (catalog == null) {
+            log.warn("catalog.validate.fail reason=null");
+            return false;
+        }
         if (DiscoveryServiceUtil.isBlank(catalog.getId())) {
             log.warn("catalog.validate.fail reason=missing-id");
             return false;
@@ -337,7 +377,10 @@ public class CatalogProcessor {
 
     /** Validates an individual item. */
     public boolean validateItem(Item item) {
-        if (item == null) { log.warn("item.validate.fail reason=null"); return false; }
+        if (item == null) {
+            log.warn("item.validate.fail reason=null");
+            return false;
+        }
         if (DiscoveryServiceUtil.isBlank(item.getId())) {
             log.warn("item.validate.fail reason=missing-id");
             return false;

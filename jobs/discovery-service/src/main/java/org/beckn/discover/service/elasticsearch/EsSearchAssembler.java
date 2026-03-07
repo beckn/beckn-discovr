@@ -8,7 +8,6 @@ import org.beckn.discover.model.Item;
 import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Rating;
 import org.beckn.discover.service.response.CatalogProcessor;
-import org.beckn.discover.util.DiscoveryConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,24 +17,23 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Assembles ES hit source maps (flat documents indexed by catalog-publish-job)
  * into {@link Catalog} objects grouped by {@code catalog_id}.
  *
- * <p>Each ES hit is one item document. Multiple hits from the same catalog are
+ * <p>
+ * Each ES hit is one item document. Multiple hits from the same catalog are
  * grouped into a single {@link Catalog} with multiple {@link Item}s.
- * After grouping, each catalog is normalised via {@link CatalogProcessor#processCatalog}.</p>
+ * After grouping, each catalog is normalised via
+ * {@link CatalogProcessor#processCatalog}.
+ * </p>
  */
 @Component
 @ConditionalOnProperty(name = "discovery.text-search.engine", havingValue = "elasticsearch")
 public class EsSearchAssembler {
 
     private static final Logger log = LoggerFactory.getLogger(EsSearchAssembler.class);
-
-    private static final String ITEM_CONTEXT    = "https://becknprotocol.io/schemas/core/v1/Item/schema-context.jsonld";
-    private static final String ATTR_CONTEXT    = "https://becknprotocol.io/schemas/core/v1/Item/schema-context.jsonld";
 
     private final CatalogProcessor catalogProcessor;
 
@@ -44,13 +42,14 @@ public class EsSearchAssembler {
     }
 
     /**
-     * @param hits list of raw ES hit source maps
+     * @param hits          list of raw ES hit source maps
      * @param transactionId for logging correlation
      * @return assembled and normalised catalogs; never null
      */
     @SuppressWarnings("unchecked")
     public List<Catalog> assemble(List<Map<String, Object>> hits, String transactionId) {
-        if (hits.isEmpty()) return List.of();
+        if (hits.isEmpty())
+            return List.of();
 
         // Group by catalog_id — preserves insertion order for deterministic output
         Map<String, Catalog> byCatalogId = new LinkedHashMap<>();
@@ -58,10 +57,14 @@ public class EsSearchAssembler {
         for (Map<String, Object> doc : hits) {
             try {
                 String catalogId = str(doc, "catalog_id");
-                if (catalogId == null) { log.warn("es.assembler.missing-catalog-id txId={}", transactionId); continue; }
+                if (catalogId == null) {
+                    log.warn("es.assembler.missing-catalog-id txId={}", transactionId);
+                    continue;
+                }
 
-                byCatalogId.computeIfAbsent(catalogId, id -> buildCatalog(id, doc))
-                           .getItems().add(buildItem(doc));
+                Catalog catalog = byCatalogId.computeIfAbsent(catalogId, id -> buildCatalog(id, doc));
+                catalog.getItems().add(buildItem(doc));
+                mergeOffersFromDoc(catalog, doc);
             } catch (Exception e) {
                 log.warn("es.assembler.hit.failed txId={} error={}", transactionId, e.getMessage());
             }
@@ -70,7 +73,8 @@ public class EsSearchAssembler {
         List<Catalog> result = new ArrayList<>(byCatalogId.size());
         for (Catalog raw : byCatalogId.values()) {
             Catalog processed = catalogProcessor.processCatalog(raw);
-            if (processed != null) result.add(processed);
+            if (processed != null)
+                result.add(processed);
         }
 
         log.debug("es.assembler.done hits={} catalogs={} txId={}", hits.size(), result.size(), transactionId);
@@ -81,25 +85,42 @@ public class EsSearchAssembler {
 
     private static Catalog buildCatalog(String catalogId, Map<String, Object> doc) {
         Catalog catalog = new Catalog();
-        catalog.setContext(DiscoveryConstants.DEFAULT_CATALOG_CONTEXT);
-        catalog.setType(DiscoveryConstants.BECKN_CATALOG_TYPE);
+        catalog.setContext(str(doc, "catalog_context"));
+        catalog.setType(str(doc, "catalog_type"));
         catalog.setId(catalogId);
         catalog.setBppId(str(doc, "bpp_id"));
         catalog.setBppUri(str(doc, "bpp_uri"));
         catalog.setDescriptor(new Descriptor("beckn:Descriptor"));
         catalog.setItems(new ArrayList<>());
+        catalog.setOffers(new ArrayList<>());
+        return catalog;
+    }
 
+    /**
+     * Merges non-empty offers from an ES hit document into the catalog's offer
+     * list.
+     *
+     * <p>
+     * Called for every hit, not just the first, because each ES document carries
+     * only the offers that apply to its specific item. An item with no applicable
+     * offers has an empty {@code offers} array, while other items in the same
+     * catalog
+     * may carry the relevant offers. Accumulating across all hits ensures that
+     * offers
+     * are not lost when a non-matching item's document happens to arrive first.
+     * </p>
+     */
+    @SuppressWarnings("unchecked")
+    private static void mergeOffersFromDoc(Catalog catalog, Map<String, Object> doc) {
         Object offersRaw = doc.get("offers");
         if (offersRaw instanceof List<?> offerList && !offerList.isEmpty())
-            catalog.setOffers((List<Object>) offerList);
-
-        return catalog;
+            catalog.getOffers().addAll((List<Object>) offerList);
     }
 
     private static Item buildItem(Map<String, Object> doc) {
         Item item = new Item();
-        item.setContext(ITEM_CONTEXT);
-        item.setType(DiscoveryConstants.BECKN_ITEM_TYPE);
+        item.setContext(str(doc, "item_context"));
+        item.setType(str(doc, "item_type"));
         item.setId(str(doc, "item_id"));
         item.setDescriptor(buildDescriptor(doc));
         item.setCategory(buildCategory(doc));
@@ -121,7 +142,8 @@ public class EsSearchAssembler {
 
     private static CategoryCode buildCategory(Map<String, Object> doc) {
         String code = str(doc, "item_category_code");
-        if (code == null) return null;
+        if (code == null)
+            return null;
         CategoryCode cat = new CategoryCode("schema:CategoryCode", code);
         cat.setName(str(doc, "item_category_name"));
         return cat;
@@ -130,16 +152,20 @@ public class EsSearchAssembler {
     private static Rating buildRating(Map<String, Object> doc) {
         Object ratingValue = doc.get("item_rating_value");
         Object ratingCount = doc.get("item_rating_count");
-        if (ratingValue == null && ratingCount == null) return null;
+        if (ratingValue == null && ratingCount == null)
+            return null;
         Rating r = new Rating("beckn:Rating");
-        if (ratingValue instanceof Number n) r.setRatingValue(n.doubleValue());
-        if (ratingCount instanceof Number n) r.setRatingCount(n.intValue());
+        if (ratingValue instanceof Number n)
+            r.setRatingValue(n.doubleValue());
+        if (ratingCount instanceof Number n)
+            r.setRatingCount(n.intValue());
         return r;
     }
 
     private static Provider buildProvider(Map<String, Object> doc) {
         String providerId = str(doc, "item_provider_id");
-        if (providerId == null) return null;
+        if (providerId == null)
+            return null;
         Descriptor desc = new Descriptor("beckn:Descriptor");
         desc.setName(str(doc, "item_provider_name"));
         return new Provider(providerId, desc);
@@ -149,11 +175,16 @@ public class EsSearchAssembler {
     private static Attributes buildAttributes(Map<String, Object> doc) {
         Object attrsRaw = doc.get("item_attributes");
         if (attrsRaw instanceof Map<?, ?> map) {
-            Attributes attrs = new Attributes(ATTR_CONTEXT, "beckn:Item");
-            ((Map<String, Object>) map).forEach(attrs::setAttribute);
+            Attributes attrs = new Attributes(
+                    (String) map.get("@context"),
+                    (String) map.get("@type"));
+            ((Map<String, Object>) map).forEach((k, v) -> {
+                if (!k.startsWith("@"))
+                    attrs.setAttribute(k, v);
+            });
             return attrs;
         }
-        return new Attributes(ATTR_CONTEXT, "beckn:Item");
+        return null;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
