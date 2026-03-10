@@ -1,6 +1,7 @@
 package org.beckn.discover.service.elasticsearch;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
@@ -100,6 +101,15 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
 
         } catch (IllegalArgumentException e) {
             throw e;
+        } catch (ElasticsearchException e) {
+            if ("index_not_found_exception".equals(e.error().type())) {
+                log.info("es.search.index.not-found alias={} transactionId={} — no data indexed yet, returning empty",
+                        aliasName, txId);
+                return List.of();
+            }
+            long ms = Duration.between(start, Instant.now()).toMillis();
+            log.error("es.search.failed durationMs={} transactionId={} error={}", ms, txId, e.getMessage(), e);
+            throw new Exception("Elasticsearch text search failed for transactionId=" + txId, e);
         } catch (Exception e) {
             long ms = Duration.between(start, Instant.now()).toMillis();
             log.error("es.search.failed durationMs={} transactionId={} error={}", ms, txId, e.getMessage(), e);
