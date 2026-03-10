@@ -19,8 +19,8 @@ jobs:
           cache: 'gradle'
 
       - name: Grant execute permission for gradlew
-        run: chmod +x jobs/discovery-service/gradlew
+        run: chmod +x jobs/catalog-discover-job/gradlew
 
       - name: Run tests
         run: ./gradlew test --no-daemon
-        working-directory: jobs/discovery-service
+        working-directory: jobs/catalog-discover-job
