@@ -1,0 +1,22 @@
+{
+  "context": {
+    "bpp_id": "bpp-1",
+    "bpp_uri": "http://bpp1.example.com",
+    "message_id": "msg-three-items-patch",
+    "transaction_id": "tx-three-items-patch"
+  },
+  "message": {
+    "catalogs": [
+      {
+        "id": "cat-1",
+        "beckn:items": [],
+        "beckn:offers": [
+          {
+            "beckn:id": "offer-1",
+            "beckn:descriptor": { "schema:name": "Offer One Updated" }
+          }
+        ]
+      }
+    ]
+  }
+}

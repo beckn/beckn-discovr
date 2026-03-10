@@ -1,0 +1,72 @@
+app:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/catalog_db
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:catalog_user}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  messaging:
+    broker-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: catalog-publish-group
+      concurrency: 3
+      max-poll-records: 10
+      session-timeout-ms: 30000
+      max-poll-interval-ms: 300000
+    topics:
+      ingestion-requests: catalog.v2.upload.requests
+      catalog-events: catalog.v2.catalog.events
+      responses: catalog.responses
+      failed: catalog.v2.failed
+
+  catalog:
+    max-payload-size: 5242880
+    validation-enabled: true
+    schema-file: catalog-upload-request-schema-v7.json
+    parallel-catalog-threshold: 3
+    # Thread pool size for parallel catalog processing within a single message.
+    # Independent of Kafka consumer concurrency. Tune based on CPU cores available.
+    processing-pool-size: 8
+    elasticsearch:
+      enabled: false
+      hosts: ${ES_HOSTS:http://localhost:9200}
+      index-prefix: beckn-catalog
+      alias-name: beckn-catalog
+      failure-topic: catalog.es.failures
+      final-dlq-topic: catalog.es.failures.dlq
+      bulk-batch-size: 100
+      retry-attempts: 3
+      retry-initial-delay-ms: 1000
+      pool-size: 2
+      pool-queue-capacity: 200
+      max-failure-attempts: 5
+
+spring:
+  application:
+    name: catalog-publish-job
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc.batch_size: 50
+        order_inserts: true
+        order_updates: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+management:
+  endpoints.web.exposure.include: health,info,metrics
+  endpoint.health.show-details: when-authorized
+
+logging:
+  level:
+    org.beckn.catalogpublish: INFO
