@@ -73,6 +73,19 @@ discovery:
     max-retries: ${SCHEMA_FETCH_MAX_RETRIES:3}
     retry-delay-ms: ${SCHEMA_FETCH_RETRY_DELAY_MS:1000}
   
+  # Text search engine — "nlweb" (default) or "elasticsearch"
+  text-search:
+    engine: ${TEXT_SEARCH_ENGINE:nlweb}
+
+  # Elasticsearch text search (active when text-search.engine=elasticsearch)
+  elasticsearch:
+    hosts: ${ES_HOSTS:http://localhost:9200}
+    alias-name: ${ES_ALIAS:beckn-catalog}
+    result-limit: ${ES_RESULT_LIMIT:50}
+    min-score: ${ES_MIN_SCORE:0.5}
+    connect-timeout-ms: ${ES_CONNECT_TIMEOUT_MS:5000}
+    socket-timeout-ms: ${ES_SOCKET_TIMEOUT_MS:30000}
+
   # PostgreSQL Configuration for filter-based queries
   postgresql:
     enabled: ${POSTGRES_ENABLED:true}
