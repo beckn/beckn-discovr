@@ -17,6 +17,7 @@ public class DiscoveryProperties {
     private Schema schema = new Schema();
     private RegistryAuthConfig registryAuth = new RegistryAuthConfig();
     private TextSearch textSearch = new TextSearch();
+    private Elasticsearch elasticsearch = new Elasticsearch();
 
     public Kafka getKafka() {
         return kafka;
@@ -72,6 +73,39 @@ public class DiscoveryProperties {
 
     public void setTextSearch(TextSearch textSearch) {
         this.textSearch = textSearch;
+    }
+
+    public Elasticsearch getElasticsearch() {
+        return elasticsearch;
+    }
+
+    public void setElasticsearch(Elasticsearch elasticsearch) {
+        this.elasticsearch = elasticsearch;
+    }
+
+    /**
+     * Elasticsearch configuration — used when text-search.engine=elasticsearch.
+     */
+    public static class Elasticsearch {
+        private String hosts = "http://localhost:9200";
+        private String aliasName = "beckn-catalog";
+        private int resultLimit = 50;
+        private float minScore = 0.5f;
+        private int connectTimeoutMs = 5000;
+        private int socketTimeoutMs = 30000;
+
+        public String getHosts() { return hosts; }
+        public void setHosts(String hosts) { this.hosts = hosts; }
+        public String getAliasName() { return aliasName; }
+        public void setAliasName(String aliasName) { this.aliasName = aliasName; }
+        public int getResultLimit() { return resultLimit; }
+        public void setResultLimit(int resultLimit) { this.resultLimit = resultLimit; }
+        public float getMinScore() { return minScore; }
+        public void setMinScore(float minScore) { this.minScore = minScore; }
+        public int getConnectTimeoutMs() { return connectTimeoutMs; }
+        public void setConnectTimeoutMs(int connectTimeoutMs) { this.connectTimeoutMs = connectTimeoutMs; }
+        public int getSocketTimeoutMs() { return socketTimeoutMs; }
+        public void setSocketTimeoutMs(int socketTimeoutMs) { this.socketTimeoutMs = socketTimeoutMs; }
     }
 
     /**

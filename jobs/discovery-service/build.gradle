@@ -69,6 +69,10 @@ dependencies {
     // PostgreSQL
     implementation 'org.postgresql:postgresql:42.7.1'
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // Elasticsearch Java client (text search engine)
+    implementation 'co.elastic.clients:elasticsearch-java:8.15.0'
+    implementation 'org.elasticsearch.client:elasticsearch-rest-client:8.15.0'
     
     // Development tools
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
@@ -81,6 +85,7 @@ dependencies {
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:kafka'
     testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:elasticsearch'
     testImplementation 'com.squareup.okhttp3:mockwebserver'
 }
 
