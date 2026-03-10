@@ -1,0 +1,39 @@
+{
+  "context": {
+    "bpp_id": "bpp-1",
+    "bpp_uri": "http://bpp1.example.com",
+    "message_id": "msg-three-items",
+    "transaction_id": "tx-three-items"
+  },
+  "message": {
+    "catalogs": [
+      {
+        "id": "cat-1",
+        "beckn:items": [
+          {
+            "beckn:id": "item-1",
+            "beckn:descriptor": { "schema:name": "Item One" },
+            "beckn:availableAt": [{ "gps": "12.9716,77.5946" }]
+          },
+          {
+            "beckn:id": "item-2",
+            "beckn:descriptor": { "schema:name": "Item Two" },
+            "beckn:availableAt": [{ "gps": "12.9153,77.6104" }]
+          },
+          {
+            "beckn:id": "item-3",
+            "beckn:descriptor": { "schema:name": "Item Three" },
+            "beckn:availableAt": [{ "gps": "12.9716,77.6254" }]
+          }
+        ],
+        "beckn:offers": [
+          {
+            "beckn:id": "offer-1",
+            "beckn:descriptor": { "schema:name": "Offer One Original" },
+            "beckn:items": ["item-1", "item-2", "item-3"]
+          }
+        ]
+      }
+    ]
+  }
+}
