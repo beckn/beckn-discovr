@@ -1,0 +1,30 @@
+# Build outputs
+build/
+bin/
+out/
+
+# Gradle
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE / Editor
+.idea/
+*.iml
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local config (if any)
+.env
+.env.local
+*.local

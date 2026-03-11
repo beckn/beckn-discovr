@@ -1,0 +1,162 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for Discovered Catalogs
+  postgres-discovery:
+    image: postgis/postgis:15-3.3
+    container_name: discovery-service-postgres
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: catalog_db
+      POSTGRES_USER: catalog_user
+      POSTGRES_PASSWORD: catalog123
+      POSTGRESQL_POSTGRES_PASSWORD: catalog123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - postgres_discovery_data:/var/lib/postgresql/data
+    networks:
+      - beckn-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog_user -d catalog_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Elasticsearch for text search (optional backend for catalog-discover-job)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.1
+    container_name: discovery-elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - beckn-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:9200 | grep -q 200 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # On Discovery API (receives responses from network)
+  on-discovery-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: beckn/on-discovery-api:1.0
+    container_name: on-discovery-api
+    ports:
+      - '3001:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_ON_DISCOVER_TOPIC: catalog.discovery.response
+      SIGNATURE_VERIFICATION_ENABLED: "false"
+      LOG_LEVEL: info
+    networks:
+      - beckn-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Catalog Publish Job (Persistence Only - Distribution Disabled)
+  # This job acts as the bridge for discovery ingestion
+  catalog-publish:
+    build:
+      context: ../beckn-catalg/jobs/catalog-publish-job
+      dockerfile: Dockerfile
+    image: beckn/catalog-publish-job:1.0
+    container_name: catalog-publish
+    ports:
+      - "8084:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
+      - SPRING_FLYWAY_BASELINE_VERSION=0
+      - SPRING_FLYWAY_TABLE=flyway_schema_history_publish_no_dist
+      - APP_DATASOURCE_URL=jdbc:postgresql://postgres-discovery:5432/catalog_db
+      - APP_DATASOURCE_USERNAME=catalog_user
+      - APP_DATASOURCE_PASSWORD=catalog123
+      - DB_PASSWORD=catalog123
+      - APP_MESSAGING_BROKER_SERVERS=kafka:29092
+      - APP_MESSAGING_TOPICS_INGESTION_REQUESTS=catalog.discovery.response
+      - APP_MESSAGING_TOPICS_CATALOG_EVENTS=catalog.v2.events
+      - APP_MESSAGING_TOPICS_RESPONSES=catalog.responses
+      - APP_MESSAGING_TOPICS_FAILED=catalog.v2.failed
+      - APP_MESSAGING_TOPICS_DISTRIBUTION_TOPIC_PREFIX=catalog.distribution
+      - APP_CATALOG_VALIDATION_ENABLED=false
+      - APP_CATALOG_NETWORK_DISTRIBUTION_ENABLED=false
+      - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+      - JAVA_TOOL_OPTIONS=
+      - OTEL_TRACES_EXPORTER=none
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+    depends_on:
+      postgres-discovery:
+        condition: service_healthy
+    networks:
+      - beckn-network
+    restart: unless-stopped
+
+  # Catalog Discover Job (formerly discovery-service)
+  catalog-discover-job:
+    build:
+      context: ./jobs/catalog-discover-job
+      dockerfile: Dockerfile
+    container_name: catalog-discover-job
+    ports:
+      - "8082:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_REQUEST_TOPIC=catalog.v2.discovery.requests
+      - KAFKA_RESPONSE_TOPIC=catalog.responses
+      - POSTGRES_HOST=postgres-discovery
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=catalog_db
+      - POSTGRES_USER=catalog_user
+      - POSTGRES_PASSWORD=catalog123
+      - POSTGRES_MAX_POOL_SIZE=10
+      - MAX_ITEMS_PER_CATALOG=100
+      - SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/api/beckn.yaml
+      - SCHEMA_CACHE_TTL_HOURS=24
+      - LOGGING_LEVEL_ORG_BECKN_DISCOVER=INFO
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA=ERROR
+      - LOGGING_LEVEL_ORG_APACHE_KAFKA=ERROR
+      - OTEL_TRACES_EXPORTER=none
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+    depends_on:
+      postgres-discovery:
+        condition: service_healthy
+    networks:
+      - beckn-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  postgres_discovery_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+
+networks:
+  beckn-network:
+    external: true

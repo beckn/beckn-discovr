@@ -1,0 +1,32 @@
+{
+  "context": {
+    "bpp_id": "bpp-1",
+    "bpp_uri": "http://bpp1.example.com",
+    "message_id": "msg-multi-patch",
+    "transaction_id": "tx-multi-patch"
+  },
+  "message": {
+    "catalogs": [
+      {
+        "id": "cat-1",
+        "beckn:items": [],
+        "beckn:offers": [
+          {
+            "beckn:id": "offer-A",
+            "beckn:descriptor": { "schema:name": "Offer A Updated" }
+          }
+        ]
+      },
+      {
+        "id": "cat-2",
+        "beckn:items": [],
+        "beckn:offers": [
+          {
+            "beckn:id": "offer-C",
+            "beckn:descriptor": { "schema:name": "Offer C Updated" }
+          }
+        ]
+      }
+    ]
+  }
+}

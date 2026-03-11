@@ -1,0 +1,83 @@
+{
+    "content": [
+        {
+            "name": "Mixed Services",
+            "score": 94,
+            "schema_object": {
+                "catalogs": [
+                    {
+                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
+                        "@type": "beckn:Catalog",
+                        "beckn:id": "catalog-mixed-001",
+                        "beckn:descriptor": {
+                            "@type": "beckn:Descriptor",
+                            "schema:name": "Mixed Services Catalog"
+                        },
+                        "beckn:items": [
+                            {
+                                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
+                                "@type": "beckn:Item",
+                                "beckn:id": "item-ev-charging",
+                                "beckn:descriptor": {
+                                    "@type": "beckn:Descriptor",
+                                    "schema:name": "EV Charger"
+                                },
+                                "beckn:provider": {
+                                    "beckn:id": "provider-1",
+                                    "beckn:descriptor": {
+                                        "@type": "beckn:Descriptor",
+                                        "schema:name": "Provider 1"
+                                    }
+                                },
+                                "beckn:itemAttributes": {
+                                    "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
+                                    "@type": "ChargingService"
+                                }
+                            },
+                            {
+                                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
+                                "@type": "beckn:Item",
+                                "beckn:id": "item-food",
+                                "beckn:descriptor": {
+                                    "@type": "beckn:Descriptor",
+                                    "schema:name": "Food Item"
+                                },
+                                "beckn:provider": {
+                                    "beckn:id": "provider-2",
+                                    "beckn:descriptor": {
+                                        "@type": "beckn:Descriptor",
+                                        "schema:name": "Provider 2"
+                                    }
+                                },
+                                "beckn:itemAttributes": {
+                                    "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/FoodService/v1/context.jsonld",
+                                    "@type": "FoodService"
+                                }
+                            },
+                            {
+                                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
+                                "@type": "beckn:Item",
+                                "beckn:id": "item-ride",
+                                "beckn:descriptor": {
+                                    "@type": "beckn:Descriptor",
+                                    "schema:name": "Ride Service"
+                                },
+                                "beckn:provider": {
+                                    "beckn:id": "provider-3",
+                                    "beckn:descriptor": {
+                                        "@type": "beckn:Descriptor",
+                                        "schema:name": "Provider 3"
+                                    }
+                                },
+                                "beckn:itemAttributes": {
+                                    "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/RideService/v1/context.jsonld",
+                                    "@type": "RideService"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+}
