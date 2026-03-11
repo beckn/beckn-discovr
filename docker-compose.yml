@@ -74,7 +74,7 @@ services:
   # This job acts as the bridge for discovery ingestion
   catalog-publish:
     build:
-      context: ../beckn-catalg/jobs/catalog-publish-job
+      context: ./jobs/catalog-publish-job
       dockerfile: Dockerfile
     image: beckn/catalog-publish-job:1.0
     container_name: catalog-publish
