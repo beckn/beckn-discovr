@@ -102,7 +102,22 @@ services:
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
+       # Elasticsearch indexing
+      - APP_CATALOG_ELASTICSEARCH_ENABLED=true
+      - ES_HOSTS=http://elasticsearch:9200
+      - APP_CATALOG_ELASTICSEARCH_INDEX_PREFIX=beckn-catalog
+      - APP_CATALOG_ELASTICSEARCH_ALIAS_NAME=beckn-catalog
+      - APP_CATALOG_ELASTICSEARCH_FAILURE_TOPIC=catalog.es.failures
+      - APP_CATALOG_ELASTICSEARCH_FINAL_DLQ_TOPIC=catalog.es.failures.dlq
+      - APP_CATALOG_ELASTICSEARCH_BULK_BATCH_SIZE=100
+      - APP_CATALOG_ELASTICSEARCH_RETRY_ATTEMPTS=3
+      - APP_CATALOG_ELASTICSEARCH_RETRY_INITIAL_DELAY_MS=1000
+      - APP_CATALOG_ELASTICSEARCH_POOL_SIZE=2
+      - APP_CATALOG_ELASTICSEARCH_POOL_QUEUE_CAPACITY=200
+      - APP_CATALOG_ELASTICSEARCH_MAX_FAILURE_ATTEMPTS=5
     depends_on:
+      elasticsearch:
+        condition: service_healthy
       postgres-discovery:
         condition: service_healthy
     networks:
@@ -138,8 +153,18 @@ services:
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+       # Elasticsearch text search
+      - DISCOVERY_TEXT_SEARCH_ENGINE=elasticsearch
+      - DISCOVERY_ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - DISCOVERY_ELASTICSEARCH_ALIAS_NAME=beckn-catalog
+      - DISCOVERY_ELASTICSEARCH_RESULT_LIMIT=50
+      - DISCOVERY_ELASTICSEARCH_MIN_SCORE=0.5
+      - DISCOVERY_ELASTICSEARCH_CONNECT_TIMEOUT_MS=5000
+      - DISCOVERY_ELASTICSEARCH_SOCKET_TIMEOUT_MS=30000
     depends_on:
       postgres-discovery:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
     networks:
       - beckn-network
