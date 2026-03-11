@@ -1,0 +1,109 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.3'
+    id 'io.spring.dependency-management' version '1.1.6'
+    id 'jacoco'
+}
+
+group = 'org.beckn'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
+    implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
+    implementation 'io.micrometer:micrometer-core'
+
+    implementation 'com.networknt:json-schema-validator:1.5.9'
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'co.elastic.clients:elasticsearch-java:8.15.0'
+    implementation 'com.github.java-json-tools:json-patch:1.13'
+
+    implementation 'org.locationtech.jts:jts-core:1.19.0'
+    implementation 'org.hibernate.orm:hibernate-spatial'
+
+    runtimeOnly 'org.postgresql:postgresql:42.7.3'
+    testRuntimeOnly 'org.postgresql:postgresql:42.7.3'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    testImplementation 'org.testcontainers:junit-jupiter:1.20.1'
+    testImplementation 'org.testcontainers:postgresql:1.20.1'
+    testImplementation 'org.testcontainers:kafka:1.20.1'
+    testImplementation 'org.awaitility:awaitility:4.2.0'
+}
+
+// Unit tests: no Testcontainers, safe to parallelise across JVM forks.
+test {
+    useJUnitPlatform {
+        excludeTags 'integration'
+    }
+    maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showCauses true
+        showStackTraces true
+    }
+    jvmArgs = ['-Dfile.encoding=UTF-8', '-Duser.timezone=UTC']
+}
+
+// Integration tests: Testcontainers + Spring context.
+// maxParallelForks = 1 is mandatory — each Gradle fork is a separate JVM,
+// and the Testcontainers singleton pattern only shares containers within one JVM.
+// Multiple forks would start N sets of PostgreSQL + Kafka containers in parallel,
+// multiplying startup cost and Docker resource contention.
+tasks.register('integrationTest', Test) {
+    description = 'Runs Testcontainers-based integration tests.'
+    group = 'verification'
+    useJUnitPlatform {
+        includeTags 'integration'
+    }
+    maxParallelForks = 1
+    outputs.upToDateWhen { false }
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showCauses true
+        showStackTraces true
+    }
+    jvmArgs = ['-Dfile.encoding=UTF-8', '-Duser.timezone=UTC']
+}
+
+check.dependsOn integrationTest
+
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        csv.required = false
+        html.required = true
+    }
+}
