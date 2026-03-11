@@ -1,0 +1,39 @@
+app:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/catalog_db
+    driver-class-name: org.postgresql.Driver
+    username: catalog_user
+    password: catalog123
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 10000
+      idle-timeout: 300000
+      max-lifetime: 600000
+
+  messaging:
+    broker-servers: localhost:9092
+    consumer:
+      group-id: catalog-publish-test
+      concurrency: 1
+      max-poll-records: 5
+      session-timeout-ms: 10000
+      max-poll-interval-ms: 60000
+    topics:
+      ingestion-requests: catalog.v2.upload.requests
+      catalog-events: catalog.v2.catalog.events
+      responses: catalog.responses
+      failed: catalog.v2.failed
+
+  catalog:
+    max-payload-size: 5242880
+    validation-enabled: false
+    schema-file: catalog-upload-request-schema-v7.json
+    parallel-catalog-threshold: 1
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true

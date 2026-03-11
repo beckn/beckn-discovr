@@ -1,0 +1,28 @@
+# Build artifacts
+.gradle/
+build/
+bin/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# Tests — not needed in the Docker build stage
+src/test/
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Secrets / local overrides
+.env
+.env.*
+*.local
+secrets/

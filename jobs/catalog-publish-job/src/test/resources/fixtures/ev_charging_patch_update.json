@@ -1,0 +1,22 @@
+{
+  "context": {
+    "bpp_id": "bpp-1",
+    "bpp_uri": "http://bpp1.example.com",
+    "message_id": "msg-2",
+    "transaction_id": "tx-2"
+  },
+  "message": {
+    "catalogs": [
+      {
+        "id": "cat-1",
+        "beckn:items": [
+          {
+            "beckn:id": "item-1",
+            "beckn:descriptor": { "schema:name": "EV Station Updated" }
+          }
+        ],
+        "beckn:offers": []
+      }
+    ]
+  }
+}

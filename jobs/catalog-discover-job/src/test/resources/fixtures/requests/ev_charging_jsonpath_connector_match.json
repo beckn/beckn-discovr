@@ -1,0 +1,27 @@
+{
+  "context": {
+    "domain": "beckn.one:mobility:ev-charging:*",
+    "action": "discover",
+    "version": "2.0.0",
+    "country": "IND",
+    "city": "std:BLR",
+    "bap_id": "https://evcharging-bap.example.com",
+    "bap_uri": "https://evcharging-bap.example.com/callback",
+    "network_id": [
+      "bap.net/ev-charging"
+    ],
+    "schema_context": [
+      "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"
+    ],
+    "transaction_id": "0b46be11-7d8a-4f93-9a0c-5def0c41e027",
+    "message_id": "b64609ca-4b8d-49ea-9db6-3f9c3d489c7d",
+    "ttl": "PT10M",
+    "timestamp": "2025-10-14T10:30:00.000Z"
+  },
+  "message": {
+    "filters": {
+      "type": "jsonpath",
+      "expression": "$.catalogs[*].\"beckn:items\"[*] ? (@.\"beckn:itemAttributes\".connectorType == \"CCS2\" && @.\"beckn:itemAttributes\".maxPowerKW == 60)"
+    }
+  }
+}

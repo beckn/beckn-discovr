@@ -1,0 +1,180 @@
+spring:
+  application:
+    name: discovery-service
+  datasource:
+    hikari:
+      data-source-properties:
+        preparedStatementCacheQueries: ${POSTGRES_PS_CACHE_QUERIES:256}
+        preparedStatementCacheSizeMiB: ${POSTGRES_PS_CACHE_SIZE_MIB:16}
+        # Caches parsed statements per connection to avoid repeated plan/parse cost
+  
+  jackson:
+    serialization:
+      write-null-map-values: false
+    default-property-inclusion: non_null
+  
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: discovery-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        spring.json.add.type.headers: false
+    listener:
+      ack-mode: manual_immediate
+      concurrency: 3
+      missing-topics-fatal: false
+
+# Discovery Service Configuration
+discovery:
+  latency-tracking-enabled: ${DISCOVERY_LATENCY_TRACKING_ENABLED:true}
+  # Synchronous API Configuration
+  api:
+    base-path: /beckn
+    timeout-seconds: ${DISCOVERY_API_TIMEOUT:60}
+    
+  # Registry Authorization Configuration (Aligned with Node.js Env Vars)
+  registry-auth:
+    enabled: ${SIGNATURE_AUTH_ENABLED:false}
+    base-url: ${REGISTRY_BASE_URL:https://api.testnet.beckn.one/registry/dedi/lookup}
+    registry-name: ${REGISTRY_NAME:subscribers.beckn.one}
+    registry-token: ${REGISTRY_API_TOKEN:}
+    cache-ttl-seconds: ${PUBLIC_KEY_CACHE_TTL_SEC:300}
+    cache-max-keys: ${PUBLIC_KEY_CACHE_MAX_KEYS:100}
+    cache-enabled: ${PUBLIC_KEY_CACHE_ENABLED:true}
+    retry-attempts: ${REGISTRY_RETRY_COUNT:3}
+    timeout-seconds: ${REGISTRY_TIMEOUT_SEC:10}
+    
+  kafka:
+    request-topic: ${KAFKA_REQUEST_TOPIC:catalog.v2.discovery.requests}
+    response-topic: ${KAFKA_RESPONSE_TOPIC:catalog.discovery.response}
+  
+  nlweb:
+    base-url: ${NLWEB_BASE_URL:http://localhost:8000}
+    ask-endpoint: ${NLWEB_ASK_ENDPOINT:/ask}
+    timeout-seconds: ${NLWEB_TIMEOUT_SECONDS:30}
+    streaming: ${NLWEB_STREAMING:false}
+    score-threshold: ${NLWEB_SCORE_THRESHOLD:80}
+    max-retries: ${NLWEB_MAX_RETRIES:3}
+    retry-delay-ms: ${NLWEB_RETRY_DELAY_MS:1000}
+  
+  # Schema Validation Configuration
+  schema:
+    url: ${SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/beckn.yaml}
+    cache-ttl-hours: ${SCHEMA_CACHE_TTL_HOURS:1}
+    fetch-timeout-seconds: ${SCHEMA_FETCH_TIMEOUT_SECONDS:30}
+    max-retries: ${SCHEMA_FETCH_MAX_RETRIES:3}
+    retry-delay-ms: ${SCHEMA_FETCH_RETRY_DELAY_MS:1000}
+  
+  # Text search engine — "nlweb" (default) or "elasticsearch"
+  text-search:
+    engine: ${TEXT_SEARCH_ENGINE:nlweb}
+
+  # Elasticsearch text search (active when text-search.engine=elasticsearch)
+  elasticsearch:
+    hosts: ${ES_HOSTS:http://localhost:9200}
+    alias-name: ${ES_ALIAS:beckn-catalog}
+    result-limit: ${ES_RESULT_LIMIT:50}
+    min-score: ${ES_MIN_SCORE:0.5}
+    connect-timeout-ms: ${ES_CONNECT_TIMEOUT_MS:5000}
+    socket-timeout-ms: ${ES_SOCKET_TIMEOUT_MS:30000}
+
+  # PostgreSQL Configuration for filter-based queries
+  postgresql:
+    enabled: ${POSTGRES_ENABLED:true}
+    host: ${POSTGRES_HOST:localhost}
+    port: ${POSTGRES_PORT:5432}
+    database: ${POSTGRES_DATABASE:beckn_catalog}
+    username: ${POSTGRES_USERNAME:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+    connection-timeout: ${POSTGRES_CONNECTION_TIMEOUT:30000}
+    result-limit: ${MAX_ITEMS_PER_CATALOG:100}
+    log-explain-analyze: ${POSTGRES_LOG_EXPLAIN_ANALYZE:true}
+    parallel-query-timeout-seconds: ${DISCOVERY_PARALLEL_QUERY_TIMEOUT_SECONDS:10}
+    # Catalog-level attributes to extract from catalog.payload
+    # These attributes will be merged into catalog objects in the response
+    catalog-attributes-to-extract:
+      - "beckn:offers"
+
+# Management and Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env,loggers
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+      probes:
+        enabled: true
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        step: 10s
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        discovery.requests.duration: true
+        discovery.nlweb.duration: true
+        discovery.processing.duration: true
+        discovery.publishing.duration: true
+    tags:
+      application: discovery-service
+      environment: ${SPRING_PROFILES_ACTIVE:default}
+  tracing:
+    sampling:
+      probability: 1.0
+    enabled: false
+  info:
+    env:
+      enabled: true
+    java:
+      enabled: true
+    build:
+      enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    org.beckn.discover: INFO
+    org.springframework.kafka: ERROR
+    org.apache.kafka: ERROR
+    root: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{bapId},%X{transactionId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{bapId},%X{transactionId}] %logger{36} - %msg%n"
+  file:
+    name: logs/discovery-service.log
+
+# Server Configuration
+server:
+  port: ${SERVER_PORT:8080}
+  compression:
+    enabled: true
+    mime-types: application/json,application/ld+json,application/xml,text/plain,text/xml,text/html
+    min-response-size: 2KB
+  # tomcat:
+  #   threads:
+  #     max: ${SERVER_TOMCAT_MAX_THREADS:50}
+  #     min-spare: ${SERVER_TOMCAT_MIN_SPARE_THREADS:10}
+  #     # Guidance: keep max ≈ 5x CPU cores (50 for 1 vCPU) so threads don't thrash
+  #   accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:100}
+  #   # When worker threads are busy, up to 100 new requests queue before being rejected
+  #   max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:2000}
+    # Cap simultaneous keep-alive connections to avoid exhausting file descriptors
+  # servlet:
+  #   context-path: /discovery-service

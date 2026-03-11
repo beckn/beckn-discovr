@@ -1,0 +1,135 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.0'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'jacoco'
+}
+
+group = 'org.beckn'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = '17'
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot Starters
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Micrometer Prometheus Registry
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+    
+    // Spring Kafka
+    implementation 'org.springframework.kafka:spring-kafka'
+    
+    // Jackson for JSON processing
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+    
+    // JSON Schema Validator - NetworkNT (better allOf and enum support)
+    implementation 'com.networknt:json-schema-validator:1.0.76'
+    // Jackson YAML support for NetworkNT
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml'
+    // org.json still needed by SchemaLoaderService
+    implementation 'org.json:json:20230227'
+    
+    // Bouncy Castle for BLAKE-512 and Ed25519 crypto (Dedi auth)
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    
+    
+    // Caffeine for caching
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+    
+    // SnakeYAML for YAML parsing (used by json-schema-ref-parser-jvm, but keeping explicit)
+    implementation 'org.yaml:snakeyaml:2.2'
+    
+    // Cache abstraction (SimpleCacheManager + CaffeineCache for named caches)
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    
+    // Retry
+    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework:spring-aspects'
+    
+    // Logging
+    implementation 'ch.qos.logback:logback-classic'
+    
+    // PostgreSQL
+    implementation 'org.postgresql:postgresql:42.7.1'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // Elasticsearch Java client (text search engine)
+    implementation 'co.elastic.clients:elasticsearch-java:8.15.0'
+    implementation 'org.elasticsearch.client:elasticsearch-rest-client:8.15.0'
+    
+    // Development tools
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+    
+    // Test dependencies
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:kafka'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:elasticsearch'
+    testImplementation 'com.squareup.okhttp3:mockwebserver'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:2023.0.0"
+    }
+}
+
+jacoco {
+    toolVersion = "0.8.10"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        csv.required = false
+        html.outputLocation = layout.buildDirectory.dir("reports/jacoco")
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+
+    // Log each test so "gradlew test --console=plain" shows which test runs/fails
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showCauses true
+        showStackTraces true
+    }
+}
+
+// JAR configuration
+jar {
+    enabled = false
+    archiveClassifier = ''
+}
+
+// Boot JAR configuration
+bootJar {
+    archiveBaseName = 'discovery-service'
+    archiveVersion = '1.0.0'
+    archiveClassifier = ''
+}
