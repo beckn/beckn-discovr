@@ -23,7 +23,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Elasticsearch for text search (optional backend for discovery-service)
+  # Elasticsearch for text search (optional backend for catalog-discover-job)
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.3.1
     container_name: discovery-elasticsearch
@@ -109,12 +109,12 @@ services:
       - beckn-network
     restart: unless-stopped
 
-  # Discovery Service V2
-  discovery-service:
+  # Catalog Discover Job (formerly discovery-service)
+  catalog-discover-job:
     build:
-      context: ./jobs/discovery-service
+      context: ./jobs/catalog-discover-job
       dockerfile: Dockerfile
-    container_name: discovery-service
+    container_name: catalog-discover-job
     ports:
       - "8082:8080"
     environment:
