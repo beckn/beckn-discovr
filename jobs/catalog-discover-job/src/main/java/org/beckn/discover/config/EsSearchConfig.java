@@ -5,14 +5,14 @@ import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import org.apache.http.HttpHost;
 import org.elasticsearch.client.RestClient;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Arrays;
 
 @Configuration
-@ConditionalOnProperty(name = "discovery.text-search.engine", havingValue = "elasticsearch")
+@Conditional(AnyEsFeatureCondition.class)
 public class EsSearchConfig {
 
     @Bean

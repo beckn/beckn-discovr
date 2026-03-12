@@ -75,9 +75,13 @@ discovery:
   
   # Text search engine — "nlweb" (default) or "elasticsearch"
   text-search:
-    engine: ${TEXT_SEARCH_ENGINE:nlweb}
+    engine: ${DISCOVERY_TEXT_SEARCH_ENGINE:nlweb}
 
-  # Elasticsearch text search (active when text-search.engine=elasticsearch)
+  # Spatial search engine — "postgresql" (default) or "elasticsearch"
+  spatial:
+    engine: ${DISCOVERY_SPATIAL_ENGINE:postgresql}
+
+  # Elasticsearch configuration (active when text-search.engine or spatial.engine=elasticsearch)
   elasticsearch:
     hosts: ${ES_HOSTS:http://localhost:9200}
     alias-name: ${ES_ALIAS:beckn-catalog}
