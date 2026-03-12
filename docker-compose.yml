@@ -153,15 +153,15 @@ services:
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
-       # Elasticsearch text search + spatial
+      # Elasticsearch text search + spatial
       - DISCOVERY_TEXT_SEARCH_ENGINE=elasticsearch
       - DISCOVERY_SPATIAL_ENGINE=elasticsearch
-      - DISCOVERY_ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - DISCOVERY_ELASTICSEARCH_ALIAS_NAME=beckn-catalog
-      - DISCOVERY_ELASTICSEARCH_RESULT_LIMIT=50
-      - DISCOVERY_ELASTICSEARCH_MIN_SCORE=0.5
-      - DISCOVERY_ELASTICSEARCH_CONNECT_TIMEOUT_MS=5000
-      - DISCOVERY_ELASTICSEARCH_SOCKET_TIMEOUT_MS=30000
+      - ES_HOSTS=http://elasticsearch:9200
+      - ES_ALIAS=beckn-catalog
+      - ES_RESULT_LIMIT=50
+      - ES_MIN_SCORE=0.5
+      - ES_CONNECT_TIMEOUT_MS=5000
+      - ES_SOCKET_TIMEOUT_MS=30000
     depends_on:
       postgres-discovery:
         condition: service_healthy
@@ -176,6 +176,22 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+
+  # Beckn Demo UI
+  beckn-demo-ui:
+    build:
+      context: ./reference-apps/beckn-demo-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_CATALOG_API_URL: http://localhost:3000
+        VITE_DISCOVER_API_URL: http://localhost:8082
+    image: beckn/beckn-demo-ui:1.0
+    container_name: beckn-demo-ui
+    ports:
+      - "5173:80"
+    networks:
+      - beckn-network
+    restart: unless-stopped
 
 volumes:
   postgres_discovery_data:
