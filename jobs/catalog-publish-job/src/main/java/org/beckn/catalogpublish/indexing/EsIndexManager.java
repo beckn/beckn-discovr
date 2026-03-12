@@ -91,7 +91,7 @@ public class EsIndexManager {
                     },
                     "mappings": {
                       "dynamic_templates": [
-                        { "geo_fields":               { "path_match": "*.geo",                                                       "mapping": { "type": "geo_point" } } },
+                        { "geo_fields":               { "path_match": "*.geo",                                                       "mapping": { "type": "geo_shape" } } },
                         { "item_attrs_longs_as_float":   { "path_match": "item_attributes.*", "match_mapping_type": "long",   "mapping": { "type": "float" } } },
                         { "item_attrs_doubles_as_float": { "path_match": "item_attributes.*", "match_mapping_type": "double", "mapping": { "type": "float" } } },
                         { "strings_as_keywords":      { "match_mapping_type": "string",                                               "mapping": { "type": "keyword"   } } },
@@ -112,7 +112,6 @@ public class EsIndexManager {
                         "item_short_desc":   { "type": "text" },
                         "item_long_desc":    { "type": "text" },
                         "full_text_blob":    { "type": "text", "analyzer": "standard" },
-                        "item_location":     { "type": "geo_point" },
                         "item_rating_value": { "type": "float" },
                         "item_is_active":    { "type": "boolean" },
                         "item_rateable":     { "type": "boolean" },

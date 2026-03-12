@@ -153,8 +153,9 @@ services:
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
-       # Elasticsearch text search
+       # Elasticsearch text search + spatial
       - DISCOVERY_TEXT_SEARCH_ENGINE=elasticsearch
+      - DISCOVERY_SPATIAL_ENGINE=elasticsearch
       - DISCOVERY_ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - DISCOVERY_ELASTICSEARCH_ALIAS_NAME=beckn-catalog
       - DISCOVERY_ELASTICSEARCH_RESULT_LIMIT=50

@@ -1,16 +1,18 @@
 package org.beckn.discover.service.elasticsearch;
 
+import org.beckn.discover.config.AnyEsFeatureCondition;
 import org.beckn.discover.model.Attributes;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.CategoryCode;
 import org.beckn.discover.model.Descriptor;
 import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Location;
 import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Rating;
 import org.beckn.discover.service.response.CatalogProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -30,7 +32,7 @@ import java.util.Map;
  * </p>
  */
 @Component
-@ConditionalOnProperty(name = "discovery.text-search.engine", havingValue = "elasticsearch")
+@Conditional(AnyEsFeatureCondition.class)
 public class EsSearchAssembler {
 
     private static final Logger log = LoggerFactory.getLogger(EsSearchAssembler.class);
@@ -129,7 +131,52 @@ public class EsSearchAssembler {
         item.setIsActive(bool(doc, "item_is_active"));
         item.setProvider(buildProvider(doc));
         item.setItemAttributes(buildAttributes(doc));
+
+        // Reconstruct all availableAt locations from loc_catalogs_beckn_items_beckn_availableAt.geo
+        item.setAvailableAt(buildAvailableAt(doc));
+
         return item;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Location> buildAvailableAt(Map<String, Object> doc) {
+        Object locRaw = doc.get("loc_catalogs_beckn_items_beckn_availableAt");
+
+        // loc_* is stored directly as a Location object (single) or List (multiple)
+        List<Map<String, Object>> locList;
+        if (locRaw instanceof List<?> list) {
+            locList = (List<Map<String, Object>>) list;
+        } else if (locRaw instanceof Map<?, ?> single) {
+            locList = List.of((Map<String, Object>) single);
+        } else {
+            return null;
+        }
+
+        List<Location> locations = new ArrayList<>();
+        for (Map<String, Object> locObj : locList) {
+            // Reconstruct geo
+            Object geoRaw = locObj.get("geo");
+            if (!(geoRaw instanceof Map<?, ?> geoMap)) continue;
+            String geoType = (String) geoMap.get("type");
+            Object coords = geoMap.get("coordinates");
+            if (geoType == null || !(coords instanceof List<?>)) continue;
+            Location.Geo geo = new Location.Geo(geoType, (List<Object>) coords);
+
+            // Reconstruct address if present
+            Location.Address address = null;
+            Object addrRaw = locObj.get("address");
+            if (addrRaw instanceof Map<?, ?> addrMap) {
+                address = new Location.Address();
+                address.setStreetAddress((String) addrMap.get("streetAddress"));
+                address.setAddressLocality((String) addrMap.get("addressLocality"));
+                address.setAddressRegion((String) addrMap.get("addressRegion"));
+                address.setPostalCode((String) addrMap.get("postalCode"));
+                address.setAddressCountry((String) addrMap.get("addressCountry"));
+            }
+
+            locations.add(new Location("beckn:Location", geo, address));
+        }
+        return locations.isEmpty() ? null : locations;
     }
 
     private static Descriptor buildDescriptor(Map<String, Object> doc) {
