@@ -67,6 +67,7 @@ public class CatalogDocumentAssembler {
         doc.put("item_name", text(desc, "schema:name"));
         doc.put("item_short_desc", text(desc, "beckn:shortDesc"));
         doc.put("item_long_desc", text(desc, "beckn:longDesc"));
+        doc.put("item_image", arrayToList(desc.path("schema:image")));
         doc.put("item_category_code", text(itemNode.path("beckn:category"), "schema:codeValue"));
         doc.put("item_category_name", text(itemNode.path("beckn:category"), "schema:name"));
         doc.put("item_rateable", bool(itemNode, "beckn:rateable"));
