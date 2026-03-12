@@ -79,7 +79,7 @@ services:
     image: beckn/catalog-publish-job:1.0
     container_name: catalog-publish
     ports:
-      - "8084:8080"
+      - "8085:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - SPRING_FLYWAY_BASELINE_ON_MIGRATE=true

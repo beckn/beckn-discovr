@@ -15,7 +15,23 @@ const discoveryController = {
     const start = Date.now();
     try {
       const body = req.body as Record<string, unknown>;
+      
+      // Ensure context has bpp_id and bpp_uri (dummy injection for V2 payloads)
+      if (body.context && typeof body.context === 'object') {
+        const context = body.context as Record<string, any>;
+        const catalogs = (body.message as any)?.catalogs || [];
+        const firstCatalog = catalogs[0];
+
+        if (!context.bpp_uri || context.bpp_uri === '') {
+          context.bpp_uri = firstCatalog?.['beckn:bppUri'] || firstCatalog?.bppUri || 'http://dummy-bpp-uri.com';
+        }
+        if (!context.bpp_id || context.bpp_id === '') {
+          context.bpp_id = firstCatalog?.['beckn:bppId'] || firstCatalog?.bppId || 'dummy-bpp-id';
+        }
+      }
+
       const transactionId = getTransactionId(body);
+      logger.info({ body }, 'Full message before pushing to Kafka');
       await sendToKafka(config, JSON.stringify(body), transactionId);
       kafkaSendSuccessTotal.inc();
       logger.info({ path, transactionId }, 'Produced to Kafka');
