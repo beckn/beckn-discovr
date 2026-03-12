@@ -179,11 +179,15 @@ public class EsSearchAssembler {
         return locations.isEmpty() ? null : locations;
     }
 
+    @SuppressWarnings("unchecked")
     private static Descriptor buildDescriptor(Map<String, Object> doc) {
         Descriptor d = new Descriptor("beckn:Descriptor");
         d.setName(str(doc, "item_name"));
         d.setShortDesc(str(doc, "item_short_desc"));
         d.setLongDesc(str(doc, "item_long_desc"));
+        Object imgRaw = doc.get("item_image");
+        if (imgRaw instanceof List<?> list && !list.isEmpty())
+            d.setImage((List<String>) list);
         return d;
     }
 
