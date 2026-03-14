@@ -75,6 +75,14 @@ public record AppProperties(
                         long retryInitialDelayMs,
                         int poolSize,
                         int poolQueueCapacity,
-                        int maxFailureAttempts) {
+                        int maxFailureAttempts,
+                        @Valid Mapping mapping) {
+
+                /** Configurable ES index template mapping settings. */
+                public record Mapping(
+                                int totalFieldsLimit,
+                                int depthLimit,
+                                String templateFile) {
+                }
         }
 }
