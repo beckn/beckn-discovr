@@ -169,7 +169,8 @@ public class EsIndexManager {
                         "item_rateable":     { "type": "boolean" },
                         "item_attributes":   { "type": "object", "dynamic": true },
                         "offers":            { "type": "nested" },
-                        "indexed_at":        { "type": "date" }
+                        "indexed_at":        { "type": "date" },
+                        "item_vector":       { "type": "dense_vector", "dims": 768, "index": true, "similarity": "cosine" }
                       }
                     }
                   }
