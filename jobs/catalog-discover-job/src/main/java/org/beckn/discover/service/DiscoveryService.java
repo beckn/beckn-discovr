@@ -1,6 +1,7 @@
 package org.beckn.discover.service;
 
 import org.beckn.discover.config.DiscoveryProperties;
+import org.beckn.discover.exception.SemanticSearchException;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverRequest;
@@ -124,6 +125,10 @@ public class DiscoveryService {
 
             return response;
 
+        } catch (SemanticSearchException e) {
+            // Propagate as-is — GlobalExceptionHandler maps this to 503 NET_INTERNAL_ERROR
+            metrics.recordFailure(start, e, request.getContext().getTransactionId());
+            throw e;
         } catch (Exception e) {
             metrics.recordFailure(start, e, request.getContext().getTransactionId());
             log.error("discovery.request.failed transactionId={} error={}",
@@ -292,7 +297,12 @@ public class DiscoveryService {
             log.error("discovery.path=D.timeout transactionId={} timeoutSec={}", qr.transactionId(), timeoutSec);
             throw new Exception("Text search timed out after " + timeoutSec + "s", e);
         } catch (java.util.concurrent.ExecutionException e) {
+            // Unwrap CompletionException → original cause (e.g. SemanticSearchException)
             Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof CompletionException && cause.getCause() != null)
+                cause = cause.getCause();
+            if (cause instanceof SemanticSearchException sse)
+                throw sse;
             throw new Exception("Text search failed: " + cause.getMessage(), cause);
         }
 
