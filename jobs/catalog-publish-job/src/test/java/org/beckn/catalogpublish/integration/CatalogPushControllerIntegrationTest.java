@@ -143,7 +143,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void push_missingBppId_returns202ButDoesNotPersist() throws Exception {
-        // context present but bpp_id missing → ParseStep throws PayloadParseException async
+        // context present but bpp_id missing → controller should enrich context and pipeline should run
         String payload = """
                 {
                   "context": {
@@ -167,6 +167,37 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
         Thread.sleep(500);
         assertThat(itemRepository.count()).isEqualTo(0);
+    }
+
+    @Test
+    void push_missingBppFields_enrichedFromCatalogAndPersists() throws Exception {
+        String payload = """
+                {
+                  "context": {
+                    "network_id": "test-net"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-1",
+                      "beckn:bppId": "bpp.test",
+                      "beckn:bppUri": "https://bpp.example.com",
+                      "beckn:items": [{
+                        "id": "item-1"
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/catalog/push")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.message.ack.status").value("ACK"));
+
+        await().atMost(10, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(1));
     }
 
     @Test
