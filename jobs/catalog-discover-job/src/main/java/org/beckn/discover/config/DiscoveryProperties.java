@@ -99,7 +99,7 @@ public class DiscoveryProperties {
         private String hosts = "http://localhost:9200";
         private String aliasName = "beckn-catalog";
         private int resultLimit = 50;
-        private float minScore = 0.5f;
+        private float minScore = 0.72f;
         private int connectTimeoutMs = 5000;
         private int socketTimeoutMs = 30000;
 
@@ -118,16 +118,98 @@ public class DiscoveryProperties {
     }
 
     /**
-     * Text search engine selection.
-     * Set {@code discovery.text-search.engine} to {@code nlweb} (default) or
-     * {@code elasticsearch} to switch backends with no code changes.
+     * Text search engine selection and AI model configuration.
+     *
+     * <p>Engine options:</p>
+     * <ul>
+     *   <li>{@code native-els}      — keyword BM25 multi_match (no AI, default)</li>
+     *   <li>{@code els-semantic-search} — vector knn + optional LLM query enrichment</li>
+     *   <li>{@code nlweb}           — NLWeb-based search</li>
+     * </ul>
      */
     public static class TextSearch {
-        /** Active text search backend: "nlweb" (default) or "elasticsearch". */
-        private String engine = "nlweb";
+        private String engine = "native-els";
+        private EmbeddingModel embeddingModel = new EmbeddingModel();
+        private LlmModel llmModel = new LlmModel();
 
         public String getEngine() { return engine; }
         public void setEngine(String engine) { this.engine = engine; }
+        public EmbeddingModel getEmbeddingModel() { return embeddingModel; }
+        public void setEmbeddingModel(EmbeddingModel embeddingModel) { this.embeddingModel = embeddingModel; }
+        public LlmModel getLlmModel() { return llmModel; }
+        public void setLlmModel(LlmModel llmModel) { this.llmModel = llmModel; }
+
+        /**
+         * Embedding model — converts text to vectors for semantic similarity search.
+         * Supports any OpenAI-compatible /v1/embeddings provider (Ollama, OpenAI, Azure, etc.).
+         * MUST match the model configured in catalog-publish-job.
+         * Changing the model requires recreating the Elasticsearch index.
+         */
+        public static class EmbeddingModel {
+            private String name = "nomic-embed-text";
+            private String baseUrl = "http://localhost:11434";
+            private String apiKey = "";
+            private int timeoutMs = 10000;
+            private int knnCandidates = 500;
+            private int retries = 3;
+            private long retryDelayMs = 1000;
+
+            public String getName() { return name; }
+            public void setName(String name) { this.name = name; }
+            public String getBaseUrl() { return baseUrl; }
+            public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+            public String getApiKey() { return apiKey; }
+            public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+            public int getTimeoutMs() { return timeoutMs; }
+            public void setTimeoutMs(int timeoutMs) { this.timeoutMs = timeoutMs; }
+            public int getKnnCandidates() { return knnCandidates; }
+            public void setKnnCandidates(int knnCandidates) { this.knnCandidates = knnCandidates; }
+            public int getRetries() { return retries; }
+            public void setRetries(int retries) { this.retries = retries; }
+            public long getRetryDelayMs() { return retryDelayMs; }
+            public void setRetryDelayMs(long retryDelayMs) { this.retryDelayMs = retryDelayMs; }
+        }
+
+        /**
+         * LLM model — enriches the query with synonyms and domain vocabulary before embedding.
+         * Optional when engine=els-semantic-search. When disabled, the raw query is embedded directly.
+         * Supports any OpenAI-compatible /v1/chat/completions provider.
+         */
+        public static class LlmModel {
+            private boolean enabled = true;
+            private String name = "gpt-4o-mini";
+            private String baseUrl = "https://api.openai.com";
+            private String apiKey = "";
+            private int timeoutMs = 30000;
+            private int retries = 3;
+            private long retryDelayMs = 1000;
+            private double temperature = 0.0;
+            private String systemPrompt =
+                    "You are a search query enricher for a product and service catalog. " +
+                    "Append up to 5 highly relevant synonyms or specifications to the original query. " +
+                    "Keep the original query words first, then add only closely related terms. " +
+                    "Return only the expanded query as a single short line. " +
+                    "Do not add loosely related terms, brands, or categories. No explanation. No formatting.";
+
+            public boolean isEnabled() { return enabled; }
+            public void setEnabled(boolean enabled) { this.enabled = enabled; }
+            public String getName() { return name; }
+            public void setName(String name) { this.name = name; }
+            public String getBaseUrl() { return baseUrl; }
+            public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+            public String getApiKey() { return apiKey; }
+            public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+            public int getTimeoutMs() { return timeoutMs; }
+            public void setTimeoutMs(int timeoutMs) { this.timeoutMs = timeoutMs; }
+            public int getRetries() { return retries; }
+            public void setRetries(int retries) { this.retries = retries; }
+            public long getRetryDelayMs() { return retryDelayMs; }
+            public void setRetryDelayMs(long retryDelayMs) { this.retryDelayMs = retryDelayMs; }
+            public double getTemperature() { return temperature; }
+            public void setTemperature(double temperature) { this.temperature = temperature; }
+            public String getSystemPrompt() { return systemPrompt; }
+            public void setSystemPrompt(String systemPrompt) { this.systemPrompt = systemPrompt; }
+        }
     }
 
     public static class Spatial {
@@ -164,6 +246,8 @@ public class DiscoveryProperties {
         private int timeoutSeconds;
         private boolean streaming;
         private int scoreThreshold = 80; // Default score threshold
+        private int maxRetries;
+        private long retryDelayMs;
 
         public String getBaseUrl() {
             return baseUrl;
@@ -203,6 +287,22 @@ public class DiscoveryProperties {
 
         public void setScoreThreshold(int scoreThreshold) {
             this.scoreThreshold = scoreThreshold;
+        }
+
+        public int getMaxRetries() {
+            return maxRetries;
+        }
+
+        public void setMaxRetries(int maxRetries) {
+            this.maxRetries = maxRetries;
+        }
+
+        public long getRetryDelayMs() {
+            return retryDelayMs;
+        }
+
+        public void setRetryDelayMs(long retryDelayMs) {
+            this.retryDelayMs = retryDelayMs;
         }
     }
 

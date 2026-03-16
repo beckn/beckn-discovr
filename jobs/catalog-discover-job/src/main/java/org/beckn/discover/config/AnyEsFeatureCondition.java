@@ -5,11 +5,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.ConfigurationCondition;
 
 /**
- * Spring condition that activates Elasticsearch beans when EITHER the text-search engine
- * OR the spatial engine is set to "elasticsearch".
- *
- * Used on EsSearchConfig to ensure the ElasticsearchClient bean is created whenever
- * any ES feature is enabled.
+ * Spring condition that activates the Elasticsearch client bean when ANY ES feature is needed:
+ * <ul>
+ *   <li>{@code discovery.text-search.engine=native-els}        — keyword BM25 text search</li>
+ *   <li>{@code discovery.text-search.engine=els-semantic-search}   — vector knn + intent parsing</li>
+ *   <li>{@code discovery.spatial.engine=elasticsearch}         — geo spatial search</li>
+ * </ul>
  */
 public class AnyEsFeatureCondition extends AnyNestedCondition {
 
@@ -17,8 +18,11 @@ public class AnyEsFeatureCondition extends AnyNestedCondition {
         super(ConfigurationPhase.REGISTER_BEAN);
     }
 
-    @ConditionalOnProperty(name = "discovery.text-search.engine", havingValue = "elasticsearch")
-    static class TextSearchIsEs {}
+    @ConditionalOnProperty(name = "discovery.text-search.engine", havingValue = "native-els")
+    static class TextSearchIsNativeEs {}
+
+    @ConditionalOnProperty(name = "discovery.text-search.engine", havingValue = "els-semantic-search")
+    static class TextSearchIsSemantic {}
 
     @ConditionalOnProperty(name = "discovery.spatial.engine", havingValue = "elasticsearch")
     static class SpatialIsEs {}

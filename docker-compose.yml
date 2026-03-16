@@ -44,6 +44,40 @@ services:
       retries: 5
       start_period: 30s
 
+  # Ollama — local LLM server for generating vector embeddings
+  # No host port binding — only accessible within beckn-network
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - beckn-network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  # Pulls required models once after Ollama is healthy — skips if already cached
+  # OLLAMA_NOPRINTER=1 disables the TUI progress display so it works without a TTY
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    entrypoint: ["/bin/bash", "-c"]
+    command: "ollama pull nomic-embed-text 2>&1 | cat && ollama pull llama3.2:1b 2>&1 | cat"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_NOPRINTER=1
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - beckn-network
+    restart: "no"
+
+  # on-discovery-api removed — catalog push is now handled by catalog-publish service (POST /catalog/push)
 
   # Catalog Publish Job (Persistence Only - Distribution Disabled)
   # This job acts as the bridge for discovery ingestion
@@ -102,12 +136,27 @@ services:
        #   volumes:
        #     - ./my-template.json:/config/es-template.json
        # Then set: ES_MAPPING_TEMPLATE_FILE=/config/es-template.json
-      - ES_MAPPING_TEMPLATE_FILE=
+      - ES_MAPPING_TEMPLATE_FILE=/config/es-index-template.json
+      # ── Text Search Indexing ────────────────────────────────────────────────
+      # Enable to generate and store item vectors in Elasticsearch.
+      # Supports any OpenAI-compatible /v1/embeddings provider.
+      # MUST use the same model as DISCOVERY_TEXT_SEARCH_EMBEDDING_NAME below.
+      - CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED=true
+      - CATALOG_TEXT_SEARCH_EMBEDDING_NAME=nomic-embed-text
+      - CATALOG_TEXT_SEARCH_EMBEDDING_BASE_URL=http://ollama:11434
+      - CATALOG_TEXT_SEARCH_EMBEDDING_API_KEY=
+      - CATALOG_TEXT_SEARCH_EMBEDDING_TIMEOUT_MS=10000
+      - CATALOG_TEXT_SEARCH_EMBEDDING_RETRIES=3
+      - CATALOG_TEXT_SEARCH_EMBEDDING_RETRY_DELAY_MS=1000
+    volumes:
+      - ./config/es-index-template.json:/config/es-index-template.json
     depends_on:
       elasticsearch:
         condition: service_healthy
       postgres-discovery:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     networks:
       - beckn-network
     restart: unless-stopped
@@ -127,8 +176,8 @@ services:
       - KAFKA_RESPONSE_TOPIC=catalog.responses
       - POSTGRES_HOST=postgres-discovery
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=catalog_db
-      - POSTGRES_USER=catalog_user
+      - POSTGRES_DATABASE=catalog_db
+      - POSTGRES_USERNAME=catalog_user
       - POSTGRES_PASSWORD=catalog123
       - POSTGRES_MAX_POOL_SIZE=10
       - MAX_ITEMS_PER_CATALOG=100
@@ -142,19 +191,52 @@ services:
       - OTEL_LOGS_EXPORTER=none
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       # Elasticsearch text search + spatial
-      - DISCOVERY_TEXT_SEARCH_ENGINE=elasticsearch
       - DISCOVERY_SPATIAL_ENGINE=elasticsearch
       - ES_HOSTS=http://elasticsearch:9200
       - ES_ALIAS=beckn-catalog
       - ES_RESULT_LIMIT=50
-      - ES_MIN_SCORE=0.5
+      - ES_MIN_SCORE=0.68
       - ES_CONNECT_TIMEOUT_MS=5000
       - ES_SOCKET_TIMEOUT_MS=30000
+      # ── Text Search ─────────────────────────────────────────────────────────
+      # Engine options: native-els | els-semantic-search | nlweb
+      # native-els        — keyword BM25, no AI dependency (default)
+      # els-semantic-search — vector knn via Elasticsearch + optional LLM enrichment
+      #                       requires embedding-model and llm-model config below
+      # nlweb             — delegates to an external NLWeb service
+      - DISCOVERY_TEXT_SEARCH_ENGINE=els-semantic-search
+      # ── Embedding model (required when engine=els-semantic-search) ───────────
+      # Supports any OpenAI-compatible /v1/embeddings provider.
+      # MUST match CATALOG_TEXT_SEARCH_EMBEDDING_NAME — same model both sides.
+      # If engine != els-semantic-search, these values are ignored.
+      - DISCOVERY_TEXT_SEARCH_EMBEDDING_NAME=nomic-embed-text
+      - DISCOVERY_TEXT_SEARCH_EMBEDDING_BASE_URL=http://ollama:11434
+      - DISCOVERY_TEXT_SEARCH_EMBEDDING_API_KEY=
+      - DISCOVERY_TEXT_SEARCH_EMBEDDING_TIMEOUT_MS=10000
+      - DISCOVERY_TEXT_SEARCH_EMBEDDING_KNN_CANDIDATES=500
+      - DISCOVERY_TEXT_SEARCH_EMBEDDING_RETRIES=3
+      - DISCOVERY_TEXT_SEARCH_EMBEDDING_RETRY_DELAY_MS=1000
+      # ── LLM query enrichment (optional, used only when engine=els-semantic-search) ──
+      # Expands query with synonyms and domain vocabulary before embedding.
+      # Set LLM_ENABLED=false to skip enrichment and embed the raw query directly.
+      # Supports any OpenAI-compatible /v1/chat/completions provider (OpenAI, Groq, Azure, etc.).
+      # If engine != els-semantic-search, these values are ignored.
+      - DISCOVERY_TEXT_SEARCH_LLM_ENABLED=true
+      - DISCOVERY_TEXT_SEARCH_LLM_NAME=gpt-4o-mini
+      - DISCOVERY_TEXT_SEARCH_LLM_BASE_URL=https://api.openai.com
+      - DISCOVERY_TEXT_SEARCH_LLM_API_KEY=${OPENAI_API_KEY}
+      - DISCOVERY_TEXT_SEARCH_LLM_TIMEOUT_MS=30000
+      - DISCOVERY_TEXT_SEARCH_LLM_RETRIES=3
+      - DISCOVERY_TEXT_SEARCH_LLM_RETRY_DELAY_MS=1000
+      - DISCOVERY_TEXT_SEARCH_LLM_TEMPERATURE=0.0
+      - DISCOVERY_TEXT_SEARCH_LLM_SYSTEM_PROMPT=You are a product catalog search assistant. Preserve every word of the user query exactly as given including brand names. Only append 1-2 product synonyms if the query is purely generic like a category name. If the query contains any brand name or specific product term return it completely unchanged. Never add process terms or loosely related categories. Return only the final query as a single line with no explanation.
     depends_on:
       postgres-discovery:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     networks:
       - beckn-network
     restart: unless-stopped
@@ -185,6 +267,8 @@ volumes:
   postgres_discovery_data:
     driver: local
   elasticsearch_data:
+    driver: local
+  ollama_data:
     driver: local
 
 networks:

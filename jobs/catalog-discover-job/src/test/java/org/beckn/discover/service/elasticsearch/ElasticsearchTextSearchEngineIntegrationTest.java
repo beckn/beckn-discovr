@@ -26,6 +26,7 @@ import java.io.StringReader;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -80,7 +81,8 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                 new RestClientTransport(restClient, new JacksonJsonpMapper()));
 
         searchEngine = new ElasticsearchTextSearchEngine(
-                esClient, new EsSearchAssembler(new CatalogProcessor()), new ObjectMapper(), buildProps());
+                esClient, new EsSearchAssembler(new CatalogProcessor()), new ObjectMapper(), buildProps(),
+                Optional.empty(), Optional.empty());
 
         createIndexAndAlias();
         seedTestDocs();
