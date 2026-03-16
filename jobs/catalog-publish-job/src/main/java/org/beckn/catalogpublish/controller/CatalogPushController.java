@@ -15,7 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * POST /catalog/push — Beckn subscriber callback endpoint.
@@ -87,6 +89,30 @@ public class CatalogPushController {
             }
             ObjectNode context = (ObjectNode) ctxNode;
 
+            // Core Beckn context defaults (do not overwrite existing non-blank values)
+            if (isBlank(textOrNull(context.get("version")))) {
+                context.put("version", "2.0.0");
+            }
+            if (isBlank(textOrNull(context.get("action")))) {
+                context.put("action", "on_discover");
+            }
+            if (isBlank(textOrNull(context.get("timestamp")))) {
+                context.put("timestamp", Instant.now().toString());
+            }
+            if (isBlank(textOrNull(context.get("message_id")))) {
+                context.put("message_id", UUID.randomUUID().toString());
+            }
+            if (isBlank(textOrNull(context.get("transaction_id")))) {
+                context.put("transaction_id", UUID.randomUUID().toString());
+            }
+            if (isBlank(textOrNull(context.get("bap_id")))) {
+                context.put("bap_id", "dummy-bap-id");
+            }
+            if (isBlank(textOrNull(context.get("ttl")))) {
+                context.put("ttl", "PT30S");
+            }
+
+            // BPP context defaults (used by downstream persistence)
             String updatedBppId = textOrNull(context.get("bpp_id"));
             String updatedBppUri = textOrNull(context.get("bpp_uri"));
 
