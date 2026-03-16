@@ -142,7 +142,7 @@ services:
       # Supports any OpenAI-compatible /v1/embeddings provider.
       # MUST use the same model as DISCOVERY_TEXT_SEARCH_EMBEDDING_NAME below.
       - CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED=true
-      - CATALOG_TEXT_SEARCH_EMBEDDING_NAME=nomic-embed-text
+      - CATALOG_TEXT_SEARCH_EMBEDDING_NAME=text-embedding-3-small
       - CATALOG_TEXT_SEARCH_EMBEDDING_BASE_URL=http://ollama:11434
       - CATALOG_TEXT_SEARCH_EMBEDDING_API_KEY=
       - CATALOG_TEXT_SEARCH_EMBEDDING_TIMEOUT_MS=10000
@@ -209,7 +209,7 @@ services:
       # Supports any OpenAI-compatible /v1/embeddings provider.
       # MUST match CATALOG_TEXT_SEARCH_EMBEDDING_NAME — same model both sides.
       # If engine != els-semantic-search, these values are ignored.
-      - DISCOVERY_TEXT_SEARCH_EMBEDDING_NAME=nomic-embed-text
+      - DISCOVERY_TEXT_SEARCH_EMBEDDING_NAME=text-embedding-3-small
       - DISCOVERY_TEXT_SEARCH_EMBEDDING_BASE_URL=http://ollama:11434
       - DISCOVERY_TEXT_SEARCH_EMBEDDING_API_KEY=
       - DISCOVERY_TEXT_SEARCH_EMBEDDING_TIMEOUT_MS=10000
