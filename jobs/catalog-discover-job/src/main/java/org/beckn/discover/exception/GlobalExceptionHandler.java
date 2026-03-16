@@ -7,6 +7,8 @@ import java.util.UUID;
 
 import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.common.ErrorMessages;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.beckn.discover.controller.DiscoveryController;
 import org.beckn.discover.model.AckResponse;
 import org.springframework.http.HttpHeaders;
@@ -32,12 +34,15 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
  * <ol>
  *   <li>{@link ResponseEntityExceptionHandler} — Spring MVC infrastructure exceptions (400/405/415…)</li>
  *   <li>{@link ErrorResponseException} — Beckn auth / validation errors with embedded code/paths</li>
+ *   <li>{@link SemanticSearchException} — embedding/LLM provider unavailable → 503 NET_INTERNAL_ERROR</li>
  *   <li>{@link IllegalArgumentException} — schema validation failures → 400</li>
  *   <li>{@link Exception} — catch-all → 500</li>
  * </ol>
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     private static final java.util.regex.Pattern PATHS_PATTERN = java.util.regex.Pattern
             .compile("\\(paths:\\s*([^)]+)\\)");
@@ -53,6 +58,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     // ── Application exceptions ─────────────────────────────────────────────────
+
+    @ExceptionHandler({ SemanticSearchException.class })
+    public ResponseEntity<Object> handleSemanticSearchFailure(SemanticSearchException ex, WebRequest request) {
+        log.error("semantic.search.provider.unavailable error={} cause={}", ex.getMessage(),
+                ex.getCause() != null ? ex.getCause().getMessage() : "none", ex);
+        String transactionId = extractTransactionId(ex, request);
+        String timestamp = ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        AckResponse ackResponse = AckResponse.nack(transactionId, timestamp,
+                ErrorCodes.NET_INTERNAL_ERROR, "message.text_search", ErrorMessages.INTERNAL_SERVER_ERROR);
+        return new ResponseEntity<>(ackResponse, HttpStatus.SERVICE_UNAVAILABLE);
+    }
 
     @ExceptionHandler({ IllegalArgumentException.class })
     public ResponseEntity<Object> handleBadRequest(Exception ex, WebRequest request) {

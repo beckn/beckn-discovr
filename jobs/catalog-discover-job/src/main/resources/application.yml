@@ -73,9 +73,48 @@ discovery:
     max-retries: ${SCHEMA_FETCH_MAX_RETRIES:3}
     retry-delay-ms: ${SCHEMA_FETCH_RETRY_DELAY_MS:1000}
   
-  # Text search engine — "nlweb" (default) or "elasticsearch"
+  # ─── Text Search ──────────────────────────────────────────────────────────
+  # Controls how free-text queries (message.text_search) are resolved.
+  #
+  # engine options:
+  #   native-els      — keyword BM25 multi_match on full_text_blob + item_name (no AI, default)
+  #   els-semantic-search — full natural language vector knn search:
+  #                       1. LLM enriches the raw query with synonyms and domain vocabulary
+  #                       2. Enriched query is embedded and matched via knn against item_vector
+  #                     Both embedding-model and llm-model must be configured.
+  #   nlweb           — delegates to an external NLWeb service
   text-search:
-    engine: ${DISCOVERY_TEXT_SEARCH_ENGINE:nlweb}
+    engine: ${DISCOVERY_TEXT_SEARCH_ENGINE:native-els}
+
+    # Converts text to dense vectors for semantic similarity matching.
+    # Supports any OpenAI-compatible /v1/embeddings provider.
+    # IMPORTANT: model name MUST match catalog-publish-job — same model both sides.
+    # Changing the model requires recreating the Elasticsearch index.
+    embedding-model:
+      name: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_NAME:nomic-embed-text}
+      base-url: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_BASE_URL:http://localhost:11434}
+      api-key: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_API_KEY:}
+      timeout-ms: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_TIMEOUT_MS:10000}
+      # knn search candidate pool — higher = more accurate but slower
+      knn-candidates: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_KNN_CANDIDATES:500}
+      retries: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_RETRIES:3}
+      retry-delay-ms: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_RETRY_DELAY_MS:1000}
+
+    # Enriches the raw search query before embedding to improve semantic match quality.
+    # Optional — when disabled, the raw query is embedded directly.
+    # Supports any OpenAI-compatible /v1/chat/completions provider.
+    llm-model:
+      # Set to false to disable LLM enrichment (e.g. CPU-only environments).
+      enabled: ${DISCOVERY_TEXT_SEARCH_LLM_ENABLED:true}
+      name: ${DISCOVERY_TEXT_SEARCH_LLM_NAME:gpt-4o-mini}
+      base-url: ${DISCOVERY_TEXT_SEARCH_LLM_BASE_URL:https://api.openai.com}
+      api-key: ${DISCOVERY_TEXT_SEARCH_LLM_API_KEY:}
+      timeout-ms: ${DISCOVERY_TEXT_SEARCH_LLM_TIMEOUT_MS:30000}
+      retries: ${DISCOVERY_TEXT_SEARCH_LLM_RETRIES:3}
+      retry-delay-ms: ${DISCOVERY_TEXT_SEARCH_LLM_RETRY_DELAY_MS:1000}
+      # 0 = deterministic output (recommended for query enrichment)
+      temperature: ${DISCOVERY_TEXT_SEARCH_LLM_TEMPERATURE:0.0}
+      system-prompt: ${DISCOVERY_TEXT_SEARCH_LLM_SYSTEM_PROMPT:You are a search query enricher for a product and service catalog. Append up to 5 highly relevant synonyms or specifications to the original query. Keep the original query words first, then add only closely related terms. Return only the expanded query as a single short line. Do not add loosely related terms, brands, or categories. No explanation. No formatting.}
 
   # Spatial search engine — "postgresql" (default) or "elasticsearch"
   spatial:
@@ -86,7 +125,8 @@ discovery:
     hosts: ${ES_HOSTS:http://localhost:9200}
     alias-name: ${ES_ALIAS:beckn-catalog}
     result-limit: ${ES_RESULT_LIMIT:50}
-    min-score: ${ES_MIN_SCORE:0.5}
+    # ES normalizes cosine as (1 + cosine) / 2, so 0.72 means ~0.44 raw cosine similarity.
+    min-score: ${ES_MIN_SCORE:0.72}
     connect-timeout-ms: ${ES_CONNECT_TIMEOUT_MS:5000}
     socket-timeout-ms: ${ES_SOCKET_TIMEOUT_MS:30000}
 

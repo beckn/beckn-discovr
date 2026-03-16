@@ -10,6 +10,7 @@ import org.beckn.catalogpublish.indexing.bulk.BulkIndexService;
 import org.beckn.catalogpublish.indexing.document.CatalogDocumentAssembler;
 import org.beckn.catalogpublish.indexing.failure.EsFailurePublisher;
 import org.beckn.catalogpublish.model.Item;
+import org.beckn.catalogpublish.service.embedding.EmbeddingClient;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.MdcSupport;
 import org.slf4j.Logger;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Post-commit ES indexing step.
@@ -50,19 +52,22 @@ public class ElasticIndexStep {
     private final EsIndexerMetrics metrics;
     private final ObjectMapper mapper;
     private final int batchSize;
+    private final Optional<EmbeddingClient> embeddingClient;
 
     public ElasticIndexStep(CatalogDocumentAssembler assembler,
             BulkIndexService bulkIndexService,
             EsFailurePublisher failurePublisher,
             EsIndexerMetrics metrics,
             ObjectMapper mapper,
-            AppProperties props) {
+            AppProperties props,
+            Optional<EmbeddingClient> embeddingClient) {
         this.assembler = assembler;
         this.bulkIndexService = bulkIndexService;
         this.failurePublisher = failurePublisher;
         this.metrics = metrics;
         this.mapper = mapper;
         this.batchSize = props.catalog().elasticsearch().bulkBatchSize();
+        this.embeddingClient = embeddingClient;
     }
 
     @Async("esIndexExecutor")
@@ -89,8 +94,17 @@ public class ElasticIndexStep {
             }
             String[] networkIds = item.getNetworkIds();
             String networkId = networkIds.length > 0 ? networkIds[0] : null;
-            bySchemaType.computeIfAbsent(schemaType, k -> new ArrayList<>())
-                    .add(assembler.assemble(item, payloadNode, schemaType, networkId));
+            Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkId);
+            embeddingClient.ifPresent(client -> {
+                try {
+                    JsonNode catalogNode = payloadNode.path("catalogs").path(0);
+                    String itemJson = mapper.writeValueAsString(catalogNode);
+                    client.embed(itemJson).ifPresent(vec -> doc.put("item_vector", vec));
+                } catch (Exception e) {
+                    log.warn("es.index.embedding.serialize.failed itemId={} error={}", item.getId(), e.getMessage());
+                }
+            });
+            bySchemaType.computeIfAbsent(schemaType, k -> new ArrayList<>()).add(doc);
         }
         bySchemaType.forEach((schemaType, docs) -> indexInBatches(schemaType, docs, batch));
     }

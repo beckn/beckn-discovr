@@ -27,6 +27,9 @@ discovery:
     request-topic: catalog.v2.discovery.requests
     response-topic: catalog.discovery.response
   
+  text-search:
+    engine: nlweb
+
   nlweb:
     base-url: http://localhost:8000
     ask-endpoint: /ask
