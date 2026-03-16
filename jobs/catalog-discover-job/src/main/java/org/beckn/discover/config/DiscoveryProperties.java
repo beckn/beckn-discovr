@@ -17,6 +17,7 @@ public class DiscoveryProperties {
     private Schema schema = new Schema();
     private RegistryAuthConfig registryAuth = new RegistryAuthConfig();
     private TextSearch textSearch = new TextSearch();
+    private Spatial spatial = new Spatial();
     private Elasticsearch elasticsearch = new Elasticsearch();
 
     public Kafka getKafka() {
@@ -75,6 +76,14 @@ public class DiscoveryProperties {
         this.textSearch = textSearch;
     }
 
+    public Spatial getSpatial() {
+        return spatial;
+    }
+
+    public void setSpatial(Spatial spatial) {
+        this.spatial = spatial;
+    }
+
     public Elasticsearch getElasticsearch() {
         return elasticsearch;
     }
@@ -116,6 +125,13 @@ public class DiscoveryProperties {
     public static class TextSearch {
         /** Active text search backend: "nlweb" (default) or "elasticsearch". */
         private String engine = "nlweb";
+
+        public String getEngine() { return engine; }
+        public void setEngine(String engine) { this.engine = engine; }
+    }
+
+    public static class Spatial {
+        private String engine = "postgresql";
 
         public String getEngine() { return engine; }
         public void setEngine(String engine) { this.engine = engine; }

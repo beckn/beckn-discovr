@@ -16,7 +16,8 @@ import org.springframework.validation.annotation.Validated;
 public record AppProperties(
                 @Valid Datasource datasource,
                 @Valid Messaging messaging,
-                @Valid Catalog catalog) {
+                @Valid Catalog catalog,
+                @Valid Http http) {
         public record Datasource(
                         @NotBlank String url,
                         @NotBlank String driverClassName,
@@ -63,6 +64,9 @@ public record AppProperties(
                         @Valid Elasticsearch elasticsearch) {
         }
 
+        public record Http(boolean signatureVerificationEnabled) {
+        }
+
         public record Elasticsearch(
                         boolean enabled,
                         String hosts,
@@ -75,6 +79,14 @@ public record AppProperties(
                         long retryInitialDelayMs,
                         int poolSize,
                         int poolQueueCapacity,
-                        int maxFailureAttempts) {
+                        int maxFailureAttempts,
+                        @Valid Mapping mapping) {
+
+                /** Configurable ES index template mapping settings. */
+                public record Mapping(
+                                int totalFieldsLimit,
+                                int depthLimit,
+                                String templateFile) {
+                }
         }
 }

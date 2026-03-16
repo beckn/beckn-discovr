@@ -3,6 +3,7 @@ package org.beckn.catalogpublish.indexing.document;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.catalogpublish.model.Item;
+import org.beckn.catalogpublish.service.geometry.GeoShapeExtractor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -18,9 +19,11 @@ import java.util.stream.StreamSupport;
 public class CatalogDocumentAssembler {
 
     private final ObjectMapper objectMapper;
+    private final GeoShapeExtractor geoShapeExtractor;
 
-    public CatalogDocumentAssembler(ObjectMapper objectMapper) {
+    public CatalogDocumentAssembler(ObjectMapper objectMapper, GeoShapeExtractor geoShapeExtractor) {
         this.objectMapper = objectMapper;
+        this.geoShapeExtractor = geoShapeExtractor;
     }
 
     /** Called from ElasticIndexStep — Item carries bppId/bppUri directly. */
@@ -64,6 +67,7 @@ public class CatalogDocumentAssembler {
         doc.put("item_name", text(desc, "schema:name"));
         doc.put("item_short_desc", text(desc, "beckn:shortDesc"));
         doc.put("item_long_desc", text(desc, "beckn:longDesc"));
+        doc.put("item_image", arrayToList(desc.path("schema:image")));
         doc.put("item_category_code", text(itemNode.path("beckn:category"), "schema:codeValue"));
         doc.put("item_category_name", text(itemNode.path("beckn:category"), "schema:name"));
         doc.put("item_rateable", bool(itemNode, "beckn:rateable"));
@@ -74,7 +78,7 @@ public class CatalogDocumentAssembler {
         doc.put("item_provider_name", text(itemNode.path("beckn:provider").path("beckn:descriptor"), "schema:name"));
         doc.put("indexed_at", Instant.now().toString());
 
-        geoPoint(itemNode).ifPresent(geo -> doc.put("item_location", geo));
+        geoShapeExtractor.extractGeoShapes(payloadNode).forEach(doc::put);
 
         JsonNode attrs = itemNode.path("beckn:itemAttributes");
         if (!attrs.isMissingNode() && attrs.isObject())
@@ -82,7 +86,7 @@ public class CatalogDocumentAssembler {
 
         List<Map<String, Object>> offers = buildOffers(catalog.path("beckn:offers"));
         doc.put("offers", offers);
-        doc.put("full_text_blob", buildTextBlob(doc, offers));
+        doc.put("full_text_blob", buildTextBlob(doc, offers, itemNode));
         return doc;
     }
 
@@ -108,18 +112,26 @@ public class CatalogDocumentAssembler {
         return result;
     }
 
-    private String buildTextBlob(Map<String, Object> doc, List<Map<String, Object>> offers) {
+    private String buildTextBlob(Map<String, Object> doc, List<Map<String, Object>> offers,
+                                  JsonNode itemNode) {
         List<String> parts = new ArrayList<>();
+
+        // Core item fields
         for (String key : List.of("item_name", "item_short_desc", "item_long_desc",
                 "item_category_name", "item_provider_name")) {
             if (doc.get(key) instanceof String s && !s.isBlank())
                 parts.add(s);
         }
-        if (doc.get("item_attributes") instanceof Map<?, ?> m)
-            m.values().stream().filter(v -> v instanceof String).map(Object::toString).forEach(parts::add);
+
+        // Task 2: text from all location objects anywhere in itemNode (any key, any depth)
+        collectLocationText(itemNode, parts);
+
+        // Task 3: all text from itemAttributes — recursive deep walk
+        collectStrings(itemNode.path("beckn:itemAttributes"), parts);
+
+        // Offer names
         offers.stream()
                 .map(o -> {
-                    // Navigate preserved beckn:descriptor → schema:name structure
                     Object desc = o.get("beckn:descriptor");
                     if (desc instanceof Map<?, ?> m)
                         return m.get("schema:name");
@@ -128,15 +140,51 @@ public class CatalogDocumentAssembler {
                 .filter(n -> n instanceof String)
                 .map(Object::toString)
                 .forEach(parts::add);
+
         return String.join(" ", parts);
     }
 
-    private java.util.Optional<Map<String, Double>> geoPoint(JsonNode itemNode) {
-        JsonNode coords = itemNode.path("beckn:availableAt").path(0).path("geo").path("coordinates");
-        if (!coords.isArray() || coords.size() < 2)
-            return java.util.Optional.empty();
-        // GeoJSON order: [lon, lat] → ES geo_point: {lat, lon}
-        return java.util.Optional.of(Map.of("lat", coords.get(1).asDouble(), "lon", coords.get(0).asDouble()));
+    /**
+     * Walks the entire itemNode tree. When it finds a Location object
+     * (any object containing a geo/gps/polygon field at any depth, any key name),
+     * collects all non-geo string values from it (address fields, etc.).
+     */
+    private static void collectLocationText(JsonNode node, List<String> parts) {
+        if (node == null || node.isMissingNode()) return;
+        if (node.isObject()) {
+            if (node.has("geo") || node.has("gps") || node.has("polygon")) {
+                // This is a Location object — collect all non-geo text fields
+                node.fields().forEachRemaining(e -> {
+                    if (!e.getKey().equals("geo") && !e.getKey().equals("gps")
+                            && !e.getKey().equals("polygon") && !e.getKey().startsWith("@"))
+                        collectStrings(e.getValue(), parts);
+                });
+            } else {
+                node.fields().forEachRemaining(e -> collectLocationText(e.getValue(), parts));
+            }
+        } else if (node.isArray()) {
+            node.forEach(child -> collectLocationText(child, parts));
+        }
+    }
+
+    /**
+     * Recursively collects all non-blank string leaf values from a JsonNode tree.
+     * Skips JSON-LD metadata keys (@context, @type) and URL strings.
+     */
+    private static void collectStrings(JsonNode node, List<String> parts) {
+        if (node == null || node.isMissingNode()) return;
+        if (node.isTextual()) {
+            String val = node.asText();
+            if (!val.isBlank() && !val.startsWith("http") && !val.startsWith("@"))
+                parts.add(val);
+        } else if (node.isObject()) {
+            node.fields().forEachRemaining(e -> {
+                if (!e.getKey().startsWith("@"))
+                    collectStrings(e.getValue(), parts);
+            });
+        } else if (node.isArray()) {
+            node.forEach(child -> collectStrings(child, parts));
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -12,6 +12,17 @@ jobs:
       contents: read
       packages: write
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: catalog-discover-job
+            context: jobs/catalog-discover-job
+            dockerfile: jobs/catalog-discover-job/Dockerfile
+          - name: catalog-publish-job
+            context: jobs/catalog-publish-job
+            dockerfile: jobs/catalog-publish-job/Dockerfile
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,7 +41,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/catalog-discover-job
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -38,8 +49,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: jobs/catalog-discover-job
-          file: jobs/catalog-discover-job/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
