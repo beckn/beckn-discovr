@@ -77,31 +77,7 @@ services:
       - beckn-network
     restart: "no"
 
-  # On Discovery API (receives responses from network)
-  on-discovery-api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    image: beckn/on-discovery-api:1.0
-    container_name: on-discovery-api
-    ports:
-      - '3001:3000'
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      KAFKA_ON_DISCOVER_TOPIC: catalog.discovery.response
-      SIGNATURE_VERIFICATION_ENABLED: "false"
-      LOG_LEVEL: info
-    networks:
-      - beckn-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+  # on-discovery-api removed — catalog push is now handled by catalog-publish service (POST /catalog/push)
 
   # Catalog Publish Job (Persistence Only - Distribution Disabled)
   # This job acts as the bridge for discovery ingestion
@@ -219,7 +195,7 @@ services:
       - ES_HOSTS=http://elasticsearch:9200
       - ES_ALIAS=beckn-catalog
       - ES_RESULT_LIMIT=50
-      - ES_MIN_SCORE=0.72
+      - ES_MIN_SCORE=0.68
       - ES_CONNECT_TIMEOUT_MS=5000
       - ES_SOCKET_TIMEOUT_MS=30000
       # ── Text Search ─────────────────────────────────────────────────────────
@@ -253,7 +229,7 @@ services:
       - DISCOVERY_TEXT_SEARCH_LLM_RETRIES=3
       - DISCOVERY_TEXT_SEARCH_LLM_RETRY_DELAY_MS=1000
       - DISCOVERY_TEXT_SEARCH_LLM_TEMPERATURE=0.0
-      - DISCOVERY_TEXT_SEARCH_LLM_SYSTEM_PROMPT=You are a search query enricher for a product and service catalog. Append up to 5 highly relevant synonyms or specifications to the original query. Keep the original query words first, then add only closely related terms. Return only the expanded query as a single short line. Do not add loosely related terms, brands, or categories. No explanation. No formatting.
+      - DISCOVERY_TEXT_SEARCH_LLM_SYSTEM_PROMPT=You are a product catalog search assistant. Preserve every word of the user query exactly as given including brand names. Only append 1-2 product synonyms if the query is purely generic like a category name. If the query contains any brand name or specific product term return it completely unchanged. Never add process terms or loosely related categories. Return only the final query as a single line with no explanation.
     depends_on:
       postgres-discovery:
         condition: service_healthy
