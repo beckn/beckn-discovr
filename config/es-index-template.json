@@ -34,7 +34,7 @@
         "item_attributes":   { "type": "object", "dynamic": true },
         "offers":            { "type": "nested" },
         "indexed_at":        { "type": "date" },
-        "item_vector":       { "type": "dense_vector", "dims": 768, "index": true, "similarity": "cosine" }
+        "item_vector":       { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }
       }
     }
   }
