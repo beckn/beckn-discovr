@@ -1,0 +1,41 @@
+{
+  "index_patterns": ["${INDEX_PREFIX}-*"],
+  "template": {
+    "settings": {
+      "index.mapping.total_fields.limit": 2000,
+      "index.mapping.depth.limit": 10
+    },
+    "mappings": {
+      "dynamic_templates": [
+        { "geo_fields":               { "path_match": "*.geo",              "mapping": { "type": "geo_shape" } } },
+        { "item_attrs_longs_as_float":   { "path_match": "item_attributes.*", "match_mapping_type": "long",    "mapping": { "type": "float"   } } },
+        { "item_attrs_doubles_as_float": { "path_match": "item_attributes.*", "match_mapping_type": "double",  "mapping": { "type": "float"   } } },
+        { "strings_as_keywords":      { "match_mapping_type": "string",       "mapping": { "type": "keyword" } } },
+        { "integers_as_ints":         { "match_mapping_type": "long",         "mapping": { "type": "integer" } } },
+        { "doubles_as_doubles":       { "match_mapping_type": "double",       "mapping": { "type": "double"  } } },
+        { "booleans":                 { "match_mapping_type": "boolean",      "mapping": { "type": "boolean" } } }
+      ],
+      "properties": {
+        "catalog_id":        { "type": "keyword" },
+        "catalog_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+        "catalog_images":    { "type": "keyword" },
+        "item_id":           { "type": "keyword" },
+        "bpp_id":            { "type": "keyword" },
+        "bpp_uri":           { "type": "keyword" },
+        "network_id":        { "type": "keyword" },
+        "schema_type":       { "type": "keyword" },
+        "item_name":         { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+        "item_short_desc":   { "type": "text" },
+        "item_long_desc":    { "type": "text" },
+        "full_text_blob":    { "type": "text", "analyzer": "standard" },
+        "item_rating_value": { "type": "float" },
+        "item_is_active":    { "type": "boolean" },
+        "item_rateable":     { "type": "boolean" },
+        "item_attributes":   { "type": "object", "dynamic": true },
+        "offers":            { "type": "nested" },
+        "indexed_at":        { "type": "date" },
+        "item_vector":       { "type": "dense_vector", "dims": 768, "index": true, "similarity": "cosine" }
+      }
+    }
+  }
+}
