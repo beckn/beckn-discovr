@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * Assembles ES hit source maps (flat documents indexed by catalog-publish-job)
@@ -129,54 +130,98 @@ public class EsSearchAssembler {
         item.setRating(buildRating(doc));
         item.setRateable(bool(doc, "item_rateable"));
         item.setIsActive(bool(doc, "item_is_active"));
-        item.setProvider(buildProvider(doc));
+        Provider provider = buildProvider(doc);
+        if (provider != null) {
+            provider.setLocations(collectProviderLocations(doc));
+        }
+        item.setProvider(provider);
         item.setItemAttributes(buildAttributes(doc));
 
-        // Reconstruct all availableAt locations from loc_catalogs_beckn_items_beckn_availableAt.geo
-        item.setAvailableAt(buildAvailableAt(doc));
+        // Reconstruct direct item-level locations from loc_* fields
+        item.setAvailableAt(collectItemLocations(doc));
 
         return item;
     }
 
+    /**
+     * Collects only <b>direct item-level</b> location fields from the ES document.
+     *
+     * <p>{@code GeoShapeExtractor} on the publish side indexes location objects from
+     * any path as {@code loc_*} fields. However, offer-level, provider-level,
+     * itemAttributes-level, and providerAttributes-level locations are returned via
+     * their own response structures. Only direct item children
+     * (e.g. {@code beckn:availableAt}, {@code beckn:location}, or any spec-extended
+     * location field) should be collected here.</p>
+     */
+    private static List<Location> collectItemLocations(Map<String, Object> doc) {
+        return collectLocFields(doc, key ->
+                key.contains("_items_")
+                        && !key.contains("_provider_")
+                        && !key.contains("_providerAttributes_")
+                        && !key.contains("_itemAttributes_")
+                        && !key.contains("_offers_"));
+    }
+
+    /**
+     * Collects provider-level location fields (e.g.
+     * {@code loc_catalogs_beckn_items_beckn_provider_beckn_locations})
+     * for {@link Provider#setLocations}.
+     */
+    private static List<Location> collectProviderLocations(Map<String, Object> doc) {
+        return collectLocFields(doc, key ->
+                key.contains("_provider_")
+                        && !key.contains("_providerAttributes_"));
+    }
+
     @SuppressWarnings("unchecked")
-    private static List<Location> buildAvailableAt(Map<String, Object> doc) {
-        Object locRaw = doc.get("loc_catalogs_beckn_items_beckn_availableAt");
-
-        // loc_* is stored directly as a Location object (single) or List (multiple)
-        List<Map<String, Object>> locList;
-        if (locRaw instanceof List<?> list) {
-            locList = (List<Map<String, Object>>) list;
-        } else if (locRaw instanceof Map<?, ?> single) {
-            locList = List.of((Map<String, Object>) single);
-        } else {
-            return null;
-        }
-
+    private static List<Location> collectLocFields(Map<String, Object> doc,
+                                                    Predicate<String> keyFilter) {
         List<Location> locations = new ArrayList<>();
-        for (Map<String, Object> locObj : locList) {
-            // Reconstruct geo
-            Object geoRaw = locObj.get("geo");
-            if (!(geoRaw instanceof Map<?, ?> geoMap)) continue;
-            String geoType = (String) geoMap.get("type");
-            Object coords = geoMap.get("coordinates");
-            if (geoType == null || !(coords instanceof List<?>)) continue;
-            Location.Geo geo = new Location.Geo(geoType, (List<Object>) coords);
 
-            // Reconstruct address if present
-            Location.Address address = null;
-            Object addrRaw = locObj.get("address");
-            if (addrRaw instanceof Map<?, ?> addrMap) {
-                address = new Location.Address();
-                address.setStreetAddress((String) addrMap.get("streetAddress"));
-                address.setAddressLocality((String) addrMap.get("addressLocality"));
-                address.setAddressRegion((String) addrMap.get("addressRegion"));
-                address.setPostalCode((String) addrMap.get("postalCode"));
-                address.setAddressCountry((String) addrMap.get("addressCountry"));
+        for (Map.Entry<String, Object> entry : doc.entrySet()) {
+            String key = entry.getKey();
+            if (!key.startsWith("loc_") || !keyFilter.test(key)) continue;
+
+            Object locRaw = entry.getValue();
+            List<Map<String, Object>> locList;
+            if (locRaw instanceof List<?> list) {
+                locList = (List<Map<String, Object>>) list;
+            } else if (locRaw instanceof Map<?, ?> single) {
+                locList = List.of((Map<String, Object>) single);
+            } else {
+                continue;
             }
 
-            locations.add(new Location("beckn:Location", geo, address));
+            for (Map<String, Object> locObj : locList) {
+                Location location = reconstructLocation(locObj);
+                if (location != null) locations.add(location);
+            }
         }
         return locations.isEmpty() ? null : locations;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Location reconstructLocation(Map<String, Object> locObj) {
+        Object geoRaw = locObj.get("geo");
+        if (!(geoRaw instanceof Map<?, ?> geoMap)) return null;
+        String geoType = (String) geoMap.get("type");
+        Object coords = geoMap.get("coordinates");
+        if (geoType == null || !(coords instanceof List<?>)) return null;
+        Location.Geo geo = new Location.Geo(geoType, (List<Object>) coords);
+
+        Location.Address address = null;
+        Object addrRaw = locObj.get("address");
+        if (addrRaw instanceof Map<?, ?> addrMap) {
+            address = new Location.Address();
+            address.setStreetAddress((String) addrMap.get("streetAddress"));
+            address.setExtendedAddress((String) addrMap.get("extendedAddress"));
+            address.setAddressLocality((String) addrMap.get("addressLocality"));
+            address.setAddressRegion((String) addrMap.get("addressRegion"));
+            address.setPostalCode((String) addrMap.get("postalCode"));
+            address.setAddressCountry((String) addrMap.get("addressCountry"));
+        }
+
+        return new Location("beckn:Location", geo, address);
     }
 
     @SuppressWarnings("unchecked")

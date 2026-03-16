@@ -8,7 +8,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.io.StringReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
@@ -17,6 +20,19 @@ import java.util.regex.Pattern;
  * Index names are derived from the item's @type (e.g. "GroceryItem" →
  * "beckn-catalog-groceryitem"). A shared index template is created lazily
  * on the first index creation.
+ *
+ * <p>Mapping template is configurable:
+ * <ul>
+ *   <li>{@code app.catalog.elasticsearch.mapping.template-file} — path to a custom
+ *       template JSON file. When set, the file is loaded instead of the built-in
+ *       default. The placeholder {@code ${INDEX_PREFIX}} in the file is replaced
+ *       with the configured index prefix.</li>
+ *   <li>{@code app.catalog.elasticsearch.mapping.total-fields-limit} — max fields
+ *       per index (default 2000).</li>
+ *   <li>{@code app.catalog.elasticsearch.mapping.depth-limit} — max mapping depth
+ *       (default 10).</li>
+ * </ul>
+ * All settings are overridable via environment variables for Docker / Kubernetes.
  */
 @Component
 @ConditionalOnProperty(name = "app.catalog.elasticsearch.enabled", havingValue = "true")
@@ -30,6 +46,9 @@ public class EsIndexManager {
     private final EsIndexerMetrics    metrics;
     private final String              indexPrefix;
     private final String              aliasName;
+    private final int                 totalFieldsLimit;
+    private final int                 depthLimit;
+    private final String              templateFile;
     private final AtomicBoolean       templateCreated = new AtomicBoolean(false);
 
     public EsIndexManager(ElasticsearchClient esClient,
@@ -39,6 +58,13 @@ public class EsIndexManager {
         this.metrics     = metrics;
         this.indexPrefix = props.catalog().elasticsearch().indexPrefix();
         this.aliasName   = props.catalog().elasticsearch().aliasName();
+
+        var mapping = props.catalog().elasticsearch().mapping();
+        this.totalFieldsLimit = mapping != null && mapping.totalFieldsLimit() > 0
+                ? mapping.totalFieldsLimit() : 2000;
+        this.depthLimit = mapping != null && mapping.depthLimit() > 0
+                ? mapping.depthLimit() : 10;
+        this.templateFile = mapping != null ? mapping.templateFile() : null;
     }
 
     public String resolveIndexName(String schemaType) {
@@ -67,7 +93,8 @@ public class EsIndexManager {
     private void ensureTemplateOnce() {
         if (templateCreated.get()) return;
         try {
-            esClient.indices().putIndexTemplate(t -> t.name(TEMPLATE_NAME).withJson(new StringReader(templateJson())));
+            String json = resolveTemplateJson();
+            esClient.indices().putIndexTemplate(t -> t.name(TEMPLATE_NAME).withJson(new StringReader(json)));
             log.info("es.template.created name={}", TEMPLATE_NAME);
             templateCreated.set(true);
         } catch (Exception e) {
@@ -80,14 +107,39 @@ public class EsIndexManager {
             esClient.indices().putAlias(r -> r.index(indexName).name(aliasName));
     }
 
-    private String templateJson() {
+    /**
+     * Loads the template from an external file if configured, otherwise uses
+     * the built-in default. External files may use {@code ${INDEX_PREFIX}} as
+     * a placeholder.
+     */
+    String resolveTemplateJson() {
+        if (templateFile != null && !templateFile.isBlank()) {
+            return loadExternalTemplate();
+        }
+        return defaultTemplateJson();
+    }
+
+    private String loadExternalTemplate() {
+        try {
+            String content = Files.readString(Path.of(templateFile));
+            String resolved = content.replace("${INDEX_PREFIX}", indexPrefix);
+            log.info("es.template.loaded-from-file path={}", templateFile);
+            return resolved;
+        } catch (IOException e) {
+            log.warn("es.template.file-load-failed path={} error={}, falling back to default",
+                    templateFile, e.getMessage());
+            return defaultTemplateJson();
+        }
+    }
+
+    private String defaultTemplateJson() {
         return """
                 {
                   "index_patterns": ["%s-*"],
                   "template": {
                     "settings": {
-                      "index.mapping.total_fields.limit": 2000,
-                      "index.mapping.depth.limit": 10
+                      "index.mapping.total_fields.limit": %d,
+                      "index.mapping.depth.limit": %d
                     },
                     "mappings": {
                       "dynamic_templates": [
@@ -123,6 +175,6 @@ public class EsIndexManager {
                   }
                 }
                 """
-                .formatted(indexPrefix);
+                .formatted(indexPrefix, totalFieldsLimit, depthLimit);
     }
 }

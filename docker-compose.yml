@@ -115,6 +115,19 @@ services:
       - APP_CATALOG_ELASTICSEARCH_POOL_SIZE=2
       - APP_CATALOG_ELASTICSEARCH_POOL_QUEUE_CAPACITY=200
       - APP_CATALOG_ELASTICSEARCH_MAX_FAILURE_ATTEMPTS=5
+       # ES index mapping configuration
+       # total-fields-limit: max number of fields per index (default 2000)
+      - APP_CATALOG_ELASTICSEARCH_MAPPING_TOTAL_FIELDS_LIMIT=2000
+       # depth-limit: max nesting depth for mappings (default 10)
+      - APP_CATALOG_ELASTICSEARCH_MAPPING_DEPTH_LIMIT=10
+       # template-file: path to a custom ES index template JSON file.
+       # When set, the file is loaded instead of the built-in default template.
+       # Use ${INDEX_PREFIX} placeholder in the file for the index prefix.
+       # Mount via Docker volume, e.g.:
+       #   volumes:
+       #     - ./my-template.json:/config/es-template.json
+       # Then set: ES_MAPPING_TEMPLATE_FILE=/config/es-template.json
+      - ES_MAPPING_TEMPLATE_FILE=
     depends_on:
       elasticsearch:
         condition: service_healthy
