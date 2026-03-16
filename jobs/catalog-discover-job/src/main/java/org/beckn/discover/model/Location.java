@@ -114,10 +114,13 @@ public class Location {
         }
     }
 
-    // Nested Address class
+    // Nested Address class (aligned with schema.org PostalAddress)
     public static class Address {
         @JsonProperty("streetAddress")
         private String streetAddress;
+
+        @JsonProperty("extendedAddress")
+        private String extendedAddress;
 
         @JsonProperty("addressLocality")
         private String addressLocality;
@@ -140,6 +143,14 @@ public class Location {
 
         public void setStreetAddress(String streetAddress) {
             this.streetAddress = streetAddress;
+        }
+
+        public String getExtendedAddress() {
+            return extendedAddress;
+        }
+
+        public void setExtendedAddress(String extendedAddress) {
+            this.extendedAddress = extendedAddress;
         }
 
         public String getAddressLocality() {
@@ -178,6 +189,7 @@ public class Location {
         public String toString() {
             return "Address{" +
                     "streetAddress='" + streetAddress + '\'' +
+                    ", extendedAddress='" + extendedAddress + '\'' +
                     ", addressLocality='" + addressLocality + '\'' +
                     ", addressRegion='" + addressRegion + '\'' +
                     ", postalCode='" + postalCode + '\'' +

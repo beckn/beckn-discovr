@@ -74,12 +74,12 @@ services:
   # This job acts as the bridge for discovery ingestion
   catalog-publish:
     build:
-      context: ../beckn-catalg/jobs/catalog-publish-job
+      context: ./jobs/catalog-publish-job
       dockerfile: Dockerfile
     image: beckn/catalog-publish-job:1.0
     container_name: catalog-publish
     ports:
-      - "8084:8080"
+      - "8085:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
@@ -102,7 +102,35 @@ services:
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
+       # Elasticsearch indexing
+      - APP_CATALOG_ELASTICSEARCH_ENABLED=true
+      - ES_HOSTS=http://elasticsearch:9200
+      - APP_CATALOG_ELASTICSEARCH_INDEX_PREFIX=beckn-catalog
+      - APP_CATALOG_ELASTICSEARCH_ALIAS_NAME=beckn-catalog
+      - APP_CATALOG_ELASTICSEARCH_FAILURE_TOPIC=catalog.es.failures
+      - APP_CATALOG_ELASTICSEARCH_FINAL_DLQ_TOPIC=catalog.es.failures.dlq
+      - APP_CATALOG_ELASTICSEARCH_BULK_BATCH_SIZE=100
+      - APP_CATALOG_ELASTICSEARCH_RETRY_ATTEMPTS=3
+      - APP_CATALOG_ELASTICSEARCH_RETRY_INITIAL_DELAY_MS=1000
+      - APP_CATALOG_ELASTICSEARCH_POOL_SIZE=2
+      - APP_CATALOG_ELASTICSEARCH_POOL_QUEUE_CAPACITY=200
+      - APP_CATALOG_ELASTICSEARCH_MAX_FAILURE_ATTEMPTS=5
+       # ES index mapping configuration
+       # total-fields-limit: max number of fields per index (default 2000)
+      - APP_CATALOG_ELASTICSEARCH_MAPPING_TOTAL_FIELDS_LIMIT=2000
+       # depth-limit: max nesting depth for mappings (default 10)
+      - APP_CATALOG_ELASTICSEARCH_MAPPING_DEPTH_LIMIT=10
+       # template-file: path to a custom ES index template JSON file.
+       # When set, the file is loaded instead of the built-in default template.
+       # Use ${INDEX_PREFIX} placeholder in the file for the index prefix.
+       # Mount via Docker volume, e.g.:
+       #   volumes:
+       #     - ./my-template.json:/config/es-template.json
+       # Then set: ES_MAPPING_TEMPLATE_FILE=/config/es-template.json
+      - ES_MAPPING_TEMPLATE_FILE=
     depends_on:
+      elasticsearch:
+        condition: service_healthy
       postgres-discovery:
         condition: service_healthy
     networks:
@@ -138,8 +166,19 @@ services:
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+      # Elasticsearch text search + spatial
+      - DISCOVERY_TEXT_SEARCH_ENGINE=elasticsearch
+      - DISCOVERY_SPATIAL_ENGINE=elasticsearch
+      - ES_HOSTS=http://elasticsearch:9200
+      - ES_ALIAS=beckn-catalog
+      - ES_RESULT_LIMIT=50
+      - ES_MIN_SCORE=0.5
+      - ES_CONNECT_TIMEOUT_MS=5000
+      - ES_SOCKET_TIMEOUT_MS=30000
     depends_on:
       postgres-discovery:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
     networks:
       - beckn-network
@@ -150,6 +189,22 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+
+  # Beckn Demo UI
+  beckn-demo-ui:
+    build:
+      context: ./reference-apps/beckn-demo-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_CATALOG_API_URL: http://localhost:3000
+        VITE_DISCOVER_API_URL: http://localhost:8082
+    image: beckn/beckn-demo-ui:1.0
+    container_name: beckn-demo-ui
+    ports:
+      - "5173:80"
+    networks:
+      - beckn-network
+    restart: unless-stopped
 
 volumes:
   postgres_discovery_data:

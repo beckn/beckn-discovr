@@ -31,6 +31,9 @@ app:
     schema-file: catalog-upload-request-schema-v7.json
     parallel-catalog-threshold: 1
 
+  http:
+    signature-verification-enabled: false
+
 spring:
   jpa:
     hibernate:
