@@ -5,8 +5,21 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  gradle-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: catalog-discover-job
+            path: jobs/catalog-discover-job
+            run_integration_tests: false
+          - name: catalog-publish-job
+            path: jobs/catalog-publish-job
+            run_integration_tests: true
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,8 +32,14 @@ jobs:
           cache: 'gradle'
 
       - name: Grant execute permission for gradlew
-        run: chmod +x jobs/catalog-discover-job/gradlew
+        run: chmod +x gradlew
+        working-directory: ${{ matrix.path }}
 
-      - name: Run tests
+      - name: Run unit tests
         run: ./gradlew test --no-daemon
-        working-directory: jobs/catalog-discover-job
+        working-directory: ${{ matrix.path }}
+
+      - name: Run integration tests
+        if: ${{ matrix.run_integration_tests }}
+        run: ./gradlew integrationTest --no-daemon
+        working-directory: ${{ matrix.path }}
