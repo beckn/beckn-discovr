@@ -8,7 +8,7 @@ const DEFAULT = {
   networkId: 'ondc-retail-grocery',
   networkName: 'Grocery',
   schemaType: 'https://becknprotocol.io/schema/GroceryItem/v1/context.jsonld#GroceryItem',
-  callbackUrl: 'http://on-discovery-api:3000/on_discover'
+  callbackUrl: 'http://catalog-publish:8080/catalog/push'
 }
 
 function uuid() {

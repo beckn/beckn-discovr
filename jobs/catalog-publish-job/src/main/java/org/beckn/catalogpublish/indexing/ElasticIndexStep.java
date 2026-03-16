@@ -96,9 +96,13 @@ public class ElasticIndexStep {
             String networkId = networkIds.length > 0 ? networkIds[0] : null;
             Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkId);
             embeddingClient.ifPresent(client -> {
-                Object blob = doc.get("full_text_blob");
-                if (blob instanceof String text && !text.isBlank())
-                    client.embed(text).ifPresent(vec -> doc.put("item_vector", vec));
+                try {
+                    JsonNode catalogNode = payloadNode.path("catalogs").path(0);
+                    String itemJson = mapper.writeValueAsString(catalogNode);
+                    client.embed(itemJson).ifPresent(vec -> doc.put("item_vector", vec));
+                } catch (Exception e) {
+                    log.warn("es.index.embedding.serialize.failed itemId={} error={}", item.getId(), e.getMessage());
+                }
             });
             bySchemaType.computeIfAbsent(schemaType, k -> new ArrayList<>()).add(doc);
         }
