@@ -31,8 +31,29 @@ app:
     schema-file: catalog-upload-request-schema-v7.json
     parallel-catalog-threshold: 3
     # Thread pool size for parallel catalog processing within a single message.
-    # Independent of Kafka consumer concurrency. Tune based on CPU cores available.
     processing-pool-size: 8
+
+    # ─── Text Search Indexing ──────────────────────────────────────────────
+    # Controls whether item text is converted to vectors at index time.
+    # Vectors are stored in Elasticsearch and used by the discovery service
+    # for semantic search (engine: els-semantic-search).
+    text-search:
+      embedding-model:
+        # Set to true to enable semantic indexing — stores item vectors in Elasticsearch.
+        # When enabled, items are indexed with a dense_vector field (item_vector)
+        # that the discovery service uses for knn similarity search.
+        enabled: ${CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED:false}
+        # Supports any OpenAI-compatible /v1/embeddings provider
+        # (Ollama local, OpenAI, Azure OpenAI, Groq, etc.)
+        # IMPORTANT: must match DISCOVERY_TEXT_SEARCH_EMBEDDING_NAME in discovery service.
+        # Changing the model requires recreating the Elasticsearch index.
+        name: ${CATALOG_TEXT_SEARCH_EMBEDDING_NAME:nomic-embed-text}
+        base-url: ${CATALOG_TEXT_SEARCH_EMBEDDING_BASE_URL:http://localhost:11434}
+        api-key: ${CATALOG_TEXT_SEARCH_EMBEDDING_API_KEY:}
+        timeout-ms: ${CATALOG_TEXT_SEARCH_EMBEDDING_TIMEOUT_MS:10000}
+        retries: ${CATALOG_TEXT_SEARCH_EMBEDDING_RETRIES:3}
+        retry-delay-ms: ${CATALOG_TEXT_SEARCH_EMBEDDING_RETRY_DELAY_MS:1000}
+
     elasticsearch:
       enabled: false
       hosts: ${ES_HOSTS:http://localhost:9200}

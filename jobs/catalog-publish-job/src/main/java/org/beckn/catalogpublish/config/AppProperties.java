@@ -61,11 +61,34 @@ public record AppProperties(
                         @NotBlank String schemaFile,
                         @Min(1) int parallelCatalogThreshold,
                         @Min(1) int processingPoolSize,
-                        @Valid Elasticsearch elasticsearch) {
+                        @Valid Elasticsearch elasticsearch,
+                        @Valid TextSearch textSearch) {
         }
 
         public record Http(boolean signatureVerificationEnabled) {
         }
+
+        /**
+         * Text search indexing configuration.
+         * Controls whether item vectors are generated and stored in Elasticsearch
+         * for semantic search support in the discovery service.
+         */
+        public record TextSearch(@Valid EmbeddingModel embeddingModel) {}
+
+        /**
+         * Embedding model for converting item text to vectors at index time.
+         * Supports any OpenAI-compatible /v1/embeddings provider.
+         * IMPORTANT: model name MUST match discovery-job text-search.embedding-model.name.
+         * Changing the model requires recreating the Elasticsearch index.
+         */
+        public record EmbeddingModel(
+                        boolean enabled,
+                        String name,
+                        String baseUrl,
+                        String apiKey,
+                        int timeoutMs,
+                        int retries,
+                        long retryDelayMs) {}
 
         public record Elasticsearch(
                         boolean enabled,

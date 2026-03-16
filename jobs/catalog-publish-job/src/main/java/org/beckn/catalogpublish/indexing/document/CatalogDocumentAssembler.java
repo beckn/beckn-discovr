@@ -84,9 +84,10 @@ public class CatalogDocumentAssembler {
         if (!attrs.isMissingNode() && attrs.isObject())
             doc.put("item_attributes", flattenJsonLd(attrs));
 
-        List<Map<String, Object>> offers = buildOffers(catalog.path("beckn:offers"));
+        JsonNode offersNode = catalog.path("beckn:offers");
+        List<Map<String, Object>> offers = buildOffers(offersNode);
         doc.put("offers", offers);
-        doc.put("full_text_blob", buildTextBlob(doc, offers, itemNode));
+        doc.put("full_text_blob", buildTextBlob(doc, offersNode, itemNode));
         return doc;
     }
 
@@ -112,8 +113,7 @@ public class CatalogDocumentAssembler {
         return result;
     }
 
-    private String buildTextBlob(Map<String, Object> doc, List<Map<String, Object>> offers,
-                                  JsonNode itemNode) {
+    private String buildTextBlob(Map<String, Object> doc, JsonNode offersNode, JsonNode itemNode) {
         List<String> parts = new ArrayList<>();
 
         // Core item fields
@@ -123,23 +123,14 @@ public class CatalogDocumentAssembler {
                 parts.add(s);
         }
 
-        // Task 2: text from all location objects anywhere in itemNode (any key, any depth)
+        // Text from all location objects anywhere in itemNode (any key, any depth)
         collectLocationText(itemNode, parts);
 
-        // Task 3: all text from itemAttributes — recursive deep walk
+        // All text from itemAttributes — recursive deep walk
         collectStrings(itemNode.path("beckn:itemAttributes"), parts);
 
-        // Offer names
-        offers.stream()
-                .map(o -> {
-                    Object desc = o.get("beckn:descriptor");
-                    if (desc instanceof Map<?, ?> m)
-                        return m.get("schema:name");
-                    return null;
-                })
-                .filter(n -> n instanceof String)
-                .map(Object::toString)
-                .forEach(parts::add);
+        // All text fields from offers (names, descriptions, terms, eligibility, etc.)
+        collectStrings(offersNode, parts);
 
         return String.join(" ", parts);
     }
@@ -179,7 +170,8 @@ public class CatalogDocumentAssembler {
                 parts.add(val);
         } else if (node.isObject()) {
             node.fields().forEachRemaining(e -> {
-                if (!e.getKey().startsWith("@"))
+                String key = e.getKey();
+                if (!key.startsWith("@") && !key.equals("geo") && !key.equals("gps") && !key.equals("polygon"))
                     collectStrings(e.getValue(), parts);
             });
         } else if (node.isArray()) {
