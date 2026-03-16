@@ -47,6 +47,9 @@ app:
       pool-queue-capacity: 200
       max-failure-attempts: 5
 
+  http:
+    signature-verification-enabled: false
+
 spring:
   application:
     name: catalog-publish-job
