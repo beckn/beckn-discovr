@@ -38,7 +38,7 @@ spring:
 # Discovery Service Configuration for Docker
 discovery:
   kafka:
-    request-topic: ${KAFKA_REQUEST_TOPIC:catalog.v2.discovery.requests}
+    request-topic: ${KAFKA_REQUEST_TOPIC:catalog.discovery.request}
     response-topic: ${KAFKA_RESPONSE_TOPIC:catalog.discovery.response}
   
   nlweb:

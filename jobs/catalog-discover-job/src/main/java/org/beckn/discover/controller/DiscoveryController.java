@@ -1,8 +1,12 @@
 package org.beckn.discover.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.beckn.discover.config.DiscoveryProperties;
+import org.beckn.discover.model.AckResponse;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
@@ -12,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -55,16 +60,22 @@ public class DiscoveryController {
     private final ObjectMapper objectMapper;
     private final DiscoveryValidationService validationService;
     private final AuthorizationService authorizationService;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final DiscoveryProperties discoveryProperties;
 
     public DiscoveryController(
             DiscoveryService discoveryService,
             ObjectMapper objectMapper,
             DiscoveryValidationService validationService,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            KafkaTemplate<String, String> kafkaTemplate,
+            DiscoveryProperties discoveryProperties) {
         this.discoveryService = discoveryService;
         this.objectMapper = objectMapper;
         this.validationService = validationService;
         this.authorizationService = authorizationService;
+        this.kafkaTemplate = kafkaTemplate;
+        this.discoveryProperties = discoveryProperties;
     }
 
     /** GET endpoint for Beckn discovery. */
@@ -76,13 +87,21 @@ public class DiscoveryController {
         return handleDiscoverRequest(rawBytes, headers, httpRequest);
     }
 
-    /** POST endpoint for Beckn discovery. */
+    /**
+     * POST endpoint for async Beckn discovery.
+     *
+     * <p>Performs the same auth and schema validation as the GET endpoint, then publishes
+     * the request to the Kafka request topic and immediately returns an ACK.  The request
+     * is processed asynchronously by {@link org.beckn.discover.consumer.DiscoveryEventConsumer},
+     * which publishes the {@code on_discover} response to the response topic for the
+     * response-dispatcher to forward to the BAP callback URL.</p>
+     */
     @PostMapping("/discover")
-    public ResponseEntity<DiscoverResponse> discoverPost(
+    public ResponseEntity<AckResponse> discoverPost(
             @RequestBody byte[] rawBytes,
             @RequestHeader HttpHeaders headers,
             HttpServletRequest httpRequest) throws Exception {
-        return handleDiscoverRequest(rawBytes, headers, httpRequest);
+        return handleAsyncDiscoverRequest(rawBytes, headers, httpRequest);
     }
 
     /** Shared pipeline: authorize → validate → process. */
@@ -105,6 +124,54 @@ public class DiscoveryController {
         DiscoverRequest request = objectMapper.convertValue(requestNode, DiscoverRequest.class);
         DiscoverResponse result = discoveryService.processDiscoveryRequest(request);
         return ResponseEntity.ok(result);
+    }
+
+    /** Async pipeline: authorize → validate → publish to Kafka → ACK. */
+    private ResponseEntity<AckResponse> handleAsyncDiscoverRequest(
+            byte[] rawBytes, HttpHeaders headers, HttpServletRequest httpRequest) throws Exception {
+
+        String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
+        JsonNode requestNode = objectMapper.readTree(rawBody);
+
+        String transactionId = null;
+        JsonNode txnNode = requestNode.path("context").path("transaction_id");
+        if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
+            transactionId = txnNode.asText();
+            httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
+        }
+
+        authorizationService.authorizeRequest(rawBody, requestNode, headers);
+        validateSchema(requestNode);
+
+        String messageId = requestNode.path("context").path("message_id").asText();
+        String kafkaKey = transactionId != null ? transactionId : messageId;
+        String requestTopic = discoveryProperties.getKafka().getRequestTopic();
+        if (requestTopic == null || requestTopic.isBlank()) {
+            throw new IllegalStateException("discovery.kafka.request-topic is not configured");
+        }
+
+        // Capture effectively-final copies for lambda
+        final String logTxnId = transactionId;
+        final String logMsgId = messageId;
+        kafkaTemplate.send(requestTopic, kafkaKey, rawBody)
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        logger.error("Failed to queue async discovery request transactionId={} messageId={} topic={}",
+                                logTxnId, logMsgId, requestTopic, ex);
+                    } else {
+                        logger.debug("Async discovery request queued transactionId={} messageId={} topic={} partition={} offset={}",
+                                logTxnId, logMsgId, requestTopic,
+                                result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
+                    }
+                });
+
+        logger.info("Queued async discovery request transactionId={} messageId={} topic={}",
+                transactionId, messageId, requestTopic);
+
+        // Use messageId as fallback when transactionId is absent
+        String ackTransactionId = transactionId != null ? transactionId : messageId;
+        String timestamp = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        return ResponseEntity.ok(AckResponse.ack(ackTransactionId, timestamp));
     }
 
     private void validateSchema(JsonNode requestNode) {

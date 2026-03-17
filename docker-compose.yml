@@ -101,7 +101,7 @@ services:
       - APP_MESSAGING_BROKER_SERVERS=kafka:29092
       - APP_MESSAGING_TOPICS_INGESTION_REQUESTS=catalog.discovery.response
       - APP_MESSAGING_TOPICS_CATALOG_EVENTS=catalog.v2.events
-      - APP_MESSAGING_TOPICS_RESPONSES=catalog.responses
+      - APP_MESSAGING_TOPICS_RESPONSES=catalog.discovery.response
       - APP_MESSAGING_TOPICS_FAILED=catalog.v2.failed
       - APP_MESSAGING_TOPICS_DISTRIBUTION_TOPIC_PREFIX=catalog.distribution
       - APP_CATALOG_VALIDATION_ENABLED=false
@@ -172,8 +172,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - KAFKA_REQUEST_TOPIC=catalog.v2.discovery.requests
-      - KAFKA_RESPONSE_TOPIC=catalog.responses
+      - KAFKA_REQUEST_TOPIC=catalog.discovery.request
+      - KAFKA_RESPONSE_TOPIC=catalog.discovery.response
       - POSTGRES_HOST=postgres-discovery
       - POSTGRES_PORT=5432
       - POSTGRES_DATABASE=catalog_db

@@ -22,7 +22,7 @@ app:
     topics:
       ingestion-requests: catalog.v2.upload.requests
       catalog-events: catalog.v2.catalog.events
-      responses: catalog.responses
+      responses: catalog.discovery.response
       failed: catalog.v2.failed
 
   catalog:

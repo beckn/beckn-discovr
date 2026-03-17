@@ -312,7 +312,6 @@ public class DiscoveryProperties {
         private String database = "catalog_db";
         private String username = "catalog_user";
         private String password = "";  // provide via POSTGRES_PASSWORD env var — no default
-        private int maxPoolSize = 10;
         private int resultLimit = 100;
         private boolean logExplainAnalyze = false;
         private int parallelQueryTimeoutSeconds = 10;
@@ -365,14 +364,6 @@ public class DiscoveryProperties {
 
         public void setPassword(String password) {
             this.password = password;
-        }
-
-        public int getMaxPoolSize() {
-            return maxPoolSize;
-        }
-
-        public void setMaxPoolSize(int maxPoolSize) {
-            this.maxPoolSize = maxPoolSize;
         }
 
         public java.util.List<String> getCatalogAttributesToExtract() {
