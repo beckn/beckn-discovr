@@ -41,22 +41,32 @@ public class ElasticsearchQueryEngine implements QueryEngine {
 
     private static final Logger log = LoggerFactory.getLogger(ElasticsearchQueryEngine.class);
 
-    private final PostgreSQLQueryEngine pgEngine;
-    private final EsSpatialQueryBuilder spatialBuilder;
-    private final ElasticsearchClient   esClient;
-    private final EsSearchAssembler     assembler;
-    private final DiscoveryProperties   props;
+    private final PostgreSQLQueryEngine     pgEngine;
+    private final EsSpatialQueryBuilder     spatialBuilder;
+    private final ElasticsearchClient       esClient;
+    private final EsSearchAssembler         assembler;
+    private final DiscoveryProperties       props;
+    private final Optional<EmbeddingClient> embeddingClient;
+    private final Optional<QueryEnricher>   queryEnricher;
+    private final int                       knnCandidates;
 
     public ElasticsearchQueryEngine(PostgreSQLQueryEngine pgEngine,
                                     EsSpatialQueryBuilder spatialBuilder,
                                     ElasticsearchClient esClient,
                                     EsSearchAssembler assembler,
-                                    DiscoveryProperties props) {
-        this.pgEngine       = pgEngine;
-        this.spatialBuilder = spatialBuilder;
-        this.esClient       = esClient;
-        this.assembler      = assembler;
-        this.props          = props;
+                                    DiscoveryProperties props,
+                                    Optional<EmbeddingClient> embeddingClient,
+                                    Optional<QueryEnricher> queryEnricher) {
+        this.pgEngine        = pgEngine;
+        this.spatialBuilder  = spatialBuilder;
+        this.esClient        = esClient;
+        this.assembler       = assembler;
+        this.props           = props;
+        this.embeddingClient = embeddingClient;
+        this.queryEnricher   = queryEnricher;
+        this.knnCandidates   = Math.max(
+                props.getTextSearch().getEmbeddingModel().getKnnCandidates(),
+                props.getElasticsearch().getResultLimit());
     }
 
     /** Path B: always delegates to PostgreSQL filter query. */
@@ -81,9 +91,51 @@ public class ElasticsearchQueryEngine implements QueryEngine {
         String alias = props.getElasticsearch().getAliasName();
         int limit    = props.getElasticsearch().getResultLimit();
 
-        // Build must clauses: always include geo_shape queries; add multi_match when text is present
-        List<Query> mustQueries = new ArrayList<>(queriesOpt.get());
         boolean hasText = req.hasTextSearch();
+        List<Query> geoQueries = queriesOpt.get();
+
+        // ── Semantic search + spatial: KNN with geo_shape as knn.filter ──────
+        if (hasText && embeddingClient.isPresent()) {
+            String text = req.textSearch();
+            String enriched = queryEnricher.isPresent() ? queryEnricher.get().enrich(text) : text;
+            Optional<List<Float>> vecOpt = embeddingClient.get().embed(enriched);
+            if (vecOpt.isEmpty()) {
+                log.warn("es.engine.spatial+semantic.empty-vector transactionId={} — returning empty", req.transactionId());
+                return List.of();
+            }
+            List<Float> vec = vecOpt.get();
+            double minScore = props.getElasticsearch().getMinScore();
+            log.info("es.engine.spatial+semantic.request txId={} alias={} k={} numCandidates={} geoFilters={}",
+                    req.transactionId(), alias, limit, knnCandidates, geoQueries.size());
+            try {
+                SearchResponse<Map> response = esClient.search(s -> s
+                        .index(alias)
+                        .size(limit)
+                        .minScore(minScore)
+                        .knn(k -> {
+                            var kb = k.field("item_vector")
+                                    .queryVector(vec)
+                                    .k(limit)
+                                    .numCandidates(knnCandidates);
+                            geoQueries.forEach(kb::filter);
+                            return kb;
+                        }), Map.class);
+
+                List<Map<String, Object>> hits = response.hits().hits().stream()
+                        .map(h -> (Map<String, Object>) h.source())
+                        .filter(Objects::nonNull)
+                        .toList();
+                List<Catalog> catalogs = assembler.assemble(hits, req.transactionId());
+                log.info("es.engine.spatial+semantic.done catalogs={} durationMs={} transactionId={}",
+                        catalogs.size(), elapsed(start), req.transactionId());
+                return catalogs;
+            } catch (ElasticsearchException e) {
+                return handleEsException(e, alias, req.transactionId());
+            }
+        }
+
+        // ── BM25 text + spatial OR spatial only: geo_shape in bool.must ──────
+        List<Query> mustQueries = new ArrayList<>(geoQueries);
         double applyMinScore = 0.0;
 
         if (hasText) {
@@ -121,25 +173,12 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                     .toList();
 
             List<Catalog> catalogs = assembler.assemble(hits, req.transactionId());
-
             log.info("es.engine.spatial{}.done catalogs={} durationMs={} transactionId={}",
                     hasText ? "+text" : "", catalogs.size(), elapsed(start), req.transactionId());
             return catalogs;
 
         } catch (ElasticsearchException e) {
-            if ("index_not_found_exception".equals(e.error().type())) {
-                log.warn("es.engine.spatial.index-not-found alias={} transactionId={}", alias, req.transactionId());
-                return List.of();
-            }
-            if ("search_phase_execution_exception".equals(e.error().type())
-                    && e.error().rootCause().stream().anyMatch(rc ->
-                            rc.reason() != null && rc.reason().contains("failed to find type for field"))) {
-                String fieldHint = e.error().rootCause().get(0).reason();
-                log.warn("es.engine.spatial.unknown-field hint='{}' transactionId={} — targets path not indexed; returning empty",
-                        fieldHint, req.transactionId());
-                return List.of();
-            }
-            throw e;
+            return handleEsException(e, alias, req.transactionId());
         }
     }
 
@@ -150,6 +189,22 @@ public class ElasticsearchQueryEngine implements QueryEngine {
     @Override
     public Optional<List<Catalog>> executeCombinedQuery(QueryRequest req) throws Exception {
         return Optional.empty();
+    }
+
+    private List<Catalog> handleEsException(ElasticsearchException e, String alias, String transactionId) {
+        if ("index_not_found_exception".equals(e.error().type())) {
+            log.warn("es.engine.spatial.index-not-found alias={} transactionId={}", alias, transactionId);
+            return List.of();
+        }
+        if ("search_phase_execution_exception".equals(e.error().type())
+                && e.error().rootCause().stream().anyMatch(rc ->
+                        rc.reason() != null && rc.reason().contains("failed to find type for field"))) {
+            String fieldHint = e.error().rootCause().get(0).reason();
+            log.warn("es.engine.spatial.unknown-field hint='{}' transactionId={} — targets path not indexed; returning empty",
+                    fieldHint, transactionId);
+            return List.of();
+        }
+        throw e;
     }
 
     private static long elapsed(Instant start) {
