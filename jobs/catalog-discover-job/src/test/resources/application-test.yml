@@ -24,7 +24,7 @@ spring:
 # Discovery Service Configuration
 discovery:
   kafka:
-    request-topic: catalog.v2.discovery.requests
+    request-topic: catalog.discovery.request
     response-topic: catalog.discovery.response
   
   text-search:

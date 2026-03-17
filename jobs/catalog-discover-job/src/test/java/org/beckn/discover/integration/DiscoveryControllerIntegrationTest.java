@@ -27,48 +27,18 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
         @Test
         void postDiscoverReturnsCatalogsFromService() throws Exception {
+                // POST is now async: validates auth+schema, publishes to Kafka, returns ACK.
+                // The actual catalog response is delivered asynchronously via response-dispatcher.
                 String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
-                result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.message.catalogs", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:descriptor']['schema:name']")
-                                                .value("EV Charging Services Network"))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:descriptor']['schema:image']",
-                                                hasSize(2)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:descriptor']['schema:image'][0]")
-                                                .value("https://example.com/images/ev-charging-network.jpg"))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:descriptor']['schema:image'][1]")
-                                                .value("https://example.com/images/charging-station-banner.png"))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items']", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items'][0]['beckn:id']")
-                                                .value("ev-charger-ccs2-001"))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:name']")
-                                                .value("DC Fast Charger - CCS2 (60kW)"))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image']",
-                                                hasSize(2)))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image'][0]")
-                                                .value("https://example.com/images/ev-charger-ccs2-60kw.jpg"))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image'][1]")
-                                                .value("https://example.com/images/charging-station-ccs2.png"))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:provider']['beckn:id']")
-                                                .value("ecopower-charging"))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:itemAttributes'].connectorType")
-                                                .value("CCS2"))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers']",
-                                                hasSize(greaterThanOrEqualTo(1))))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers'][0]['beckn:items'][0]")
-                                                .value("ev-charger-ccs2-001"));
+                result.andExpect(status().isOk())
+                                .andExpect(jsonPath("$.ack_status").value("ACK"))
+                                .andExpect(jsonPath("$.transaction_id").exists())
+                                .andExpect(jsonPath("$.timestamp").exists());
         }
 
         @Test
@@ -157,28 +127,17 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
         @Test
         void postDiscoverWithMissingTransactionIdReturnsSuccess() throws Exception {
-                // Note: transaction_id appears to be optional in the schema, so this passes
-                // validation
+                // Note: transaction_id is optional in the schema, so this passes validation.
+                // POST is async — returns ACK (transaction_id will be null/absent).
                 String payload = readFixture("invalid_missing_transaction_id.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
-                // Schema validation passes, so request succeeds
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.message.catalogs").exists())
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items']", hasSize(2)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items'][*]['beckn:id']",
-                                                containsInAnyOrder("ev-charger-ccs2-001", "ev-charger-ccs2-002")))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][*]['beckn:descriptor']['schema:name']",
-                                                hasItems("DC Fast Charger - CCS2 (60kW)",
-                                                                "DC Fast Charger - CCS2 (120kW)")))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers']",
-                                                hasSize(greaterThanOrEqualTo(2))))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers'][*]['beckn:items'][0]",
-                                                hasItems("ev-charger-ccs2-001", "ev-charger-ccs2-002")));
+                                .andExpect(jsonPath("$.ack_status").value("ACK"))
+                                .andExpect(jsonPath("$.timestamp").exists());
         }
 
         @Test
@@ -216,7 +175,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         }
 
         @Test
-        void postDiscoverWithSpatialQueryReturnsCatalogs() throws Exception {
+        void postDiscoverWithSpatialQueryReturnsAck() throws Exception {
+                // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_spatial_query.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
@@ -224,25 +184,14 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.context").exists())
-                                .andExpect(jsonPath("$.message.catalogs", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items']",
-                                                hasSize(greaterThanOrEqualTo(1))))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items'][0]['beckn:id']")
-                                                .value("ev-charger-ccs2-001"))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:name']")
-                                                .value("DC Fast Charger - CCS2 (60kW)"))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image']",
-                                                hasSize(2)))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image'][0]")
-                                                .value("https://example.com/images/ev-charger-ccs2-60kw.jpg"));
+                                .andExpect(jsonPath("$.ack_status").value("ACK"))
+                                .andExpect(jsonPath("$.transaction_id").exists())
+                                .andExpect(jsonPath("$.timestamp").exists());
         }
 
         @Test
-        void postDiscoverWithCombinedFiltersReturnsCatalogs() throws Exception {
+        void postDiscoverWithCombinedFiltersReturnsAck() throws Exception {
+                // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_combined_jsonpath_spatial.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
@@ -250,21 +199,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.context").exists())
-                                .andExpect(jsonPath("$.message.catalogs").exists())
-                                .andExpect(jsonPath("$.message.catalogs", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items']", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items'][0]['beckn:id']")
-                                                .value("ev-charger-ccs2-001"))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:name']")
-                                                .value("DC Fast Charger - CCS2 (60kW)"))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image']",
-                                                hasSize(2)))
-                                .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image'][0]")
-                                                .value("https://example.com/images/ev-charger-ccs2-60kw.jpg"));
+                                .andExpect(jsonPath("$.ack_status").value("ACK"))
+                                .andExpect(jsonPath("$.transaction_id").exists())
+                                .andExpect(jsonPath("$.timestamp").exists());
         }
 
         @Test
@@ -285,7 +222,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         }
 
         @Test
-        void postDiscoverWithOfferFilter_returnsExactlyOneMatchingOffer() throws Exception {
+        void postDiscoverWithOfferFilter_returnsAck() throws Exception {
+                // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_jsonpath_offer_by_id.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
@@ -293,13 +231,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.message.catalogs", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers']", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers'][0]['beckn:id']")
-                                                .value("offer-ccs2-60kw-kwh"))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items']", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items'][0]['beckn:id']")
-                                                .value("ev-charger-ccs2-001"));
+                                .andExpect(jsonPath("$.ack_status").value("ACK"))
+                                .andExpect(jsonPath("$.transaction_id").exists())
+                                .andExpect(jsonPath("$.timestamp").exists());
         }
 
         @Test
@@ -319,7 +253,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         }
 
         @Test
-        void postDiscoverWithCatalogFilter_returnsCatalogWithMetadata() throws Exception {
+        void postDiscoverWithCatalogFilter_returnsAck() throws Exception {
+                // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_jsonpath_catalog_only.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
@@ -327,16 +262,14 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.message.catalogs", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:id']").value("catalog-ev-charging-001"))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:descriptor']['schema:name']")
-                                                .value("EV Charging Services Network"))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items']", hasSize(greaterThanOrEqualTo(1))))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers']", hasSize(greaterThanOrEqualTo(1))));
+                                .andExpect(jsonPath("$.ack_status").value("ACK"))
+                                .andExpect(jsonPath("$.transaction_id").exists())
+                                .andExpect(jsonPath("$.timestamp").exists());
         }
 
         @Test
-        void postDiscoverWithItemFilterCcs2Only_returnsMultipleCcs2Items() throws Exception {
+        void postDiscoverWithItemFilterCcs2Only_returnsAck() throws Exception {
+                // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_jsonpath_connector_ccs2_only.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
@@ -344,15 +277,14 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.message.catalogs", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items']", hasSize(2)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items'][*]['beckn:id']",
-                                                hasItems("ev-charger-ccs2-001", "ev-charger-ccs2-002")))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers']", hasSize(2)));
+                                .andExpect(jsonPath("$.ack_status").value("ACK"))
+                                .andExpect(jsonPath("$.transaction_id").exists())
+                                .andExpect(jsonPath("$.timestamp").exists());
         }
 
         @Test
-        void postDiscoverWithOfferPriceFilter_returnsOffersWithPriceLessThan20() throws Exception {
+        void postDiscoverWithOfferPriceFilter_returnsAck() throws Exception {
+                // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_jsonpath_offer_by_price.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
@@ -360,10 +292,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.message.catalogs", hasSize(greaterThanOrEqualTo(1))))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers']", hasSize(greaterThanOrEqualTo(1))))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers'][0]['beckn:price']").exists())
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers'][0]['beckn:id']").exists());
+                                .andExpect(jsonPath("$.ack_status").value("ACK"))
+                                .andExpect(jsonPath("$.transaction_id").exists())
+                                .andExpect(jsonPath("$.timestamp").exists());
         }
 
         private String readFixture(String fileName) {
@@ -380,17 +311,19 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         private org.beckn.discover.config.DiscoveryProperties discoveryProperties;
 
         @Test
-        void postDiscover_WithRegistryAuthDisabled_ReturnsOk() throws Exception {
-                // Registry auth is disabled by default in test profile
+        void postDiscover_WithRegistryAuthDisabled_ReturnsAck() throws Exception {
+                // Registry auth is disabled by default in test profile.
+                // POST is async — should succeed without Authorization header and return ACK.
                 String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
-                // Should succeed without Authorization header when registry auth is disabled
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.message.catalogs", hasSize(1)));
+                                .andExpect(jsonPath("$.ack_status").value("ACK"))
+                                .andExpect(jsonPath("$.transaction_id").exists())
+                                .andExpect(jsonPath("$.timestamp").exists());
         }
 
         @Test
