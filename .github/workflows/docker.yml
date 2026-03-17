@@ -56,3 +56,29 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Determine image ref for scanning
+        id: image-ref
+        run: |
+          set -euo pipefail
+          first="$(printf "%s\n" "${{ steps.meta.outputs.tags }}" | head -n 1)"
+          echo "ref=${first#ref=}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Trivy image scan (HIGH,CRITICAL) [non-blocking]
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.image-ref.outputs.ref }}
+          format: json
+          output: trivy-image-report.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload Trivy image report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-report-${{ matrix.name }}
+          path: trivy-image-report.json
+          retention-days: 30
