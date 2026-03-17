@@ -4,6 +4,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
@@ -138,9 +139,12 @@ public abstract class BaseIntegrationTest {
                                                               long timeoutMs,
                                                               Predicate<String> valueMatcher) {
         try (KafkaConsumer<String, String> consumer = createConsumer(groupId)) {
-            TopicPartition partition = new TopicPartition(topic, 0);
-            consumer.assign(List.of(partition));
-            consumer.seekToBeginning(List.of(partition));
+            List<PartitionInfo> partitions = consumer.partitionsFor(topic, Duration.ofSeconds(5));
+            List<TopicPartition> topicPartitions = partitions.stream()
+                    .map(p -> new TopicPartition(p.topic(), p.partition()))
+                    .toList();
+            consumer.assign(topicPartitions);
+            consumer.seekToBeginning(topicPartitions);
             long deadline = System.currentTimeMillis() + timeoutMs;
             while (System.currentTimeMillis() < deadline) {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(50));
