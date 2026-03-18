@@ -1,122 +1,181 @@
-# beckn-discovr — AI/Contributor Guide
+# Beckn Discovr — Claude Navigation Index
 
-This repository contains services/jobs for the Beckn One Catalog Distribution System (CDS) discovery + ingestion flow. Most code lives under `jobs/` as independent Gradle/Spring Boot projects, each with its own Gradle wrapper.
+Catalog **discovery → query → dispatch** pipeline for the Beckn ecosystem.
+BAPs send `discover` requests → Discovr queries the catalog index → delivers `on_discover` callbacks.
+**Not** a catalog management service — catalog data is indexed from Beckn Catalg.
 
-## Repo map
+---
 
-- `jobs/catalog-discover-job/` — **Discovery Service** (aka `discovery-service`): HTTP API `/beckn/discover`, optional Kafka consumer, Postgres-backed query engine with optional Elasticsearch/NLWeb text search integration.
-- `jobs/catalog-publish-job/` — **Catalog Publish Job**: ingestion/persistence bridge (Kafka + Postgres; distribution can be disabled).
-- `jobs/response-dispatcher/` — **Seeker Notifier Job**: Kafka consumer/producer that forwards messages between topics with DLT handling.
-- `docker-compose.yml` — local stack for Postgres + Elasticsearch + Ollama + jobs + demo UI.
-- `reference-apps/` — demo UI and supporting reference apps.
-- `config/` — shared configuration assets (e.g., Elasticsearch index template used by docker compose).
+## Components
 
-## Build / test (canonical commands)
+| Component | Path | Stack |
+|-----------|------|-------|
+| Catalog Discover Job | `jobs/catalog-discover-job/` | Java 17 · Spring Boot · PostgreSQL/PostGIS · Elasticsearch · Kafka |
+| Catalog Publish Job | `jobs/catalog-publish-job/` | Java 17 · Spring Boot · Kafka · PostgreSQL · Elasticsearch |
+| Response Dispatcher | `jobs/response-dispatcher/` | Java 17 · Spring Boot · Kafka · RestTemplate |
 
-Each job is built and tested from its own directory (each has its own `gradlew`).
+---
 
-- Unit tests:
+## File Map — Read These First
 
-```bash
-cd jobs/<job-name>
-./gradlew test --no-daemon
+### Catalog Discover Job (`jobs/catalog-discover-job/src/main/java/org/beckn/discover/`)
+
+| Task | File |
+|------|------|
+| REST entry point (GET + POST /beckn/discover) | `controller/DiscoveryController.java` |
+| Global NACK handler | `exception/GlobalExceptionHandler.java` |
+| Discovery orchestration | `service/DiscoveryService.java` |
+| PostgreSQL query engine | `service/postgresql/PostgreSQLQueryEngine.java` |
+| PostgreSQL assembler | `service/postgresql/PostgreSQLAssembler.java` |
+| Elasticsearch text search | `service/elasticsearch/ElasticsearchTextSearchEngine.java` |
+| NLWeb text search | `service/nlweb/NLWebTextSearchEngine.java` |
+| Response pipeline (schema filter → dedup → prune) | `service/response/CatalogPipeline.java` |
+| Catalog/item normalization & offer ops | `service/response/CatalogProcessor.java` |
+| on_discover response assembly | `service/response/ResponseProcessor.java` |
+| Schema validation | `service/validation/DiscoveryValidationService.java` |
+| Beckn auth (HTTP signatures) | `service/authorization/AuthorizationService.java` |
+| Async Kafka consumer | `consumer/DiscoveryEventConsumer.java` |
+| Config properties | `config/DiscoveryProperties.java` · `src/main/resources/application.yml` |
+| Domain models | `model/Context.java`, `model/Catalog.java`, `model/Item.java`, `model/Provider.java`, `model/Descriptor.java`, `model/AckResponse.java` |
+| Integration test base | `src/test/java/.../integration/BaseIntegrationTest.java` |
+
+### Catalog Publish Job (`jobs/catalog-publish-job/src/main/java/org/beckn/catalogpublish/`)
+
+| Task | File |
+|------|------|
+| Kafka consumer | `consumer/CatalogPublishConsumer.java` |
+| Pipeline steps | `step/ParseStep.java`, `step/ValidateStep.java`, `step/PersistenceStep.java` |
+| Context field extraction | `util/FieldExtractor.java` |
+| HTTP push controller | `controller/CatalogPushController.java` |
+| Elasticsearch doc assembler | `indexing/document/CatalogDocumentAssembler.java` |
+| Config | `config/AppProperties.java` · `src/main/resources/application.yml` |
+
+### Response Dispatcher (`jobs/response-dispatcher/src/main/java/org/beckn/seeker/`)
+
+| Task | File |
+|------|------|
+| Kafka consumer | `messaging/consumer/EventConsumer.java` |
+| HTTP callback delivery | `service/HttpService.java` |
+| Beckn HTTP signature | `service/SignatureService.java` |
+| Config | `config/SeekerProperties.java` · `src/main/resources/application.yml` |
+
+---
+
+## Beckn Protocol v2.0 — Applied (March 2026)
+
+All three jobs have been migrated to Beckn Protocol v2.0:
+
+### Context fields (camelCase)
+`transactionId`, `messageId`, `bapId`, `bapUri`, `bppId`, `bppUri`, `networkId` (String, not List), `schemaContext`. Field `coreVersion` removed.
+
+### Catalog/Item fields (no `beckn:` prefix)
+`id`, `descriptor`, `items`, `offers`, `provider`, `itemAttributes`, `name`, `shortDesc`, `longDesc`, `images`, `networkId`
+
+### ACK/NACK format
+- ACK: `{"status":"ACK"}` — no transactionId, no timestamp
+- NACK: `{"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}`
+- HTTP 409 = `AckNoCallback` — log and skip, not an error
+
+### on_discover response structure
+```json
+{
+  "context": {"action":"on_discover","messageId":"...","bapId":"...","transactionId":"...",...},
+  "message": {
+    "catalogs": [{"id":"...","descriptor":{"name":"..."},"items":[...],"offers":[...]}]
+  }
+}
 ```
 
-- Integration tests (only some jobs define them; CI runs this for `catalog-publish-job`):
+---
 
-```bash
-cd jobs/<job-name>
-./gradlew integrationTest --no-daemon
+## on_discover Flow
+
+```
+POST /beckn/discover
+  → Auth (Beckn HTTP Signature)
+  → Schema validation
+  → Publish to Kafka request topic → ACK {"status":"ACK"}
+
+DiscoveryEventConsumer (async):
+  → QueryEngine (PostgreSQL / Elasticsearch / NLWeb)
+  → CatalogPipeline:
+      1. Schema context filter
+      2. Dedup offers
+      3. Filter items by offer refs
+      4. Filter offers by item ids
+      5. Remove empty catalogs
+  → ResponseProcessor (copy context, set action="on_discover")
+  → Publish to Kafka response topic
+
+ResponseDispatcher:
+  → Consumes response topic
+  → Signs with Beckn HTTP Signature
+  → POST to BAP callback URL
 ```
 
-- Full verification:
+---
+
+## Build & Test
 
 ```bash
-cd jobs/<job-name>
-./gradlew check --no-daemon
+# Each job runs from its own directory (each has its own gradlew)
+
+cd jobs/catalog-discover-job && ./gradlew test
+cd jobs/catalog-publish-job && ./gradlew test
+cd jobs/catalog-publish-job && ./gradlew integrationTest   # CI also runs this
+cd jobs/response-dispatcher && ./gradlew test
+
+# Run specific test class
+./gradlew test --tests "org.beckn.discover.integration.DiscoveryControllerIntegrationTest"
+
+# Compile only
+./gradlew compileJava
+./gradlew compileTestJava
 ```
 
-### Java version
-
-CI uses **JDK 17**. Keep code compatible with Java 17 and Spring Boot versions declared per job.
-
-## CI expectations (GitHub Actions)
-
-Pull requests to `main` run:
-
-- **Gradle tests**:
-  - `jobs/catalog-discover-job`: `./gradlew test`
-  - `jobs/catalog-publish-job`: `./gradlew test` + `./gradlew integrationTest`
-- **Trivy FS + SBOM scanning** (non-blocking): generates CycloneDX SBOMs via `cyclonedxDirectBom` for the Java jobs and scans them.
-
-When changing dependencies, ensure `./gradlew cyclonedxDirectBom` still works for impacted jobs.
-
-## Running locally (Docker Compose)
-
-The root `docker-compose.yml` brings up:
-
-- Postgres/PostGIS (`postgres-discovery`, exposed on host `5434`)
-- Elasticsearch (`9200`)
-- Ollama + model init job (pulls embedding + small LLM models)
-- `catalog-publish` (host `8085`)
-- `catalog-discover-job` (host `8082`)
-- Demo UI (host `5173`)
-
-### One-time setup
-
-`docker-compose.yml` uses an **external** network named `beckn-network`. Create it once:
+## Local Docker Stack
 
 ```bash
-docker network create beckn-network
-```
-
-### Start/stop
-
-```bash
+docker network create beckn-network   # one-time setup
 docker compose up -d
-docker compose logs -f
-docker compose down
+# catalog-discover-job: http://localhost:8082
+# catalog-publish-job:  http://localhost:8085
+# Postgres: localhost:5434
+# Elasticsearch: localhost:9200
 ```
 
-### Health checks
+---
 
-- `catalog-discover-job`: `GET http://localhost:8082/actuator/health`
+## Hard Rules — Never Violate
 
-## Configuration conventions
+- **Constructor injection only** — no `@Autowired` field injection
+- **Parameterized SQL only** — no string concatenation in queries
+- **Secrets via `${ENV_VAR}` only** — never hardcoded in YAML
+- **No `Thread.sleep()` in tests** — use deadline-based poll loops from `BaseIntegrationTest`
+- **Validate callback URLs before HTTP POST** — SSRF risk
+- **No `new ObjectMapper()`** — inject Spring Boot's auto-configured bean
+- **Beckn v2.0 field names only** — no `beckn:` prefix, no snake_case context fields
+- **Topic names from `@ConfigurationProperties`** — never hardcoded string literals
+- **Kafka publish**: `kafkaTemplate.send().whenComplete(...)` — never `.get()`
+- **Per-job Gradle wrappers**: run `./gradlew` from the specific job directory
 
-Prefer configuration through:
+---
 
-- Spring `application.yml` / profile-specific YAML (e.g., `application-docker.yml`)
-- Environment variables (Docker Compose uses many `APP_*`, `KAFKA_*`, `POSTGRES_*`, etc.)
+## Agents
 
-When adding new configuration:
+Five agents in `.claude/agents/` for autonomous development workflow:
 
-- Keep **property names consistent** with existing patterns in that job.
-- Prefer **typed properties** classes (`@ConfigurationProperties`) where already used.
-- Document new required env vars in the job’s README if they affect runtime.
+| Agent | Model | Purpose |
+|-------|-------|---------|
+| `design` | Opus | Two proposals → scoring → Design Spec. **User approves before proceeding.** |
+| `implement` | Sonnet | Implements from Design Spec with tests. Runs autonomously. |
+| `review` | Opus | CRITICAL/HIGH/MEDIUM/LOW findings. APPROVE/REQUEST CHANGES/BLOCK. |
+| `test-runner` | Haiku | Runs `./gradlew test`, reports pass/fail. Cheap — use freely. |
+| `debug` | Sonnet | Reads failures, fixes minimally, re-tests. Max 3 rounds then reports. |
 
-## Kafka conventions
+**Development Workflow:**
+```
+design → [USER APPROVAL] → implement → review → test-runner → debug (if failures) → done
+```
 
-Several jobs consume/produce Kafka messages.
-
-- Keep topic names **configurable** (do not hardcode).
-- When adding consumers, prefer **manual acknowledgment** if the job’s design relies on precise failure routing (DLT) and retry control.
-- Ensure failed message handling is explicit (logging + DLT topic where applicable).
-
-## Coding conventions for changes
-
-When you (or an AI assistant) make changes:
-
-- Keep changes **scoped to the relevant job** under `jobs/<job>/...`.
-- Follow existing Spring Boot patterns in that job (package layout, configuration style).
-- Add/adjust tests in the same job:
-  - Unit tests under `src/test/java/...`
-  - Integration tests when the job already uses Testcontainers (e.g., `catalog-publish-job`).
-- Avoid introducing new build steps that CI doesn’t run, unless you also update CI.
-
-## Common “gotchas”
-
-- **Per-job Gradle wrappers**: run `./gradlew ...` from the job directory you’re working on.
-- **External Docker network**: `beckn-network` must exist or compose will fail.
-- **Integration tests and Testcontainers**: `catalog-publish-job` uses a dedicated `integrationTest` task; CI runs it, so keep it stable and deterministic.
-
+For small tasks (bug fix, field rename): skip design → implement → review → test-runner.
