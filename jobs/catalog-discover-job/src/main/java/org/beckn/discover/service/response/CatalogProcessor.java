@@ -241,9 +241,7 @@ public class CatalogProcessor {
 
     private static String offerId(Object offer) {
         if (offer instanceof Map<?, ?> map) {
-            Object id = map.get("beckn:id");
-            if (id == null)
-                id = map.get("id");
+            Object id = map.get("id");
             if (id != null)
                 return id.toString();
         }
@@ -298,15 +296,12 @@ public class CatalogProcessor {
     }
 
     /**
-     * Extracts item ID references from an offer map ({@code beckn:items} or
-     * {@code items}).
+     * Extracts item ID references from an offer map ({@code items}).
      */
     public static Set<String> offerItemIds(Object offer) {
         if (!(offer instanceof Map<?, ?> map))
             return Collections.emptySet();
-        Object itemsObj = map.get("beckn:items");
-        if (itemsObj == null)
-            itemsObj = map.get("items");
+        Object itemsObj = map.get("items");
         if (itemsObj instanceof List<?> list) {
             return list.stream().filter(Objects::nonNull).map(Object::toString).collect(Collectors.toSet());
         }

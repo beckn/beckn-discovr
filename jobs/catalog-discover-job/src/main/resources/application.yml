@@ -139,7 +139,7 @@ discovery:
     # Catalog-level attributes to extract from catalog.payload
     # These attributes will be merged into catalog objects in the response
     catalog-attributes-to-extract:
-      - "beckn:offers"
+      - "offers"
 
 # Management and Monitoring
 management:

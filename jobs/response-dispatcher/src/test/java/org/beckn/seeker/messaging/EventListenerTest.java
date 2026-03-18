@@ -37,12 +37,12 @@ class EventListenerTest {
 
     @Test
     void shouldProcessDiscoveryResponseSuccessfully() {
-        // Given
+        // Given - Beckn v2.0 camelCase context fields
         String testMessage = """
             {
               "context": {
-                "message_id": "msg-123",
-                "bap_uri": "https://bap.example.com",
+                "messageId": "msg-123",
+                "bapUri": "https://bap.example.com",
                 "action": "on_search"
               },
               "catalog": {
@@ -68,12 +68,12 @@ class EventListenerTest {
 
     @Test
     void shouldUseExtractedKeyWhenOriginalKeyIsNull() {
-        // Given
+        // Given - Beckn v2.0 camelCase context fields
         String testMessage = """
             {
               "context": {
-                "message_id": "msg-456",
-                "bap_uri": "https://bap.example.com",
+                "messageId": "msg-456",
+                "bapUri": "https://bap.example.com",
                 "action": "on_search"
               },
               "catalog": {
@@ -99,12 +99,12 @@ class EventListenerTest {
 
     @Test
     void shouldSendToDltOnProcessingError() {
-        // Given
+        // Given - Beckn v2.0 camelCase context fields
         String testMessage = """
             {
               "context": {
-                "message_id": "msg-123",
-                "bap_uri": "https://bap.example.com",
+                "messageId": "msg-123",
+                "bapUri": "https://bap.example.com",
                 "action": "on_search"
               },
               "catalog": {

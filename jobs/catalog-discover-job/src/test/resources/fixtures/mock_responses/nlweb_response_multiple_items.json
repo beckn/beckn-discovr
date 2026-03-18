@@ -8,28 +8,28 @@
                     {
                         "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
                         "@type": "beckn:Catalog",
-                        "beckn:id": "catalog-mixed-001",
-                        "beckn:descriptor": {
+                        "id": "catalog-mixed-001",
+                        "descriptor": {
                             "@type": "beckn:Descriptor",
-                            "schema:name": "Mixed Services Catalog"
+                            "name": "Mixed Services Catalog"
                         },
-                        "beckn:items": [
+                        "items": [
                             {
                                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
                                 "@type": "beckn:Item",
-                                "beckn:id": "item-ev-charging",
-                                "beckn:descriptor": {
+                                "id": "item-ev-charging",
+                                "descriptor": {
                                     "@type": "beckn:Descriptor",
-                                    "schema:name": "EV Charger"
+                                    "name": "EV Charger"
                                 },
-                                "beckn:provider": {
-                                    "beckn:id": "provider-1",
-                                    "beckn:descriptor": {
+                                "provider": {
+                                    "id": "provider-1",
+                                    "descriptor": {
                                         "@type": "beckn:Descriptor",
-                                        "schema:name": "Provider 1"
+                                        "name": "Provider 1"
                                     }
                                 },
-                                "beckn:itemAttributes": {
+                                "itemAttributes": {
                                     "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
                                     "@type": "ChargingService"
                                 }
@@ -37,19 +37,19 @@
                             {
                                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
                                 "@type": "beckn:Item",
-                                "beckn:id": "item-food",
-                                "beckn:descriptor": {
+                                "id": "item-food",
+                                "descriptor": {
                                     "@type": "beckn:Descriptor",
-                                    "schema:name": "Food Item"
+                                    "name": "Food Item"
                                 },
-                                "beckn:provider": {
-                                    "beckn:id": "provider-2",
-                                    "beckn:descriptor": {
+                                "provider": {
+                                    "id": "provider-2",
+                                    "descriptor": {
                                         "@type": "beckn:Descriptor",
-                                        "schema:name": "Provider 2"
+                                        "name": "Provider 2"
                                     }
                                 },
-                                "beckn:itemAttributes": {
+                                "itemAttributes": {
                                     "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/FoodService/v1/context.jsonld",
                                     "@type": "FoodService"
                                 }
@@ -57,19 +57,19 @@
                             {
                                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
                                 "@type": "beckn:Item",
-                                "beckn:id": "item-ride",
-                                "beckn:descriptor": {
+                                "id": "item-ride",
+                                "descriptor": {
                                     "@type": "beckn:Descriptor",
-                                    "schema:name": "Ride Service"
+                                    "name": "Ride Service"
                                 },
-                                "beckn:provider": {
-                                    "beckn:id": "provider-3",
-                                    "beckn:descriptor": {
+                                "provider": {
+                                    "id": "provider-3",
+                                    "descriptor": {
                                         "@type": "beckn:Descriptor",
-                                        "schema:name": "Provider 3"
+                                        "name": "Provider 3"
                                     }
                                 },
-                                "beckn:itemAttributes": {
+                                "itemAttributes": {
                                     "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/RideService/v1/context.jsonld",
                                     "@type": "RideService"
                                 }

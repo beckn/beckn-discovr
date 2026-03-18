@@ -1,19 +1,19 @@
 [
   {
     "item_id": "ev-charger-ccs2-001",
-    "path": "$.catalogs[*].\"beckn:items\"[*].\"beckn:availableAt\"[*].\"geo\"",
+    "path": "$.catalogs[*].items[*].availableAt[*].geo",
     "lon": 77.5946,
     "lat": 12.9716
   },
   {
     "item_id": "ev-charger-ccs2-001",
-    "path": "$.catalogs[*].\"beckn:items\"[*].\"beckn:itemAttributes\".\"ride:serviceArea\".\"geo\"",
+    "path": "$.catalogs[*].items[*].itemAttributes.serviceArea.geo",
     "lon": 70.0,
     "lat": 10.0
   },
   {
     "item_id": "ev-charger-ccs2-002",
-    "path": "$.catalogs[*].\"beckn:items\"[*].\"beckn:availableAt\"[*].\"geo\"",
+    "path": "$.catalogs[*].items[*].availableAt[*].geo",
     "lon": 77.5700,
     "lat": 12.9800
   }

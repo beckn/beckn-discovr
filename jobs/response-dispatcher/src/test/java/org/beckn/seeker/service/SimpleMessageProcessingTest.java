@@ -29,12 +29,12 @@ class SimpleMessageProcessingTest {
 
     @Test
     void shouldProcessValidDiscoveryResponse() {
-        // Given
+        // Given - Beckn v2.0 camelCase context fields
         String discoveryResponse = """
             {
               "context": {
-                "message_id": "msg-123",
-                "bap_uri": "https://bap.example.com",
+                "messageId": "msg-123",
+                "bapUri": "https://bap.example.com",
                 "action": "on_search"
               },
               "catalog": {
@@ -55,12 +55,12 @@ class SimpleMessageProcessingTest {
 
     @Test
     void shouldThrowExceptionWhenHttpServiceFails() {
-        // Given
+        // Given - Beckn v2.0 camelCase context fields
         String discoveryResponse = """
             {
               "context": {
-                "message_id": "msg-123",
-                "bap_uri": "https://bap.example.com",
+                "messageId": "msg-123",
+                "bapUri": "https://bap.example.com",
                 "action": "on_search"
               },
               "catalog": {

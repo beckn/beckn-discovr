@@ -24,7 +24,7 @@ public record OfferIndex(
         List<JsonNode> catalogWide = new ArrayList<>();
         Map<String, List<JsonNode>> byItemId = new HashMap<>();
         for (JsonNode offer : allOffers) {
-            JsonNode offerItems = offer.path("beckn:items");
+            JsonNode offerItems = offer.path("items");
             if (offerItems.isMissingNode() || !offerItems.isArray()) {
                 catalogWide.add(offer);
             } else {

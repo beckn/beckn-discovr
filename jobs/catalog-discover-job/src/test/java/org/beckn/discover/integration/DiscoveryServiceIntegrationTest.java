@@ -186,7 +186,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .as("Geo must not be null")
                 .isNotNull();
         Assertions.assertThat(geo.getCoordinates())
-                .as("Coordinates must match item_location_collection [longitude, latitude] for $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo")
+                .as("Coordinates must match item_location_collection [longitude, latitude] for $.catalogs[*].items[*].availableAt[*].geo")
                 .containsExactly(77.5946, 12.9716);
     }
 
@@ -326,7 +326,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers())
                 .as("Combined spatial+offer filter should return only matching offer")
                 .hasSize(1);
-        Assertions.assertThat(objectMapper.valueToTree(catalog.getOffers().get(0)).path("beckn:id").asText())
+        Assertions.assertThat(objectMapper.valueToTree(catalog.getOffers().get(0)).path("id").asText())
                 .isEqualTo("offer-ccs2-60kw-kwh");
 
         // Items filtered to only those referenced by the offer
@@ -363,7 +363,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .as("Should return offers referencing the CCS2 items")
                 .hasSize(2);
         Set<String> offerIds = catalog.getOffers().stream()
-                .map(o -> objectMapper.valueToTree(o).path("beckn:id").asText())
+                .map(o -> objectMapper.valueToTree(o).path("id").asText())
                 .collect(Collectors.toSet());
         Assertions.assertThat(offerIds).containsExactlyInAnyOrder("offer-ccs2-60kw-kwh", "offer-ccs2-120kw-kwh");
     }
@@ -423,7 +423,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .isNotEmpty();
         catalog.getOffers().forEach(offer -> {
             @SuppressWarnings("unchecked")
-            List<String> refs = (List<String>) ((Map<?, ?>) offer).get("beckn:items");
+            List<String> refs = (List<String>) ((Map<?, ?>) offer).get("items");
             Assertions.assertThat(refs).contains("ev-charger-ccs2-001");
         });
     }
@@ -440,11 +440,11 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         for (Object o : catalog.getOffers()) {
             JsonNode offer = objectMapper.valueToTree(o);
-            Assertions.assertThat(offer.has("beckn:id")).isTrue();
-            Assertions.assertThat(offer.has("beckn:price")).isTrue();
-            Assertions.assertThat(offer.path("beckn:price").path("value").asDouble()).isLessThan(20.0);
-            Assertions.assertThat(offer.path("beckn:price").path("currency").asText()).isEqualTo("INR");
-            Assertions.assertThat(offer.has("beckn:items")).isTrue();
+            Assertions.assertThat(offer.has("id")).isTrue();
+            Assertions.assertThat(offer.has("price")).isTrue();
+            Assertions.assertThat(offer.path("price").path("value").asDouble()).isLessThan(20.0);
+            Assertions.assertThat(offer.path("price").path("currency").asText()).isEqualTo("INR");
+            Assertions.assertThat(offer.has("items")).isTrue();
         }
     }
 
@@ -711,7 +711,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         var catalog = response.getCatalogs().get(0);
         Assertions.assertThat(catalog.getOffers()).hasSize(1);
         JsonNode offer = objectMapper.valueToTree(catalog.getOffers().get(0));
-        Assertions.assertThat(offer.path("beckn:id").asText()).isEqualTo("offer-ccs2-60kw-kwh");
+        Assertions.assertThat(offer.path("id").asText()).isEqualTo("offer-ccs2-60kw-kwh");
         Assertions.assertThat(catalog.getItems()).extracting("id").contains("ev-charger-ccs2-001");
     }
 
@@ -727,7 +727,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         for (Object o : catalog.getOffers()) {
             JsonNode offer = objectMapper.valueToTree(o);
-            double value = offer.path("beckn:price").path("value").asDouble();
+            double value = offer.path("price").path("value").asDouble();
             Assertions.assertThat(value).isLessThan(20.0);
         }
     }
@@ -750,7 +750,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         boolean hasCheapOffer = catalog.getOffers().stream().anyMatch(o -> {
             JsonNode node = objectMapper.valueToTree(o);
-            return node.path("beckn:price").path("value").asDouble() < 20;
+            return node.path("price").path("value").asDouble() < 20;
         });
         Assertions.assertThat(hasCheapOffer).isTrue();
     }
@@ -767,13 +767,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getId()).isEqualTo("catalog-ev-charging-001");
         Assertions.assertThat(catalog.getItems()).extracting("id").contains("ev-charger-ccs2-001");
         Assertions.assertThat(catalog.getOffers()).hasSize(1);
-        Assertions.assertThat(objectMapper.valueToTree(catalog.getOffers().get(0)).path("beckn:id").asText())
+        Assertions.assertThat(objectMapper.valueToTree(catalog.getOffers().get(0)).path("id").asText())
                 .isEqualTo("offer-ccs2-60kw-kwh");
     }
 
     @Test
     void userReportedFilterRegression() {
-        String filterExpression = "$.catalogs[*] ? (exists(@.\"beckn:offers\"[*] ? (@.\"beckn:id\" == \"offer-ccs2-60kw-kwh\")))";
+        String filterExpression = "$.catalogs[*] ? (exists(@.offers[*] ? (@.id == \"offer-ccs2-60kw-kwh\")))";
         DiscoverRequest request = new DiscoverRequest();
         request.setContext(buildContext("txn-regression", "msg-regression"));
         request.setFilters(filterExpression);
@@ -785,7 +785,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         boolean hasTargetOffer = catalog.getOffers().stream().anyMatch(o -> {
             var node = objectMapper.valueToTree(o);
-            return "offer-ccs2-60kw-kwh".equals(node.path("beckn:id").asText(null));
+            return "offer-ccs2-60kw-kwh".equals(node.path("id").asText(null));
         });
         Assertions.assertThat(hasTargetOffer).as("Response should contain the offer that matched the filter").isTrue();
     }
@@ -797,21 +797,21 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         String catalogId = "catalog-1";
         String item1Json = "{" +
                 "\"@type\": \"beckn:Catalog\"," +
-                "\"beckn:id\": \"" + catalogId + "\"," +
-                "\"beckn:items\": [{\"beckn:id\": \"item-1\", \"descriptor\": {\"name\": \"Item 1\"}}]," +
-                "\"beckn:offers\": [{" +
-                "  \"beckn:id\": \"offer-1\"," +
-                "  \"beckn:items\": [\"item-1\"]," +
+                "\"id\": \"" + catalogId + "\"," +
+                "\"items\": [{\"id\": \"item-1\", \"descriptor\": {\"name\": \"Item 1\"}}]," +
+                "\"offers\": [{" +
+                "  \"id\": \"offer-1\"," +
+                "  \"items\": [\"item-1\"]," +
                 "  \"descriptor\": { \"name\": \"Offer 1\" }" +
                 "}]" +
                 "}";
         String item2Json = "{" +
                 "\"@type\": \"beckn:Catalog\"," +
-                "\"beckn:id\": \"" + catalogId + "\"," +
-                "\"beckn:items\": [{\"beckn:id\": \"item-2\", \"descriptor\": {\"name\": \"Item 2\"}}]," +
-                "\"beckn:offers\": [{" +
-                "  \"beckn:id\": \"offer-2\"," +
-                "  \"beckn:items\": [\"item-2\"]," +
+                "\"id\": \"" + catalogId + "\"," +
+                "\"items\": [{\"id\": \"item-2\", \"descriptor\": {\"name\": \"Item 2\"}}]," +
+                "\"offers\": [{" +
+                "  \"id\": \"offer-2\"," +
+                "  \"items\": [\"item-2\"]," +
                 "  \"descriptor\": { \"name\": \"Offer 2\" }" +
                 "}]" +
                 "}";
@@ -857,7 +857,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
     private DiscoverRequest createRequestWithOfferQuery(String offerId) {
         DiscoverRequest request = new DiscoverRequest();
         request.setContext(buildContext("txn-precise-filter", "msg-precise-filter"));
-        request.setFilters("$.catalogs[*].\"beckn:offers\"[*] ? (@.\"beckn:id\" == \"" + offerId + "\")");
+        request.setFilters("$.catalogs[*].offers[*] ? (@.id == \"" + offerId + "\")");
         return request;
     }
 
@@ -880,7 +880,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
      * PURPOSE: Verify that querying for a specific offer by ID returns ONLY that offer,
      * with no extra offers, and the catalog contains ONLY items referenced by that offer.
      * 
-     * QUERY: $.catalogs[*]["beckn:offers"][*] ? (@["beckn:id"] == "offer-ccs2-60kw-kwh")
+     * QUERY: $.catalogs[*]["offers"][*] ? (@["id"] == "offer-ccs2-60kw-kwh")
      * 
      * EXPECTED RESULTS:
      * - Exactly 1 catalog returned
@@ -922,13 +922,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> offer = (Map<String, Object>) catalog.getOffers().get(0);
-        Assertions.assertThat(offer.get("beckn:id"))
+        Assertions.assertThat(offer.get("id"))
                 .as("Offer ID must match the queried offer")
                 .isEqualTo("offer-ccs2-60kw-kwh");
 
         // Assert: Verify offer price
         @SuppressWarnings("unchecked")
-        Map<String, Object> price = (Map<String, Object>) offer.get("beckn:price");
+        Map<String, Object> price = (Map<String, Object>) offer.get("price");
         Assertions.assertThat(price.get("value"))
                 .as("Offer price should be 18")
                 .isEqualTo(18);
@@ -945,7 +945,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         // Assert: Offer references match returned items
         @SuppressWarnings("unchecked")
-        List<String> offerItems = (List<String>) offer.get("beckn:items");
+        List<String> offerItems = (List<String>) offer.get("items");
         List<String> returnedItemIds = catalog.getItems().stream()
                 .map(Item::getId)
                 .collect(Collectors.toList());
@@ -960,7 +960,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
      * PURPOSE: Verify that querying for offers within a price range returns ALL matching offers
      * across multiple catalogs, with no extras and no missing offers.
      * 
-     * QUERY: $.catalogs[*]["beckn:offers"][*] ? (@["beckn:price"]["value"] < 20)
+     * QUERY: $.catalogs[*]["offers"][*] ? (@["price"]["value"] < 20)
      * 
      * EXPECTED RESULTS:
      * - Multiple catalogs returned (those with matching offers)
@@ -998,12 +998,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
                 allOffers.add(offer);
                 
-                String offerId = (String) offer.get("beckn:id");
+                String offerId = (String) offer.get("id");
                 offerIds.add(offerId);
                 
                 // Assert: Each offer has price < 20
                 @SuppressWarnings("unchecked")
-                Map<String, Object> price = (Map<String, Object>) offer.get("beckn:price");
+                Map<String, Object> price = (Map<String, Object>) offer.get("price");
                 Number priceValue = (Number) price.get("value");
                 Assertions.assertThat(priceValue.doubleValue())
                         .as("Offer %s price must be less than 20", offerId)
@@ -1038,7 +1038,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
      * PURPOSE: Verify that querying items by a single attribute (connectorType) returns
      * ALL matching items across multiple catalogs, with no extras.
      * 
-     * QUERY: $["beckn:itemAttributes"].connectorType == "CCS2"
+     * QUERY: $["itemAttributes"].connectorType == "CCS2"
      * 
      * EXPECTED RESULTS:
      * - Multiple catalogs with CCS2 items
@@ -1096,8 +1096,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
      * PURPOSE: Verify that items matching MULTIPLE conditions (AND logic) are returned,
      * and items failing ANY condition are excluded.
      * 
-     * QUERY: $["beckn:itemAttributes"].connectorType == "CCS2" && 
-     *        $["beckn:itemAttributes"].maxPowerKW >= 50
+     * QUERY: $["itemAttributes"].connectorType == "CCS2" && 
+     *        $["itemAttributes"].maxPowerKW >= 50
      * 
      * EXPECTED RESULTS:
      * - Only items that are BOTH CCS2 AND power >= 50
@@ -1362,10 +1362,10 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
             for (Object offerObj : catalog.getOffers()) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
-                String offerId = (String) offer.get("beckn:id");
+                String offerId = (String) offer.get("id");
 
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("beckn:items");
+                List<String> offerItemIds = (List<String>) offer.get("items");
 
                 Assertions.assertThat(offerItemIds)
                         .as("Offer %s must have items array", offerId)
@@ -1418,7 +1418,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
             for (Object offerObj : catalog.getOffers()) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
-                String offerId = (String) offer.get("beckn:id");
+                String offerId = (String) offer.get("id");
 
                 offerIds.add(offerId);
                 offerCount++;
@@ -1521,7 +1521,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
                 
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("beckn:items");
+                List<String> offerItemIds = (List<String>) offer.get("items");
                 
                 // Assert: Offer items belong to this catalog
                 for (String offerItemId : offerItemIds) {

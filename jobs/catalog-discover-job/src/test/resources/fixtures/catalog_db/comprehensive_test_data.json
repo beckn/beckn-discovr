@@ -7,7 +7,7 @@
       "type": "beckn:Catalog",
       "bpp_id": "bpp-ev-charging.example.com",
       "bpp_uri": "https://bpp-ev-charging.example.com",
-      "payload_string": "{\"beckn:id\": \"ev-charging-network-blr\", \"beckn:descriptor\": {\"schema:name\": \"EV Charging Network Bangalore\"}}",
+      "payload_string": "{\"id\": \"ev-charging-network-blr\", \"descriptor\": {\"name\": \"EV Charging Network Bangalore\"}}",
       "offers": [
         {
           "id": "fast-charging-offer-001",
@@ -42,7 +42,7 @@
       "type": "beckn:Catalog",
       "bpp_id": "bpp-solar.example.com",
       "bpp_uri": "https://bpp-solar.example.com",
-      "payload_string": "{\"beckn:id\": \"solar-charging-network-blr\", \"beckn:descriptor\": {\"schema:name\": \"Solar Charging Network Bangalore\"}}",
+      "payload_string": "{\"id\": \"solar-charging-network-blr\", \"descriptor\": {\"name\": \"Solar Charging Network Bangalore\"}}",
       "offers": [
         {
           "id": "eco-offer-001",
@@ -65,7 +65,7 @@
       "type": "beckn:Catalog",
       "bpp_id": "bpp-home-charging.example.com",
       "bpp_uri": "https://bpp-home-charging.example.com",
-      "payload_string": "{\"beckn:id\": \"home-charging-network-mum\", \"beckn:descriptor\": {\"schema:name\": \"Home Charging Solutions Mumbai\"}}",
+      "payload_string": "{\"id\": \"home-charging-network-mum\", \"descriptor\": {\"name\": \"Home Charging Solutions Mumbai\"}}",
       "offers": [
         {
           "id": "home-offer-001",

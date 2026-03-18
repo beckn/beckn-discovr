@@ -1,19 +1,19 @@
 {
   "context": {
-    "bpp_id": "bpp-1",
-    "bpp_uri": "http://bpp1.example.com",
-    "message_id": "msg-patch-offer-1",
-    "transaction_id": "tx-patch-offer-1"
+    "bppId": "bpp-1",
+    "bppUri": "http://bpp1.example.com",
+    "messageId": "msg-patch-offer-1",
+    "transactionId": "tx-patch-offer-1"
   },
   "message": {
     "catalogs": [
       {
         "id": "cat-1",
-        "beckn:items": [],
-        "beckn:offers": [
+        "items": [],
+        "offers": [
           {
-            "beckn:id": "offer-A",
-            "beckn:descriptor": {"schema:name": "Offer A Updated"}
+            "id": "offer-A",
+            "descriptor": {"name": "Offer A Updated"}
           }
         ]
       }

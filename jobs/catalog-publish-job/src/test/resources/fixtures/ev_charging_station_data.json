@@ -1,21 +1,21 @@
 {
   "context": {
-    "bpp_id": "bpp-1",
-    "bpp_uri": "http://bpp1.example.com",
-    "message_id": "msg-1",
-    "transaction_id": "tx-1"
+    "bppId": "bpp-1",
+    "bppUri": "http://bpp1.example.com",
+    "messageId": "msg-1",
+    "transactionId": "tx-1"
   },
   "message": {
     "catalogs": [
       {
         "id": "cat-1",
-        "beckn:items": [
+        "items": [
           {
-            "beckn:id": "item-1",
-            "beckn:descriptor": { "schema:name": "EV Station" }
+            "id": "item-1",
+            "descriptor": { "name": "EV Station" }
           }
         ],
-        "beckn:offers": []
+        "offers": []
       }
     ]
   }

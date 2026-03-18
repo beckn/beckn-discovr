@@ -34,13 +34,13 @@ public class CatalogDocumentAssembler {
     /** Called from EsFailureConsumer — all fields extracted from stored payload. */
     public Map<String, Object> assemble(JsonNode payloadNode, String indexKey) {
         JsonNode catalog = payloadNode.path("catalogs").path(0);
-        JsonNode itemNode = catalog.path("beckn:items").path(0);
-        JsonNode netNode = itemNode.path("beckn:networkId");
+        JsonNode itemNode = catalog.path("items").path(0);
+        JsonNode netNode = itemNode.path("networkId");
         String networkId = netNode.isArray() ? netNode.path(0).asText(null) : netNode.asText(null);
         return build(payloadNode, indexKey, networkId,
-                text(catalog.path("beckn:items").path(0), "beckn:id"),
-                text(catalog, "beckn:bppId"),
-                text(catalog, "beckn:bppUri"));
+                text(catalog.path("items").path(0), "id"),
+                text(catalog, "bppId"),
+                text(catalog, "bppUri"));
     }
 
     // ── Core builder ─────────────────────────────────────────────────────────
@@ -48,15 +48,15 @@ public class CatalogDocumentAssembler {
     private Map<String, Object> build(JsonNode payloadNode, String schemaType, String networkId,
             String itemId, String bppId, String bppUri) {
         JsonNode catalog = payloadNode.path("catalogs").path(0);
-        JsonNode itemNode = catalog.path("beckn:items").path(0);
-        JsonNode desc = itemNode.path("beckn:descriptor");
+        JsonNode itemNode = catalog.path("items").path(0);
+        JsonNode desc = itemNode.path("descriptor");
 
         Map<String, Object> doc = new LinkedHashMap<>();
-        doc.put("catalog_id", text(catalog, "beckn:id"));
+        doc.put("catalog_id", text(catalog, "id"));
         doc.put("catalog_context", text(catalog, "@context"));
         doc.put("catalog_type", text(catalog, "@type"));
-        doc.put("catalog_name", text(catalog.path("beckn:descriptor"), "schema:name"));
-        doc.put("catalog_images", arrayToList(catalog.path("beckn:descriptor").path("schema:image")));
+        doc.put("catalog_name", text(catalog.path("descriptor"), "name"));
+        doc.put("catalog_images", arrayToList(catalog.path("descriptor").path("images")));
         doc.put("bpp_id", bppId);
         doc.put("bpp_uri", bppUri);
         doc.put("network_id", networkId);
@@ -64,27 +64,27 @@ public class CatalogDocumentAssembler {
         doc.put("item_context", text(itemNode, "@context"));
         doc.put("item_type", text(itemNode, "@type"));
         doc.put("item_id", itemId);
-        doc.put("item_name", text(desc, "schema:name"));
-        doc.put("item_short_desc", text(desc, "beckn:shortDesc"));
-        doc.put("item_long_desc", text(desc, "beckn:longDesc"));
-        doc.put("item_image", arrayToList(desc.path("schema:image")));
-        doc.put("item_category_code", text(itemNode.path("beckn:category"), "schema:codeValue"));
-        doc.put("item_category_name", text(itemNode.path("beckn:category"), "schema:name"));
-        doc.put("item_rateable", bool(itemNode, "beckn:rateable"));
-        doc.put("item_is_active", bool(itemNode, "beckn:isActive"));
-        doc.put("item_rating_value", dbl(itemNode.path("beckn:rating"), "beckn:ratingValue"));
-        doc.put("item_rating_count", integer(itemNode.path("beckn:rating"), "beckn:ratingCount"));
-        doc.put("item_provider_id", text(itemNode.path("beckn:provider"), "beckn:id"));
-        doc.put("item_provider_name", text(itemNode.path("beckn:provider").path("beckn:descriptor"), "schema:name"));
+        doc.put("item_name", text(desc, "name"));
+        doc.put("item_short_desc", text(desc, "shortDesc"));
+        doc.put("item_long_desc", text(desc, "longDesc"));
+        doc.put("item_image", arrayToList(desc.path("images")));
+        doc.put("item_category_code", text(itemNode.path("category"), "codeValue"));
+        doc.put("item_category_name", text(itemNode.path("category"), "name"));
+        doc.put("item_rateable", bool(itemNode, "rateable"));
+        doc.put("item_is_active", bool(itemNode, "isActive"));
+        doc.put("item_rating_value", dbl(itemNode.path("rating"), "ratingValue"));
+        doc.put("item_rating_count", integer(itemNode.path("rating"), "ratingCount"));
+        doc.put("item_provider_id", text(itemNode.path("provider"), "id"));
+        doc.put("item_provider_name", text(itemNode.path("provider").path("descriptor"), "name"));
         doc.put("indexed_at", Instant.now().toString());
 
         geoShapeExtractor.extractGeoShapes(payloadNode).forEach(doc::put);
 
-        JsonNode attrs = itemNode.path("beckn:itemAttributes");
+        JsonNode attrs = itemNode.path("itemAttributes");
         if (!attrs.isMissingNode() && attrs.isObject())
             doc.put("item_attributes", flattenJsonLd(attrs));
 
-        JsonNode offersNode = catalog.path("beckn:offers");
+        JsonNode offersNode = catalog.path("offers");
         List<Map<String, Object>> offers = buildOffers(offersNode);
         doc.put("offers", offers);
         doc.put("full_text_blob", buildTextBlob(doc, offersNode, itemNode));
@@ -127,7 +127,7 @@ public class CatalogDocumentAssembler {
         collectLocationText(itemNode, parts);
 
         // All text from itemAttributes — recursive deep walk
-        collectStrings(itemNode.path("beckn:itemAttributes"), parts);
+        collectStrings(itemNode.path("itemAttributes"), parts);
 
         // All text fields from offers (names, descriptions, terms, eligibility, etc.)
         collectStrings(offersNode, parts);

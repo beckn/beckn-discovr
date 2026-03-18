@@ -8,11 +8,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -58,18 +61,19 @@ public class HttpService {
 
             String targetUrl = null;
             String action = context.path("action").asText();
-            JsonNode bapUriNode = context.path("bap_uri");
-            JsonNode bppUriNode = context.path("bpp_uri");
+            // Beckn v2.0: context fields use camelCase
+            JsonNode bapUriNode = context.path("bapUri");
+            JsonNode bppUriNode = context.path("bppUri");
 
             if (ACTION_ON_DISCOVER.equals(action)) {
                 if (bapUriNode.isMissingNode() || bapUriNode.asText().isEmpty()) {
-                    throw new IllegalArgumentException("Action is " + ACTION_ON_DISCOVER + " but bap_uri is missing");
+                    throw new IllegalArgumentException("Action is " + ACTION_ON_DISCOVER + " but bapUri is missing");
                 }
                 targetUrl = normalizeBaseUrl(bapUriNode.asText()) + ON_DISCOVER_ENDPOINT;
             } else if (ACTION_ON_CATALOG_PUBLISH.equals(action)) {
                 if (bppUriNode.isMissingNode() || bppUriNode.asText().isEmpty()) {
                     throw new IllegalArgumentException(
-                            "Action is " + ACTION_ON_CATALOG_PUBLISH + " but bpp_uri is missing");
+                            "Action is " + ACTION_ON_CATALOG_PUBLISH + " but bppUri is missing");
                 }
                 targetUrl = normalizeBaseUrl(bppUriNode.asText()) + ON_PUBLISH_ENDPOINT;
             } else {
@@ -81,7 +85,7 @@ public class HttpService {
 
             // Normalize JSON to compact format for consistent signature validation
             String requestBody = objectMapper.writeValueAsString(rootNode);
-           
+
             // Prepare headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -95,16 +99,25 @@ public class HttpService {
             // Create HTTP entity
             HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
 
-            // Make the HTTP POST request
-            ResponseEntity<String> response = restTemplate.exchange(
-                    targetUrl,
-                    HttpMethod.POST,
-                    entity,
-                    String.class);
+            // Make the HTTP POST request — handle 409 as AckNoCallback (not an error)
+            try {
+                ResponseEntity<String> response = restTemplate.exchange(
+                        targetUrl,
+                        HttpMethod.POST,
+                        entity,
+                        String.class);
 
-            log.info("Successfully sent callback response: {} - Status: {}", targetUrl,
-                    response.getStatusCode());
-            return true;
+                parseAckResponse(response, targetUrl);
+                return true;
+
+            } catch (HttpClientErrorException e) {
+                if (e.getStatusCode() == HttpStatus.CONFLICT) {
+                    // HTTP 409 = AckNoCallback: BAP has no registered callback — log and skip
+                    log.info("AckNoCallback (HTTP 409) from {}: BAP has no registered callback, skipping", targetUrl);
+                    return true;
+                }
+                throw e;
+            }
 
         } catch (RestClientException e) {
             log.error("HTTP error sending callback: {}", e.getMessage(), e);
@@ -112,6 +125,35 @@ public class HttpService {
         } catch (Exception e) {
             log.error("Error sending callback response: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to send callback", e);
+        }
+    }
+
+    /**
+     * Parses the Beckn v2.0 ACK/NACK response body.
+     * v2.0 format: {@code {"status":"ACK"}} or {@code {"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}}
+     */
+    private void parseAckResponse(ResponseEntity<String> response, String targetUrl) {
+        var statusCode = response.getStatusCode();
+        var body = response.getBody();
+        log.info("Callback response from {}: HTTP {}", targetUrl, statusCode);
+
+        if (body == null || body.isBlank()) {
+            log.warn("Empty response body from {}", targetUrl);
+            return;
+        }
+        try {
+            var responseNode = objectMapper.readTree(body);
+            var status = responseNode.path("status").asText();
+            if ("NACK".equals(status)) {
+                var error = responseNode.path("error");
+                var errorCode = error.path("errorCode").asText();
+                var errorMessage = error.path("errorMessage").asText();
+                log.warn("NACK received from {}: errorCode={}, errorMessage={}", targetUrl, errorCode, errorMessage);
+            } else {
+                log.debug("ACK received from {}", targetUrl);
+            }
+        } catch (Exception e) {
+            log.warn("Could not parse ACK response body from {}: {}", targetUrl, e.getMessage());
         }
     }
 

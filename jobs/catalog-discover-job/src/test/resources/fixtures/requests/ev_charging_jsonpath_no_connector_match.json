@@ -5,23 +5,21 @@
     "version": "2.0.0",
     "country": "IND",
     "city": "std:BLR",
-    "bap_id": "https://evcharging-bap.example.com",
-    "bap_uri": "https://evcharging-bap.example.com/callback",
-    "network_id": [
-      "bap.net/ev-charging"
-    ],
-    "schema_context": [
+    "bapId": "https://evcharging-bap.example.com",
+    "bapUri": "https://evcharging-bap.example.com/callback",
+    "networkId": "bap.net/ev-charging",
+    "schemaContext": [
       "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"
     ],
-    "transaction_id": "4ff1a96e-2df0-45d9-b6a4-1dff0cb3be43",
-    "message_id": "c3b795bf-e711-4724-80f4-5487494c5a14",
+    "transactionId": "4ff1a96e-2df0-45d9-b6a4-1dff0cb3be43",
+    "messageId": "c3b795bf-e711-4724-80f4-5487494c5a14",
     "ttl": "PT10M",
     "timestamp": "2025-10-14T10:30:00.000Z"
   },
   "message": {
     "filters": {
       "type": "jsonpath",
-      "expression": "$.catalogs[*].\"beckn:items\"[*] ? (@.\"beckn:itemAttributes\".connectorType == \"ChaDeMo\")"
+      "expression": "$.catalogs[*].items[*] ? (@.itemAttributes.connectorType == \"ChaDeMo\")"
     }
   }
 }
