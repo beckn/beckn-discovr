@@ -1,6 +1,7 @@
 package org.beckn.catalogpublish.util;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.exception.FieldExtractionException;
 
 import java.util.List;
@@ -46,7 +47,7 @@ public final class FieldExtractor {
     public static String[] extractNetworkIds(JsonNode contextNode) {
         if (contextNode == null || contextNode.isMissingNode())
             return new String[0];
-        return extractNetworkArray(contextNode.path("networkId"));
+        return extractNetworkArray(contextNode.path(BecknFields.NETWORK_ID));
     }
 
     /**
@@ -57,7 +58,7 @@ public final class FieldExtractor {
     public static String[] extractItemNetworkIds(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return new String[0];
-        JsonNode field = itemNode.path("networkId");
+        JsonNode field = itemNode.path(BecknFields.NETWORK_ID);
         return extractNetworkArray(field);
     }
 
@@ -81,7 +82,7 @@ public final class FieldExtractor {
     public static JsonNode extractOffersOrEmpty(JsonNode catalogNode) {
         if (catalogNode == null)
             return null;
-        JsonNode n = catalogNode.path("offers");
+        JsonNode n = catalogNode.path(BecknFields.OFFERS);
         return n.isMissingNode() ? null : n;
     }
 
@@ -101,7 +102,7 @@ public final class FieldExtractor {
         if (catalogNode == null || catalogNode.isMissingNode())
             return "unknown";
         for (JsonNode itemNode : iterableItems(catalogNode)) {
-            JsonNode attrs = itemNode.path("itemAttributes");
+            JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
             if (attrs.isMissingNode() || !attrs.isObject())
                 continue;
             JsonNode typeNode = attrs.path("@type");
@@ -122,14 +123,14 @@ public final class FieldExtractor {
     public static String extractSchemaType(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return "unknown";
-        JsonNode n = itemNode.path("schemaType");
+        JsonNode n = itemNode.path("schemaType"); // legacy field, not a BecknFields constant
         return (n.isMissingNode() || !n.isTextual()) ? "unknown" : n.asText("unknown");
     }
 
     public static Iterable<JsonNode> iterableItems(JsonNode catalogNode) {
         if (catalogNode == null)
             return List.of();
-        JsonNode field = catalogNode.path("items");
+        JsonNode field = catalogNode.path(BecknFields.ITEMS);
         if (field.isMissingNode() || !field.isArray())
             return List.of();
         final JsonNode arr = field;
@@ -142,11 +143,11 @@ public final class FieldExtractor {
     public static String extractItemName(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode desc = itemNode.path("descriptor");
+        JsonNode desc = itemNode.path(BecknFields.DESCRIPTOR);
         if (desc.isMissingNode() || !desc.isObject())
             return null;
-        return extractString(desc, "name")
-                .or(() -> extractString(desc, "shortDesc"))
+        return extractString(desc, BecknFields.NAME)
+                .or(() -> extractString(desc, BecknFields.SHORT_DESC))
                 .filter(s -> !s.isBlank())
                 .orElse(null);
     }
@@ -197,12 +198,12 @@ public final class FieldExtractor {
     public static String extractItemProviderId(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode prov = itemNode.path("provider");
+        JsonNode prov = itemNode.path(BecknFields.PROVIDER);
         if (prov.isMissingNode() || prov.isNull())
             return null;
         if (prov.isTextual())
             return prov.asText(null);
-        return extractString(prov, "id").orElse(null);
+        return extractString(prov, BecknFields.ID).orElse(null);
     }
 
     /** @context URL from catalog or item (string or first element of array). */
@@ -229,7 +230,7 @@ public final class FieldExtractor {
     private static JsonNode itemAttributesNode(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode attrs = itemNode.path("itemAttributes");
+        JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
         return (attrs.isMissingNode() || !attrs.isObject()) ? null : attrs;
     }
 }

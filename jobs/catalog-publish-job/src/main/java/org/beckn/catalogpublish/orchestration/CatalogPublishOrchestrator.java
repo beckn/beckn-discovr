@@ -12,6 +12,7 @@ import org.beckn.catalogpublish.step.ParseStep;
 import org.beckn.catalogpublish.step.PersistenceStep;
 import org.beckn.catalogpublish.step.ResultStep;
 import org.beckn.catalogpublish.step.ValidateStep;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.util.CorrelationContext;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.MdcSupport;
@@ -72,7 +73,7 @@ public class CatalogPublishOrchestrator {
 
     public PublishOutcome processPublish(String rawMessage) {
         ParsedCatalogMessage parsed = parseStep.parse(rawMessage);
-        String messageId = parsed.context().contextNode().path("message_id").asText(null);
+        String messageId = parsed.context().contextNode().path(BecknFields.MESSAGE_ID).asText(null);
         correlationContext.populate(parsed.context(), messageId);
         validateStep.validate(parsed);
         List<ProcessingResult> results = processInParallel(parsed.catalogs(), parsed.context(),

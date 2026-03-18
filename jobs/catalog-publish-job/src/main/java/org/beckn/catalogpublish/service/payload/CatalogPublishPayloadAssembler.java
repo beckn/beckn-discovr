@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.dto.CatalogBatch;
 import org.beckn.catalogpublish.exception.CatalogPublishException;
 import org.beckn.catalogpublish.model.Item;
@@ -115,13 +116,13 @@ public class CatalogPublishPayloadAssembler {
             byCatalog.values().forEach(group -> catalogsArray.add(buildCatalogNode(group, payloadNodes)));
 
             ObjectNode message = objectMapper.createObjectNode();
-            message.set("catalogs", catalogsArray);
+            message.set(BecknFields.CATALOGS, catalogsArray);
 
             // Forward the original inbound context node unchanged — all fields
             // (message_id, transaction_id, network_id, etc.) are preserved.
             ObjectNode root = objectMapper.createObjectNode();
-            root.set("context", batch.context().contextNode());
-            root.set("message", message);
+            root.set(BecknFields.CONTEXT, batch.context().contextNode());
+            root.set(BecknFields.MESSAGE, message);
 
             return objectMapper.writeValueAsString(root);
         } catch (Exception e) {
@@ -143,12 +144,12 @@ public class CatalogPublishPayloadAssembler {
         if (firstPayload == null || firstPayload.isMissingNode()) {
             firstPayload = objectMapper.createObjectNode();
         }
-        JsonNode catalogTemplate = firstPayload.path("catalogs").path(0);
+        JsonNode catalogTemplate = firstPayload.path(BecknFields.CATALOGS).path(0);
 
         // Copy catalog-level fields; items and offers are assembled below.
         ObjectNode catalogNode = objectMapper.createObjectNode();
         catalogTemplate.fields().forEachRemaining(entry -> {
-            if (!"items".equals(entry.getKey()) && !"offers".equals(entry.getKey())) {
+            if (!BecknFields.ITEMS.equals(entry.getKey()) && !BecknFields.OFFERS.equals(entry.getKey())) {
                 catalogNode.set(entry.getKey(), entry.getValue());
             }
         });
@@ -160,15 +161,15 @@ public class CatalogPublishPayloadAssembler {
             JsonNode node = payloadNodes.get(item.getId());
             if (node == null)
                 continue;
-            JsonNode payloadCatalog = node.path("catalogs").path(0);
-            JsonNode itemNode = payloadCatalog.path("items").path(0);
+            JsonNode payloadCatalog = node.path(BecknFields.CATALOGS).path(0);
+            JsonNode itemNode = payloadCatalog.path(BecknFields.ITEMS).path(0);
             if (!itemNode.isMissingNode()) {
                 itemsArray.add(itemNode);
             }
-            JsonNode offers = payloadCatalog.path("offers");
+            JsonNode offers = payloadCatalog.path(BecknFields.OFFERS);
             if (offers.isArray()) {
                 for (JsonNode offer : offers) {
-                    String offerId = offer.path("id").asText(null);
+                    String offerId = offer.path(BecknFields.ID).asText(null);
                     if (offerId != null) {
                         offerById.putIfAbsent(offerId, offer);
                     }
@@ -179,8 +180,8 @@ public class CatalogPublishPayloadAssembler {
         ArrayNode offersArray = objectMapper.createArrayNode();
         offerById.values().forEach(offersArray::add);
 
-        catalogNode.set("items", itemsArray);
-        catalogNode.set("offers", offersArray);
+        catalogNode.set(BecknFields.ITEMS, itemsArray);
+        catalogNode.set(BecknFields.OFFERS, offersArray);
         return catalogNode;
     }
 }

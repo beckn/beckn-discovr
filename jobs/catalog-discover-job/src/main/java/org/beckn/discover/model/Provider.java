@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
 
@@ -13,12 +14,12 @@ import java.util.List;
 public class Provider {
 
     @NotBlank(message = "id is required")
-    @JsonProperty("id")
+    @JsonProperty(BecknFields.ID)
     private String id;
 
     @NotNull(message = "descriptor is required")
     @Valid
-    @JsonProperty("descriptor")
+    @JsonProperty(BecknFields.DESCRIPTOR)
     private Descriptor descriptor;
 
     @JsonProperty("validity")

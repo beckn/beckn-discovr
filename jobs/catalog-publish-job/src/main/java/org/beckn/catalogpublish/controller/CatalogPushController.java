@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.http.HttpServletRequest;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,7 +83,7 @@ public class CatalogPushController {
                 return rawBody;
             }
 
-            JsonNode ctxNode = root.get("context");
+            JsonNode ctxNode = root.get(BecknFields.CONTEXT);
             if (!(ctxNode instanceof ObjectNode)) {
                 // Only enrich when a context object is already present.
                 return rawBody;
@@ -90,37 +91,37 @@ public class CatalogPushController {
             ObjectNode context = (ObjectNode) ctxNode;
 
             // Core Beckn context defaults (do not overwrite existing non-blank values)
-            if (isBlank(textOrNull(context.get("version")))) {
-                context.put("version", "2.0.0");
+            if (isBlank(textOrNull(context.get(BecknFields.VERSION)))) {
+                context.put(BecknFields.VERSION, "2.0.0");
             }
-            if (isBlank(textOrNull(context.get("action")))) {
-                context.put("action", "on_discover");
+            if (isBlank(textOrNull(context.get(BecknFields.ACTION)))) {
+                context.put(BecknFields.ACTION, "on_discover");
             }
-            if (isBlank(textOrNull(context.get("timestamp")))) {
-                context.put("timestamp", Instant.now().toString());
+            if (isBlank(textOrNull(context.get(BecknFields.TIMESTAMP)))) {
+                context.put(BecknFields.TIMESTAMP, Instant.now().toString());
             }
-            if (isBlank(textOrNull(context.get("messageId")))) {
-                context.put("messageId", UUID.randomUUID().toString());
+            if (isBlank(textOrNull(context.get(BecknFields.MESSAGE_ID)))) {
+                context.put(BecknFields.MESSAGE_ID, UUID.randomUUID().toString());
             }
-            if (isBlank(textOrNull(context.get("transactionId")))) {
-                context.put("transactionId", UUID.randomUUID().toString());
+            if (isBlank(textOrNull(context.get(BecknFields.TRANSACTION_ID)))) {
+                context.put(BecknFields.TRANSACTION_ID, UUID.randomUUID().toString());
             }
-            if (isBlank(textOrNull(context.get("bapId")))) {
-                context.put("bapId", "dummy-bap-id");
+            if (isBlank(textOrNull(context.get(BecknFields.BAP_ID)))) {
+                context.put(BecknFields.BAP_ID, "dummy-bap-id");
             }
-            if (isBlank(textOrNull(context.get("ttl")))) {
-                context.put("ttl", "PT30S");
+            if (isBlank(textOrNull(context.get(BecknFields.TTL)))) {
+                context.put(BecknFields.TTL, "PT30S");
             }
 
             // BPP context defaults (used by downstream persistence)
-            String updatedBppId = textOrNull(context.get("bppId"));
-            String updatedBppUri = textOrNull(context.get("bppUri"));
+            String updatedBppId = textOrNull(context.get(BecknFields.BPP_ID));
+            String updatedBppUri = textOrNull(context.get(BecknFields.BPP_URI));
 
             if (isBlank(updatedBppId)) {
-                context.put("bppId", "dummy-bpp-id");
+                context.put(BecknFields.BPP_ID, "dummy-bpp-id");
             }
             if (isBlank(updatedBppUri)) {
-                context.put("bppUri", "http://dummy-bpp-uri.com");
+                context.put(BecknFields.BPP_URI, "http://dummy-bpp-uri.com");
             }
 
             return objectMapper.writeValueAsString(root);

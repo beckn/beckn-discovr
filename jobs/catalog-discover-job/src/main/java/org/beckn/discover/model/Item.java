@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
 
@@ -19,12 +20,12 @@ public class Item {
     private String type;
 
     @NotBlank(message = "id is required")
-    @JsonProperty("id")
+    @JsonProperty(BecknFields.ID)
     private String id;
 
     @NotNull(message = "descriptor is required")
     @Valid
-    @JsonProperty("descriptor")
+    @JsonProperty(BecknFields.DESCRIPTOR)
     private Descriptor descriptor;
 
     @JsonProperty("category")
@@ -45,7 +46,7 @@ public class Item {
     @JsonProperty("isActive")
     private Boolean isActive;
 
-    @JsonProperty("networkId")
+    @JsonProperty(BecknFields.NETWORK_ID)
     private List<String> networkId;
 
     @JsonProperty("acceptedPaymentMethod")
@@ -53,12 +54,12 @@ public class Item {
 
     @NotNull(message = "provider is required")
     @Valid
-    @JsonProperty("provider")
+    @JsonProperty(BecknFields.PROVIDER)
     private Provider provider;
 
     @NotNull(message = "itemAttributes is required")
     @Valid
-    @JsonProperty("itemAttributes")
+    @JsonProperty(BecknFields.ITEM_ATTRIBUTES)
     private Attributes itemAttributes;
 
     // Default constructor

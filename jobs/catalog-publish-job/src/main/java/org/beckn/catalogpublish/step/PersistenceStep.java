@@ -15,6 +15,7 @@ import org.beckn.catalogpublish.model.ItemLocationCollection;
 import org.beckn.catalogpublish.service.geometry.GeometryExtractor;
 import org.beckn.catalogpublish.service.payload.ItemPayloadBuilder;
 import org.beckn.catalogpublish.service.payload.PayloadMergeService;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.store.ItemLocationCollectionStore;
 import org.beckn.catalogpublish.store.ItemStore;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
@@ -145,7 +146,7 @@ public class PersistenceStep {
                     if (existing.getOfferIds() != null)
                         offerIdsToApply.addAll(Arrays.asList(existing.getOfferIds()));
                     offerIndex.getOffersForItem(itemId, objectMapper)
-                            .forEach(o -> FieldExtractor.extractString(o, "id")
+                            .forEach(o -> FieldExtractor.extractString(o, BecknFields.ID)
                                     .ifPresent(offerIdsToApply::add));
 
                     if (!offerIdsToApply.isEmpty()) {
@@ -270,7 +271,7 @@ public class PersistenceStep {
     // ─── Private helpers ──────────────────────────────────────────────────────
 
     private String extractItemId(JsonNode itemNode) {
-        return FieldExtractor.extractString(itemNode, "id")
+        return FieldExtractor.extractString(itemNode, BecknFields.ID)
                 .filter(s -> !s.isBlank())
                 .orElseThrow(() -> new FieldExtractionException("Item missing id"));
     }
@@ -284,7 +285,7 @@ public class PersistenceStep {
             return Map.of();
         Map<String, JsonNode> map = new HashMap<>();
         for (JsonNode offer : allOffers) {
-            String offerId = FieldExtractor.extractString(offer, "id").orElse(null);
+            String offerId = FieldExtractor.extractString(offer, BecknFields.ID).orElse(null);
             if (offerId != null && !offerId.isBlank())
                 map.put(offerId, offer);
         }

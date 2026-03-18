@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
 
@@ -19,21 +20,21 @@ public class Catalog {
     private String type;
 
     @NotBlank(message = "id is required")
-    @JsonProperty("id")
+    @JsonProperty(BecknFields.ID)
     private String id;
 
     @NotNull(message = "descriptor is required")
     @Valid
-    @JsonProperty("descriptor")
+    @JsonProperty(BecknFields.DESCRIPTOR)
     private Descriptor descriptor;
 
-    @JsonProperty("providerId")
+    @JsonProperty(BecknFields.PROVIDER_ID)
     private String providerId;
 
-    @JsonProperty("bppId")
+    @JsonProperty(BecknFields.BPP_ID)
     private String bppId;
 
-    @JsonProperty("bppUri")
+    @JsonProperty(BecknFields.BPP_URI)
     private String bppUri;
 
     @JsonProperty("validity")
@@ -41,10 +42,10 @@ public class Catalog {
 
     @NotNull(message = "items is required")
     @Valid
-    @JsonProperty("items")
+    @JsonProperty(BecknFields.ITEMS)
     private List<Item> items;
 
-    @JsonProperty("offers")
+    @JsonProperty(BecknFields.OFFERS)
     private List<Object> offers;
 
     // Default constructor

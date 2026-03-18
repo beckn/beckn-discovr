@@ -1,5 +1,6 @@
 package org.beckn.discover.service.response;
 
+import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.model.Attributes;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
@@ -241,7 +242,7 @@ public class CatalogProcessor {
 
     private static String offerId(Object offer) {
         if (offer instanceof Map<?, ?> map) {
-            Object id = map.get("id");
+            Object id = map.get(BecknFields.ID);
             if (id != null)
                 return id.toString();
         }
@@ -301,7 +302,7 @@ public class CatalogProcessor {
     public static Set<String> offerItemIds(Object offer) {
         if (!(offer instanceof Map<?, ?> map))
             return Collections.emptySet();
-        Object itemsObj = map.get("items");
+        Object itemsObj = map.get(BecknFields.ITEMS);
         if (itemsObj instanceof List<?> list) {
             return list.stream().filter(Objects::nonNull).map(Object::toString).collect(Collectors.toSet());
         }

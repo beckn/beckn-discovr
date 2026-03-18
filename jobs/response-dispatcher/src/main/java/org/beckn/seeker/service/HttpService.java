@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.beckn.seeker.common.BecknFields;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -52,7 +53,7 @@ public class HttpService {
     public boolean sendCallback(String eventJson) {
         try {
             JsonNode rootNode = objectMapper.readTree(eventJson);
-            JsonNode context = rootNode.path("context");
+            JsonNode context = rootNode.path(BecknFields.CONTEXT);
 
             if (context.isMissingNode()) {
                 log.error("Invalid event structure: missing context. Event: {}", eventJson);
@@ -60,10 +61,10 @@ public class HttpService {
             }
 
             String targetUrl = null;
-            String action = context.path("action").asText();
+            String action = context.path(BecknFields.ACTION).asText();
             // Beckn v2.0: context fields use camelCase
-            JsonNode bapUriNode = context.path("bapUri");
-            JsonNode bppUriNode = context.path("bppUri");
+            JsonNode bapUriNode = context.path(BecknFields.BAP_URI);
+            JsonNode bppUriNode = context.path(BecknFields.BPP_URI);
 
             if (ACTION_ON_DISCOVER.equals(action)) {
                 if (bapUriNode.isMissingNode() || bapUriNode.asText().isEmpty()) {
@@ -143,11 +144,11 @@ public class HttpService {
         }
         try {
             var responseNode = objectMapper.readTree(body);
-            var status = responseNode.path("status").asText();
+            var status = responseNode.path(BecknFields.STATUS).asText();
             if ("NACK".equals(status)) {
-                var error = responseNode.path("error");
-                var errorCode = error.path("errorCode").asText();
-                var errorMessage = error.path("errorMessage").asText();
+                var error = responseNode.path(BecknFields.ERROR);
+                var errorCode = error.path(BecknFields.ERROR_CODE).asText();
+                var errorMessage = error.path(BecknFields.ERROR_MESSAGE).asText();
                 log.warn("NACK received from {}: errorCode={}, errorMessage={}", targetUrl, errorCode, errorMessage);
             } else {
                 log.debug("ACK received from {}", targetUrl);

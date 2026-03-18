@@ -3,6 +3,7 @@ package org.beckn.discover.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 import java.util.List;
 
 /**
@@ -18,22 +19,22 @@ public class DiscoverRequest {
 
     @NotNull(message = "Context is required")
     @Valid
-    @JsonProperty("context")
+    @JsonProperty(BecknFields.CONTEXT)
     private Context context;
 
     // New schema: wrap search parameters under "message"
-    @JsonProperty("message")
+    @JsonProperty(BecknFields.MESSAGE)
     private Message message;
 
     // Back-compat fields (root-level), will be populated when no message object is
     // present
-    @JsonProperty("text_search")
+    @JsonProperty(BecknFields.TEXT_SEARCH)
     private String textSearch;
 
-    @JsonProperty("filters")
+    @JsonProperty(BecknFields.FILTERS)
     private String filters;
 
-    @JsonProperty("spatial")
+    @JsonProperty(BecknFields.SPATIAL)
     private List<SpatialConstraint> spatial;
 
     // Default constructor
@@ -120,13 +121,13 @@ public class DiscoverRequest {
 
     // New schema message container
     public static class Message {
-        @JsonProperty("text_search")
+        @JsonProperty(BecknFields.TEXT_SEARCH)
         private String textSearch;
 
-        @JsonProperty("filters")
+        @JsonProperty(BecknFields.FILTERS)
         private Filter filters;
 
-        @JsonProperty("spatial")
+        @JsonProperty(BecknFields.SPATIAL)
         private List<SpatialConstraint> spatial;
 
         public Message() {
