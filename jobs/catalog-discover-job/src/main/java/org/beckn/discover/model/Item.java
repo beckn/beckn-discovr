@@ -47,7 +47,7 @@ public class Item {
     private Boolean isActive;
 
     @JsonProperty(BecknFields.NETWORK_ID)
-    private List<String> networkId;
+    private String networkId;
 
     @JsonProperty("acceptedPaymentMethod")
     private List<String> acceptedPaymentMethod;
@@ -107,8 +107,8 @@ public class Item {
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
 
-    public List<String> getNetworkId() { return networkId; }
-    public void setNetworkId(List<String> networkId) { this.networkId = networkId; }
+    public String getNetworkId() { return networkId; }
+    public void setNetworkId(String networkId) { this.networkId = networkId; }
 
     public List<String> getAcceptedPaymentMethod() { return acceptedPaymentMethod; }
     public void setAcceptedPaymentMethod(List<String> acceptedPaymentMethod) { this.acceptedPaymentMethod = acceptedPaymentMethod; }

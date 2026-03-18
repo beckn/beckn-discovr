@@ -105,7 +105,7 @@ public final class FieldExtractor {
             JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
             if (attrs.isMissingNode() || !attrs.isObject())
                 continue;
-            JsonNode typeNode = attrs.path("@type");
+            JsonNode typeNode = attrs.path("type");
             if (!typeNode.isMissingNode() && typeNode.isTextual()) {
                 String val = typeNode.asText();
                 if (!val.isBlank())
@@ -153,21 +153,21 @@ public final class FieldExtractor {
     }
 
     /**
-     * Item type/category from category (codeValue or name) or schemaType — v2.0 format.
+     * Item schema type from {@code itemAttributes.type} — Beckn v2.0.
+     * Returns null when absent; callers fall back to {@link #extractSchemaTypeFromItems}.
      */
     public static String extractItemType(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode cat = itemNode.path("category");
-        if (!cat.isMissingNode() && cat.isObject()) {
-            String v = extractString(cat, "codeValue")
-                    .or(() -> extractString(cat, "name"))
-                    .filter(s -> !s.isBlank())
-                    .orElse(null);
-            if (v != null)
-                return v;
+        JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
+        if (!attrs.isMissingNode() && attrs.isObject()) {
+            JsonNode typeNode = attrs.path("type");
+            if (typeNode.isTextual()) {
+                String v = typeNode.asText();
+                if (!v.isBlank()) return v;
+            }
         }
-        return extractSchemaType(itemNode);
+        return null;
     }
 
     /**
@@ -187,7 +187,7 @@ public final class FieldExtractor {
         JsonNode attrs = itemAttributesNode(itemNode);
         if (attrs == null)
             return null;
-        JsonNode typeNode = attrs.path("@type");
+        JsonNode typeNode = attrs.path("type");
         if (!typeNode.isTextual())
             return null;
         String v = typeNode.asText();
@@ -206,11 +206,13 @@ public final class FieldExtractor {
         return extractString(prov, BecknFields.ID).orElse(null);
     }
 
-    /** @context URL from catalog or item (string or first element of array). */
+    /** Context URL from a node — checks {@code @context} (JSON-LD root) or plain {@code context} (itemAttributes). */
     public static String extractContextUrl(JsonNode node) {
         if (node == null || node.isMissingNode())
             return null;
         JsonNode ctx = node.get("@context");
+        if (ctx == null || ctx.isMissingNode() || ctx.isNull())
+            ctx = node.get("context");
         if (ctx == null || ctx.isMissingNode() || ctx.isNull())
             return null;
         if (ctx.isTextual())

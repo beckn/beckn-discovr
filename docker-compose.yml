@@ -217,7 +217,7 @@ services:
       # Set LLM_ENABLED=false to skip enrichment and embed the raw query directly.
       # Supports any OpenAI-compatible /v1/chat/completions provider (OpenAI, Groq, Azure, etc.).
       # If engine != els-semantic-search, these values are ignored.
-      - DISCOVERY_TEXT_SEARCH_LLM_ENABLED=true
+      - DISCOVERY_TEXT_SEARCH_LLM_ENABLED=false
       - DISCOVERY_TEXT_SEARCH_LLM_NAME=gpt-4o-mini
       - DISCOVERY_TEXT_SEARCH_LLM_BASE_URL=https://api.openai.com
       - DISCOVERY_TEXT_SEARCH_LLM_API_KEY=
