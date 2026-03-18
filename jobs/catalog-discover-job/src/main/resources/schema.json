@@ -350,7 +350,8 @@
             "DiscoverRequest": {
                 "type": "object",
                 "required": [
-                    "context"
+                    "context",
+                    "message"
                 ],
                 "properties": {
                     "context": {
@@ -381,9 +382,19 @@
                                 "example": "gaming laptop premium tech"
                             },
                             "filters": {
-                                "type": "string",
-                                "description": "JSONPath expression for filtering items (RFC 9535)",
-                                "example": "$[?(@.rating.value >= 4.0 && @.electronic.brand.name == 'Premium Tech')]"
+                                "type": "object",
+                                "description": "Filter criteria for items",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "description": "Filter type (e.g. jsonpath)"
+                                    },
+                                    "expression": {
+                                        "type": "string",
+                                        "description": "JSONPath expression for filtering items (RFC 9535)"
+                                    }
+                                },
+                                "required": ["type", "expression"]
                             },
                             "spatial": {
                                 "type": "array",
@@ -405,6 +416,11 @@
                             {
                                 "required": [
                                     "filters"
+                                ]
+                            },
+                            {
+                                "required": [
+                                    "spatial"
                                 ]
                             }
                         ]
@@ -451,25 +467,84 @@
                 }
             },
             "DiscoveryContext": {
-                "allOf": [
-                    {
-                        "$ref": "https://raw.githubusercontent.com/beckn/protocol-specifications/refs/heads/master/api/transaction/build/transaction.yaml#/components/schemas/Context"
+                "type": "object",
+                "description": "Beckn Protocol v2.0 Context for Discovery API.",
+                "required": [
+                    "domain",
+                    "action",
+                    "version",
+                    "bapId",
+                    "bapUri"
+                ],
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "description": "Domain of the request"
                     },
-                    {
-                        "type": "object",
-                        "description": "Beckn Context extended for Discovery.",
-                        "properties": {
-                            "schema_context": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string",
-                                    "format": "uri"
-                                },
-                                "description": "Optional JSON-LD context URLs indicating item types to search across"
-                            }
-                        }
+                    "action": {
+                        "type": "string",
+                        "description": "API action name"
+                    },
+                    "version": {
+                        "type": "string",
+                        "description": "Protocol version"
+                    },
+                    "bapId": {
+                        "type": "string",
+                        "description": "BAP subscriber ID"
+                    },
+                    "bapUri": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "BAP subscriber URI"
+                    },
+                    "bppId": {
+                        "type": "string",
+                        "description": "BPP subscriber ID"
+                    },
+                    "bppUri": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "BPP subscriber URI"
+                    },
+                    "transactionId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Transaction identifier (UUID v4)"
+                    },
+                    "messageId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Message identifier (UUID v4)"
+                    },
+                    "networkId": {
+                        "type": "string",
+                        "description": "Network identifier"
+                    },
+                    "schemaContext": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "format": "uri"
+                        },
+                        "description": "Optional JSON-LD context URLs indicating item types to search across"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "ISO 8601 timestamp"
+                    },
+                    "ttl": {
+                        "type": "string",
+                        "description": "Time to live (ISO 8601 duration)"
+                    },
+                    "country": {
+                        "type": "string"
+                    },
+                    "city": {
+                        "type": "string"
                     }
-                ]
+                }
             },
             "GeoJSONGeometry": {
                 "type": "object",
@@ -833,14 +908,7 @@
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
-                    "transaction_id": {
-                        "type": "string"
-                    },
-                    "timestamp": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "ack_status": {
+                    "status": {
                         "type": "string",
                         "enum": [
                             "ACK",
@@ -852,20 +920,18 @@
                     }
                 },
                 "required": [
-                    "transaction_id",
-                    "timestamp",
-                    "ack_status"
+                    "status"
                 ],
                 "allOf": [
                     {
                         "if": {
                             "properties": {
-                                "ack_status": {
+                                "status": {
                                     "const": "NACK"
                                 }
                             },
                             "required": [
-                                "ack_status"
+                                "status"
                             ]
                         },
                         "then": {
@@ -877,12 +943,12 @@
                     {
                         "if": {
                             "properties": {
-                                "ack_status": {
+                                "status": {
                                     "const": "ACK"
                                 }
                             },
                             "required": [
-                                "ack_status"
+                                "status"
                             ]
                         },
                         "then": {
@@ -1407,23 +1473,19 @@
             "Error": {
                 "type": "object",
                 "required": [
-                    "code",
-                    "message"
+                    "errorCode",
+                    "errorMessage"
                 ],
                 "properties": {
-                    "code": {
+                    "errorCode": {
                         "type": "string",
                         "description": "Error code",
-                        "example": "INVALID_SCHEMA_FIELD"
+                        "example": "INVALID_REQUEST"
                     },
-                    "message": {
+                    "errorMessage": {
                         "type": "string",
                         "description": "Human-readable error message",
-                        "example": "Field 'electronic:invalidField' not found in ElectronicItem schema"
-                    },
-                    "details": {
-                        "type": "object",
-                        "description": "Additional error details"
+                        "example": "Schema validation failed: transactionId must be a valid UUID"
                     }
                 }
             }
