@@ -1,7 +1,7 @@
 {
     "context": {
         "domain": "beckn.one:mobility:ev-charging:*",
-        "action": "discover",
+        "action": "beckn/discover",
         "version": "2.0.0",
         "country": "IND",
         "city": "std:BLR",
@@ -17,19 +17,21 @@
         "timestamp": "2025-10-14T10:30:00.000Z"
     },
     "message": {
-        "spatial": [
-            {
-                "op": "s_dwithin",
-                "targets": "$['availableAt'][*]['geo']",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [
-                        999.999,
-                        999.999
-                    ]
-                },
-                "distanceMeters": -100.0
-            }
-        ]
+        "intent": {
+            "spatial": [
+                {
+                    "op": "s_dwithin",
+                    "targets": "$['availableAt'][*]['geo']",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            999.999,
+                            999.999
+                        ]
+                    },
+                    "distanceMeters": -100.0
+                }
+            ]
+        }
     }
 }

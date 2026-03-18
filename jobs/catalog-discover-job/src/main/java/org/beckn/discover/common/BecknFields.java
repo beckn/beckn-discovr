@@ -49,7 +49,8 @@ public final class BecknFields {
     public static final String PROVIDER_ID     = "providerId";
 
     // ── Discover message fields ───────────────────────────────────────────────
-    public static final String TEXT_SEARCH     = "text_search";
+    public static final String INTENT          = "intent";
+    public static final String TEXT_SEARCH     = "textSearch";
     public static final String FILTERS         = "filters";
     public static final String SPATIAL         = "spatial";
     public static final String CATALOGS        = "catalogs";

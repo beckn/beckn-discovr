@@ -141,7 +141,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
     void spatialQueryUsesPostgisTargets() {
         DiscoverRequest request = loadRequestFixture("fixtures/requests/ev_charging_spatial_query.json");
         assertRequestValid(request);
-        Assertions.assertThat(request.getMessage().getSpatial())
+        Assertions.assertThat(request.getMessage().getIntent().getSpatial())
                 .as("Request must have spatial constraint with targets")
                 .isNotEmpty()
                 .first()
@@ -401,7 +401,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(response.getContext().getTransactionId()).isEqualTo(expectedTxnId);
         Assertions.assertThat(response.getContext().getMessageId()).isEqualTo(expectedMsgId);
         Assertions.assertThat(response.getContext().getBapId()).isEqualTo(expectedBapId);
-        Assertions.assertThat(response.getContext().getAction()).isEqualTo("on_discover");
+        Assertions.assertThat(response.getContext().getAction()).isEqualTo("beckn/on_discover");
         Assertions.assertThat(response.getContext().getTimestamp()).isNotNull();
     }
 
@@ -463,7 +463,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void emptyFiltersFailsSchemaValidation() {
-        // Empty message {} fails schema validation - requires at least one of text_search, filters, or spatial
+        // Empty message {} fails schema validation - requires intent with at least one of textSearch, filters, or spatial
         ObjectNode root = loadRequestNode("fixtures/requests/empty_filters.json");
 
         var result = discoveryValidationService.validateDiscoverRequest(root);
@@ -473,7 +473,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         // Verify error mentions message or one of the required fields
         String errorsString = String.join(" ", result.getErrors());
         Assertions.assertThat(
-                errorsString.contains("text_search") ||
+                errorsString.contains("textSearch") ||
+                errorsString.contains("intent") ||
                 errorsString.contains("filters") ||
                 errorsString.contains("spatial") ||
                 errorsString.contains("message")
@@ -541,8 +542,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         var result = discoveryValidationService.validateDiscoverRequest(root);
 
         Assertions.assertThat(result.isValid()).isFalse();
-        Assertions.assertThat(result.getErrors()).contains("$.message.filters.expression: filters expression cannot be blank");
-        Assertions.assertThat(result.getPaths()).contains("$.message.filters.expression");
+        Assertions.assertThat(result.getErrors()).contains("$.message.intent.filters.expression: filters expression cannot be blank");
+        Assertions.assertThat(result.getPaths()).contains("$.message.intent.filters.expression");
     }
 
     @Test
@@ -552,8 +553,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         var result = discoveryValidationService.validateDiscoverRequest(root);
 
         Assertions.assertThat(result.isValid()).isFalse();
-        Assertions.assertThat(result.getErrors()).contains("$.message.filters.expression: filters expression cannot be blank");
-        Assertions.assertThat(result.getPaths()).contains("$.message.filters.expression");
+        Assertions.assertThat(result.getErrors()).contains("$.message.intent.filters.expression: filters expression cannot be blank");
+        Assertions.assertThat(result.getPaths()).contains("$.message.intent.filters.expression");
     }
 
     @Test
@@ -564,8 +565,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         Assertions.assertThat(result.isValid()).isFalse();
         Assertions.assertThat(result.getErrors()).contains(
-                "$.message.filters.expression: filters expression must be an absolute JSONPath (e.g. $.catalogs[*]...)");
-        Assertions.assertThat(result.getPaths()).contains("$.message.filters.expression");
+                "$.message.intent.filters.expression: filters expression must be an absolute JSONPath (e.g. $.catalogs[*]...)");
+        Assertions.assertThat(result.getPaths()).contains("$.message.intent.filters.expression");
     }
 
     private DiscoverRequest loadRequestFixture(String relativePath) {
@@ -1246,8 +1247,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .isNotNull();
         
         Assertions.assertThat(response.getContext().getAction())
-                .as("Response action should be on_discover")
-                .isEqualTo("on_discover");
+                .as("Response action should be beckn/on_discover")
+                .isEqualTo("beckn/on_discover");
 
         // Assert: Response is valid (catalogs might be empty if intersection yields no results)
         Assertions.assertThat(response.getCatalogs())
