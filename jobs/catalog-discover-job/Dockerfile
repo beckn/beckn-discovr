@@ -20,6 +20,8 @@ RUN ./gradlew build -x test --no-daemon
 # Runtime Stage
 # =============================================================================
 FROM openjdk:17.0.1-jdk-slim
+# Install curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 # Create application user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 # Set working directory
