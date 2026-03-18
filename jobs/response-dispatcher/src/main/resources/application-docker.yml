@@ -15,8 +15,8 @@ http:
 
 # Topics Configuration
 topics:
-  input: catalog.discovery.response
-  dlt: events.seeker.dlt
+  input: discovr.discover.out.responses
+  dlt: discovr.dispatcher.dlt.responses
 
 # HTTP Signature Configuration
 signing:
