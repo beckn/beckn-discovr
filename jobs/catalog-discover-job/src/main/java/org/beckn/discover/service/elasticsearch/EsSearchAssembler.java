@@ -9,6 +9,7 @@ import org.beckn.discover.model.Item;
 import org.beckn.discover.model.Location;
 import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Rating;
+import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.service.response.CatalogProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -272,10 +273,10 @@ public class EsSearchAssembler {
         Object attrsRaw = doc.get("item_attributes");
         if (attrsRaw instanceof Map<?, ?> map) {
             Attributes attrs = new Attributes(
-                    (String) map.get("@context"),
-                    (String) map.get("@type"));
+                    (String) map.get(BecknFields.CONTEXT),
+                    (String) map.get(BecknFields.TYPE));
             ((Map<String, Object>) map).forEach((k, v) -> {
-                if (!k.startsWith("@"))
+                if (!k.equals(BecknFields.CONTEXT) && !k.equals(BecknFields.TYPE))
                     attrs.setAttribute(k, v);
             });
             return attrs;
