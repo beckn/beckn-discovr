@@ -1,6 +1,8 @@
 {
   "context": {
+    "domain": "beckn.one:retail:food:*",
     "action": "discover",
+    "version": "2.0.0",
     "bapId": "test.bap.com",
     "bapUri": "https://test.bap.com",
     "transactionId": "550e8400-e29b-41d4-a716-446655440003",

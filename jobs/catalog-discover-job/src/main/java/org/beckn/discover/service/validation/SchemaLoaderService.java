@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
@@ -17,6 +18,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.HttpServerErrorException;
 import org.yaml.snakeyaml.Yaml;
 
+import java.io.InputStream;
 import java.io.StringReader;
 import java.time.Duration;
 import java.util.Map;
@@ -73,21 +75,35 @@ public class SchemaLoaderService {
     )
     public JSONObject getApiSchema() throws Exception {
         String schemaUrl = discoveryProperties.getSchema().getUrl();
-        logger.info("Schema cache miss — fetching from: {}", schemaUrl);
+        logger.info("Schema cache miss — loading from: {}", schemaUrl);
 
-        String yamlContent = restClient.get()
-                .uri(schemaUrl)
-                .retrieve()
-                .body(String.class);
-
-        if (yamlContent == null || yamlContent.isBlank()) {
-            throw new RuntimeException("Schema content is empty from URL: " + schemaUrl);
+        String content;
+        if (schemaUrl.startsWith("classpath:")) {
+            String resourcePath = schemaUrl.substring("classpath:".length());
+            ClassPathResource resource = new ClassPathResource(resourcePath);
+            try (InputStream is = resource.getInputStream()) {
+                content = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+        } else {
+            content = restClient.get()
+                    .uri(schemaUrl)
+                    .retrieve()
+                    .body(String.class);
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> yamlMap = yamlParser.load(yamlContent);
-        String jsonString = objectMapper.writeValueAsString(yamlMap);
-        JSONObject schemaJson = new JSONObject(new JSONTokener(new StringReader(jsonString)));
+        if (content == null || content.isBlank()) {
+            throw new RuntimeException("Schema content is empty from: " + schemaUrl);
+        }
+
+        JSONObject schemaJson;
+        if (schemaUrl.endsWith(".json") || schemaUrl.contains(".json?")) {
+            schemaJson = new JSONObject(new JSONTokener(new StringReader(content)));
+        } else {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> yamlMap = yamlParser.load(content);
+            String jsonString = objectMapper.writeValueAsString(yamlMap);
+            schemaJson = new JSONObject(new JSONTokener(new StringReader(jsonString)));
+        }
 
         if (!schemaJson.has("components") || !schemaJson.getJSONObject("components").has("schemas")) {
             logger.warn("Schema missing components.schemas structure");
