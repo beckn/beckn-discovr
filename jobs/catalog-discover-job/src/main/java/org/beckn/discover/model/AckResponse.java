@@ -2,6 +2,7 @@ package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.beckn.discover.common.BecknFields;
 
 /**
  * ACK/NACK Response DTO — Beckn Protocol v2.0 format.
@@ -14,10 +15,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AckResponse {
 
-    @JsonProperty("status")
+    @JsonProperty(BecknFields.STATUS)
     private String status; // "ACK" or "NACK"
 
-    @JsonProperty("error")
+    @JsonProperty(BecknFields.ERROR)
     private ErrorDetail error;
 
     public AckResponse() {}
@@ -56,10 +57,10 @@ public class AckResponse {
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ErrorDetail {
-        @JsonProperty("errorCode")
+        @JsonProperty(BecknFields.ERROR_CODE)
         private String errorCode;
 
-        @JsonProperty("errorMessage")
+        @JsonProperty(BecknFields.ERROR_MESSAGE)
         private String errorMessage;
 
         public ErrorDetail() {}

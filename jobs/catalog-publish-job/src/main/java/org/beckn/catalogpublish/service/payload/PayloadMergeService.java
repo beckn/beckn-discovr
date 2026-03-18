@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.exception.PayloadMergeException;
 import org.beckn.catalogpublish.util.DenormalizedPayloadUtils;
 import org.springframework.stereotype.Service;
@@ -51,7 +52,7 @@ public class PayloadMergeService {
         ArrayNode offers = getOffersArray(payload);
         Map<String, Integer> index = new HashMap<>(Math.max(offers.size() * 2, 4));
         for (int i = 0; i < offers.size(); i++) {
-            String id = offers.get(i).path("id").asText(null);
+            String id = offers.get(i).path(BecknFields.ID).asText(null);
             if (id != null)
                 index.put(id, i);
         }
@@ -156,16 +157,16 @@ public class PayloadMergeService {
     }
 
     private ArrayNode getOffersArray(JsonNode payload) {
-        JsonNode cat = payload.path("catalogs").path(0);
+        JsonNode cat = payload.path(BecknFields.CATALOGS).path(0);
         // path(0) returns MissingNode (not ObjectNode) when catalogs is absent or empty.
         // Casting MissingNode → ObjectNode throws ClassCastException; guard explicitly.
         if (cat.isMissingNode() || !(cat instanceof ObjectNode catObj)) {
             throw new IllegalStateException("payload missing catalogs[0] — cannot merge offer");
         }
-        JsonNode offers = catObj.path("offers");
+        JsonNode offers = catObj.path(BecknFields.OFFERS);
         if (!offers.isArray()) {
             ArrayNode arr = objectMapper.createArrayNode();
-            catObj.set("offers", arr);
+            catObj.set(BecknFields.OFFERS, arr);
             return arr;
         }
         return (ArrayNode) offers;

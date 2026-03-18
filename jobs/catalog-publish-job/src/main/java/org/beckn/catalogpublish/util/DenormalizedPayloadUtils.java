@@ -1,6 +1,7 @@
 package org.beckn.catalogpublish.util;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.beckn.catalogpublish.common.BecknFields;
 
 /**
  * Shared helpers for denormalized catalog payloads.
@@ -21,11 +22,11 @@ public final class DenormalizedPayloadUtils {
     public static JsonNode getFirstItemNode(JsonNode root) {
         if (root == null || root.isMissingNode())
             return null;
-        JsonNode catalogs = root.path("catalogs");
+        JsonNode catalogs = root.path(BecknFields.CATALOGS);
         if (!catalogs.isArray() || catalogs.isEmpty())
             return null;
         JsonNode cat = catalogs.get(0);
-        JsonNode items = cat.path("items");
+        JsonNode items = cat.path(BecknFields.ITEMS);
         if (items.isMissingNode() || !items.isArray() || items.isEmpty())
             return null;
         return items.get(0);

@@ -3,6 +3,7 @@ package org.beckn.discover.controller;
 import java.nio.charset.StandardCharsets;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.model.AckResponse;
 import org.beckn.discover.model.DiscoverRequest;
@@ -111,7 +112,7 @@ public class DiscoveryController {
 
         // Store transactionId early so GlobalExceptionHandler can include it in NACKs
         // even when an exception is thrown before full request parsing.
-        JsonNode txnNode = requestNode.path("context").path("transactionId");
+        JsonNode txnNode = requestNode.path(BecknFields.CONTEXT).path(BecknFields.TRANSACTION_ID);
         if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
             httpRequest.setAttribute(TRANSACTION_ID_ATTR, txnNode.asText());
         }
@@ -132,7 +133,7 @@ public class DiscoveryController {
         JsonNode requestNode = objectMapper.readTree(rawBody);
 
         String transactionId = null;
-        JsonNode txnNode = requestNode.path("context").path("transactionId");
+        JsonNode txnNode = requestNode.path(BecknFields.CONTEXT).path(BecknFields.TRANSACTION_ID);
         if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
             transactionId = txnNode.asText();
             httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
@@ -141,7 +142,7 @@ public class DiscoveryController {
         authorizationService.authorizeRequest(rawBody, requestNode, headers);
         validateSchema(requestNode);
 
-        String messageId = requestNode.path("context").path("messageId").asText();
+        String messageId = requestNode.path(BecknFields.CONTEXT).path(BecknFields.MESSAGE_ID).asText();
         String kafkaKey = transactionId != null ? transactionId : messageId;
         String requestTopic = discoveryProperties.getKafka().getRequestTopic();
         if (requestTopic == null || requestTopic.isBlank()) {

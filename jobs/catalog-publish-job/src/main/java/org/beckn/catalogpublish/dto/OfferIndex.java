@@ -3,6 +3,7 @@ package org.beckn.catalogpublish.dto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.beckn.catalogpublish.common.BecknFields;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,7 +25,7 @@ public record OfferIndex(
         List<JsonNode> catalogWide = new ArrayList<>();
         Map<String, List<JsonNode>> byItemId = new HashMap<>();
         for (JsonNode offer : allOffers) {
-            JsonNode offerItems = offer.path("items");
+            JsonNode offerItems = offer.path(BecknFields.ITEMS);
             if (offerItems.isMissingNode() || !offerItems.isArray()) {
                 catalogWide.add(offer);
             } else {

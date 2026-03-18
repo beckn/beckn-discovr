@@ -1,6 +1,7 @@
 package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
 
@@ -12,16 +13,16 @@ public class Descriptor {
     @JsonProperty("@type")
     private String type;
 
-    @JsonProperty("name")
+    @JsonProperty(BecknFields.NAME)
     private String name;
 
-    @JsonProperty("shortDesc")
+    @JsonProperty(BecknFields.SHORT_DESC)
     private String shortDesc;
 
-    @JsonProperty("longDesc")
+    @JsonProperty(BecknFields.LONG_DESC)
     private String longDesc;
 
-    @JsonProperty("images")
+    @JsonProperty(BecknFields.IMAGES)
     private List<String> image;
 
     // Default constructor

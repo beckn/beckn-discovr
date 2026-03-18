@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import org.beckn.discover.common.BecknFields;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -36,7 +38,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.status").value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -101,9 +103,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.status").value("NACK"))
-                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.errorMessage", containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
         }
 
         @Test
@@ -115,9 +117,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.status").value("NACK"))
-                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.errorMessage", containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
         }
 
         @Test
@@ -131,7 +133,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.status").value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -143,11 +145,11 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.status").value("NACK"))
-                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.errorMessage", anyOf(
-                                                containsString("transactionId"),
-                                                containsString("messageId"),
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, anyOf(
+                                                containsString(BecknFields.TRANSACTION_ID),
+                                                containsString(BecknFields.MESSAGE_ID),
                                                 containsString("invalid uuid"))));
         }
 
@@ -160,8 +162,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.status").value("NACK"))
-                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"));
         }
 
         @Test
@@ -174,7 +176,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.status").value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -187,7 +189,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.status").value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -201,9 +203,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.status").value("NACK"))
-                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.errorMessage", containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
         }
 
         @Test
@@ -216,7 +218,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.status").value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -228,9 +230,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.status").value("NACK"))
-                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.errorMessage",
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                 containsString("absolute JSONPath")));
         }
 
@@ -244,7 +246,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.status").value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -257,7 +259,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.status").value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -270,7 +272,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.status").value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
         private String readFixture(String fileName) {
@@ -297,7 +299,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.status").value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -316,9 +318,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .content(payload));
 
                         result.andExpect(status().isBadRequest())
-                                        .andExpect(jsonPath("$.status").value("NACK"))
-                                        .andExpect(jsonPath("$.error.errorCode").value("SEC_SIGNATURE_MISSING"))
-                                        .andExpect(jsonPath("$.error.errorMessage",
+                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_MISSING"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                         containsString("Missing Authorization")));
                 } finally {
                         // Reset configuration
@@ -343,9 +345,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                                         .andExpect(status().isBadRequest())
-                                        .andExpect(jsonPath("$.status").value("NACK"))
-                                        .andExpect(jsonPath("$.error.errorCode").value("SEC_SIGNATURE_INVALID"))
-                                        .andExpect(jsonPath("$.error.errorMessage",
+                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                         containsString("Invalid keyId format")));
                 } finally {
                         // Reset configuration
@@ -370,9 +372,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .content(payload));
 
                         result.andExpect(status().isBadRequest())
-                                        .andExpect(jsonPath("$.status").value("NACK"))
-                                        .andExpect(jsonPath("$.error.errorCode").value("SEC_SIGNATURE_INVALID"))
-                                        .andExpect(jsonPath("$.error.errorMessage",
+                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                         containsString("Invalid Beckn HTTP Signature format")));
                 } finally {
                         // Reset configuration
@@ -413,8 +415,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                                         .andExpect(status().isUnauthorized())
-                                        .andExpect(jsonPath("$.status").value("NACK"))
-                                        .andExpect(jsonPath("$.error.errorCode").value("SEC_KEY_NOT_FOUND"));
+                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_KEY_NOT_FOUND"));
                         // .andExpect(jsonPath("$.error.message", containsString("Failed to fetch public
                         // key")));
                 } finally {

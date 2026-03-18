@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -21,52 +22,52 @@ import java.util.List;
 public class Context {
 
     @NotBlank(message = "Message ID is required")
-    @JsonProperty("messageId")
+    @JsonProperty(BecknFields.MESSAGE_ID)
     private String messageId;
 
     @NotBlank(message = "BAP ID is required")
-    @JsonProperty("bapId")
+    @JsonProperty(BecknFields.BAP_ID)
     private String bapId;
 
     @NotBlank(message = "Transaction ID is required")
-    @JsonProperty("transactionId")
+    @JsonProperty(BecknFields.TRANSACTION_ID)
     private String transactionId;
 
     @NotNull(message = "Timestamp is required")
-    @JsonProperty("timestamp")
+    @JsonProperty(BecknFields.TIMESTAMP)
     private OffsetDateTime timestamp;
 
-    @JsonProperty("domain")
+    @JsonProperty(BecknFields.DOMAIN)
     private String domain;
 
-    @JsonProperty("action")
+    @JsonProperty(BecknFields.ACTION)
     private String action;
 
-    @JsonProperty("version")
+    @JsonProperty(BecknFields.VERSION)
     private String version;
 
-    @JsonProperty("bppId")
+    @JsonProperty(BecknFields.BPP_ID)
     private String bppId;
 
-    @JsonProperty("bppUri")
+    @JsonProperty(BecknFields.BPP_URI)
     private String bppUri;
 
-    @JsonProperty("country")
+    @JsonProperty(BecknFields.COUNTRY)
     private String country;
 
-    @JsonProperty("city")
+    @JsonProperty(BecknFields.CITY)
     private String city;
 
-    @JsonProperty("ttl")
+    @JsonProperty(BecknFields.TTL)
     private String ttl;
 
-    @JsonProperty("bapUri")
+    @JsonProperty(BecknFields.BAP_URI)
     private String bapUri;
 
-    @JsonProperty("networkId")
+    @JsonProperty(BecknFields.NETWORK_ID)
     private String networkId;
 
-    @JsonProperty("schemaContext")
+    @JsonProperty(BecknFields.SCHEMA_CONTEXT)
     private List<String> schemaContext;
 
     // Default constructor

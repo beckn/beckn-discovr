@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
 
@@ -19,12 +20,12 @@ public class DiscoverResponse {
 
     @NotNull(message = "Context is required")
     @Valid
-    @JsonProperty("context")
+    @JsonProperty(BecknFields.CONTEXT)
     private Context context;
 
     @NotNull(message = "Message is required")
     @Valid
-    @JsonProperty("message")
+    @JsonProperty(BecknFields.MESSAGE)
     private ResponseMessage message;
 
     // No root-level catalogs in new schema; catalogs live under message
@@ -75,7 +76,7 @@ public class DiscoverResponse {
      * Response Message DTO containing catalogs
      */
     public static class ResponseMessage {
-        @JsonProperty("catalogs")
+        @JsonProperty(BecknFields.CATALOGS)
         private List<Catalog> catalogs;
 
         public ResponseMessage() {}

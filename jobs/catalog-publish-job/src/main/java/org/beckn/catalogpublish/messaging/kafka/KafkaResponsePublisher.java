@@ -3,6 +3,7 @@ package org.beckn.catalogpublish.messaging.kafka;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.dto.ProcessingResult;
 import org.beckn.catalogpublish.messaging.ResponsePublisher;
@@ -38,13 +39,13 @@ public class KafkaResponsePublisher implements ResponsePublisher {
             ObjectNode contextCopy = contextNode.isObject()
                     ? (ObjectNode) contextNode.deepCopy()
                     : objectMapper.createObjectNode();
-            contextCopy.put("action", "on_catalog_publish");
-            contextCopy.put("timestamp", Instant.now().toString());
+            contextCopy.put(BecknFields.ACTION, "on_catalog_publish");
+            contextCopy.put(BecknFields.TIMESTAMP, Instant.now().toString());
             ObjectNode response = objectMapper.createObjectNode();
-            response.set("context", contextCopy);
+            response.set(BecknFields.CONTEXT, contextCopy);
             ObjectNode message = objectMapper.createObjectNode();
             message.set("results", objectMapper.valueToTree(results));
-            response.set("message", message);
+            response.set(BecknFields.MESSAGE, message);
             kafkaTemplate.send(topic, objectMapper.writeValueAsString(response));
         } catch (Exception e) {
             log.error("response.publish.failed error={}", e.getMessage(), e);
