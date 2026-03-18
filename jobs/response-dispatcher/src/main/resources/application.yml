@@ -28,8 +28,8 @@ spring:
       missing-topics-fatal: false
 
 topics:
-  input: catalog.discovery.response
-  dlt: events.seeker.dlt
+  input: discovr.discover.out.responses
+  dlt: discovr.dispatcher.dlt.responses
 
 kafka:
   topics:
