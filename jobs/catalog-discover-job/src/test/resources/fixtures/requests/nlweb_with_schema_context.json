@@ -1,7 +1,7 @@
 {
   "context": {
     "domain": "beckn.one:mobility:ev-charging:*",
-    "action": "discover",
+    "action": "beckn/discover",
     "version": "2.0.0",
     "bapId": "test.bap.com",
     "bapUri": "https://test.bap.com",
@@ -14,6 +14,8 @@
     ]
   },
   "message": {
-    "text_search": "ev charging stations"
+    "intent": {
+      "textSearch": "ev charging stations"
+    }
   }
 }

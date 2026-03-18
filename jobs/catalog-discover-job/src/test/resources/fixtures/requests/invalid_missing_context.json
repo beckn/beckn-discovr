@@ -1,8 +1,10 @@
 {
   "message": {
-    "filters": {
-      "type": "jsonpath",
-      "expression": "$.catalogs[*].items[*] ? (@.itemAttributes.connectorType == \"CCS2\")"
+    "intent": {
+      "filters": {
+        "type": "jsonpath",
+        "expression": "$.catalogs[*].items[*] ? (@.itemAttributes.connectorType == \"CCS2\")"
+      }
     }
   }
 }

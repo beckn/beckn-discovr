@@ -1,7 +1,7 @@
 {
   "context": {
     "domain": "beckn.one:mobility:ev-charging:*",
-    "action": "discover",
+    "action": "beckn/discover",
     "version": "2.0.0",
     "country": "IND",
     "city": "std:BLR",

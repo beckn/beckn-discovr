@@ -35,7 +35,7 @@ public class ResponseProcessor {
     /** Copies the request context and sets {@code action = "on_discover"}. */
     public Context createResponseContext(Context requestContext) {
         Context ctx = new Context(requestContext);
-        ctx.setAction("on_discover");
+        ctx.setAction("beckn/on_discover");
         return ctx;
     }
 
@@ -46,7 +46,7 @@ public class ResponseProcessor {
         ctx.setBapId("unknown");
         ctx.setTransactionId("txn-" + System.currentTimeMillis());
         ctx.setTimestamp(OffsetDateTime.now());
-        ctx.setAction("discover");
+        ctx.setAction("beckn/discover");
         ctx.setVersion("2.0.0");
         return ctx;
     }

@@ -194,8 +194,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
         @Test
         void postDiscoverWithEmptyFiltersReturnsBadRequest() throws Exception {
-                // Empty message {} fails schema validation - requires at least one of
-                // text_search, filters, or spatial
+                // Empty message {} fails schema validation - requires intent with at least one of
+                // textSearch, filters, or spatial
                 String payload = readFixture("empty_filters.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")

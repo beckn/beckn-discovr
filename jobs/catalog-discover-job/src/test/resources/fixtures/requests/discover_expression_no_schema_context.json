@@ -1,6 +1,6 @@
 {
   "context": {
-    "action": "discover",
+    "action": "beckn/discover",
     "bapId": "app.example.com",
     "bapUri": "https://app.example.com/bap",
     "transactionId": "2b4d69aa-22e4-4c78-9f56-5a7b9e2b2002",
@@ -9,9 +9,11 @@
     "ttl": "PT30S"
   },
   "message": {
-    "filters": {
-      "type": "jsonpath",
-      "expression": "$.catalogs[*].items[*] ? (@.itemAttributes.evseId == \"IN*ECO*BTM*01*CCS2*A\")"
+    "intent": {
+      "filters": {
+        "type": "jsonpath",
+        "expression": "$.catalogs[*].items[*] ? (@.itemAttributes.evseId == \"IN*ECO*BTM*01*CCS2*A\")"
+      }
     }
   }
 }
