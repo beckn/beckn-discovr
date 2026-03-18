@@ -8,34 +8,32 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 /**
- * Provider DTO
- * 
- * Represents a provider that offers items in the catalog.
+ * Provider DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
  */
 public class Provider {
 
-    @NotBlank(message = "beckn:id is required")
-    @JsonProperty("beckn:id")
+    @NotBlank(message = "id is required")
+    @JsonProperty("id")
     private String id;
 
-    @NotNull(message = "beckn:descriptor is required")
+    @NotNull(message = "descriptor is required")
     @Valid
-    @JsonProperty("beckn:descriptor")
+    @JsonProperty("descriptor")
     private Descriptor descriptor;
 
-    @JsonProperty("beckn:validity")
+    @JsonProperty("validity")
     private TimePeriod validity;
 
-    @JsonProperty("beckn:locations")
+    @JsonProperty("locations")
     private List<Location> locations;
 
-    @JsonProperty("beckn:rateable")
+    @JsonProperty("rateable")
     private Boolean rateable;
 
-    @JsonProperty("beckn:rating")
+    @JsonProperty("rating")
     private Rating rating;
 
-    @JsonProperty("beckn:providerAttributes")
+    @JsonProperty("providerAttributes")
     private Attributes providerAttributes;
 
     // Default constructor
@@ -48,72 +46,29 @@ public class Provider {
     }
 
     // Getters and Setters
-    public String getId() {
-        return id;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public void setId(String id) {
-        this.id = id;
-    }
+    public Descriptor getDescriptor() { return descriptor; }
+    public void setDescriptor(Descriptor descriptor) { this.descriptor = descriptor; }
 
-    public Descriptor getDescriptor() {
-        return descriptor;
-    }
+    public TimePeriod getValidity() { return validity; }
+    public void setValidity(TimePeriod validity) { this.validity = validity; }
 
-    public void setDescriptor(Descriptor descriptor) {
-        this.descriptor = descriptor;
-    }
+    public List<Location> getLocations() { return locations; }
+    public void setLocations(List<Location> locations) { this.locations = locations; }
 
-    public TimePeriod getValidity() {
-        return validity;
-    }
+    public Boolean getRateable() { return rateable; }
+    public void setRateable(Boolean rateable) { this.rateable = rateable; }
 
-    public void setValidity(TimePeriod validity) {
-        this.validity = validity;
-    }
+    public Rating getRating() { return rating; }
+    public void setRating(Rating rating) { this.rating = rating; }
 
-    public List<Location> getLocations() {
-        return locations;
-    }
-
-    public void setLocations(List<Location> locations) {
-        this.locations = locations;
-    }
-
-    public Boolean getRateable() {
-        return rateable;
-    }
-
-    public void setRateable(Boolean rateable) {
-        this.rateable = rateable;
-    }
-
-    public Rating getRating() {
-        return rating;
-    }
-
-    public void setRating(Rating rating) {
-        this.rating = rating;
-    }
-
-    public Attributes getProviderAttributes() {
-        return providerAttributes;
-    }
-
-    public void setProviderAttributes(Attributes providerAttributes) {
-        this.providerAttributes = providerAttributes;
-    }
+    public Attributes getProviderAttributes() { return providerAttributes; }
+    public void setProviderAttributes(Attributes providerAttributes) { this.providerAttributes = providerAttributes; }
 
     @Override
     public String toString() {
-        return "Provider{" +
-                "id='" + id + '\'' +
-                ", descriptor=" + descriptor +
-                ", validity=" + validity +
-                ", locations=" + locations +
-                ", rateable=" + rateable +
-                ", rating=" + rating +
-                ", providerAttributes=" + providerAttributes +
-                '}';
+        return "Provider{id='" + id + "', descriptor=" + descriptor + '}';
     }
 }

@@ -1,13 +1,13 @@
 {
   "context": {
     "action": "discover",
-    "bap_id": "test.bap.com",
-    "bap_uri": "https://test.bap.com",
-    "transaction_id": "550e8400-e29b-41d4-a716-446655440003",
-    "message_id": "660e8400-e29b-41d4-a716-446655440003",
+    "bapId": "test.bap.com",
+    "bapUri": "https://test.bap.com",
+    "transactionId": "550e8400-e29b-41d4-a716-446655440003",
+    "messageId": "660e8400-e29b-41d4-a716-446655440003",
     "timestamp": "2024-01-15T10:00:00Z",
     "ttl": "PT30S",
-    "schema_context": [
+    "schemaContext": [
       "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/FoodService/v1/context.jsonld"
     ]
   },

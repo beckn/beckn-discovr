@@ -8,47 +8,43 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 /**
- * Catalog DTO
- * 
- * Represents a catalog containing items from the discovery response.
+ * Catalog DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
  */
 public class Catalog {
 
-    @NotBlank(message = "@context is required")
     @JsonProperty("@context")
     private String context;
 
-    @NotBlank(message = "@type is required")
     @JsonProperty("@type")
     private String type;
 
-    @NotBlank(message = "beckn:id is required")
-    @JsonProperty("beckn:id")
+    @NotBlank(message = "id is required")
+    @JsonProperty("id")
     private String id;
 
-    @NotNull(message = "beckn:descriptor is required")
+    @NotNull(message = "descriptor is required")
     @Valid
-    @JsonProperty("beckn:descriptor")
+    @JsonProperty("descriptor")
     private Descriptor descriptor;
 
-    @JsonProperty("beckn:providerId")
+    @JsonProperty("providerId")
     private String providerId;
 
-    @JsonProperty("beckn:bppId")
+    @JsonProperty("bppId")
     private String bppId;
 
-    @JsonProperty("beckn:bppUri")
+    @JsonProperty("bppUri")
     private String bppUri;
 
-    @JsonProperty("beckn:validity")
+    @JsonProperty("validity")
     private TimePeriod validity;
 
-    @NotNull(message = "beckn:items is required")
+    @NotNull(message = "items is required")
     @Valid
-    @JsonProperty("beckn:items")
+    @JsonProperty("items")
     private List<Item> items;
 
-    @JsonProperty("beckn:offers")
+    @JsonProperty("offers")
     private List<Object> offers;
 
     // Default constructor
@@ -80,99 +76,38 @@ public class Catalog {
     }
 
     // Getters and Setters
-    public String getContext() {
-        return context;
-    }
+    public String getContext() { return context; }
+    public void setContext(String context) { this.context = context; }
 
-    public void setContext(String context) {
-        this.context = context;
-    }
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
-    public String getType() {
-        return type;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public void setType(String type) {
-        this.type = type;
-    }
+    public Descriptor getDescriptor() { return descriptor; }
+    public void setDescriptor(Descriptor descriptor) { this.descriptor = descriptor; }
 
-    public String getId() {
-        return id;
-    }
+    public String getProviderId() { return providerId; }
+    public void setProviderId(String providerId) { this.providerId = providerId; }
 
-    public void setId(String id) {
-        this.id = id;
-    }
+    public String getBppId() { return bppId; }
+    public void setBppId(String bppId) { this.bppId = bppId; }
 
-    public Descriptor getDescriptor() {
-        return descriptor;
-    }
+    public String getBppUri() { return bppUri; }
+    public void setBppUri(String bppUri) { this.bppUri = bppUri; }
 
-    public void setDescriptor(Descriptor descriptor) {
-        this.descriptor = descriptor;
-    }
+    public TimePeriod getValidity() { return validity; }
+    public void setValidity(TimePeriod validity) { this.validity = validity; }
 
-    public String getProviderId() {
-        return providerId;
-    }
+    public List<Item> getItems() { return items; }
+    public void setItems(List<Item> items) { this.items = items; }
 
-    public void setProviderId(String providerId) {
-        this.providerId = providerId;
-    }
-
-    public TimePeriod getValidity() {
-        return validity;
-    }
-
-    public void setValidity(TimePeriod validity) {
-        this.validity = validity;
-    }
-
-    public List<Item> getItems() {
-        return items;
-    }
-
-    public void setItems(List<Item> items) {
-        this.items = items;
-    }
-
-    public List<Object> getOffers() {
-        return offers;
-    }
-
-    public void setOffers(List<Object> offers) {
-        this.offers = offers;
-    }
-
-    public String getBppId() {
-        return bppId;
-    }
-
-    public void setBppId(String bppId) {
-        this.bppId = bppId;
-    }
-
-    public String getBppUri() {
-        return bppUri;
-    }
-
-    public void setBppUri(String bppUri) {
-        this.bppUri = bppUri;
-    }
+    public List<Object> getOffers() { return offers; }
+    public void setOffers(List<Object> offers) { this.offers = offers; }
 
     @Override
     public String toString() {
-        return "Catalog{" +
-                "context='" + context + '\'' +
-                ", type='" + type + '\'' +
-                ", id='" + id + '\'' +
-                ", descriptor=" + descriptor +
-                ", providerId='" + providerId + '\'' +
-                ", bppId='" + bppId + '\'' +
-                ", bppUri='" + bppUri + '\'' +
-                ", validity=" + validity +
-                ", items=" + items +
-                ", offers=" + offers +
-                '}';
+        return "Catalog{id='" + id + "', bppId='" + bppId + "', items=" + items + '}';
     }
 }

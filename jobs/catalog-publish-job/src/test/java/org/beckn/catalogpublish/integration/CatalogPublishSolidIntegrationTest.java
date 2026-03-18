@@ -127,7 +127,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                 .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(3));
 
         Item ccs2_001Before = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
-        assertThat(ccs2_001Before.getPayload()).contains("beckn:isActive");
+        assertThat(ccs2_001Before.getPayload()).contains("isActive");
         assertThat(ccs2_001Before.getPayload()).contains("77.5946");
         assertThat(ccs2_001Before.getPayload()).contains("value").contains("18.0");
 
@@ -140,17 +140,17 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
                     Item item = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
-                    assertThat(item.getPayload()).contains("beckn:isActive");
+                    assertThat(item.getPayload()).contains("isActive");
                     assertThat(item.getPayload()).contains("99.5946");
                     assertThat(item.getPayload()).contains("value").contains("22.1");
                 });
 
         Item ccs2_001After = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
-        assertThat(ccs2_001After.getPayload()).contains("beckn:isActive").contains("true");
+        assertThat(ccs2_001After.getPayload()).contains("isActive").contains("true");
         assertThat(ccs2_001After.getPayload()).contains("99.5946");
         assertThat(ccs2_001After.getPayload()).contains("value").contains("22.1");
         assertThat(ccs2_001After.getPayload()).contains("unitQuantity").contains("1.1");
-        assertThat(ccs2_001After.getPayload()).contains("EcoPower Charging Pvt Ltd\"");
+        assertThat(ccs2_001After.getPayload()).contains("EcoPower Charging Pvt Ltd");
         // On upsert, all columns remain/update from merged payload
         assertThat(ccs2_001After.getName()).isEqualTo("DC Fast Charger - CCS2 (60kW)");
         assertThat(ccs2_001After.getType()).isEqualTo("ChargingService");

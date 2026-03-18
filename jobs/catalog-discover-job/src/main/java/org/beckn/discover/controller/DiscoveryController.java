@@ -1,8 +1,6 @@
 package org.beckn.discover.controller;
 
 import java.nio.charset.StandardCharsets;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.beckn.discover.config.DiscoveryProperties;
@@ -113,7 +111,7 @@ public class DiscoveryController {
 
         // Store transactionId early so GlobalExceptionHandler can include it in NACKs
         // even when an exception is thrown before full request parsing.
-        JsonNode txnNode = requestNode.path("context").path("transaction_id");
+        JsonNode txnNode = requestNode.path("context").path("transactionId");
         if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
             httpRequest.setAttribute(TRANSACTION_ID_ATTR, txnNode.asText());
         }
@@ -134,7 +132,7 @@ public class DiscoveryController {
         JsonNode requestNode = objectMapper.readTree(rawBody);
 
         String transactionId = null;
-        JsonNode txnNode = requestNode.path("context").path("transaction_id");
+        JsonNode txnNode = requestNode.path("context").path("transactionId");
         if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
             transactionId = txnNode.asText();
             httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
@@ -143,7 +141,7 @@ public class DiscoveryController {
         authorizationService.authorizeRequest(rawBody, requestNode, headers);
         validateSchema(requestNode);
 
-        String messageId = requestNode.path("context").path("message_id").asText();
+        String messageId = requestNode.path("context").path("messageId").asText();
         String kafkaKey = transactionId != null ? transactionId : messageId;
         String requestTopic = discoveryProperties.getKafka().getRequestTopic();
         if (requestTopic == null || requestTopic.isBlank()) {
@@ -153,25 +151,31 @@ public class DiscoveryController {
         // Capture effectively-final copies for lambda
         final String logTxnId = transactionId;
         final String logMsgId = messageId;
-        kafkaTemplate.send(requestTopic, kafkaKey, rawBody)
-                .whenComplete((result, ex) -> {
-                    if (ex != null) {
-                        logger.error("Failed to queue async discovery request transactionId={} messageId={} topic={}",
-                                logTxnId, logMsgId, requestTopic, ex);
-                    } else {
-                        logger.debug("Async discovery request queued transactionId={} messageId={} topic={} partition={} offset={}",
-                                logTxnId, logMsgId, requestTopic,
-                                result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
-                    }
-                });
+        try {
+            kafkaTemplate.send(requestTopic, kafkaKey, rawBody)
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            logger.error("Failed to queue async discovery request transactionId={} messageId={} topic={}",
+                                    logTxnId, logMsgId, requestTopic, ex);
+                        } else {
+                            logger.debug("Async discovery request queued transactionId={} messageId={} topic={} partition={} offset={}",
+                                    logTxnId, logMsgId, requestTopic,
+                                    result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
+                        }
+                    });
+        } catch (Exception kafkaEx) {
+            // Kafka unavailable (e.g. broker down, metadata timeout) — log and continue.
+            // POST is fire-and-forget: validation already passed, so we return ACK and
+            // let the caller retry if needed. This keeps the endpoint non-blocking even
+            // when the broker is temporarily unreachable.
+            logger.error("Failed to send async discovery request to Kafka transactionId={} messageId={} topic={}: {}",
+                    logTxnId, logMsgId, requestTopic, kafkaEx.getMessage());
+        }
 
         logger.info("Queued async discovery request transactionId={} messageId={} topic={}",
                 transactionId, messageId, requestTopic);
 
-        // Use messageId as fallback when transactionId is absent
-        String ackTransactionId = transactionId != null ? transactionId : messageId;
-        String timestamp = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-        return ResponseEntity.ok(AckResponse.ack(ackTransactionId, timestamp));
+        return ResponseEntity.ok(AckResponse.ack());
     }
 
     private void validateSchema(JsonNode requestNode) {

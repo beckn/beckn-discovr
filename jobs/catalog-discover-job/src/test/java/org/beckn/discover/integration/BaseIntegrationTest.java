@@ -136,13 +136,11 @@ public abstract class BaseIntegrationTest {
         context.setDomain("beckn.one:mobility:ev-charging:*");
         context.setAction("discover");
         context.setVersion("2.0.0");
-        context.setCoreVersion("2.0.0");
         context.setCountry("IND");
         context.setCity("std:BLR");
         context.setTtl("PT10M");
         context.setTimestamp(OffsetDateTime.of(2025, 8, 14, 10, 30, 0, 0, ZoneOffset.UTC));
-        context.setNetworkId(java.util.List.of(
-                "bap.net/ev-charging"));
+        context.setNetworkId("bap.net/ev-charging");
         context.setSchemaContext(java.util.List.of(
                 "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"));
         return context;
@@ -229,7 +227,7 @@ public abstract class BaseIntegrationTest {
             // Fallback: seed geometry for the EV charging test fixture.
             // Path format matches catalog-publish-job and request targets.
             // Used by spatialQueryUsesPostgisTargets — s_dwithin with radius 1000m.
-            String path = "$.catalogs[*].\"beckn:items\"[*].\"beckn:availableAt\"[*].\"geo\"";
+            String path = "$.catalogs[*].items[*].availableAt[*].geo";
             insertItemLocationGeom("ev-charger-ccs2-001", path, 77.5946, 12.9716);
             insertItemLocationGeom("ev-charger-ccs2-002", path, 77.5700, 12.9800);
         }
@@ -415,13 +413,13 @@ public abstract class BaseIntegrationTest {
         Assertions.assertThat(offerObj).isInstanceOf(Map.class);
 
         Map<String, Object> offer = (Map<String, Object>) offerObj;
-        Assertions.assertThat(offer.get("beckn:id"))
-                .as("Offer must have beckn:id")
+        Assertions.assertThat(offer.get("id"))
+                .as("Offer must have id")
                 .isNotNull();
 
-        Object itemsObj = offer.get("beckn:items");
+        Object itemsObj = offer.get("items");
         Assertions.assertThat(itemsObj)
-                .as("Offer must have beckn:items array")
+                .as("Offer must have items array")
                 .isNotNull();
         Assertions.assertThat(itemsObj).isInstanceOf(List.class);
 

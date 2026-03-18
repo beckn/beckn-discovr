@@ -21,10 +21,10 @@ public class ItemPayloadBuilder {
     }
 
     public String[] extractOfferIdsFromPayload(JsonNode payload) {
-        JsonNode offers = payload.path("catalogs").path(0).path("beckn:offers");
+        JsonNode offers = payload.path("catalogs").path(0).path("offers");
         if (!offers.isArray() || offers.isEmpty()) return new String[0];
         return StreamSupport.stream(offers.spliterator(), false)
-                .map(o -> o.path("beckn:id").asText(null))
+                .map(o -> o.path("id").asText(null))
                 .filter(Objects::nonNull)
                 .toArray(String[]::new);
     }
@@ -34,11 +34,11 @@ public class ItemPayloadBuilder {
         // buildDenormalizedPayloadFromSlice deep-copies this slice per item, so shallow refs are safe here.
         ObjectNode slice = objectMapper.createObjectNode();
         catalogNode.fields().forEachRemaining(e -> {
-            if (!"beckn:items".equals(e.getKey()) && !"beckn:offers".equals(e.getKey()))
+            if (!"items".equals(e.getKey()) && !"offers".equals(e.getKey()))
                 slice.set(e.getKey(), e.getValue());
         });
-        if (!slice.has("beckn:bppId")) slice.put("beckn:bppId", ctx.bppId());
-        if (!slice.has("beckn:bppUri")) slice.put("beckn:bppUri", ctx.bppUri());
+        if (!slice.has("bppId")) slice.put("bppId", ctx.bppId());
+        if (!slice.has("bppUri")) slice.put("bppUri", ctx.bppUri());
         return slice;
     }
 
@@ -46,8 +46,8 @@ public class ItemPayloadBuilder {
             ObjectNode baseSlice, JsonNode itemNode, OfferIndex offerIndex, String itemId) {
         ArrayNode itemOffers = offerIndex.getOffersForItem(itemId, objectMapper);
         ObjectNode itemSlice = baseSlice.deepCopy();
-        itemSlice.set("beckn:items", wrapInArray(itemNode));
-        itemSlice.set("beckn:offers", itemOffers);
+        itemSlice.set("items", wrapInArray(itemNode));
+        itemSlice.set("offers", itemOffers);
         return objectMapper.createObjectNode().set("catalogs", wrapInArray(itemSlice));
     }
 

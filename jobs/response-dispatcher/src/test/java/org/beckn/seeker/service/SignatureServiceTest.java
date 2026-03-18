@@ -59,7 +59,8 @@ class SignatureServiceTest {
         ReflectionTestUtils.setField(signatureService, "expirySeconds", 3600L);
         ReflectionTestUtils.setField(signatureService, "parsedPrivateKey", testPrivateKey);
         
-        String requestBody = "{\"context\":{\"bap_id\":\"example.com\",\"action\":\"on_discover\"}}";
+        // Beckn v2.0: bap_id → bapId
+        String requestBody = "{\"context\":{\"bapId\":\"example.com\",\"action\":\"on_discover\"}}";
         
         when(cryptoService.hashMessage(requestBody)).thenReturn("testDigest");
         when(cryptoService.sign(anyString(), any(PrivateKey.class))).thenReturn("testSignature");

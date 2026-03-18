@@ -133,7 +133,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithOffers_offersSetOnCatalog() {
-        Map<String, Object> offer = Map.of("beckn:id", "offer-1", "beckn:price", Map.of("value", 150.0));
+        Map<String, Object> offer = Map.of("id", "offer-1", "price", Map.of("value", 150.0));
         Map<String, Object> doc = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "Charger", List.of(offer));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-9");
@@ -146,7 +146,7 @@ class EsSearchAssemblerTest {
         // item-2 (no offers) arrives first in ES relevance order;
         // item-1 (has the offer) arrives second.
         // Offers must still appear in the assembled catalog.
-        Map<String, Object> offer = Map.of("beckn:id", "offer-1", "beckn:items", List.of("item-1"), "beckn:price",
+        Map<String, Object> offer = Map.of("id", "offer-1", "items", List.of("item-1"), "price",
                 Map.of("value", 99.0));
 
         Map<String, Object> noOfferDoc = evChargerDoc("cat-1", "bpp-1", "item-2", "AC Charger");
@@ -160,7 +160,7 @@ class EsSearchAssemblerTest {
         assertThat(catalogs.get(0).getOffers()).isNotNull().hasSize(1);
         assertThat(catalogs.get(0).getOffers().get(0))
                 .isInstanceOfSatisfying(java.util.Map.class,
-                        m -> assertThat(m.get("beckn:id")).isEqualTo("offer-1"));
+                        m -> assertThat(m.get("id")).isEqualTo("offer-1"));
     }
 
     @Test
@@ -169,7 +169,7 @@ class EsSearchAssemblerTest {
         // items).
         // After assembly the offer list must not contain duplicates once the pipeline
         // runs.
-        Map<String, Object> offer = Map.of("beckn:id", "offer-shared", "beckn:items", List.of("item-1", "item-2"));
+        Map<String, Object> offer = Map.of("id", "offer-shared", "items", List.of("item-1", "item-2"));
 
         Map<String, Object> doc1 = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "CCS2 Charger", List.of(offer));
         Map<String, Object> doc2 = evChargerDocWithOffers("cat-1", "bpp-1", "item-2", "AC Charger", List.of(offer));

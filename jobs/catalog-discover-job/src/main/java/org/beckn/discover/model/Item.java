@@ -8,66 +8,61 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 /**
- * Item DTO
- * 
- * Represents an item within a catalog from the discovery response.
+ * Item DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
  */
 public class Item {
 
-    @NotBlank(message = "@context is required")
     @JsonProperty("@context")
     private String context;
 
-    @NotBlank(message = "@type is required")
     @JsonProperty("@type")
     private String type;
 
-    @NotBlank(message = "beckn:id is required")
-    @JsonProperty("beckn:id")
+    @NotBlank(message = "id is required")
+    @JsonProperty("id")
     private String id;
 
-    @NotNull(message = "beckn:descriptor is required")
+    @NotNull(message = "descriptor is required")
     @Valid
-    @JsonProperty("beckn:descriptor")
+    @JsonProperty("descriptor")
     private Descriptor descriptor;
 
-    @JsonProperty("beckn:category")
+    @JsonProperty("category")
     private CategoryCode category;
 
-    @JsonProperty("beckn:availableAt")
+    @JsonProperty("availableAt")
     private List<Location> availableAt;
 
-    @JsonProperty("beckn:availabilityWindow")
+    @JsonProperty("availabilityWindow")
     private List<TimePeriod> availabilityWindow;
 
-    @JsonProperty("beckn:rateable")
+    @JsonProperty("rateable")
     private Boolean rateable;
 
-    @JsonProperty("beckn:rating")
+    @JsonProperty("rating")
     private Rating rating;
 
-    @JsonProperty("beckn:isActive")
+    @JsonProperty("isActive")
     private Boolean isActive;
 
-    @JsonProperty("beckn:networkId")
+    @JsonProperty("networkId")
     private List<String> networkId;
 
-    @JsonProperty("beckn:acceptedPaymentMethod")
+    @JsonProperty("acceptedPaymentMethod")
     private List<String> acceptedPaymentMethod;
 
-    @NotNull(message = "beckn:provider is required")
+    @NotNull(message = "provider is required")
     @Valid
-    @JsonProperty("beckn:provider")
+    @JsonProperty("provider")
     private Provider provider;
 
-    @NotNull(message = "beckn:itemAttributes is required")
+    @NotNull(message = "itemAttributes is required")
     @Valid
-    @JsonProperty("beckn:itemAttributes")
+    @JsonProperty("itemAttributes")
     private Attributes itemAttributes;
 
     // Default constructor
-    public Item() {
-    }
+    public Item() {}
 
     // Constructor with required fields
     public Item(String context, String type, String id, Descriptor descriptor, Provider provider,
@@ -81,130 +76,50 @@ public class Item {
     }
 
     // Getters and Setters
-    public String getContext() {
-        return context;
-    }
+    public String getContext() { return context; }
+    public void setContext(String context) { this.context = context; }
 
-    public void setContext(String context) {
-        this.context = context;
-    }
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
-    public String getType() {
-        return type;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public void setType(String type) {
-        this.type = type;
-    }
+    public Descriptor getDescriptor() { return descriptor; }
+    public void setDescriptor(Descriptor descriptor) { this.descriptor = descriptor; }
 
-    public String getId() {
-        return id;
-    }
+    public CategoryCode getCategory() { return category; }
+    public void setCategory(CategoryCode category) { this.category = category; }
 
-    public void setId(String id) {
-        this.id = id;
-    }
+    public List<Location> getAvailableAt() { return availableAt; }
+    public void setAvailableAt(List<Location> availableAt) { this.availableAt = availableAt; }
 
-    public Descriptor getDescriptor() {
-        return descriptor;
-    }
+    public List<TimePeriod> getAvailabilityWindow() { return availabilityWindow; }
+    public void setAvailabilityWindow(List<TimePeriod> availabilityWindow) { this.availabilityWindow = availabilityWindow; }
 
-    public void setDescriptor(Descriptor descriptor) {
-        this.descriptor = descriptor;
-    }
+    public Boolean getRateable() { return rateable; }
+    public void setRateable(Boolean rateable) { this.rateable = rateable; }
 
-    public CategoryCode getCategory() {
-        return category;
-    }
+    public Rating getRating() { return rating; }
+    public void setRating(Rating rating) { this.rating = rating; }
 
-    public void setCategory(CategoryCode category) {
-        this.category = category;
-    }
+    public Boolean getIsActive() { return isActive; }
+    public void setIsActive(Boolean isActive) { this.isActive = isActive; }
 
-    public List<Location> getAvailableAt() {
-        return availableAt;
-    }
+    public List<String> getNetworkId() { return networkId; }
+    public void setNetworkId(List<String> networkId) { this.networkId = networkId; }
 
-    public void setAvailableAt(List<Location> availableAt) {
-        this.availableAt = availableAt;
-    }
+    public List<String> getAcceptedPaymentMethod() { return acceptedPaymentMethod; }
+    public void setAcceptedPaymentMethod(List<String> acceptedPaymentMethod) { this.acceptedPaymentMethod = acceptedPaymentMethod; }
 
-    public List<TimePeriod> getAvailabilityWindow() {
-        return availabilityWindow;
-    }
+    public Provider getProvider() { return provider; }
+    public void setProvider(Provider provider) { this.provider = provider; }
 
-    public void setAvailabilityWindow(List<TimePeriod> availabilityWindow) {
-        this.availabilityWindow = availabilityWindow;
-    }
-
-    public Boolean getRateable() {
-        return rateable;
-    }
-
-    public void setRateable(Boolean rateable) {
-        this.rateable = rateable;
-    }
-
-    public Rating getRating() {
-        return rating;
-    }
-
-    public void setRating(Rating rating) {
-        this.rating = rating;
-    }
-
-    public Boolean getIsActive() {
-        return isActive;
-    }
-
-    public void setIsActive(Boolean isActive) {
-        this.isActive = isActive;
-    }
-
-    public List<String> getNetworkId() {
-        return networkId;
-    }
-
-    public void setNetworkId(List<String> networkId) {
-        this.networkId = networkId;
-    }
-
-    public List<String> getAcceptedPaymentMethod() {
-        return acceptedPaymentMethod;
-    }
-
-    public void setAcceptedPaymentMethod(List<String> acceptedPaymentMethod) {
-        this.acceptedPaymentMethod = acceptedPaymentMethod;
-    }
-
-    public Provider getProvider() {
-        return provider;
-    }
-
-    public void setProvider(Provider provider) {
-        this.provider = provider;
-    }
-
-    public Attributes getItemAttributes() {
-        return itemAttributes;
-    }
-
-    public void setItemAttributes(Attributes itemAttributes) {
-        this.itemAttributes = itemAttributes;
-    }
+    public Attributes getItemAttributes() { return itemAttributes; }
+    public void setItemAttributes(Attributes itemAttributes) { this.itemAttributes = itemAttributes; }
 
     @Override
     public String toString() {
-        return "Item{" +
-                "context='" + context + '\'' +
-                ", type='" + type + '\'' +
-                ", id='" + id + '\'' +
-                ", descriptor=" + descriptor +
-                ", category=" + category +
-                ", provider=" + provider +
-                ", itemAttributes=" + itemAttributes +
-                ", isActive=" + isActive +
-                ", acceptedPaymentMethod=" + acceptedPaymentMethod +
-                '}';
+        return "Item{id='" + id + "', provider=" + provider + ", itemAttributes=" + itemAttributes + '}';
     }
 }

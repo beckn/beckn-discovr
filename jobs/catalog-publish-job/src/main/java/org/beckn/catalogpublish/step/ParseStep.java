@@ -34,7 +34,6 @@ public class ParseStep {
 
     public String extractCatalogIdSafe(JsonNode catalogNode) {
         return FieldExtractor.extractString(catalogNode, "id")
-                .or(() -> FieldExtractor.extractString(catalogNode, "beckn:id"))
                 .orElse("unknown");
     }
 
@@ -48,8 +47,8 @@ public class ParseStep {
 
     private CatalogContext extractContext(JsonNode root) {
         JsonNode ctx = FieldExtractor.requireNode(root, "context");
-        String bppId = FieldExtractor.requireString(ctx, "bpp_id");
-        String bppUri = FieldExtractor.requireString(ctx, "bpp_uri");
+        String bppId = FieldExtractor.requireString(ctx, "bppId");
+        String bppUri = FieldExtractor.requireString(ctx, "bppUri");
         String[] netIds = FieldExtractor.extractNetworkIds(ctx);
         return new CatalogContext(bppId, bppUri, netIds, ctx);
     }

@@ -1,29 +1,29 @@
 {
   "context": {
-    "bpp_id": "bpp-1",
-    "bpp_uri": "http://bpp1.example.com",
-    "message_id": "msg-multi-patch",
-    "transaction_id": "tx-multi-patch"
+    "bppId": "bpp-1",
+    "bppUri": "http://bpp1.example.com",
+    "messageId": "msg-multi-patch",
+    "transactionId": "tx-multi-patch"
   },
   "message": {
     "catalogs": [
       {
         "id": "cat-1",
-        "beckn:items": [],
-        "beckn:offers": [
+        "items": [],
+        "offers": [
           {
-            "beckn:id": "offer-A",
-            "beckn:descriptor": { "schema:name": "Offer A Updated" }
+            "id": "offer-A",
+            "descriptor": { "name": "Offer A Updated" }
           }
         ]
       },
       {
         "id": "cat-2",
-        "beckn:items": [],
-        "beckn:offers": [
+        "items": [],
+        "offers": [
           {
-            "beckn:id": "offer-C",
-            "beckn:descriptor": { "schema:name": "Offer C Updated" }
+            "id": "offer-C",
+            "descriptor": { "name": "Offer C Updated" }
           }
         ]
       }

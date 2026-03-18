@@ -99,28 +99,28 @@ public class CatalogPushController {
             if (isBlank(textOrNull(context.get("timestamp")))) {
                 context.put("timestamp", Instant.now().toString());
             }
-            if (isBlank(textOrNull(context.get("message_id")))) {
-                context.put("message_id", UUID.randomUUID().toString());
+            if (isBlank(textOrNull(context.get("messageId")))) {
+                context.put("messageId", UUID.randomUUID().toString());
             }
-            if (isBlank(textOrNull(context.get("transaction_id")))) {
-                context.put("transaction_id", UUID.randomUUID().toString());
+            if (isBlank(textOrNull(context.get("transactionId")))) {
+                context.put("transactionId", UUID.randomUUID().toString());
             }
-            if (isBlank(textOrNull(context.get("bap_id")))) {
-                context.put("bap_id", "dummy-bap-id");
+            if (isBlank(textOrNull(context.get("bapId")))) {
+                context.put("bapId", "dummy-bap-id");
             }
             if (isBlank(textOrNull(context.get("ttl")))) {
                 context.put("ttl", "PT30S");
             }
 
             // BPP context defaults (used by downstream persistence)
-            String updatedBppId = textOrNull(context.get("bpp_id"));
-            String updatedBppUri = textOrNull(context.get("bpp_uri"));
+            String updatedBppId = textOrNull(context.get("bppId"));
+            String updatedBppUri = textOrNull(context.get("bppUri"));
 
             if (isBlank(updatedBppId)) {
-                context.put("bpp_id", "dummy-bpp-id");
+                context.put("bppId", "dummy-bpp-id");
             }
             if (isBlank(updatedBppUri)) {
-                context.put("bpp_uri", "http://dummy-bpp-uri.com");
+                context.put("bppUri", "http://dummy-bpp-uri.com");
             }
 
             return objectMapper.writeValueAsString(root);

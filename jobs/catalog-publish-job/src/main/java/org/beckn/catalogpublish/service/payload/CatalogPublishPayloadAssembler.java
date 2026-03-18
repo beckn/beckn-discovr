@@ -145,10 +145,10 @@ public class CatalogPublishPayloadAssembler {
         }
         JsonNode catalogTemplate = firstPayload.path("catalogs").path(0);
 
-        // Copy catalog-level fields; beckn:items and beckn:offers are assembled below.
+        // Copy catalog-level fields; items and offers are assembled below.
         ObjectNode catalogNode = objectMapper.createObjectNode();
         catalogTemplate.fields().forEachRemaining(entry -> {
-            if (!"beckn:items".equals(entry.getKey()) && !"beckn:offers".equals(entry.getKey())) {
+            if (!"items".equals(entry.getKey()) && !"offers".equals(entry.getKey())) {
                 catalogNode.set(entry.getKey(), entry.getValue());
             }
         });
@@ -161,14 +161,14 @@ public class CatalogPublishPayloadAssembler {
             if (node == null)
                 continue;
             JsonNode payloadCatalog = node.path("catalogs").path(0);
-            JsonNode itemNode = payloadCatalog.path("beckn:items").path(0);
+            JsonNode itemNode = payloadCatalog.path("items").path(0);
             if (!itemNode.isMissingNode()) {
                 itemsArray.add(itemNode);
             }
-            JsonNode offers = payloadCatalog.path("beckn:offers");
+            JsonNode offers = payloadCatalog.path("offers");
             if (offers.isArray()) {
                 for (JsonNode offer : offers) {
-                    String offerId = offer.path("beckn:id").asText(null);
+                    String offerId = offer.path("id").asText(null);
                     if (offerId != null) {
                         offerById.putIfAbsent(offerId, offer);
                     }
@@ -179,8 +179,8 @@ public class CatalogPublishPayloadAssembler {
         ArrayNode offersArray = objectMapper.createArrayNode();
         offerById.values().forEach(offersArray::add);
 
-        catalogNode.set("beckn:items", itemsArray);
-        catalogNode.set("beckn:offers", offersArray);
+        catalogNode.set("items", itemsArray);
+        catalogNode.set("offers", offersArray);
         return catalogNode;
     }
 }

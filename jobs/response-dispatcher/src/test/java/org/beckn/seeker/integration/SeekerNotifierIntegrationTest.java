@@ -93,12 +93,12 @@ class SeekerNotifierIntegrationTest {
   void shouldProcessMessageAndSendToBapEndpoint() {
     logger.info("🧪 Starting end-to-end message processing test...");
 
-    // Given - Valid discovery response message with BAP URI
+    // Given - Valid discovery response message with BAP URI (Beckn v2.0 camelCase context fields)
     String testMessage = """
         {
           "context": {
-            "message_id": "msg-123",
-            "bap_uri": "https://bap.example.com/callback",
+            "messageId": "msg-123",
+            "bapUri": "https://bap.example.com/callback",
             "action": "on_discover"
           },
           "catalog": {
@@ -109,12 +109,12 @@ class SeekerNotifierIntegrationTest {
     String inputTopic = "test.seeker.requests";
     String bapUrl = "https://bap.example.com/callback/on_discover";
 
-    // Mock successful HTTP response from BAP endpoint
+    // Mock successful HTTP response from BAP endpoint (Beckn v2.0 ACK format)
     mockServer.expect(requestTo(bapUrl))
         .andExpect(method(HttpMethod.POST))
         .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-        .andExpect(jsonPath("$.context.message_id").value("msg-123"))
-        .andRespond(withSuccess("OK", MediaType.TEXT_PLAIN));
+        .andExpect(jsonPath("$.context.messageId").value("msg-123"))
+        .andRespond(withSuccess("{\"status\":\"ACK\"}", MediaType.APPLICATION_JSON));
 
     // When - Send message to input topic
     logger.info("📤 Sending test message to input topic: {}", inputTopic);
@@ -139,12 +139,12 @@ class SeekerNotifierIntegrationTest {
   void shouldProcessMessageAndSendToBppEndpoint() {
     logger.info("🧪 Starting BPP message processing test...");
 
-    // Given - Valid discovery response message with BPP URI
+    // Given - Valid discovery response message with BPP URI (Beckn v2.0 camelCase context fields)
     String testMessage = """
         {
           "context": {
-            "message_id": "msg-456",
-            "bpp_uri": "https://bpp.example.com",
+            "messageId": "msg-456",
+            "bppUri": "https://bpp.example.com",
             "action": "on_catalog_publish"
           },
           "catalog": {
@@ -155,12 +155,12 @@ class SeekerNotifierIntegrationTest {
     String inputTopic = "test.seeker.requests";
     String bppUrl = "https://bpp.example.com/catalog/on_publish";
 
-    // Mock successful HTTP response from BPP endpoint
+    // Mock successful HTTP response from BPP endpoint (Beckn v2.0 ACK format)
     mockServer.expect(requestTo(bppUrl))
         .andExpect(method(HttpMethod.POST))
         .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-        .andExpect(jsonPath("$.context.message_id").value("msg-456"))
-        .andRespond(withSuccess("OK", MediaType.TEXT_PLAIN));
+        .andExpect(jsonPath("$.context.messageId").value("msg-456"))
+        .andRespond(withSuccess("{\"status\":\"ACK\"}", MediaType.APPLICATION_JSON));
 
     // When - Send message to input topic
     logger.info("📤 Sending test message to input topic: {}", inputTopic);
@@ -236,23 +236,23 @@ class SeekerNotifierIntegrationTest {
     String bapUrl = "https://bap.example.com/callback";
     String expectedUrl = bapUrl + "/on_discover";
 
-    // Mock successful HTTP responses for all messages
+    // Mock successful HTTP responses for all messages (Beckn v2.0 ACK format)
     for (int i = 0; i < messageCount; i++) {
       mockServer.expect(requestTo(expectedUrl))
           .andExpect(method(HttpMethod.POST))
           .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-          .andExpect(jsonPath("$.context.message_id").value("msg-" + i))
-          .andRespond(withSuccess("OK", MediaType.TEXT_PLAIN));
+          .andExpect(jsonPath("$.context.messageId").value("msg-" + i))
+          .andRespond(withSuccess("{\"status\":\"ACK\"}", MediaType.APPLICATION_JSON));
     }
 
-    // When - Send multiple messages
+    // When - Send multiple messages (Beckn v2.0 camelCase context fields)
     logger.info("📤 Sending {} messages to input topic...", messageCount);
     for (int i = 0; i < messageCount; i++) {
       String message = String.format("""
           {
             "context": {
-              "message_id": "msg-%d",
-              "bap_uri": "%s",
+              "messageId": "msg-%d",
+              "bapUri": "%s",
               "action": "on_discover"
             },
             "catalog": {

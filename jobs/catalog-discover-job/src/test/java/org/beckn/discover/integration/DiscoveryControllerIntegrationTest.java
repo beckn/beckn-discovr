@@ -36,9 +36,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.ack_status").value("ACK"))
-                                .andExpect(jsonPath("$.transaction_id").exists())
-                                .andExpect(jsonPath("$.timestamp").exists());
+                                .andExpect(jsonPath("$.status").value("ACK"));
         }
 
         @Test
@@ -54,43 +52,43 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .andExpect(jsonPath("$.context").exists())
                                 // Validate catalogs
                                 .andExpect(jsonPath("$.message.catalogs", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:id']").exists())
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:descriptor']['schema:name']")
+                                .andExpect(jsonPath("$.message.catalogs[0].id").exists())
+                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.name")
                                                 .value("EV Charging Services Network"))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:descriptor']['schema:image']",
+                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.images",
                                                 hasSize(2)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:descriptor']['schema:image'][0]")
+                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.images[0]")
                                                 .value("https://example.com/images/ev-charging-network.jpg"))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:descriptor']['schema:image'][1]")
+                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.images[1]")
                                                 .value("https://example.com/images/charging-station-banner.png"))
                                 // Validate items
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items']", hasSize(1)))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:items'][0]['beckn:id']")
+                                .andExpect(jsonPath("$.message.catalogs[0].items", hasSize(1)))
+                                .andExpect(jsonPath("$.message.catalogs[0].items[0].id")
                                                 .value("ev-charger-ccs2-001"))
                                 .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:name']")
+                                                "$.message.catalogs[0].items[0].descriptor.name")
                                                 .value("DC Fast Charger - CCS2 (60kW)"))
                                 .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image']",
+                                                "$.message.catalogs[0].items[0].descriptor.images",
                                                 hasSize(2)))
                                 .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image'][0]")
+                                                "$.message.catalogs[0].items[0].descriptor.images[0]")
                                                 .value("https://example.com/images/ev-charger-ccs2-60kw.jpg"))
                                 .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:descriptor']['schema:image'][1]")
+                                                "$.message.catalogs[0].items[0].descriptor.images[1]")
                                                 .value("https://example.com/images/charging-station-ccs2.png"))
                                 // Validate provider
                                 .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:provider']['beckn:id']")
+                                                "$.message.catalogs[0].items[0].provider.id")
                                                 .value("ecopower-charging"))
                                 .andExpect(jsonPath(
-                                                "$.message.catalogs[0]['beckn:items'][0]['beckn:itemAttributes'].connectorType")
+                                                "$.message.catalogs[0].items[0].itemAttributes.connectorType")
                                                 .value("CCS2"))
                                 // Validate offers
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers']", hasSize(greaterThanOrEqualTo(1))))
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers'][0]['beckn:id']").exists())
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers'][0]['beckn:items']").isArray())
-                                .andExpect(jsonPath("$.message.catalogs[0]['beckn:offers'][0]['beckn:items'][0]")
+                                .andExpect(jsonPath("$.message.catalogs[0].offers", hasSize(greaterThanOrEqualTo(1))))
+                                .andExpect(jsonPath("$.message.catalogs[0].offers[0].id").exists())
+                                .andExpect(jsonPath("$.message.catalogs[0].offers[0].items").isArray())
+                                .andExpect(jsonPath("$.message.catalogs[0].offers[0].items[0]")
                                                 .value("ev-charger-ccs2-001"));
         }
 
@@ -103,10 +101,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.paths", not(emptyOrNullString())))
-                                .andExpect(jsonPath("$.error.message", containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$.status").value("NACK"))
+                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$.error.errorMessage", containsString("Schema validation failed")));
         }
 
         @Test
@@ -118,11 +115,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.paths", not(emptyOrNullString())))
-                                .andExpect(jsonPath("$.error.message", containsString("Schema validation failed")))
-                                .andExpect(jsonPath("$.transaction_id").exists());
+                                .andExpect(jsonPath("$.status").value("NACK"))
+                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$.error.errorMessage", containsString("Schema validation failed")));
         }
 
         @Test
@@ -136,8 +131,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.ack_status").value("ACK"))
-                                .andExpect(jsonPath("$.timestamp").exists());
+                                .andExpect(jsonPath("$.status").value("ACK"));
         }
 
         @Test
@@ -149,14 +143,12 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.paths", not(emptyOrNullString())))
-                                .andExpect(jsonPath("$.error.message", anyOf(
-                                                containsString("transaction_id"),
-                                                containsString("message_id"),
-                                                containsString("invalid uuid"))))
-                                .andExpect(jsonPath("$.transaction_id").exists());
+                                .andExpect(jsonPath("$.status").value("NACK"))
+                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$.error.errorMessage", anyOf(
+                                                containsString("transactionId"),
+                                                containsString("messageId"),
+                                                containsString("invalid uuid"))));
         }
 
         @Test
@@ -168,10 +160,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.paths", not(emptyOrNullString())))
-                                .andExpect(jsonPath("$.transaction_id").exists());
+                                .andExpect(jsonPath("$.status").value("NACK"))
+                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"));
         }
 
         @Test
@@ -184,9 +174,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.ack_status").value("ACK"))
-                                .andExpect(jsonPath("$.transaction_id").exists())
-                                .andExpect(jsonPath("$.timestamp").exists());
+                                .andExpect(jsonPath("$.status").value("ACK"));
         }
 
         @Test
@@ -199,9 +187,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.ack_status").value("ACK"))
-                                .andExpect(jsonPath("$.transaction_id").exists())
-                                .andExpect(jsonPath("$.timestamp").exists());
+                                .andExpect(jsonPath("$.status").value("ACK"));
         }
 
         @Test
@@ -215,10 +201,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.paths", not(emptyOrNullString())))
-                                .andExpect(jsonPath("$.error.message", containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$.status").value("NACK"))
+                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$.error.errorMessage", containsString("Schema validation failed")));
         }
 
         @Test
@@ -231,9 +216,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.ack_status").value("ACK"))
-                                .andExpect(jsonPath("$.transaction_id").exists())
-                                .andExpect(jsonPath("$.timestamp").exists());
+                                .andExpect(jsonPath("$.status").value("ACK"));
         }
 
         @Test
@@ -245,10 +228,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
-                                .andExpect(jsonPath("$.error.paths", not(emptyOrNullString())))
-                                .andExpect(jsonPath("$.error.message",
+                                .andExpect(jsonPath("$.status").value("NACK"))
+                                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$.error.errorMessage",
                                                 containsString("absolute JSONPath")));
         }
 
@@ -262,9 +244,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.ack_status").value("ACK"))
-                                .andExpect(jsonPath("$.transaction_id").exists())
-                                .andExpect(jsonPath("$.timestamp").exists());
+                                .andExpect(jsonPath("$.status").value("ACK"));
         }
 
         @Test
@@ -277,9 +257,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.ack_status").value("ACK"))
-                                .andExpect(jsonPath("$.transaction_id").exists())
-                                .andExpect(jsonPath("$.timestamp").exists());
+                                .andExpect(jsonPath("$.status").value("ACK"));
         }
 
         @Test
@@ -292,9 +270,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.ack_status").value("ACK"))
-                                .andExpect(jsonPath("$.transaction_id").exists())
-                                .andExpect(jsonPath("$.timestamp").exists());
+                                .andExpect(jsonPath("$.status").value("ACK"));
         }
 
         private String readFixture(String fileName) {
@@ -321,9 +297,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$.ack_status").value("ACK"))
-                                .andExpect(jsonPath("$.transaction_id").exists())
-                                .andExpect(jsonPath("$.timestamp").exists());
+                                .andExpect(jsonPath("$.status").value("ACK"));
         }
 
         @Test
@@ -342,10 +316,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .content(payload));
 
                         result.andExpect(status().isBadRequest())
-                                        .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                        .andExpect(jsonPath("$.error.code").value("SEC_SIGNATURE_MISSING"))
-                                        .andExpect(jsonPath("$.error.paths").value("authorization"))
-                                        .andExpect(jsonPath("$.error.message",
+                                        .andExpect(jsonPath("$.status").value("NACK"))
+                                        .andExpect(jsonPath("$.error.errorCode").value("SEC_SIGNATURE_MISSING"))
+                                        .andExpect(jsonPath("$.error.errorMessage",
                                                         containsString("Missing Authorization")));
                 } finally {
                         // Reset configuration
@@ -370,10 +343,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                                         .andExpect(status().isBadRequest())
-                                        .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                        .andExpect(jsonPath("$.error.code").value("SEC_SIGNATURE_INVALID"))
-                                        .andExpect(jsonPath("$.error.paths").value("authorization/keyId"))
-                                        .andExpect(jsonPath("$.error.message",
+                                        .andExpect(jsonPath("$.status").value("NACK"))
+                                        .andExpect(jsonPath("$.error.errorCode").value("SEC_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$.error.errorMessage",
                                                         containsString("Invalid keyId format")));
                 } finally {
                         // Reset configuration
@@ -398,10 +370,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .content(payload));
 
                         result.andExpect(status().isBadRequest())
-                                        .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                        .andExpect(jsonPath("$.error.code").value("SEC_SIGNATURE_INVALID"))
-                                        .andExpect(jsonPath("$.error.paths").value("authorization"))
-                                        .andExpect(jsonPath("$.error.message",
+                                        .andExpect(jsonPath("$.status").value("NACK"))
+                                        .andExpect(jsonPath("$.error.errorCode").value("SEC_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$.error.errorMessage",
                                                         containsString("Invalid Beckn HTTP Signature format")));
                 } finally {
                         // Reset configuration
@@ -442,8 +413,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                                         .andExpect(status().isUnauthorized())
-                                        .andExpect(jsonPath("$.ack_status").value("NACK"))
-                                        .andExpect(jsonPath("$.error.code").value("SEC_KEY_NOT_FOUND"));
+                                        .andExpect(jsonPath("$.status").value("NACK"))
+                                        .andExpect(jsonPath("$.error.errorCode").value("SEC_KEY_NOT_FOUND"));
                         // .andExpect(jsonPath("$.error.message", containsString("Failed to fetch public
                         // key")));
                 } finally {

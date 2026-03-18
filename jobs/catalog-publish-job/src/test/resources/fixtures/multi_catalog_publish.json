@@ -1,43 +1,43 @@
 {
   "context": {
-    "bpp_id": "bpp-1",
-    "bpp_uri": "http://bpp1.example.com",
-    "message_id": "msg-multi-1",
-    "transaction_id": "tx-multi-1"
+    "bppId": "bpp-1",
+    "bppUri": "http://bpp1.example.com",
+    "messageId": "msg-multi-1",
+    "transactionId": "tx-multi-1"
   },
   "message": {
     "catalogs": [
       {
         "id": "cat-1",
-        "beckn:items": [
-          {"beckn:id": "item-1", "beckn:descriptor": {"schema:name": "Item One"}},
-          {"beckn:id": "item-2", "beckn:descriptor": {"schema:name": "Item Two"}},
-          {"beckn:id": "item-3", "beckn:descriptor": {"schema:name": "Item Three"}}
+        "items": [
+          {"id": "item-1", "descriptor": {"name": "Item One"}},
+          {"id": "item-2", "descriptor": {"name": "Item Two"}},
+          {"id": "item-3", "descriptor": {"name": "Item Three"}}
         ],
-        "beckn:offers": [
+        "offers": [
           {
-            "beckn:id": "offer-A",
-            "beckn:descriptor": {"schema:name": "Offer A Original"},
-            "beckn:items": ["item-1", "item-2"]
+            "id": "offer-A",
+            "descriptor": {"name": "Offer A Original"},
+            "items": ["item-1", "item-2"]
           },
           {
-            "beckn:id": "offer-B",
-            "beckn:descriptor": {"schema:name": "Offer B"},
-            "beckn:items": ["item-3"]
+            "id": "offer-B",
+            "descriptor": {"name": "Offer B"},
+            "items": ["item-3"]
           }
         ]
       },
       {
         "id": "cat-2",
-        "beckn:items": [
-          {"beckn:id": "item-4", "beckn:descriptor": {"schema:name": "Item Four"}},
-          {"beckn:id": "item-5", "beckn:descriptor": {"schema:name": "Item Five"}}
+        "items": [
+          {"id": "item-4", "descriptor": {"name": "Item Four"}},
+          {"id": "item-5", "descriptor": {"name": "Item Five"}}
         ],
-        "beckn:offers": [
+        "offers": [
           {
-            "beckn:id": "offer-C",
-            "beckn:descriptor": {"schema:name": "Offer C"},
-            "beckn:items": ["item-4", "item-5"]
+            "id": "offer-C",
+            "descriptor": {"name": "Offer C"},
+            "items": ["item-4", "item-5"]
           }
         ]
       }

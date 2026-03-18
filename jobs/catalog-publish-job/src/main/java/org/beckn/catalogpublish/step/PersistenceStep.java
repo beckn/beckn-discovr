@@ -145,7 +145,7 @@ public class PersistenceStep {
                     if (existing.getOfferIds() != null)
                         offerIdsToApply.addAll(Arrays.asList(existing.getOfferIds()));
                     offerIndex.getOffersForItem(itemId, objectMapper)
-                            .forEach(o -> FieldExtractor.extractString(o, "beckn:id")
+                            .forEach(o -> FieldExtractor.extractString(o, "id")
                                     .ifPresent(offerIdsToApply::add));
 
                     if (!offerIdsToApply.isEmpty()) {
@@ -270,24 +270,21 @@ public class PersistenceStep {
     // ─── Private helpers ──────────────────────────────────────────────────────
 
     private String extractItemId(JsonNode itemNode) {
-        return FieldExtractor.extractString(itemNode, "beckn:id")
-                .or(() -> FieldExtractor.extractString(itemNode, "id"))
+        return FieldExtractor.extractString(itemNode, "id")
                 .filter(s -> !s.isBlank())
                 .orElseThrow(() -> new FieldExtractionException("Item missing id"));
     }
 
     /**
-     * Indexes incoming offers by {@code beckn:id} for O(1) lookup during Phase 2
-     * propagation.
-     * Offers missing an ID are silently skipped — they cannot be matched to stored
-     * items.
+     * Indexes incoming offers by {@code id} for O(1) lookup during Phase 2 propagation.
+     * Offers missing an ID are silently skipped — they cannot be matched to stored items.
      */
     private Map<String, JsonNode> buildIncomingOfferMap(JsonNode allOffers) {
         if (allOffers == null || !allOffers.isArray() || allOffers.isEmpty())
             return Map.of();
         Map<String, JsonNode> map = new HashMap<>();
         for (JsonNode offer : allOffers) {
-            String offerId = FieldExtractor.extractString(offer, "beckn:id").orElse(null);
+            String offerId = FieldExtractor.extractString(offer, "id").orElse(null);
             if (offerId != null && !offerId.isBlank())
                 map.put(offerId, offer);
         }

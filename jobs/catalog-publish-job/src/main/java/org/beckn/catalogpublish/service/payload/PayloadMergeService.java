@@ -51,7 +51,7 @@ public class PayloadMergeService {
         ArrayNode offers = getOffersArray(payload);
         Map<String, Integer> index = new HashMap<>(Math.max(offers.size() * 2, 4));
         for (int i = 0; i < offers.size(); i++) {
-            String id = offers.get(i).path("beckn:id").asText(null);
+            String id = offers.get(i).path("id").asText(null);
             if (id != null)
                 index.put(id, i);
         }
@@ -140,34 +140,32 @@ public class PayloadMergeService {
     }
 
     private JsonNode rewrapItemInDenormalized(JsonNode denorm, JsonNode mergedItem) {
-        // denorm is freshly parsed from the DB string inside mergeItemPayload — we own
-        // it.
+        // denorm is freshly parsed from the DB string inside mergeItemPayload — we own it.
         // Mutate the items array in-place; no deep copy of the catalog wrapper needed.
         JsonNode catalogsNode = denorm.path("catalogs");
         if (catalogsNode.isArray() && !catalogsNode.isEmpty()) {
             ObjectNode catalog = (ObjectNode) catalogsNode.get(0);
-            catalog.set("beckn:items", objectMapper.createArrayNode().add(mergedItem));
+            catalog.set("items", objectMapper.createArrayNode().add(mergedItem));
             return denorm;
         }
         // Fallback: malformed denorm — build minimal structure from scratch.
         ObjectNode catalog = objectMapper.createObjectNode();
-        catalog.set("beckn:items", objectMapper.createArrayNode().add(mergedItem));
+        catalog.set("items", objectMapper.createArrayNode().add(mergedItem));
         return objectMapper.createObjectNode()
                 .set("catalogs", objectMapper.createArrayNode().add(catalog));
     }
 
     private ArrayNode getOffersArray(JsonNode payload) {
         JsonNode cat = payload.path("catalogs").path(0);
-        // path(0) returns MissingNode (not ObjectNode) when catalogs is absent or
-        // empty.
+        // path(0) returns MissingNode (not ObjectNode) when catalogs is absent or empty.
         // Casting MissingNode → ObjectNode throws ClassCastException; guard explicitly.
         if (cat.isMissingNode() || !(cat instanceof ObjectNode catObj)) {
             throw new IllegalStateException("payload missing catalogs[0] — cannot merge offer");
         }
-        JsonNode offers = catObj.path("beckn:offers");
+        JsonNode offers = catObj.path("offers");
         if (!offers.isArray()) {
             ArrayNode arr = objectMapper.createArrayNode();
-            catObj.set("beckn:offers", arr);
+            catObj.set("offers", arr);
             return arr;
         }
         return (ArrayNode) offers;
