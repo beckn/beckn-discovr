@@ -1,7 +1,7 @@
 {
     "context": {
         "version": "2.0.0",
-        "action": "catalog_publish",
+        "action": "catalog/publish",
         "domain": "beckn.one:deg:ev-charging:*",
         "timestamp": "2024-01-15T10:30:05Z",
         "transactionId": "2b4d69aa-22e4-4c78-9f56-5a7b9e2b2002",
@@ -13,7 +13,7 @@
     "message": {
         "catalogs": [
             {
-                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
+                "@context": "https://schema.beckn.io/",
                 "@type": "Catalog",
                 "id": "catalog-ev-charging-001",
                 "bppId": "bpp.example.com1",
@@ -30,7 +30,7 @@
                 },
                 "items": [
                     {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
+                        "@context": "https://schema.beckn.io/",
                         "@type": "Item",
                         "id": "ev-charger-ccs2-001",
                         "descriptor": {
@@ -142,7 +142,7 @@
                         }
                     },
                     {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
+                        "@context": "https://schema.beckn.io/",
                         "@type": "Item",
                         "id": "ev-charger-ccs2-002",
                         "descriptor": {
@@ -223,7 +223,7 @@
                         }
                     },
                     {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
+                        "@context": "https://schema.beckn.io/",
                         "@type": "Item",
                         "id": "ev-charger-type2-001",
                         "descriptor": {
@@ -306,7 +306,7 @@
                 ],
                 "offers": [
                     {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
+                        "@context": "https://schema.beckn.io/",
                         "@type": "Offer",
                         "id": "offer-ccs2-60kw-kwh",
                         "descriptor": {
@@ -338,7 +338,7 @@
                         "provider": "ecopower-charging"
                     },
                     {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
+                        "@context": "https://schema.beckn.io/",
                         "@type": "Offer",
                         "id": "offer-ccs2-120kw-kwh",
                         "descriptor": {
@@ -370,7 +370,7 @@
                         "provider": "greencharge-koramangala"
                     },
                     {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
+                        "@context": "https://schema.beckn.io/",
                         "@type": "Offer",
                         "id": "offer-type2-22kw-kwh",
                         "descriptor": {

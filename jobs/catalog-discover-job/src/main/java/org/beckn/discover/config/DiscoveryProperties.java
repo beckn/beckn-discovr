@@ -1,24 +1,28 @@
 package org.beckn.discover.config;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties for Discovery Service
  */
 @Configuration
 @ConfigurationProperties(prefix = "discovery")
+@Validated
 public class DiscoveryProperties {
 
     private boolean latencyTrackingEnabled = true;
-    private Kafka kafka = new Kafka();
-    private NLWeb nlweb = new NLWeb();
-    private PostgreSQL postgresql = new PostgreSQL();
-    private Schema schema = new Schema();
-    private RegistryAuthConfig registryAuth = new RegistryAuthConfig();
-    private TextSearch textSearch = new TextSearch();
-    private Spatial spatial = new Spatial();
-    private Elasticsearch elasticsearch = new Elasticsearch();
+    @Valid private Kafka kafka = new Kafka();
+    @Valid private NLWeb nlweb = new NLWeb();
+    @Valid private PostgreSQL postgresql = new PostgreSQL();
+    @Valid private Schema schema = new Schema();
+    @Valid private RegistryAuthConfig registryAuth = new RegistryAuthConfig();
+    @Valid private TextSearch textSearch = new TextSearch();
+    @Valid private Spatial spatial = new Spatial();
+    @Valid private Elasticsearch elasticsearch = new Elasticsearch();
 
     public Kafka getKafka() {
         return kafka;
@@ -96,7 +100,9 @@ public class DiscoveryProperties {
      * Elasticsearch configuration — used when text-search.engine=elasticsearch.
      */
     public static class Elasticsearch {
+        @NotBlank(message = "discovery.elasticsearch.hosts must not be blank")
         private String hosts = "http://localhost:9200";
+        @NotBlank(message = "discovery.elasticsearch.alias-name must not be blank")
         private String aliasName = "beckn-catalog";
         private int resultLimit = 50;
         private float minScore = 0.72f;
@@ -220,7 +226,9 @@ public class DiscoveryProperties {
     }
 
     public static class Kafka {
+        @NotBlank(message = "discovery.kafka.request-topic must not be blank")
         private String requestTopic;
+        @NotBlank(message = "discovery.kafka.response-topic must not be blank")
         private String responseTopic;
 
         public String getRequestTopic() {
@@ -241,7 +249,9 @@ public class DiscoveryProperties {
     }
 
     public static class NLWeb {
+        @NotBlank(message = "discovery.nlweb.base-url must not be blank")
         private String baseUrl;
+        @NotBlank(message = "discovery.nlweb.ask-endpoint must not be blank")
         private String askEndpoint;
         private int timeoutSeconds;
         private boolean streaming;
@@ -324,7 +334,7 @@ public class DiscoveryProperties {
          * These attributes will be merged into the catalog object in the response
          * Default: ["beckn:offers"] - extracts offers from catalog payload
          */
-        private java.util.List<String> catalogAttributesToExtract = java.util.List.of("beckn:offers");
+        private java.util.List<String> catalogAttributesToExtract = java.util.List.of("offers");
 
         public String getHost() {
             return host;

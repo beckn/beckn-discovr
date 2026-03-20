@@ -19,11 +19,11 @@ public class Rating {
 
     @DecimalMin(value = "0.0", message = "Rating value must be at least 0.0")
     @DecimalMax(value = "5.0", message = "Rating value must be at most 5.0")
-    @JsonProperty("beckn:ratingValue")
+    @JsonProperty("ratingValue")
     private Double ratingValue;
 
     @Min(value = 0, message = "Rating count must be at least 0")
-    @JsonProperty("beckn:ratingCount")
+    @JsonProperty("ratingCount")
     private Integer ratingCount;
 
     // Default constructor

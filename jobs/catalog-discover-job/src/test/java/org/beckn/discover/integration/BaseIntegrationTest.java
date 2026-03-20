@@ -134,7 +134,7 @@ public abstract class BaseIntegrationTest {
         context.setBapId("https://evcharging-bap.example.com");
         context.setBapUri("https://evcharging-bap.example.com/callback");
         context.setDomain("beckn.one:mobility:ev-charging:*");
-        context.setAction("beckn/discover");
+        context.setAction("discover");
         context.setVersion("2.0.0");
         context.setCountry("IND");
         context.setCity("std:BLR");
@@ -370,8 +370,8 @@ public abstract class BaseIntegrationTest {
                 .as("Response context must have timestamp")
                 .isNotNull();
         Assertions.assertThat(context.getAction())
-                .as("Response context action must be 'beckn/on_discover'")
-                .isEqualTo("beckn/on_discover");
+                .as("Response context action must be 'on_discover'")
+                .isEqualTo("on_discover");
         Assertions.assertThat(context.getVersion())
                 .as("Response context should have version")
                 .isNotNull();

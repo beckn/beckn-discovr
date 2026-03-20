@@ -17,9 +17,14 @@ public class DiscoveryConstants {
     public static final String DEFAULT_OFFER_ATTRIBUTE = "offers";
 
     /**
-     * Beckn Item type identifier
+     * Beckn Item type identifier (v2.0 prefixed form)
      */
     public static final String BECKN_ITEM_TYPE = "beckn:Item";
+
+    /**
+     * Item type identifier (v2.1 unprefixed form)
+     */
+    public static final String ITEM_TYPE = "Item";
 
     /**
      * Beckn Catalog type identifier
