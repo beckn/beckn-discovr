@@ -401,7 +401,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(response.getContext().getTransactionId()).isEqualTo(expectedTxnId);
         Assertions.assertThat(response.getContext().getMessageId()).isEqualTo(expectedMsgId);
         Assertions.assertThat(response.getContext().getBapId()).isEqualTo(expectedBapId);
-        Assertions.assertThat(response.getContext().getAction()).isEqualTo("beckn/on_discover");
+        Assertions.assertThat(response.getContext().getAction()).isEqualTo("on_discover");
         Assertions.assertThat(response.getContext().getTimestamp()).isNotNull();
     }
 
@@ -1248,7 +1248,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         
         Assertions.assertThat(response.getContext().getAction())
                 .as("Response action should be beckn/on_discover")
-                .isEqualTo("beckn/on_discover");
+                .isEqualTo("on_discover");
 
         // Assert: Response is valid (catalogs might be empty if intersection yields no results)
         Assertions.assertThat(response.getCatalogs())

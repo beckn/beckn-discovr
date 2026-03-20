@@ -94,7 +94,7 @@ public class EsSearchAssembler {
         catalog.setId(catalogId);
         catalog.setBppId(str(doc, "bpp_id"));
         catalog.setBppUri(str(doc, "bpp_uri"));
-        catalog.setDescriptor(new Descriptor("beckn:Descriptor"));
+        catalog.setDescriptor(new Descriptor("Descriptor"));
         catalog.setItems(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         return catalog;
@@ -222,12 +222,12 @@ public class EsSearchAssembler {
             address.setAddressCountry((String) addrMap.get("addressCountry"));
         }
 
-        return new Location("beckn:Location", geo, address);
+        return new Location("Location", geo, address);
     }
 
     @SuppressWarnings("unchecked")
     private static Descriptor buildDescriptor(Map<String, Object> doc) {
-        Descriptor d = new Descriptor("beckn:Descriptor");
+        Descriptor d = new Descriptor("Descriptor");
         d.setName(str(doc, "item_name"));
         d.setShortDesc(str(doc, "item_short_desc"));
         d.setLongDesc(str(doc, "item_long_desc"));
@@ -251,7 +251,7 @@ public class EsSearchAssembler {
         Object ratingCount = doc.get("item_rating_count");
         if (ratingValue == null && ratingCount == null)
             return null;
-        Rating r = new Rating("beckn:Rating");
+        Rating r = new Rating("Rating");
         if (ratingValue instanceof Number n)
             r.setRatingValue(n.doubleValue());
         if (ratingCount instanceof Number n)
@@ -263,7 +263,7 @@ public class EsSearchAssembler {
         String providerId = str(doc, "item_provider_id");
         if (providerId == null)
             return null;
-        Descriptor desc = new Descriptor("beckn:Descriptor");
+        Descriptor desc = new Descriptor("Descriptor");
         desc.setName(str(doc, "item_provider_name"));
         return new Provider(providerId, desc);
     }
@@ -273,10 +273,10 @@ public class EsSearchAssembler {
         Object attrsRaw = doc.get("item_attributes");
         if (attrsRaw instanceof Map<?, ?> map) {
             Attributes attrs = new Attributes(
-                    (String) map.get(BecknFields.CONTEXT),
-                    (String) map.get(BecknFields.TYPE));
+                    (String) map.get(BecknFields.AT_CONTEXT),
+                    (String) map.get(BecknFields.AT_TYPE));
             ((Map<String, Object>) map).forEach((k, v) -> {
-                if (!k.equals(BecknFields.CONTEXT) && !k.equals(BecknFields.TYPE))
+                if (!k.equals(BecknFields.AT_CONTEXT) && !k.equals(BecknFields.AT_TYPE))
                     attrs.setAttribute(k, v);
             });
             return attrs;

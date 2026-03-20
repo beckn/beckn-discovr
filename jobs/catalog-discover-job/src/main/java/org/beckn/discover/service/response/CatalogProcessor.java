@@ -49,6 +49,10 @@ public class CatalogProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogProcessor.class);
 
+    private static final String DEFAULT_ITEM_CONTEXT = "https://schema.beckn.io/";
+    private static final String DEFAULT_ITEM_TYPE = "Item";
+    private static final String DEFAULT_DESCRIPTOR_TYPE = "Descriptor";
+
     // ── Catalog normalization ────────────────────────────────────────────────
 
     /**
@@ -71,7 +75,7 @@ public class CatalogProcessor {
                     catalog.getItems().stream()
                             .map(this::processItem)
                             .filter(Objects::nonNull)
-                            .collect(Collectors.toList()));
+                            .toList());
         }
 
         // Back-fill providerId from the first item that carries provider info
@@ -115,9 +119,9 @@ public class CatalogProcessor {
 
     private void normalizeAttributes(Attributes attrs) {
         if (DiscoveryServiceUtil.isBlank(attrs.getContext()))
-            attrs.setContext("https://becknprotocol.io/schemas/core/v1/Item/schema-context.jsonld");
+            attrs.setContext(DEFAULT_ITEM_CONTEXT);
         if (DiscoveryServiceUtil.isBlank(attrs.getType()))
-            attrs.setType("beckn:Item");
+            attrs.setType(DEFAULT_ITEM_TYPE);
     }
 
     private void normalizeProvider(Provider provider) {
@@ -131,7 +135,7 @@ public class CatalogProcessor {
 
     private void normalizeDescriptor(Descriptor descriptor) {
         if (DiscoveryServiceUtil.isBlank(descriptor.getType()))
-            descriptor.setType("beckn:Descriptor");
+            descriptor.setType(DEFAULT_DESCRIPTOR_TYPE);
     }
 
     // ── Provider-based catalog merging (NLWeb only) ──────────────────────────
@@ -236,7 +240,7 @@ public class CatalogProcessor {
                         (existing, dup) -> existing,
                         LinkedHashMap::new))
                 .values().stream()
-                .collect(Collectors.toList());
+                .toList();
         catalog.setOffers(unique);
     }
 
@@ -270,7 +274,7 @@ public class CatalogProcessor {
         int before = catalog.getItems().size();
         catalog.setItems(catalog.getItems().stream()
                 .filter(i -> referencedIds.contains(i.getId()))
-                .collect(Collectors.toList()));
+                .toList());
 
         log.debug("catalog.offerFilter id={} items.before={} items.after={}",
                 catalog.getId(), before, catalog.getItems().size());
@@ -293,7 +297,7 @@ public class CatalogProcessor {
 
         catalog.setOffers(catalog.getOffers().stream()
                 .filter(o -> offerItemIds(o).stream().anyMatch(itemIds::contains))
-                .collect(Collectors.toList()));
+                .toList());
     }
 
     /**
@@ -326,7 +330,7 @@ public class CatalogProcessor {
                 return;
             catalog.setItems(catalog.getItems().stream()
                     .filter(item -> matchesSchema(item, schemaContextUrls))
-                    .collect(Collectors.toList()));
+                    .toList());
         });
     }
 

@@ -5,23 +5,22 @@ import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import org.beckn.discover.common.BecknFields;
-
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Attributes DTO — Beckn Protocol v2.0.
- * Uses plain {@code context} and {@code type} field names (no {@code @} prefix).
+ * Uses JSON-LD {@code @context} and {@code @type} field names per Beckn Protocol v2.0.
  * Any additional domain-specific properties are allowed via {@code additionalProperties}.
  */
 public class Attributes {
 
     @NotBlank(message = "context is required")
-    @JsonProperty(BecknFields.CONTEXT)
+    @JsonProperty(BecknFields.AT_CONTEXT)
     private String context;
 
     @NotBlank(message = "type is required")
-    @JsonProperty(BecknFields.TYPE)
+    @JsonProperty(BecknFields.AT_TYPE)
     private String type;
 
     // Additional properties are stored in a map to handle dynamic attributes

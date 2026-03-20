@@ -271,10 +271,9 @@ public class PostgreSQLAssembler {
     private JsonNode extractItemNode(String itemId, JsonNode itemPayload) {
         if (itemPayload == null) return null;
 
-        // Shape 1: direct item
+        // Shape 1: direct item — accepts both "beckn:Item" (v2.0) and "Item" (v2.1)
         if (itemPayload.has(DiscoveryConstants.JsonFields.TYPE)
-                && DiscoveryConstants.BECKN_ITEM_TYPE.equals(
-                        itemPayload.get(DiscoveryConstants.JsonFields.TYPE).asText())
+                && isItemType(itemPayload.get(DiscoveryConstants.JsonFields.TYPE).asText())
                 && (itemId == null || itemId.equals(
                         itemPayload.path(DiscoveryConstants.JsonFields.BECKN_ID).asText()))) {
             return itemPayload;
@@ -292,6 +291,11 @@ public class PostgreSQLAssembler {
                         && itemId.equals(node.path(DiscoveryConstants.JsonFields.BECKN_ID).asText()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /** Returns {@code true} for both the v2.0 prefixed form ({@code "beckn:Item"}) and the v2.1 unprefixed form ({@code "Item"}). */
+    private static boolean isItemType(String type) {
+        return DiscoveryConstants.BECKN_ITEM_TYPE.equals(type) || DiscoveryConstants.ITEM_TYPE.equals(type);
     }
 
     /** Returns the first element of {@code payload.catalogs}, or {@code null}. */

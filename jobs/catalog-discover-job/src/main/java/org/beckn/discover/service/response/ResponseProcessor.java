@@ -35,7 +35,7 @@ public class ResponseProcessor {
     /** Copies the request context and sets {@code action = "on_discover"}. */
     public Context createResponseContext(Context requestContext) {
         Context ctx = new Context(requestContext);
-        ctx.setAction("beckn/on_discover");
+        ctx.setAction("on_discover");
         return ctx;
     }
 
@@ -46,7 +46,7 @@ public class ResponseProcessor {
         ctx.setBapId("unknown");
         ctx.setTransactionId("txn-" + System.currentTimeMillis());
         ctx.setTimestamp(OffsetDateTime.now());
-        ctx.setAction("beckn/discover");
+        ctx.setAction("on_discover");
         ctx.setVersion("2.0.0");
         return ctx;
     }
@@ -73,7 +73,10 @@ public class ResponseProcessor {
 
         DiscoverResponse response = new DiscoverResponse();
         response.setContext(createResponseContext(ctx));
-        response.setMessage(new DiscoverResponse.ResponseMessage(catalogs));
+        DiscoverResponse.InReplyTo inReplyTo = ctx.getMessageId() != null
+                ? new DiscoverResponse.InReplyTo(ctx.getMessageId(), null)
+                : null;
+        response.setMessage(new DiscoverResponse.ResponseMessage(catalogs, inReplyTo));
 
         if (!validateResponse(response)) {
             log.warn("response.build.validationFailed transactionId={}", ctx.getTransactionId());
