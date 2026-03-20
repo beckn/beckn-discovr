@@ -146,6 +146,18 @@ docker compose up -d
 
 ---
 
+## Elasticsearch Mapping Template
+
+`config/es-index-template.json` — applies to `catalogs-*` index pattern.
+
+Critical rules:
+- **`item_attributes.@context` and `item_attributes.@type`** must be explicit `keyword` mappings inside the `item_attributes` object — never left to dynamic mapping (dynamic template ordering is undefined; silent breakage if wrong template fires first)
+- **`network_id`** is `keyword` (not text) — handles multi-network arrays natively; do not add `.raw` sub-field
+- **`item_provider_name`** is `text` with a `raw` keyword sub-field for exact-match filtering
+- When adding new `item_attributes.*` fields: add them as explicit mappings, never rely on dynamic templates for attributes fields
+
+---
+
 ## Hard Rules — Never Violate
 
 - **Constructor injection only** — no `@Autowired` field injection
@@ -163,7 +175,7 @@ docker compose up -d
 
 ## Agents
 
-Five agents in `.claude/agents/` for autonomous development workflow:
+Seven agents in `.claude/agents/` — use in sequence for any non-trivial change:
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
@@ -172,10 +184,14 @@ Five agents in `.claude/agents/` for autonomous development workflow:
 | `review` | Opus | CRITICAL/HIGH/MEDIUM/LOW findings. APPROVE/REQUEST CHANGES/BLOCK. |
 | `test-runner` | Haiku | Runs `./gradlew test`, reports pass/fail. Cheap — use freely. |
 | `debug` | Sonnet | Reads failures, fixes minimally, re-tests. Max 3 rounds then reports. |
+| `migrate` | Sonnet | Applies Beckn protocol version migrations across source + fixtures. |
+| `verify` | Sonnet | Runs E2E scenarios against the live Docker stack. PASS/FAIL table. Use before/after every PR. |
 
 **Development Workflow:**
 ```
-design → [USER APPROVAL] → implement → review → test-runner → debug (if failures) → done
+design → [USER APPROVAL] → implement → review → test-runner → debug (if failures) → verify → done
 ```
 
-For small tasks (bug fix, field rename): skip design → implement → review → test-runner.
+For small tasks (bug fix, field rename): implement → review → test-runner → verify.
+
+**Regression verification:** Run `verify` agent any time to confirm no regressions against the live system.
