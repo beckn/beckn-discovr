@@ -175,11 +175,12 @@ Critical rules:
 
 ## Agents
 
-Seven agents in `.claude/agents/` — use in sequence for any non-trivial change:
+Eight agents in `.claude/agents/` — use in sequence for any non-trivial change:
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
-| `design` | Opus | Two proposals → scoring → Design Spec. **User approves before proceeding.** |
+| `requirements` | Sonnet | Asks clarifying questions → produces structured REQ doc in `docs/requirements/`. **Always invoke before design for new features.** |
+| `design` | Opus | Asks clarifying questions → two proposals → scoring → Design Spec. **User approves before proceeding.** |
 | `implement` | Sonnet | Implements from Design Spec with tests. Runs autonomously. |
 | `review` | Opus | CRITICAL/HIGH/MEDIUM/LOW findings. APPROVE/REQUEST CHANGES/BLOCK. |
 | `test-runner` | Haiku | Runs `./gradlew test`, reports pass/fail. Cheap — use freely. |
@@ -189,7 +190,7 @@ Seven agents in `.claude/agents/` — use in sequence for any non-trivial change
 
 **Development Workflow:**
 ```
-design → [USER APPROVAL] → implement → review → test-runner → debug (if failures) → verify → done
+requirements → [USER APPROVAL] → design → [USER APPROVAL] → implement → review → test-runner → debug (if failures) → verify → done
 ```
 
 For small tasks (bug fix, field rename): implement → review → test-runner → verify.
