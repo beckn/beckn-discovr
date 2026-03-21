@@ -9,7 +9,7 @@ COPY build.gradle settings.gradle gradlew ./
 COPY gradle/ gradle/
 COPY src/ src/
 
-RUN ./gradlew build -x test -x integrationTest --no-daemon
+RUN gradle build -x test -x integrationTest --no-daemon
 
 # =============================================================================
 # Runtime Stage

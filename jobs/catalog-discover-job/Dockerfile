@@ -14,12 +14,12 @@ COPY gradle/ gradle/
 COPY src/ src/
 
 # Build the application
-RUN ./gradlew build -x test --no-daemon
+RUN gradle build -x test --no-daemon
 
 # =============================================================================
 # Runtime Stage
 # =============================================================================
-FROM openjdk:17.0.1-jdk-slim
+FROM eclipse-temurin:17-jre-jammy
 # Install curl for healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 # Create application user for security
@@ -29,7 +29,7 @@ WORKDIR /app
 # Copy the built JAR from builder stage
 COPY --from=builder /app/build/libs/*.jar app.jar
 # Download OpenTelemetry Java Agent using ADD (no curl needed)
-ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
+ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.11.0/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
 # Create logs directory
 RUN mkdir -p /app/logs && chmod 644 /app/opentelemetry-javaagent.jar && chown -R appuser:appuser /app
 # Switch to non-root user

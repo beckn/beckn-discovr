@@ -278,20 +278,20 @@ services:
       start_period: 60s
 
   # Beckn Demo UI
-  beckn-demo-ui:
-    build:
-      context: ./reference-apps/beckn-demo-ui
-      dockerfile: Dockerfile
-      args:
-        VITE_CATALOG_API_URL: http://localhost:8085
-        VITE_DISCOVER_API_URL: http://localhost:8082
-    image: beckn/beckn-demo-ui:1.0
-    container_name: beckn-demo-ui
-    ports:
-      - "5173:80"
-    networks:
-      - beckn-network
-    restart: unless-stopped
+  # beckn-demo-ui:
+  #   build:
+  #     context: ./reference-apps/beckn-demo-ui
+  #     dockerfile: Dockerfile
+  #     args:
+  #       VITE_CATALOG_API_URL: http://localhost:8085
+  #       VITE_DISCOVER_API_URL: http://localhost:8082
+  #   image: beckn/beckn-demo-ui:1.0
+  #   container_name: beckn-demo-ui
+  #   ports:
+  #     - "5173:80"
+  #   networks:
+  #     - beckn-network
+  #   restart: unless-stopped
 
 volumes:
   postgres_discovery_data:
