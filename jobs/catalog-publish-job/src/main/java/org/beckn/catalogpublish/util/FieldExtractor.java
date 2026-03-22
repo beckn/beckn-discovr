@@ -162,7 +162,7 @@ public final class FieldExtractor {
             return null;
         JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
         if (!attrs.isMissingNode() && attrs.isObject()) {
-            JsonNode typeNode = attrs.path("type");
+            JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
             if (typeNode.isTextual()) {
                 String v = typeNode.asText();
                 if (!v.isBlank()) return v;
@@ -188,7 +188,7 @@ public final class FieldExtractor {
         JsonNode attrs = itemAttributesNode(itemNode);
         if (attrs == null)
             return null;
-        JsonNode typeNode = attrs.path("type");
+        JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
         if (!typeNode.isTextual())
             return null;
         String v = typeNode.asText();
