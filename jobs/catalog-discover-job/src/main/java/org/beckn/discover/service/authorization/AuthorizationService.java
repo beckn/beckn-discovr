@@ -27,6 +27,9 @@ public class AuthorizationService {
     public AuthorizationService(BecknAuth becknAuth, AuthProperties authProperties) {
         this.becknAuth = becknAuth;
         this.authProperties = authProperties;
+        logger.info("beckn.auth.verification {} | whitelistedEndpoints={}",
+                authProperties.enabled() ? "ENABLED" : "DISABLED",
+                authProperties.whitelistedEndpoints());
     }
 
     private boolean isWhitelisted(String method, String path) {
@@ -57,7 +60,8 @@ public class AuthorizationService {
     public void authorizeRequest(String rawBody, HttpHeaders headers) {
         var attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attrs != null && isWhitelisted(attrs.getRequest().getMethod(), attrs.getRequest().getRequestURI())) {
-            logger.debug("auth.whitelisted path={}", attrs.getRequest().getRequestURI());
+            logger.info("beckn.auth.skipped reason=whitelisted method={} path={}",
+                    attrs.getRequest().getMethod(), attrs.getRequest().getRequestURI());
             return;
         }
 

@@ -105,7 +105,7 @@ services:
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - JAVA_TOOL_OPTIONS=
       # Beckn Auth SDK — signature verification for /catalog/push
-      - SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_AUTH_ENABLED=false
       - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
@@ -199,7 +199,7 @@ services:
       - LOGGING_LEVEL_ORG_APACHE_KAFKA=ERROR
       - OTEL_TRACES_EXPORTER=none
       # Beckn Auth SDK — signature verification for /beckn/discover
-      - SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_AUTH_ENABLED=false
       - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
@@ -290,7 +290,13 @@ services:
       - TOPICS_DLT=discovr.dispatcher.dlt.responses
       - SPRING_KAFKA_CONSUMER_GROUP_ID=seeker-notifier-group
       - SPRING_KAFKA_LISTENER_CONCURRENCY=1
+      # Beckn HTTP Signature — outgoing signing for on_discover callbacks to BAP
+      # Set SIGNING_ENABLED=true and provide key details to sign outbound callbacks
       - SIGNING_ENABLED=false
+      - SIGNING_SUBSCRIBER_ID=
+      - SIGNING_KEY_ID_SUFFIX=
+      - SIGNING_PRIVATE_KEY=
+      - SIGNING_EXPIRY_SECONDS=3600
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none

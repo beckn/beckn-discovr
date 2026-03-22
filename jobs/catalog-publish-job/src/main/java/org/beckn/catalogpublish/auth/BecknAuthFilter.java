@@ -31,6 +31,9 @@ public class BecknAuthFilter extends OncePerRequestFilter {
         this.becknAuth = becknAuth;
         this.authProperties = authProperties;
         this.objectMapper = objectMapper;
+        log.info("beckn.auth.verification {} | whitelistedEndpoints={}",
+                authProperties.enabled() ? "ENABLED" : "DISABLED",
+                authProperties.whitelistedEndpoints());
     }
 
     private boolean isWhitelisted(String method, String path) {
@@ -55,9 +58,18 @@ public class BecknAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
             FilterChain chain) throws ServletException, IOException {
 
-        if (!authProperties.enabled()
-                || !MUTATING_METHODS.contains(request.getMethod())
-                || isWhitelisted(request.getMethod(), request.getRequestURI())) {
+        if (!authProperties.enabled()) {
+            log.debug("beckn.auth.skipped reason=disabled method={} path={}", request.getMethod(), request.getRequestURI());
+            chain.doFilter(request, response);
+            return;
+        }
+        if (!MUTATING_METHODS.contains(request.getMethod())) {
+            log.info("beckn.auth.skipped reason=non-mutating method={} path={}", request.getMethod(), request.getRequestURI());
+            chain.doFilter(request, response);
+            return;
+        }
+        if (isWhitelisted(request.getMethod(), request.getRequestURI())) {
+            log.info("beckn.auth.skipped reason=whitelisted method={} path={}", request.getMethod(), request.getRequestURI());
             chain.doFilter(request, response);
             return;
         }
