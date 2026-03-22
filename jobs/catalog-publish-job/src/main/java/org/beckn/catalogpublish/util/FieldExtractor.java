@@ -105,7 +105,8 @@ public final class FieldExtractor {
             JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
             if (attrs.isMissingNode() || !attrs.isObject())
                 continue;
-            JsonNode typeNode = attrs.path("type");
+            // itemAttributes uses "@type" (JSON-LD) as the schema type field
+            JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
             if (!typeNode.isMissingNode() && typeNode.isTextual()) {
                 String val = typeNode.asText();
                 if (!val.isBlank())
@@ -210,7 +211,7 @@ public final class FieldExtractor {
     public static String extractContextUrl(JsonNode node) {
         if (node == null || node.isMissingNode())
             return null;
-        JsonNode ctx = node.get("@context");
+        JsonNode ctx = node.get(BecknFields.JSON_LD_CONTEXT);
         if (ctx == null || ctx.isMissingNode() || ctx.isNull())
             ctx = node.get("context");
         if (ctx == null || ctx.isMissingNode() || ctx.isNull())

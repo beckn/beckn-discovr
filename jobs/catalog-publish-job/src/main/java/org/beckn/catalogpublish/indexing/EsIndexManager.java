@@ -169,6 +169,17 @@ public class EsIndexManager {
                         "item_long_desc":          { "type": "text" },
                         "item_provider_id":        { "type": "keyword" },
                         "item_provider_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "item_descriptor_thumbnail_image": { "type": "keyword" },
+                        "item_descriptor_docs":            { "type": "nested" },
+                        "item_descriptor_media_file":      { "type": "nested" },
+                        "item_provider_alerts":            { "type": "nested" },
+                        "item_provider_policies": {
+                          "type": "nested",
+                          "properties": {
+                            "@type": { "type": "keyword" },
+                            "name":  { "type": "keyword" }
+                          }
+                        },
                         "item_category_code":      { "type": "keyword" },
                         "item_category_name":      { "type": "keyword" },
                         "item_image":              { "type": "keyword" },

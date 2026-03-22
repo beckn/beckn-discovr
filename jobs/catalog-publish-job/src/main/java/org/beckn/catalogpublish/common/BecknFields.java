@@ -34,6 +34,10 @@ public final class BecknFields {
     public static final String ERROR_CODE      = "errorCode";
     public static final String ERROR_MESSAGE   = "errorMessage";
 
+    // ── JSON-LD fields ───────────────────────────────────────────────────────
+    public static final String JSON_LD_TYPE    = "@type";
+    public static final String JSON_LD_CONTEXT = "@context";
+
     // ── Catalog / Item fields (v2.0 — no beckn: prefix) ─────────────────────
     public static final String ID              = "id";
     public static final String ITEMS           = "items";
