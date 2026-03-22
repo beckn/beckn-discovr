@@ -134,6 +134,11 @@ public class EsSearchAssembler {
         item.setRating(buildRating(doc));
         item.setRateable(bool(doc, "item_rateable"));
         item.setIsActive(bool(doc, "item_is_active"));
+        Object networkIdRaw = doc.get("network_id");
+        if (networkIdRaw instanceof String s && !s.isBlank())
+            item.setNetworkId(List.of(s));
+        else if (networkIdRaw instanceof List<?> list)
+            item.setNetworkId((List<String>) list);
         Provider provider = buildProvider(doc);
         if (provider != null) {
             provider.setLocations(collectProviderLocations(doc));
@@ -255,6 +260,13 @@ public class EsSearchAssembler {
         Object imgRaw = doc.get("item_image");
         if (imgRaw instanceof List<?> list && !list.isEmpty())
             d.setImage((List<String>) list);
+        d.setThumbnailImage(str(doc, "item_descriptor_thumbnail_image"));
+        Object docsRaw = doc.get("item_descriptor_docs");
+        if (docsRaw instanceof List<?> list && !list.isEmpty())
+            d.setDocs((List<Map<String, Object>>) list);
+        Object mediaRaw = doc.get("item_descriptor_media_file");
+        if (mediaRaw instanceof List<?> list && !list.isEmpty())
+            d.setMediaFile((List<Map<String, Object>>) list);
         return d;
     }
 
@@ -270,23 +282,38 @@ public class EsSearchAssembler {
     private static Rating buildRating(Map<String, Object> doc) {
         Object ratingValue = doc.get("item_rating_value");
         Object ratingCount = doc.get("item_rating_count");
-        if (ratingValue == null && ratingCount == null)
+        String reviewText = str(doc, "item_rating_review_text");
+        if (ratingValue == null && ratingCount == null && reviewText == null)
             return null;
         Rating r = new Rating("Rating");
         if (ratingValue instanceof Number n)
             r.setRatingValue(n.doubleValue());
         if (ratingCount instanceof Number n)
             r.setRatingCount(n.intValue());
+        r.setReviewText(reviewText);
         return r;
     }
 
+    @SuppressWarnings("unchecked")
     private static Provider buildProvider(Map<String, Object> doc) {
         String providerId = str(doc, "item_provider_id");
         if (providerId == null)
             return null;
         Descriptor desc = new Descriptor("Descriptor");
         desc.setName(str(doc, "item_provider_name"));
-        return new Provider(providerId, desc);
+        Provider provider = new Provider(providerId, desc);
+        Object alertsRaw = doc.get("item_provider_alerts");
+        if (alertsRaw instanceof List<?> list && !list.isEmpty())
+            provider.setAlerts((List<Map<String, Object>>) list);
+        Object provPoliciesRaw = doc.get("item_provider_policies");
+        if (provPoliciesRaw instanceof List<?> list && !list.isEmpty()) {
+            List<Policy> policies = list.stream()
+                    .filter(e -> e instanceof Map<?, ?>)
+                    .map(e -> policyFromMap((Map<String, Object>) e))
+                    .toList();
+            if (!policies.isEmpty()) provider.setPolicies(policies);
+        }
+        return provider;
     }
 
     @SuppressWarnings("unchecked")

@@ -24,6 +24,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import io.micrometer.core.instrument.Timer;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -92,9 +93,9 @@ public class ElasticIndexStep {
                 log.warn("es.index.schema.type.missing itemId={}", item.getId());
                 continue;
             }
-            String[] networkIds = item.getNetworkIds();
-            String networkId = networkIds.length > 0 ? networkIds[0] : null;
-            Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkId);
+            String[] networkIdsArr = item.getNetworkIds();
+            List<String> networkIds = networkIdsArr.length > 0 ? Arrays.asList(networkIdsArr) : List.of();
+            Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkIds);
             embeddingClient.ifPresent(client -> {
                 try {
                     JsonNode catalogNode = payloadNode.path("catalogs").path(0);

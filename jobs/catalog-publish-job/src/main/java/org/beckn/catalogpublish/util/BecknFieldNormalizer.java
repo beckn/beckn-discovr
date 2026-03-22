@@ -37,7 +37,7 @@ public final class BecknFieldNormalizer {
         if (itemNode == null || itemNode.isMissingNode()) {
             return SchemaVersion.V2_0;
         }
-        JsonNode typeNode = itemNode.get("@type");
+        JsonNode typeNode = itemNode.get(BecknFields.JSON_LD_TYPE);
         if (typeNode == null || typeNode.isNull() || !typeNode.isTextual()) {
             return SchemaVersion.V2_0;
         }

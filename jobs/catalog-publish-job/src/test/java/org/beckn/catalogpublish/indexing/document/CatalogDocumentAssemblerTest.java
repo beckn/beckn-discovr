@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -161,7 +162,7 @@ class CatalogDocumentAssemblerTest {
                 }
                 """);
 
-        Map<String, Object> doc = assembler.assemble(item, payload, "SmartMeter", "net-1");
+        Map<String, Object> doc = assembler.assemble(item, payload, "SmartMeter", List.of("net-1"));
 
         assertThat(doc.get("schema_version")).isEqualTo("2.1");
     }
@@ -234,6 +235,210 @@ class CatalogDocumentAssemblerTest {
 
         assertThat(doc.containsKey("constraints")).isFalse();
         assertThat(doc.containsKey("policies")).isFalse();
+    }
+
+    // ── item_descriptor_thumbnail_image ───────────────────────────────────────
+
+    @Test
+    void assemble_itemWithThumbnailImage_populatesThumbnailImageField() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-thumb",
+                  "descriptor": {
+                    "name": "Thumb Item",
+                    "thumbnailImage": "https://example.org/thumb.jpg"
+                  },
+                  "provider": {"id": "prov-1"},
+                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.get("item_descriptor_thumbnail_image")).isEqualTo("https://example.org/thumb.jpg");
+    }
+
+    // ── item_descriptor_docs ──────────────────────────────────────────────────
+
+    @Test
+    void assemble_itemWithDescriptorDocs_populatesDocsField() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-docs",
+                  "descriptor": {
+                    "name": "Docs Item",
+                    "docs": [
+                      {"url": "https://example.org/doc1.pdf", "label": "Manual"},
+                      {"url": "https://example.org/doc2.pdf", "label": "Spec"}
+                    ]
+                  },
+                  "provider": {"id": "prov-1"},
+                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.containsKey("item_descriptor_docs")).isTrue();
+        @SuppressWarnings("unchecked")
+        List<Object> docs = (List<Object>) doc.get("item_descriptor_docs");
+        assertThat(docs).hasSize(2);
+    }
+
+    // ── item_descriptor_media_file ────────────────────────────────────────────
+
+    @Test
+    void assemble_itemWithDescriptorMediaFile_populatesMediaFileField() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-media",
+                  "descriptor": {
+                    "name": "Media Item",
+                    "mediaFile": [
+                      {"url": "https://example.org/video.mp4", "mimetype": "video/mp4"}
+                    ]
+                  },
+                  "provider": {"id": "prov-1"},
+                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.containsKey("item_descriptor_media_file")).isTrue();
+        @SuppressWarnings("unchecked")
+        List<Object> mediaFile = (List<Object>) doc.get("item_descriptor_media_file");
+        assertThat(mediaFile).hasSize(1);
+    }
+
+    // ── item_provider_alerts ──────────────────────────────────────────────────
+
+    @Test
+    void assemble_itemWithProviderAlerts_populatesProviderAlertsField() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-alerts",
+                  "descriptor": {"name": "Alert Item"},
+                  "provider": {
+                    "id": "prov-1",
+                    "alerts": [
+                      {"type": "maintenance", "message": "Scheduled downtime tonight"},
+                      {"type": "closure", "message": "Public holiday closure"}
+                    ]
+                  },
+                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.containsKey("item_provider_alerts")).isTrue();
+        @SuppressWarnings("unchecked")
+        List<Object> alerts = (List<Object>) doc.get("item_provider_alerts");
+        assertThat(alerts).hasSize(2);
+    }
+
+    // ── item_provider_policies ────────────────────────────────────────────────
+
+    @Test
+    void assemble_itemWithProviderPolicies_populatesProviderPoliciesField() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-provpol",
+                  "descriptor": {"name": "Policy Item"},
+                  "provider": {
+                    "id": "prov-1",
+                    "policies": [
+                      {"@type": "CancellationPolicy", "name": "No cancellations"},
+                      {"@type": "ReturnPolicy", "name": "30-day returns"}
+                    ]
+                  },
+                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.containsKey("item_provider_policies")).isTrue();
+        @SuppressWarnings("unchecked")
+        List<Object> policies = (List<Object>) doc.get("item_provider_policies");
+        assertThat(policies).hasSize(2);
+    }
+
+    // ── item_rating_review_text ───────────────────────────────────────────────
+
+    @Test
+    void assemble_itemWithRatingReviewText_populatesReviewTextField() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-review",
+                  "descriptor": {"name": "Reviewed Item"},
+                  "provider": {"id": "prov-1"},
+                  "rating": {
+                    "ratingValue": 4.8,
+                    "reviewText": "Excellent service and fast charging"
+                  },
+                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.get("item_rating_review_text")).isEqualTo("Excellent service and fast charging");
+    }
+
+    // ── network_id as List ────────────────────────────────────────────────────
+
+    @Test
+    void assemble_itemWithArrayNetworkIds_populatesNetworkIdAsList() throws Exception {
+        org.beckn.catalogpublish.dto.CatalogContext ctx =
+                new org.beckn.catalogpublish.dto.CatalogContext("bpp.net", "https://bpp.net",
+                        new String[]{"net-a", "net-b"}, null);
+        org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
+                "item-multi-net", "{}", new String[0], ctx, "cat-1",
+                "Multi Net Item", "GenericItem", "prov-1", null, "2.0");
+
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-multi-net",
+                  "descriptor": {"name": "Multi Net Item"},
+                  "provider": {"id": "prov-1"},
+                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(item, payload, "GenericItem", Arrays.asList("net-a", "net-b"));
+
+        assertThat(doc.get("network_id")).isInstanceOf(List.class);
+        @SuppressWarnings("unchecked")
+        List<String> networkId = (List<String>) doc.get("network_id");
+        assertThat(networkId).containsExactly("net-a", "net-b");
+    }
+
+    @Test
+    void assemble_itemWithSingleNetworkId_populatesNetworkIdAsListOfOne() throws Exception {
+        org.beckn.catalogpublish.dto.CatalogContext ctx =
+                new org.beckn.catalogpublish.dto.CatalogContext("bpp.single", "https://bpp.single",
+                        new String[]{"net-only"}, null);
+        org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
+                "item-single-net", "{}", new String[0], ctx, "cat-1",
+                "Single Net Item", "GenericItem", "prov-1", null, "2.0");
+
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-single-net",
+                  "descriptor": {"name": "Single Net Item"},
+                  "provider": {"id": "prov-1"},
+                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(item, payload, "GenericItem", List.of("net-only"));
+
+        assertThat(doc.get("network_id")).isInstanceOf(List.class);
+        @SuppressWarnings("unchecked")
+        List<String> networkId = (List<String>) doc.get("network_id");
+        assertThat(networkId).containsExactly("net-only");
     }
 
     // ── full_text_blob includes constraints and policies text ─────────────────

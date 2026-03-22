@@ -28,8 +28,8 @@ public class CatalogDocumentAssembler {
     }
 
     /** Called from ElasticIndexStep — Item carries bppId/bppUri directly. */
-    public Map<String, Object> assemble(Item item, JsonNode payloadNode, String schemaType, String networkId) {
-        return build(payloadNode, schemaType, networkId, item.getId(), item.getBppId(), item.getBppUri(),
+    public Map<String, Object> assemble(Item item, JsonNode payloadNode, String schemaType, List<String> networkIds) {
+        return build(payloadNode, schemaType, networkIds, item.getId(), item.getBppId(), item.getBppUri(),
                 item.getSchemaVersion());
     }
 
@@ -38,9 +38,19 @@ public class CatalogDocumentAssembler {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
         JsonNode itemNode = catalog.path(BecknFields.ITEMS).path(0);
         JsonNode netNode = itemNode.path(BecknFields.NETWORK_ID);
-        String networkId = netNode.isArray() ? netNode.path(0).asText(null) : netNode.asText(null);
+        List<String> networkIds;
+        if (netNode.isArray()) {
+            networkIds = new ArrayList<>();
+            netNode.forEach(n -> {
+                String v = n.asText(null);
+                if (v != null && !v.isBlank()) networkIds.add(v);
+            });
+        } else {
+            String single = netNode.asText(null);
+            networkIds = (single != null && !single.isBlank()) ? List.of(single) : List.of();
+        }
         // schema_version not available from payload alone — default to "2.0" for retry path
-        return build(payloadNode, indexKey, networkId,
+        return build(payloadNode, indexKey, networkIds,
                 text(catalog.path(BecknFields.ITEMS).path(0), BecknFields.ID),
                 text(catalog, BecknFields.BPP_ID),
                 text(catalog, BecknFields.BPP_URI),
@@ -49,7 +59,7 @@ public class CatalogDocumentAssembler {
 
     // ── Core builder ─────────────────────────────────────────────────────────
 
-    private Map<String, Object> build(JsonNode payloadNode, String schemaType, String networkId,
+    private Map<String, Object> build(JsonNode payloadNode, String schemaType, List<String> networkIds,
             String itemId, String bppId, String bppUri, String schemaVersion) {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
         JsonNode itemNode = catalog.path(BecknFields.ITEMS).path(0);
@@ -57,16 +67,16 @@ public class CatalogDocumentAssembler {
 
         Map<String, Object> doc = new LinkedHashMap<>();
         doc.put("catalog_id", text(catalog, BecknFields.ID));
-        doc.put("catalog_context", text(catalog, "@context"));
-        doc.put("catalog_type", text(catalog, "@type"));
+        doc.put("catalog_context", text(catalog, BecknFields.JSON_LD_CONTEXT));
+        doc.put("catalog_type", text(catalog, BecknFields.JSON_LD_TYPE));
         doc.put("catalog_name", text(catalog.path(BecknFields.DESCRIPTOR), BecknFields.NAME));
         doc.put("catalog_images", arrayToList(catalog.path(BecknFields.DESCRIPTOR).path(BecknFields.IMAGES)));
         doc.put("bpp_id", bppId);
         doc.put("bpp_uri", bppUri);
-        doc.put("network_id", networkId);
+        doc.put("network_id", networkIds);
         doc.put("schema_type", schemaType);
-        doc.put("item_context", text(itemNode, "@context"));
-        doc.put("item_type", text(itemNode, "@type"));
+        doc.put("item_context", text(itemNode, BecknFields.JSON_LD_CONTEXT));
+        doc.put("item_type", text(itemNode, BecknFields.JSON_LD_TYPE));
         doc.put("item_id", itemId);
         doc.put("item_name", text(desc, BecknFields.NAME));
         doc.put("item_short_desc", text(desc, BecknFields.SHORT_DESC));
@@ -80,6 +90,12 @@ public class CatalogDocumentAssembler {
         doc.put("item_rating_count", integer(itemNode.path("rating"), "ratingCount"));
         doc.put("item_provider_id", text(itemNode.path(BecknFields.PROVIDER), BecknFields.ID));
         doc.put("item_provider_name", text(itemNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+        doc.put("item_descriptor_thumbnail_image", text(desc, "thumbnailImage"));
+        doc.put("item_descriptor_docs", convertToList(desc.path("docs")));
+        doc.put("item_descriptor_media_file", convertToList(desc.path("mediaFile")));
+        doc.put("item_provider_alerts", convertToList(itemNode.path(BecknFields.PROVIDER).path("alerts")));
+        doc.put("item_provider_policies", convertToList(itemNode.path(BecknFields.PROVIDER).path("policies")));
+        doc.put("item_rating_review_text", text(itemNode.path("rating"), "reviewText"));
         // Internal metadata — never returned in API responses
         doc.put("schema_version", schemaVersion != null ? schemaVersion : "2.0");
         doc.put("indexed_at", Instant.now().toString());
@@ -91,8 +107,8 @@ public class CatalogDocumentAssembler {
             doc.put("item_attributes", flattenJsonLd(attrs));
             // Dedicated top-level ES fields for @type and @context so they can be
             // filtered as keywords without navigating into the nested object.
-            doc.put("item_attributes_type", text(attrs, "@type"));
-            doc.put("item_attributes_context", text(attrs, "@context"));
+            doc.put("item_attributes_type", text(attrs, BecknFields.JSON_LD_TYPE));
+            doc.put("item_attributes_context", text(attrs, BecknFields.JSON_LD_CONTEXT));
         }
 
         // v2.1 fields: constraints and policies
@@ -154,6 +170,10 @@ public class CatalogDocumentAssembler {
         collectStrings(itemNode.path(BecknFields.CONSTRAINTS), parts);
         collectStrings(itemNode.path(BecknFields.POLICIES), parts);
 
+        // Descriptor docs and mediaFile text
+        collectStrings(itemNode.path(BecknFields.DESCRIPTOR).path("docs"), parts);
+        collectStrings(itemNode.path(BecknFields.DESCRIPTOR).path("mediaFile"), parts);
+
         // All text fields from offers (names, descriptions, terms, eligibility, etc.)
         collectStrings(offersNode, parts);
 
@@ -205,6 +225,13 @@ public class CatalogDocumentAssembler {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    @SuppressWarnings("unchecked")
+    private List<Object> convertToList(JsonNode n) {
+        if (n == null || n.isMissingNode() || !n.isArray())
+            return null;
+        return objectMapper.convertValue(n, List.class);
+    }
 
     private String text(JsonNode n, String f) {
         return n.path(f).asText(null);

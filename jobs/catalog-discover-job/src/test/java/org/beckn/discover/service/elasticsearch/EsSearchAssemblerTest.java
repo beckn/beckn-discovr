@@ -308,6 +308,108 @@ class EsSearchAssemblerTest {
                 .containsExactly(78.0, 13.0);
     }
 
+    // ── New field tests ───────────────────────────────────────────────────────
+
+    @Test
+    void hitWithThumbnailImage_populatesThumbnailImageOnDescriptor() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_descriptor_thumbnail_image", "https://example.org/thumb.jpg");
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-1");
+
+        Item item = catalogs.get(0).getItems().get(0);
+        assertThat(item.getDescriptor().getThumbnailImage()).isEqualTo("https://example.org/thumb.jpg");
+    }
+
+    @Test
+    void hitWithDescriptorDocs_populatesDocsOnDescriptor() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_descriptor_docs", List.of(
+                Map.of("url", "https://example.org/doc.pdf", "label", "Manual")));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-2");
+
+        Item item = catalogs.get(0).getItems().get(0);
+        assertThat(item.getDescriptor().getDocs()).isNotNull().hasSize(1);
+        assertThat(item.getDescriptor().getDocs().get(0).get("label")).isEqualTo("Manual");
+    }
+
+    @Test
+    void hitWithDescriptorMediaFile_populatesMediaFileOnDescriptor() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_descriptor_media_file", List.of(
+                Map.of("url", "https://example.org/video.mp4", "mimetype", "video/mp4")));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-3");
+
+        Item item = catalogs.get(0).getItems().get(0);
+        assertThat(item.getDescriptor().getMediaFile()).isNotNull().hasSize(1);
+        assertThat(item.getDescriptor().getMediaFile().get(0).get("mimetype")).isEqualTo("video/mp4");
+    }
+
+    @Test
+    void hitWithProviderAlerts_populatesAlertsOnProvider() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_provider_alerts", List.of(
+                Map.of("type", "maintenance", "message", "Scheduled downtime tonight")));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4");
+
+        Item item = catalogs.get(0).getItems().get(0);
+        assertThat(item.getProvider().getAlerts()).isNotNull().hasSize(1);
+        assertThat(item.getProvider().getAlerts().get(0).get("type")).isEqualTo("maintenance");
+    }
+
+    @Test
+    void hitWithProviderPolicies_populatesPoliciesOnProvider() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_provider_policies", List.of(
+                Map.of("@type", "CancellationPolicy", "name", "No cancellations"),
+                Map.of("@type", "ReturnPolicy", "name", "30-day returns")));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-5");
+
+        Item item = catalogs.get(0).getItems().get(0);
+        assertThat(item.getProvider().getPolicies()).isNotNull().hasSize(2);
+        assertThat(item.getProvider().getPolicies().get(0).getType()).isEqualTo("CancellationPolicy");
+        assertThat(item.getProvider().getPolicies().get(1).getName()).isEqualTo("30-day returns");
+    }
+
+    @Test
+    void hitWithRatingReviewText_populatesReviewTextOnRating() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_rating_review_text", "Excellent service and fast charging");
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-6");
+
+        Item item = catalogs.get(0).getItems().get(0);
+        assertThat(item.getRating()).isNotNull();
+        assertThat(item.getRating().getReviewText()).isEqualTo("Excellent service and fast charging");
+    }
+
+    @Test
+    void hitWithNetworkIdAsString_wrapsInList() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        // ES may return network_id as a single string when indexed as keyword
+        doc.put("network_id", "ondc-ev");
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-7");
+
+        Item item = catalogs.get(0).getItems().get(0);
+        assertThat(item.getNetworkId()).isNotNull().containsExactly("ondc-ev");
+    }
+
+    @Test
+    void hitWithNetworkIdAsList_setsDirectly() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("network_id", List.of("ondc-ev", "beckn-open"));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-8");
+
+        Item item = catalogs.get(0).getItems().get(0);
+        assertThat(item.getNetworkId()).isNotNull().containsExactly("ondc-ev", "beckn-open");
+    }
+
     // ── Fixtures ─────────────────────────────────────────────────────────────
 
     private static Map<String, Object> evChargerDoc(String catalogId, String bppId,
