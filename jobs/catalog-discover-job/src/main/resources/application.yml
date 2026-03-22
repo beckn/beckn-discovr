@@ -46,6 +46,10 @@ discovery:
     cache-max-keys: ${SIGNATURE_CACHE_MAX_KEYS:100}
     timeout-seconds: ${SIGNATURE_TIMEOUT_SECONDS:10}
     retry-attempts: ${SIGNATURE_RETRY_ATTEMPTS:3}
+    # Comma-separated METHOD:PATH pairs that bypass signature verification.
+    # Format: POST:/beckn/discover,GET:/beckn/discover
+    # Supports {param} and :param wildcards. Leave empty to protect all endpoints.
+    whitelisted-endpoints: ${SIGNATURE_WHITELISTED_ENDPOINTS:}
   latency-tracking-enabled: ${DISCOVERY_LATENCY_TRACKING_ENABLED:true}
   kafka:
     request-topic: ${KAFKA_REQUEST_TOPIC:discovr.discover.in.requests}

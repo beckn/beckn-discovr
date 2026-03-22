@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.web.ErrorResponseException;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * Authorization Service — delegates Beckn HTTP Signature validation to the SDK.
@@ -27,6 +29,24 @@ public class AuthorizationService {
         this.authProperties = authProperties;
     }
 
+    private boolean isWhitelisted(String method, String path) {
+        return authProperties.whitelistedEndpoints().stream().anyMatch(entry -> {
+            int colonIdx = entry.indexOf(':');
+            if (colonIdx < 0) return false;
+            String wMethod = entry.substring(0, colonIdx).trim().toUpperCase();
+            String wPath = entry.substring(colonIdx + 1).trim();
+            if (!wMethod.equals(method.toUpperCase())) return false;
+            String[] patternParts = wPath.split("/");
+            String[] pathParts = path.split("/");
+            if (patternParts.length != pathParts.length) return false;
+            for (int i = 0; i < patternParts.length; i++) {
+                String p = patternParts[i];
+                if (!p.startsWith(":") && !p.startsWith("{") && !p.equals(pathParts[i])) return false;
+            }
+            return true;
+        });
+    }
+
     /**
      * Verifies the Beckn HTTP Signature on the incoming request.
      *
@@ -35,6 +55,12 @@ public class AuthorizationService {
      * @throws ErrorResponseException with 401 if signature is missing or invalid
      */
     public void authorizeRequest(String rawBody, HttpHeaders headers) {
+        var attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attrs != null && isWhitelisted(attrs.getRequest().getMethod(), attrs.getRequest().getRequestURI())) {
+            logger.debug("auth.whitelisted path={}", attrs.getRequest().getRequestURI());
+            return;
+        }
+
         if (!authProperties.enabled()) {
             logger.debug("auth.disabled — skipping signature verification");
             return;

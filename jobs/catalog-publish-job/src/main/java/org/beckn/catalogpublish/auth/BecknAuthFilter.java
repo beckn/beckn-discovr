@@ -33,11 +33,31 @@ public class BecknAuthFilter extends OncePerRequestFilter {
         this.objectMapper = objectMapper;
     }
 
+    private boolean isWhitelisted(String method, String path) {
+        return authProperties.whitelistedEndpoints().stream().anyMatch(entry -> {
+            int colonIdx = entry.indexOf(':');
+            if (colonIdx < 0) return false;
+            String wMethod = entry.substring(0, colonIdx).trim().toUpperCase();
+            String wPath = entry.substring(colonIdx + 1).trim();
+            if (!wMethod.equals(method.toUpperCase())) return false;
+            String[] patternParts = wPath.split("/");
+            String[] pathParts = path.split("/");
+            if (patternParts.length != pathParts.length) return false;
+            for (int i = 0; i < patternParts.length; i++) {
+                String p = patternParts[i];
+                if (!p.startsWith(":") && !p.startsWith("{") && !p.equals(pathParts[i])) return false;
+            }
+            return true;
+        });
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
             FilterChain chain) throws ServletException, IOException {
 
-        if (!authProperties.enabled() || !MUTATING_METHODS.contains(request.getMethod())) {
+        if (!authProperties.enabled()
+                || !MUTATING_METHODS.contains(request.getMethod())
+                || isWhitelisted(request.getMethod(), request.getRequestURI())) {
             chain.doFilter(request, response);
             return;
         }

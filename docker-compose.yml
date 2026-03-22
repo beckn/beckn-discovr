@@ -114,6 +114,11 @@ services:
       - SIGNATURE_CACHE_MAX_KEYS=100
       - SIGNATURE_TIMEOUT_SECONDS=10
       - SIGNATURE_RETRY_ATTEMPTS=3
+      # Whitelisted endpoints — comma-separated METHOD:PATH pairs that bypass signature verification
+      # Paths are absolute URI paths (e.g. POST:/catalog/push)
+      # Supports {param} and :param wildcards (e.g. GET:/catalog/{id})
+      # Leave empty to require auth on all endpoints when SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_WHITELISTED_ENDPOINTS=
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
@@ -203,6 +208,11 @@ services:
       - SIGNATURE_CACHE_MAX_KEYS=100
       - SIGNATURE_TIMEOUT_SECONDS=10
       - SIGNATURE_RETRY_ATTEMPTS=3
+      # Whitelisted endpoints — comma-separated METHOD:PATH pairs that bypass signature verification
+      # Paths are absolute URI paths (e.g. POST:/beckn/discover, GET:/beckn/discover)
+      # Supports {param} and :param wildcards (e.g. GET:/beckn/discover/{id})
+      # Leave empty to require auth on all endpoints when SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_WHITELISTED_ENDPOINTS=
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
