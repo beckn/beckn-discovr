@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Descriptor DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
@@ -24,6 +25,15 @@ public class Descriptor {
 
     @JsonProperty(BecknFields.IMAGES)
     private List<String> image;
+
+    @JsonProperty("thumbnailImage")
+    private String thumbnailImage;
+
+    @JsonProperty("docs")
+    private List<Map<String, Object>> docs;
+
+    @JsonProperty("mediaFile")
+    private List<Map<String, Object>> mediaFile;
 
     // Default constructor
     public Descriptor() {}
@@ -52,6 +62,15 @@ public class Descriptor {
 
     public List<String> getImage() { return image; }
     public void setImage(List<String> image) { this.image = image; }
+
+    public String getThumbnailImage() { return thumbnailImage; }
+    public void setThumbnailImage(String thumbnailImage) { this.thumbnailImage = thumbnailImage; }
+
+    public List<Map<String, Object>> getDocs() { return docs; }
+    public void setDocs(List<Map<String, Object>> docs) { this.docs = docs; }
+
+    public List<Map<String, Object>> getMediaFile() { return mediaFile; }
+    public void setMediaFile(List<Map<String, Object>> mediaFile) { this.mediaFile = mediaFile; }
 
     @Override
     public String toString() {

@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Provider DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
@@ -36,6 +37,12 @@ public class Provider {
 
     @JsonProperty("providerAttributes")
     private Attributes providerAttributes;
+
+    @JsonProperty("alerts")
+    private List<Map<String, Object>> alerts;
+
+    @JsonProperty("policies")
+    private List<Policy> policies;
 
     // Default constructor
     public Provider() {}
@@ -67,6 +74,12 @@ public class Provider {
 
     public Attributes getProviderAttributes() { return providerAttributes; }
     public void setProviderAttributes(Attributes providerAttributes) { this.providerAttributes = providerAttributes; }
+
+    public List<Map<String, Object>> getAlerts() { return alerts; }
+    public void setAlerts(List<Map<String, Object>> alerts) { this.alerts = alerts; }
+
+    public List<Policy> getPolicies() { return policies; }
+    public void setPolicies(List<Policy> policies) { this.policies = policies; }
 
     @Override
     public String toString() {

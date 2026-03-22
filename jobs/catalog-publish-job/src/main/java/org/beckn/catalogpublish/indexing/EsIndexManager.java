@@ -174,6 +174,7 @@ public class EsIndexManager {
                         "item_image":              { "type": "keyword" },
                         "item_rating_value":       { "type": "float" },
                         "item_rating_count":       { "type": "integer" },
+                        "item_rating_review_text": { "type": "text" },
                         "item_is_active":          { "type": "boolean" },
                         "item_rateable":           { "type": "boolean" },
                         "item_attributes": {
@@ -186,8 +187,21 @@ public class EsIndexManager {
                         },
                         "item_attributes_type":    { "type": "keyword" },
                         "item_attributes_context": { "type": "keyword" },
-                        "constraints":             { "type": "nested" },
-                        "policies":                { "type": "nested" },
+                        "constraints": {
+                          "type": "nested",
+                          "properties": {
+                            "@type": { "type": "keyword" },
+                            "name":  { "type": "keyword" },
+                            "value": { "type": "keyword" }
+                          }
+                        },
+                        "policies": {
+                          "type": "nested",
+                          "properties": {
+                            "@type": { "type": "keyword" },
+                            "name":  { "type": "keyword" }
+                          }
+                        },
                         "schema_version":          { "type": "keyword" },
                         "offers":                  { "type": "nested" },
                         "full_text_blob":          { "type": "text", "analyzer": "standard" },

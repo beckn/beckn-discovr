@@ -4,9 +4,11 @@ import org.beckn.discover.config.AnyEsFeatureCondition;
 import org.beckn.discover.model.Attributes;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.CategoryCode;
+import org.beckn.discover.model.Constraint;
 import org.beckn.discover.model.Descriptor;
 import org.beckn.discover.model.Item;
 import org.beckn.discover.model.Location;
+import org.beckn.discover.model.Policy;
 import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Rating;
 import org.beckn.discover.common.BecknFields;
@@ -145,15 +147,19 @@ public class EsSearchAssembler {
         // v2.1: constraints and policies — present only when indexed
         Object constraintsRaw = doc.get("constraints");
         if (constraintsRaw instanceof List<?> list && !list.isEmpty()) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> constraints = (List<Map<String, Object>>) list;
-            item.setConstraints(constraints);
+            List<Constraint> constraints = list.stream()
+                    .filter(e -> e instanceof Map<?, ?>)
+                    .map(e -> constraintFromMap((Map<String, Object>) e))
+                    .toList();
+            if (!constraints.isEmpty()) item.setConstraints(constraints);
         }
         Object policiesRaw = doc.get("policies");
         if (policiesRaw instanceof List<?> list && !list.isEmpty()) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> policies = (List<Map<String, Object>>) list;
-            item.setPolicies(policies);
+            List<Policy> policies = list.stream()
+                    .filter(e -> e instanceof Map<?, ?>)
+                    .map(e -> policyFromMap((Map<String, Object>) e))
+                    .toList();
+            if (!policies.isEmpty()) item.setPolicies(policies);
         }
 
         return item;
@@ -303,6 +309,31 @@ public class EsSearchAssembler {
             return attrs;
         }
         return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Constraint constraintFromMap(Map<String, Object> map) {
+        Constraint c = new Constraint();
+        c.setType(map.get("@type") instanceof String s ? s : null);
+        c.setName(map.get("name") instanceof String s ? s : null);
+        c.setValue(map.get("value"));
+        map.forEach((k, v) -> {
+            if (!"@type".equals(k) && !"name".equals(k) && !"value".equals(k))
+                c.setAdditionalProperty(k, v);
+        });
+        return c;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Policy policyFromMap(Map<String, Object> map) {
+        Policy p = new Policy();
+        p.setType(map.get("@type") instanceof String s ? s : null);
+        p.setName(map.get("name") instanceof String s ? s : null);
+        map.forEach((k, v) -> {
+            if (!"@type".equals(k) && !"name".equals(k) && !"descriptor".equals(k) && !"validity".equals(k))
+                p.setAdditionalProperty(k, v);
+        });
+        return p;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

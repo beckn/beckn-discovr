@@ -1,14 +1,15 @@
 package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.beckn.discover.common.BecknFields;
+import org.beckn.discover.util.StringOrArrayDeserializer;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Item DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
@@ -48,11 +49,9 @@ public class Item {
     @JsonProperty("isActive")
     private Boolean isActive;
 
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     @JsonProperty(BecknFields.NETWORK_ID)
-    private String networkId;
-
-    @JsonProperty("acceptedPaymentMethod")
-    private List<String> acceptedPaymentMethod;
+    private List<String> networkId;
 
     @NotNull(message = "provider is required")
     @Valid
@@ -65,10 +64,10 @@ public class Item {
     private Attributes itemAttributes;
 
     @JsonProperty("constraints")
-    private List<Map<String, Object>> constraints;
+    private List<Constraint> constraints;
 
     @JsonProperty("policies")
-    private List<Map<String, Object>> policies;
+    private List<Policy> policies;
 
     // Default constructor
     public Item() {}
@@ -115,11 +114,8 @@ public class Item {
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
 
-    public String getNetworkId() { return networkId; }
-    public void setNetworkId(String networkId) { this.networkId = networkId; }
-
-    public List<String> getAcceptedPaymentMethod() { return acceptedPaymentMethod; }
-    public void setAcceptedPaymentMethod(List<String> acceptedPaymentMethod) { this.acceptedPaymentMethod = acceptedPaymentMethod; }
+    public List<String> getNetworkId() { return networkId; }
+    public void setNetworkId(List<String> networkId) { this.networkId = networkId; }
 
     public Provider getProvider() { return provider; }
     public void setProvider(Provider provider) { this.provider = provider; }
@@ -127,11 +123,11 @@ public class Item {
     public Attributes getItemAttributes() { return itemAttributes; }
     public void setItemAttributes(Attributes itemAttributes) { this.itemAttributes = itemAttributes; }
 
-    public List<Map<String, Object>> getConstraints() { return constraints; }
-    public void setConstraints(List<Map<String, Object>> constraints) { this.constraints = constraints; }
+    public List<Constraint> getConstraints() { return constraints; }
+    public void setConstraints(List<Constraint> constraints) { this.constraints = constraints; }
 
-    public List<Map<String, Object>> getPolicies() { return policies; }
-    public void setPolicies(List<Map<String, Object>> policies) { this.policies = policies; }
+    public List<Policy> getPolicies() { return policies; }
+    public void setPolicies(List<Policy> policies) { this.policies = policies; }
 
     @Override
     public String toString() {
