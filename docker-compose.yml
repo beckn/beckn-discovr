@@ -81,8 +81,8 @@ services:
   # This job acts as the bridge for discovery ingestion
   catalog-publish:
     build:
-      context: ./jobs/catalog-publish-job
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: jobs/catalog-publish-job/Dockerfile
     image: beckn/catalog-publish-job:1.0
     container_name: catalog-publish
     ports:
@@ -104,6 +104,16 @@ services:
       - APP_CATALOG_VALIDATION_ENABLED=false
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - JAVA_TOOL_OPTIONS=
+      # Beckn Auth SDK — signature verification for /catalog/push
+      - SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
+      - SIGNATURE_REGISTRY_TOKEN=
+      - SIGNATURE_CLOCK_SKEW_SECONDS=30
+      - SIGNATURE_CACHE_TTL_SECONDS=2592000
+      - SIGNATURE_CACHE_MAX_KEYS=100
+      - SIGNATURE_TIMEOUT_SECONDS=10
+      - SIGNATURE_RETRY_ATTEMPTS=3
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
@@ -160,8 +170,8 @@ services:
   # Catalog Discover Job (formerly discovery-service)
   catalog-discover-job:
     build:
-      context: ./jobs/catalog-discover-job
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: jobs/catalog-discover-job/Dockerfile
     container_name: catalog-discover-job
     ports:
       - "8082:8080"
@@ -183,6 +193,16 @@ services:
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA=ERROR
       - LOGGING_LEVEL_ORG_APACHE_KAFKA=ERROR
       - OTEL_TRACES_EXPORTER=none
+      # Beckn Auth SDK — signature verification for /beckn/discover
+      - SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
+      - SIGNATURE_REGISTRY_TOKEN=
+      - SIGNATURE_CLOCK_SKEW_SECONDS=30
+      - SIGNATURE_CACHE_TTL_SECONDS=2592000
+      - SIGNATURE_CACHE_MAX_KEYS=100
+      - SIGNATURE_TIMEOUT_SECONDS=10
+      - SIGNATURE_RETRY_ATTEMPTS=3
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
@@ -247,8 +267,8 @@ services:
   # Consumes discovery responses and notifies the BAP; failures go to a DLT topic.
   response-dispatcher:
     build:
-      context: ./jobs/response-dispatcher
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: jobs/response-dispatcher/Dockerfile
     image: beckn/response-dispatcher:1.0
     container_name: response-dispatcher
     ports:

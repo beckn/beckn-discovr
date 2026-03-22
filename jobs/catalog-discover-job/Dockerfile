@@ -4,14 +4,15 @@
 FROM gradle:8.9-jdk17 AS builder
 
 # Set working directory
-WORKDIR /app
+WORKDIR /app/jobs/catalog-discover-job
 
+COPY sdks/beckn-auth-java-sdk/ /app/sdks/beckn-auth-java-sdk/
 # Copy gradle files first for better layer caching
-COPY build.gradle settings.gradle gradlew ./
-COPY gradle/ gradle/
+COPY jobs/catalog-discover-job/build.gradle jobs/catalog-discover-job/settings.gradle jobs/catalog-discover-job/gradlew ./
+COPY jobs/catalog-discover-job/gradle/ gradle/
 
 # Copy source code
-COPY src/ src/
+COPY jobs/catalog-discover-job/src/ src/
 
 # Build the application
 RUN gradle build -x test --no-daemon
@@ -27,7 +28,7 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 # Set working directory
 WORKDIR /app
 # Copy the built JAR from builder stage
-COPY --from=builder /app/build/libs/*.jar app.jar
+COPY --from=builder /app/jobs/catalog-discover-job/build/libs/*.jar app.jar
 # Download OpenTelemetry Java Agent using ADD (no curl needed)
 ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.11.0/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
 # Create logs directory

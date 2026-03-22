@@ -38,12 +38,10 @@ public class CatalogPushController {
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
     private final long maxPayloadSize;
-    private final boolean signatureVerificationEnabled;
 
     public CatalogPushController(CatalogPushService pushService, AppProperties props, ObjectMapper objectMapper) {
         this.pushService = pushService;
         this.maxPayloadSize = props.catalog().maxPayloadSize();
-        this.signatureVerificationEnabled = props.http().signatureVerificationEnabled();
         this.objectMapper = objectMapper;
     }
 
@@ -55,11 +53,6 @@ public class CatalogPushController {
         if (rawBytes.length > maxPayloadSize) {
             log.warn("catalog.push.rejected.oversized sizeBytes={} limit={}", rawBytes.length, maxPayloadSize);
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Payload too large");
-        }
-
-        if (signatureVerificationEnabled) {
-            // TODO: integrate Beckn HTTP signature verification (Ed25519 + registry lookup)
-            log.warn("catalog.push.signature-verification-enabled-but-not-implemented — skipping");
         }
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);

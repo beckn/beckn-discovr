@@ -117,7 +117,7 @@ public class DiscoveryController {
             httpRequest.setAttribute(TRANSACTION_ID_ATTR, txnNode.asText());
         }
 
-        authorizationService.authorizeRequest(rawBody, requestNode, headers);
+        authorizationService.authorizeRequest(rawBody, headers);
         validateSchema(requestNode);
 
         DiscoverRequest request = objectMapper.convertValue(requestNode, DiscoverRequest.class);
@@ -139,7 +139,7 @@ public class DiscoveryController {
             httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
         }
 
-        authorizationService.authorizeRequest(rawBody, requestNode, headers);
+        authorizationService.authorizeRequest(rawBody, headers);
         validateSchema(requestNode);
 
         String messageId = requestNode.path(BecknFields.CONTEXT).path(BecknFields.MESSAGE_ID).asText();

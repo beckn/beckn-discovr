@@ -2,8 +2,8 @@ package org.beckn.seeker.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.beckn.auth.BecknAuth;
 import org.beckn.seeker.common.BecknFields;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -25,15 +25,23 @@ import org.springframework.web.client.RestTemplate;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class HttpService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-    private final SignatureService signatureService;
+    private final BecknAuth becknAuth;
+
+    @Value("${signing.enabled:false}")
+    private boolean signingEnabled;
 
     @Value("${http.client.timeout}")
     private int timeoutMs;
+
+    public HttpService(RestTemplate restTemplate, ObjectMapper objectMapper, BecknAuth becknAuth) {
+        this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
+        this.becknAuth = becknAuth;
+    }
 
     private static final String ON_DISCOVER_ENDPOINT = "/on_discover";
     private static final String ON_PUBLISH_ENDPOINT = "/catalog/on_publish";
@@ -92,9 +100,10 @@ public class HttpService {
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             // Add signature if enabled
-            if (signatureService.isEnabled()) {
-                String authHeader = signatureService.generateAuthHeader(requestBody);
-                headers.set("Authorization", authHeader);
+            if (signingEnabled) {
+                log.info("dispatcher.signing.start targetUrl={} action={}", targetUrl, action);
+                headers.set("Authorization", becknAuth.generateAuthHeader(requestBody));
+                log.info("dispatcher.signing.done targetUrl={} action={}", targetUrl, action);
             }
 
             // Create HTTP entity
