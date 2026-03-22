@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS item (
     provider_id TEXT REFERENCES provider(id),
     catalog_id TEXT REFERENCES catalog(id),
     payload JSONB,
+    schema_version VARCHAR(4) NOT NULL DEFAULT '2.0',
     created_by TEXT,
     updated_by TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

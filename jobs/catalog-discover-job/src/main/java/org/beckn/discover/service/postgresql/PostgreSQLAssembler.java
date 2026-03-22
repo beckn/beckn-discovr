@@ -7,6 +7,7 @@ import org.beckn.discover.model.Descriptor;
 import org.beckn.discover.model.Item;
 import org.beckn.discover.model.TimePeriod;
 import org.beckn.discover.service.engine.QueryRequest;
+import org.beckn.discover.util.BecknFieldNormalizer;
 import org.beckn.discover.util.DiscoveryConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -127,6 +128,8 @@ public class PostgreSQLAssembler {
         }
 
         String itemId = (String) row.get("id");
+        String schemaVersion = row.containsKey("schema_version")
+                ? String.valueOf(row.get("schema_version")) : "2.0";
         JsonNode itemPayload = toJsonNode(row.get("item_payload"));
         if (itemPayload == null) {
             log.warn("assembler.row.skip reason=null-payload itemId={}", itemId);
@@ -139,7 +142,14 @@ public class PostgreSQLAssembler {
             return false;
         }
 
-        Item item = objectMapper.treeToValue(itemNode, Item.class);
+        // Normalize v2.0 items (beckn: prefixed fields) to canonical form before
+        // deserializing into the Item DTO — the DTO uses unprefixed field names.
+        // v2.1 items are already in canonical form; normalizeItem is idempotent.
+        JsonNode nodeForDeserialization = "2.0".equals(schemaVersion)
+                ? BecknFieldNormalizer.normalizeItem(itemNode, objectMapper)
+                : itemNode;
+
+        Item item = objectMapper.treeToValue(nodeForDeserialization, Item.class);
         if (item == null) {
             log.warn("assembler.row.skip reason=item-deserialise-failed itemId={}", itemId);
             return false;

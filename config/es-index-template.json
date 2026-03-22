@@ -48,6 +48,11 @@
             "@type":    { "type": "keyword" }
           }
         },
+        "item_attributes_type":    { "type": "keyword" },
+        "item_attributes_context": { "type": "keyword" },
+        "constraints":        { "type": "nested" },
+        "policies":           { "type": "nested" },
+        "schema_version":     { "type": "keyword" },
         "offers":             { "type": "nested" },
         "full_text_blob":     { "type": "text", "analyzer": "standard" },
         "indexed_at":         { "type": "date" },

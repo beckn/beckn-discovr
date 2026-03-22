@@ -22,7 +22,7 @@ class ResultStepTest {
     @Test
     void buildResult_successWhenItemsSaved() {
         CatalogContext ctx = new CatalogContext("b1", "http://b1", new String[0], null);
-        Item item = Item.from("i1", "{}", new String[0], ctx, "c1", null, null, null, null);
+        Item item = Item.from("i1", "{}", new String[0], ctx, "c1", null, null, null, null, "2.0");
         CatalogBatch batch = new CatalogBatch("c1", ctx, null, CatalogOperation.PUBLISH, List.of(item), List.of(),
                 Map.of());
         ProcessingResult result = resultStep.buildResult(batch);

@@ -48,6 +48,10 @@ public final class BecknFields {
     public static final String PROVIDER_ID     = "providerId";
     public static final String CATALOG_ID      = "catalogId";
 
+    // ── v2.1 Item fields ─────────────────────────────────────────────────────
+    public static final String CONSTRAINTS     = "constraints";
+    public static final String POLICIES        = "policies";
+
     // ── Publish-specific fields ──────────────────────────────────────────────
     public static final String CATALOG         = "catalog";
     public static final String CATALOGS        = "catalogs";

@@ -16,7 +16,9 @@ import org.beckn.catalogpublish.service.geometry.GeometryExtractor;
 import org.beckn.catalogpublish.service.payload.ItemPayloadBuilder;
 import org.beckn.catalogpublish.service.payload.PayloadMergeService;
 import org.beckn.catalogpublish.common.BecknFields;
+import org.beckn.catalogpublish.common.SchemaVersion;
 import org.beckn.catalogpublish.store.ItemLocationCollectionStore;
+import org.beckn.catalogpublish.util.BecknFieldNormalizer;
 import org.beckn.catalogpublish.store.ItemStore;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.FieldExtractor;
@@ -96,16 +98,19 @@ public class PersistenceStep {
         // Keyed by beckn:id for O(1) lookup; offers without an id are skipped.
         Map<String, JsonNode> incomingOfferById = buildIncomingOfferMap(allOffers);
 
-        // Phase 0: collect (itemId, itemNode) pairs in declaration order.
+        // Phase 0: collect (itemId, originalItemNode, normalizedItemNode) triples in declaration order.
         // Items with unresolvable IDs go straight to errors.
-        record IdAndNode(String itemId, JsonNode itemNode) {
+        // Normalization happens here so that extractItemId can always use the canonical "id" field name,
+        // while the original (unnormalized) node is preserved for payload storage.
+        record IdAndNode(String itemId, JsonNode itemNode, JsonNode normalizedItemNode) {
         }
         List<IdAndNode> pairs = new ArrayList<>();
         List<ProcessingError> errors = new ArrayList<>();
         String catalogContextUrl = FieldExtractor.extractContextUrl(catalogNode);
         for (JsonNode itemNode : FieldExtractor.iterableItems(catalogNode)) {
             try {
-                pairs.add(new IdAndNode(extractItemId(itemNode), itemNode));
+                JsonNode normalizedForId = BecknFieldNormalizer.normalizeItem(itemNode, objectMapper);
+                pairs.add(new IdAndNode(extractItemId(normalizedForId), itemNode, normalizedForId));
             } catch (Exception e) {
                 errors.add(new ProcessingError("unknown", ProcessingErrorCode.NET_INTERNAL_ERROR,
                         ErrorSanitizer.sanitize(e)));
@@ -127,8 +132,12 @@ public class PersistenceStep {
         // Phase 1: process explicitly listed items (new or upsert).
         for (IdAndNode pair : pairs) {
             String itemId = pair.itemId();
-            JsonNode itemNode = pair.itemNode();
+            JsonNode itemNode = pair.itemNode();            // original — stored in DB
+            JsonNode normalizedItemNode = pair.normalizedItemNode(); // canonical — used for extraction
             try {
+                // Detect schema version from the original (unnormalized) item node.
+                SchemaVersion version = BecknFieldNormalizer.detectVersion(itemNode);
+
                 Item existing = existingById.get(itemId);
                 JsonNode payload;
                 if (existing != null) {
@@ -140,8 +149,7 @@ public class PersistenceStep {
                     // Determine which incoming offers apply to this item.
                     // Primary source of truth: the offer_ids DB column (tracks all linked offers
                     // regardless of what offer.beckn:items says in the current request).
-                    // Secondary: offer.beckn:items — allows newly declared linkages in this
-                    // request.
+                    // Secondary: offer.id — allows newly declared linkages in this request.
                     Set<String> offerIdsToApply = new HashSet<>();
                     if (existing.getOfferIds() != null)
                         offerIdsToApply.addAll(Arrays.asList(existing.getOfferIds()));
@@ -162,22 +170,22 @@ public class PersistenceStep {
                 } else {
                     // New item path: build fresh denorm from catalog metadata + item + resolved
                     // offers.
-                    // offer.beckn:items is the only source of truth here (no DB record exists yet).
                     payload = payloadBuilder.buildDenormalizedPayloadFromSlice(baseSlice, itemNode, offerIndex, itemId);
                 }
                 String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
-                String name = FieldExtractor.extractItemName(itemNode);
-                String type = Optional.ofNullable(FieldExtractor.extractItemAttributesType(itemNode))
-                        .orElse(FieldExtractor.extractItemType(itemNode));
-                String providerId = FieldExtractor.extractItemProviderId(itemNode);
-                String attrsContextUrl = FieldExtractor.extractItemAttributesContextUrl(itemNode);
-                String itemContextUrl = FieldExtractor.extractContextUrl(itemNode);
+                // Use normalized node for all field extraction — field names are canonical here.
+                String name = FieldExtractor.extractItemName(normalizedItemNode);
+                String type = Optional.ofNullable(FieldExtractor.extractItemAttributesType(normalizedItemNode))
+                        .orElse(FieldExtractor.extractItemType(normalizedItemNode));
+                String providerId = FieldExtractor.extractItemProviderId(normalizedItemNode);
+                String attrsContextUrl = FieldExtractor.extractItemAttributesContextUrl(normalizedItemNode);
+                String itemContextUrl = FieldExtractor.extractContextUrl(normalizedItemNode);
                 String contextUrl = attrsContextUrl != null
                         ? attrsContextUrl
                         : (itemContextUrl != null ? itemContextUrl : catalogContextUrl);
                 built.add(new ItemWithNode(
                         Item.from(itemId, payload.toString(), offerIds, ctx, catalogId, name, type, providerId,
-                                contextUrl),
+                                contextUrl, version.getValue()),
                         payload));
             } catch (Exception e) {
                 String sanitized = ErrorSanitizer.sanitize(e);
@@ -228,7 +236,8 @@ public class PersistenceStep {
                         built.add(new ItemWithNode(
                                 Item.from(linkedItem.getId(), payload.toString(), offerIds, ctx,
                                         catalogId, linkedItem.getName(), linkedItem.getType(),
-                                        linkedItem.getProviderId(), linkedItem.getContextUrl()),
+                                        linkedItem.getProviderId(), linkedItem.getContextUrl(),
+                                        linkedItem.getSchemaVersion()),
                                 payload));
                         log.debug("offer.propagated itemId={} offers={}", linkedItem.getId(),
                                 Arrays.toString(linkedItem.getOfferIds()));

@@ -6,7 +6,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.beckn.discover.common.BecknFields;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Item DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
@@ -61,6 +63,12 @@ public class Item {
     @Valid
     @JsonProperty(BecknFields.ITEM_ATTRIBUTES)
     private Attributes itemAttributes;
+
+    @JsonProperty("constraints")
+    private List<Map<String, Object>> constraints;
+
+    @JsonProperty("policies")
+    private List<Map<String, Object>> policies;
 
     // Default constructor
     public Item() {}
@@ -118,6 +126,12 @@ public class Item {
 
     public Attributes getItemAttributes() { return itemAttributes; }
     public void setItemAttributes(Attributes itemAttributes) { this.itemAttributes = itemAttributes; }
+
+    public List<Map<String, Object>> getConstraints() { return constraints; }
+    public void setConstraints(List<Map<String, Object>> constraints) { this.constraints = constraints; }
+
+    public List<Map<String, Object>> getPolicies() { return policies; }
+    public void setPolicies(List<Map<String, Object>> policies) { this.policies = policies; }
 
     @Override
     public String toString() {
