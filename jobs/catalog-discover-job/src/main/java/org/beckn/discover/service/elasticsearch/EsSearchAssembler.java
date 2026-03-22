@@ -121,6 +121,7 @@ public class EsSearchAssembler {
             catalog.getOffers().addAll((List<Object>) offerList);
     }
 
+    @SuppressWarnings("unchecked")
     private static Item buildItem(Map<String, Object> doc) {
         Item item = new Item();
         item.setContext(str(doc, "item_context"));
@@ -140,6 +141,20 @@ public class EsSearchAssembler {
 
         // Reconstruct direct item-level locations from loc_* fields
         item.setAvailableAt(collectItemLocations(doc));
+
+        // v2.1: constraints and policies — present only when indexed
+        Object constraintsRaw = doc.get("constraints");
+        if (constraintsRaw instanceof List<?> list && !list.isEmpty()) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> constraints = (List<Map<String, Object>>) list;
+            item.setConstraints(constraints);
+        }
+        Object policiesRaw = doc.get("policies");
+        if (policiesRaw instanceof List<?> list && !list.isEmpty()) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> policies = (List<Map<String, Object>>) list;
+            item.setPolicies(policies);
+        }
 
         return item;
     }
@@ -272,9 +287,15 @@ public class EsSearchAssembler {
     private static Attributes buildAttributes(Map<String, Object> doc) {
         Object attrsRaw = doc.get("item_attributes");
         if (attrsRaw instanceof Map<?, ?> map) {
-            Attributes attrs = new Attributes(
-                    (String) map.get(BecknFields.AT_CONTEXT),
-                    (String) map.get(BecknFields.AT_TYPE));
+            // Prefer the dedicated top-level ES fields for @type and @context when present,
+            // so that keyword filtering against item_attributes_type works correctly.
+            String atType = doc.containsKey("item_attributes_type")
+                    ? (String) doc.get("item_attributes_type")
+                    : (String) map.get(BecknFields.AT_TYPE);
+            String atContext = doc.containsKey("item_attributes_context")
+                    ? (String) doc.get("item_attributes_context")
+                    : (String) map.get(BecknFields.AT_CONTEXT);
+            Attributes attrs = new Attributes(atContext, atType);
             ((Map<String, Object>) map).forEach((k, v) -> {
                 if (!k.equals(BecknFields.AT_CONTEXT) && !k.equals(BecknFields.AT_TYPE))
                     attrs.setAttribute(k, v);

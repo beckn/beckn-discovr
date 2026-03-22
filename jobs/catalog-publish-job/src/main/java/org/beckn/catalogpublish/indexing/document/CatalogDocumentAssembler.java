@@ -29,7 +29,8 @@ public class CatalogDocumentAssembler {
 
     /** Called from ElasticIndexStep — Item carries bppId/bppUri directly. */
     public Map<String, Object> assemble(Item item, JsonNode payloadNode, String schemaType, String networkId) {
-        return build(payloadNode, schemaType, networkId, item.getId(), item.getBppId(), item.getBppUri());
+        return build(payloadNode, schemaType, networkId, item.getId(), item.getBppId(), item.getBppUri(),
+                item.getSchemaVersion());
     }
 
     /** Called from EsFailureConsumer — all fields extracted from stored payload. */
@@ -38,16 +39,18 @@ public class CatalogDocumentAssembler {
         JsonNode itemNode = catalog.path(BecknFields.ITEMS).path(0);
         JsonNode netNode = itemNode.path(BecknFields.NETWORK_ID);
         String networkId = netNode.isArray() ? netNode.path(0).asText(null) : netNode.asText(null);
+        // schema_version not available from payload alone — default to "2.0" for retry path
         return build(payloadNode, indexKey, networkId,
                 text(catalog.path(BecknFields.ITEMS).path(0), BecknFields.ID),
                 text(catalog, BecknFields.BPP_ID),
-                text(catalog, BecknFields.BPP_URI));
+                text(catalog, BecknFields.BPP_URI),
+                "2.0");
     }
 
     // ── Core builder ─────────────────────────────────────────────────────────
 
     private Map<String, Object> build(JsonNode payloadNode, String schemaType, String networkId,
-            String itemId, String bppId, String bppUri) {
+            String itemId, String bppId, String bppUri, String schemaVersion) {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
         JsonNode itemNode = catalog.path(BecknFields.ITEMS).path(0);
         JsonNode desc = itemNode.path(BecknFields.DESCRIPTOR);
@@ -77,13 +80,30 @@ public class CatalogDocumentAssembler {
         doc.put("item_rating_count", integer(itemNode.path("rating"), "ratingCount"));
         doc.put("item_provider_id", text(itemNode.path(BecknFields.PROVIDER), BecknFields.ID));
         doc.put("item_provider_name", text(itemNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+        // Internal metadata — never returned in API responses
+        doc.put("schema_version", schemaVersion != null ? schemaVersion : "2.0");
         doc.put("indexed_at", Instant.now().toString());
 
         geoShapeExtractor.extractGeoShapes(payloadNode).forEach(doc::put);
 
         JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
-        if (!attrs.isMissingNode() && attrs.isObject())
+        if (!attrs.isMissingNode() && attrs.isObject()) {
             doc.put("item_attributes", flattenJsonLd(attrs));
+            // Dedicated top-level ES fields for @type and @context so they can be
+            // filtered as keywords without navigating into the nested object.
+            doc.put("item_attributes_type", text(attrs, "@type"));
+            doc.put("item_attributes_context", text(attrs, "@context"));
+        }
+
+        // v2.1 fields: constraints and policies
+        JsonNode constraintsNode = itemNode.path(BecknFields.CONSTRAINTS);
+        if (!constraintsNode.isMissingNode() && constraintsNode.isArray()) {
+            doc.put("constraints", objectMapper.convertValue(constraintsNode, List.class));
+        }
+        JsonNode policiesNode = itemNode.path(BecknFields.POLICIES);
+        if (!policiesNode.isMissingNode() && policiesNode.isArray()) {
+            doc.put("policies", objectMapper.convertValue(policiesNode, List.class));
+        }
 
         JsonNode offersNode = catalog.path(BecknFields.OFFERS);
         List<Map<String, Object>> offers = buildOffers(offersNode);
@@ -105,7 +125,7 @@ public class CatalogDocumentAssembler {
         return result;
     }
 
-    /** Strips @context and @type — keeps only domain-specific fields. */
+    /** Flattens a JSON-LD node into a plain Map, preserving all fields including @context and @type. */
     private Map<String, Object> flattenJsonLd(JsonNode node) {
         Map<String, Object> result = new LinkedHashMap<>();
         node.fields().forEachRemaining(e -> {
@@ -129,6 +149,10 @@ public class CatalogDocumentAssembler {
 
         // All text from itemAttributes — recursive deep walk
         collectStrings(itemNode.path(BecknFields.ITEM_ATTRIBUTES), parts);
+
+        // v2.1: text from constraints and policies
+        collectStrings(itemNode.path(BecknFields.CONSTRAINTS), parts);
+        collectStrings(itemNode.path(BecknFields.POLICIES), parts);
 
         // All text fields from offers (names, descriptions, terms, eligibility, etc.)
         collectStrings(offersNode, parts);
