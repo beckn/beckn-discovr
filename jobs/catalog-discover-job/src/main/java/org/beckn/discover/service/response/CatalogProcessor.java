@@ -4,8 +4,8 @@ import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.model.Attributes;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
-import org.beckn.discover.model.Item;
 import org.beckn.discover.model.Provider;
+import org.beckn.discover.model.Resource;
 import org.beckn.discover.util.DiscoveryConstants;
 import org.beckn.discover.util.DiscoveryServiceUtil;
 import org.slf4j.Logger;
@@ -70,18 +70,18 @@ public class CatalogProcessor {
             return null;
         }
 
-        if (catalog.getItems() != null) {
-            catalog.setItems(
-                    catalog.getItems().stream()
-                            .map(this::processItem)
+        if (catalog.getResources() != null) {
+            catalog.setResources(
+                    catalog.getResources().stream()
+                            .map(this::processResource)
                             .filter(Objects::nonNull)
                             .toList());
         }
 
-        // Back-fill providerId from the first item that carries provider info
-        if (catalog.getProviderId() == null && catalog.getItems() != null) {
-            catalog.getItems().stream()
-                    .map(Item::getProvider)
+        // Back-fill providerId from the first resource that carries provider info
+        if (catalog.getProviderId() == null && catalog.getResources() != null) {
+            catalog.getResources().stream()
+                    .map(Resource::getProvider)
                     .filter(Objects::nonNull)
                     .map(Provider::getId)
                     .filter(DiscoveryServiceUtil::isNotBlank)
@@ -93,28 +93,28 @@ public class CatalogProcessor {
     }
 
     /**
-     * Normalizes a single item: validates required fields and sets type /
+     * Normalizes a single resource: validates required fields and sets type /
      * context defaults on attributes, provider, and descriptor.
      *
-     * @return the item (possibly mutated), or {@code null} if invalid
+     * @return the resource (possibly mutated), or {@code null} if invalid
      */
-    public Item processItem(Item item) {
-        if (item == null)
+    public Resource processResource(Resource resource) {
+        if (resource == null)
             return null;
 
-        if (DiscoveryServiceUtil.isBlank(item.getId())) {
-            log.warn("item.process.skip reason=missing-id");
+        if (DiscoveryServiceUtil.isBlank(resource.getId())) {
+            log.warn("resource.process.skip reason=missing-id");
             return null;
         }
 
-        if (item.getItemAttributes() != null)
-            normalizeAttributes(item.getItemAttributes());
-        if (item.getProvider() != null)
-            normalizeProvider(item.getProvider());
-        if (item.getDescriptor() != null)
-            normalizeDescriptor(item.getDescriptor());
+        if (resource.getResourceAttributes() != null)
+            normalizeAttributes(resource.getResourceAttributes());
+        if (resource.getProvider() != null)
+            normalizeProvider(resource.getProvider());
+        if (resource.getDescriptor() != null)
+            normalizeDescriptor(resource.getDescriptor());
 
-        return item;
+        return resource;
     }
 
     private void normalizeAttributes(Attributes attrs) {
@@ -160,7 +160,7 @@ public class CatalogProcessor {
             try {
                 String key = providerKey(catalog);
                 if (merged.containsKey(key)) {
-                    mergeItems(merged.get(key), catalog);
+                    mergeResources(merged.get(key), catalog);
                 } else {
                     merged.put(key, catalog);
                 }
@@ -180,9 +180,9 @@ public class CatalogProcessor {
     private String providerKey(Catalog catalog) {
         if (DiscoveryServiceUtil.isNotBlank(catalog.getProviderId()))
             return catalog.getProviderId();
-        if (catalog.getItems() != null) {
-            return catalog.getItems().stream()
-                    .map(Item::getProvider).filter(Objects::nonNull)
+        if (catalog.getResources() != null) {
+            return catalog.getResources().stream()
+                    .map(Resource::getProvider).filter(Objects::nonNull)
                     .map(Provider::getId).filter(DiscoveryServiceUtil::isNotBlank)
                     .findFirst()
                     .orElse(fallbackKey(catalog));
@@ -196,18 +196,18 @@ public class CatalogProcessor {
                 : "unknown_" + UUID.randomUUID();
     }
 
-    private void mergeItems(Catalog target, Catalog source) {
-        if (source.getItems() == null || source.getItems().isEmpty())
+    private void mergeResources(Catalog target, Catalog source) {
+        if (source.getResources() == null || source.getResources().isEmpty())
             return;
-        if (target.getItems() == null)
-            target.setItems(new ArrayList<>());
+        if (target.getResources() == null)
+            target.setResources(new ArrayList<>());
 
-        Set<String> existing = target.getItems().stream()
-                .map(Item::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<String> existing = target.getResources().stream()
+                .map(Resource::getId).filter(Objects::nonNull).collect(Collectors.toSet());
 
-        source.getItems().stream()
-                .filter(item -> item.getId() != null && !existing.contains(item.getId()))
-                .forEach(target.getItems()::add);
+        source.getResources().stream()
+                .filter(r -> r.getId() != null && !existing.contains(r.getId()))
+                .forEach(target.getResources()::add);
 
         if (target.getDescriptor() == null)
             target.setDescriptor(source.getDescriptor());
@@ -260,7 +260,7 @@ public class CatalogProcessor {
     public void filterItemsByOfferReferences(Catalog catalog) {
         if (catalog.getOffers() == null || catalog.getOffers().isEmpty())
             return;
-        if (catalog.getItems() == null || catalog.getItems().isEmpty())
+        if (catalog.getResources() == null || catalog.getResources().isEmpty())
             return;
 
         Set<String> referencedIds = catalog.getOffers().stream()
@@ -271,13 +271,13 @@ public class CatalogProcessor {
         if (referencedIds.isEmpty())
             return;
 
-        int before = catalog.getItems().size();
-        catalog.setItems(catalog.getItems().stream()
-                .filter(i -> referencedIds.contains(i.getId()))
+        int before = catalog.getResources().size();
+        catalog.setResources(catalog.getResources().stream()
+                .filter(r -> referencedIds.contains(r.getId()))
                 .toList());
 
-        log.debug("catalog.offerFilter id={} items.before={} items.after={}",
-                catalog.getId(), before, catalog.getItems().size());
+        log.debug("catalog.offerFilter id={} resources.before={} resources.after={}",
+                catalog.getId(), before, catalog.getResources().size());
     }
 
     /**
@@ -287,34 +287,27 @@ public class CatalogProcessor {
     public void filterOffersByItemIds(Catalog catalog) {
         if (catalog.getOffers() == null || catalog.getOffers().isEmpty())
             return;
-        if (catalog.getItems() == null || catalog.getItems().isEmpty()) {
+        if (catalog.getResources() == null || catalog.getResources().isEmpty()) {
             catalog.setOffers(new ArrayList<>());
             return;
         }
 
-        Set<String> itemIds = catalog.getItems().stream()
-                .map(Item::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<String> resourceIds = catalog.getResources().stream()
+                .map(Resource::getId).filter(Objects::nonNull).collect(Collectors.toSet());
 
         catalog.setOffers(catalog.getOffers().stream()
-                .filter(o -> offerItemIds(o).stream().anyMatch(itemIds::contains))
+                .filter(o -> offerItemIds(o).stream().anyMatch(resourceIds::contains))
                 .toList());
     }
 
     /**
-     * Extracts item/resource ID references from an offer map.
-     * <p>
-     * v2.0 offer-scoped resource references use {@code "resourceIds"};
-     * older payloads use {@code "items"}. Both are checked in order.
+     * Extracts resource ID references from an offer map.
+     * Offer-scoped resource references use {@code "resourceIds"}.
      */
     public static Set<String> offerItemIds(Object offer) {
         if (!(offer instanceof Map<?, ?> map))
             return Collections.emptySet();
-        // v2.0: "resourceIds" (offer → resource references)
         Object itemsObj = map.get("resourceIds");
-        // Legacy fallback: "items"
-        if (itemsObj == null) {
-            itemsObj = map.get(BecknFields.ITEMS);
-        }
         if (itemsObj instanceof List<?> list) {
             return list.stream().filter(Objects::nonNull).map(Object::toString).collect(Collectors.toSet());
         }
@@ -334,19 +327,19 @@ public class CatalogProcessor {
         if (schemaContextUrls == null || schemaContextUrls.isEmpty())
             return;
         catalogs.forEach(catalog -> {
-            if (catalog.getItems() == null)
+            if (catalog.getResources() == null)
                 return;
-            catalog.setItems(catalog.getItems().stream()
-                    .filter(item -> matchesSchema(item, schemaContextUrls))
+            catalog.setResources(catalog.getResources().stream()
+                    .filter(resource -> matchesSchema(resource, schemaContextUrls))
                     .toList());
         });
     }
 
-    private boolean matchesSchema(Item item, List<String> schemaContextUrls) {
-        if (item.getItemAttributes() == null || item.getItemAttributes().getContext() == null)
+    private boolean matchesSchema(Resource resource, List<String> schemaContextUrls) {
+        if (resource.getResourceAttributes() == null || resource.getResourceAttributes().getContext() == null)
             return false;
-        String itemCtx = item.getItemAttributes().getContext();
-        String itemType = item.getItemAttributes().getType();
+        String itemCtx = resource.getResourceAttributes().getContext();
+        String itemType = resource.getResourceAttributes().getType();
 
         for (String schemaUrl : schemaContextUrls) {
             if (DiscoveryServiceUtil.isBlank(schemaUrl))
@@ -376,21 +369,21 @@ public class CatalogProcessor {
             log.warn("catalog.validate.fail reason=missing-id");
             return false;
         }
-        if (catalog.getItems() == null || catalog.getItems().isEmpty()) {
-            log.warn("catalog.validate.fail reason=no-items id={}", catalog.getId());
+        if (catalog.getResources() == null || catalog.getResources().isEmpty()) {
+            log.warn("catalog.validate.fail reason=no-resources id={}", catalog.getId());
             return false;
         }
-        return catalog.getItems().stream().allMatch(this::validateItem);
+        return catalog.getResources().stream().allMatch(this::validateResource);
     }
 
-    /** Validates an individual item. */
-    public boolean validateItem(Item item) {
-        if (item == null) {
-            log.warn("item.validate.fail reason=null");
+    /** Validates an individual resource. */
+    public boolean validateResource(Resource resource) {
+        if (resource == null) {
+            log.warn("resource.validate.fail reason=null");
             return false;
         }
-        if (DiscoveryServiceUtil.isBlank(item.getId())) {
-            log.warn("item.validate.fail reason=missing-id");
+        if (DiscoveryServiceUtil.isBlank(resource.getId())) {
+            log.warn("resource.validate.fail reason=missing-id");
             return false;
         }
         return true;

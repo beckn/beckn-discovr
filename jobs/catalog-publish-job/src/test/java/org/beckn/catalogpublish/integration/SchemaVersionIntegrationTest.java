@@ -44,7 +44,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                     "catalogs": [
                       {
                         "id": "cat-v21-001",
-                        "items": [
+                        "resources": [
                           {
                             "@context": "https://schema.beckn.io/",
                             "@type": "Item",
@@ -54,7 +54,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                               "shortDesc": "Next-gen charger"
                             },
                             "provider": {"id": "provider-v21-001"},
-                            "itemAttributes": {
+                            "resourceAttributes": {
                               "@context": "https://example.org/charging.jsonld",
                               "@type": "ChargingService",
                               "connectorType": "CCS2",
@@ -95,7 +95,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                 .isEqualTo("Smart EV Charger v2.1");
 
         JsonNode payload = objectMapper.readTree(item.getPayload());
-        JsonNode itemNode = payload.path("catalogs").path(0).path("items").path(0);
+        JsonNode itemNode = payload.path("catalogs").path(0).path("resources").path(0);
         assertThat(itemNode.isMissingNode()).isFalse();
 
         String payloadStr = item.getPayload();
@@ -118,7 +118,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                     "catalogs": [
                       {
                         "id": "cat-v21-002",
-                        "items": [
+                        "resources": [
                           {
                             "@context": "https://schema.beckn.io/",
                             "@type": "Item",
@@ -128,7 +128,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                               "shortDesc": "Time-slot-based EV charging"
                             },
                             "provider": {"id": "provider-v21-002"},
-                            "itemAttributes": {
+                            "resourceAttributes": {
                               "@context": "https://example.org/slot.jsonld",
                               "@type": "SlotBookingService",
                               "duration": "30min",
@@ -173,14 +173,14 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                     "catalogs": [
                       {
                         "id": "cat-multi-001",
-                        "items": [
+                        "resources": [
                           {
                             "@context": "https://schema.beckn.io/",
                             "@type": "Item",
                             "id": "item-multi-001",
                             "descriptor": {"name": "CCS2 Charger"},
                             "provider": {"id": "prov-001"},
-                            "itemAttributes": {
+                            "resourceAttributes": {
                               "@context": "https://ctx.example.org",
                               "@type": "ChargingService",
                               "connectorType": "CCS2"
@@ -192,7 +192,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                             "id": "item-multi-002",
                             "descriptor": {"name": "Type2 Charger"},
                             "provider": {"id": "prov-001"},
-                            "itemAttributes": {
+                            "resourceAttributes": {
                               "@context": "https://ctx.example.org",
                               "@type": "ChargingService",
                               "connectorType": "Type2"
@@ -242,13 +242,13 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                     "catalogs": [
                       {
                         "id": "cat-clean-001",
-                        "items": [
+                        "resources": [
                           {
                             "@type": "Item",
                             "id": "item-clean-001",
                             "descriptor": {"name": "Clean Item"},
                             "provider": {"id": "prov-clean-001"},
-                            "itemAttributes": {
+                            "resourceAttributes": {
                               "@type": "ChargingService",
                               "connectorType": "CCS2"
                             }

@@ -25,11 +25,8 @@ public record OfferIndex(
         List<JsonNode> catalogWide = new ArrayList<>();
         Map<String, List<JsonNode>> byItemId = new HashMap<>();
         for (JsonNode offer : allOffers) {
-            // v2.0: offers use "resourceIds" to reference resources; fall back to "items" (v2.1 / legacy)
+            // Offers reference resources via "resourceIds"
             JsonNode offerItems = offer.path(BecknFields.RESOURCE_IDS);
-            if (offerItems.isMissingNode() || !offerItems.isArray()) {
-                offerItems = offer.path(BecknFields.ITEMS);
-            }
             if (offerItems.isMissingNode() || !offerItems.isArray()) {
                 catalogWide.add(offer);
             } else {

@@ -51,7 +51,7 @@
                                         "name": "EcoPower Charging Pvt Ltd"
                                     }
                                 },
-                                "itemAttributes": {
+                                "resourceAttributes": {
                                     "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
                                     "@type": "ChargingService",
                                     "connectorType": "CCS2",

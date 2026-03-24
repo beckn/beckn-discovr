@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
-import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Resource;
 import org.beckn.discover.model.TimePeriod;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.util.DiscoveryConstants;
@@ -103,9 +103,9 @@ public class PostgreSQLAssembler {
         List<Catalog> catalogs = new ArrayList<>(catalogMap.values());
         long elapsedMs = (System.nanoTime() - t0) / 1_000_000;
 
-        log.info("assembler.done catalogs={} items={} skippedRows={} durationMs={} transactionId={}",
+        log.info("assembler.done catalogs={} resources={} skippedRows={} durationMs={} transactionId={}",
                 catalogs.size(),
-                catalogs.stream().mapToInt(c -> c.getItems() != null ? c.getItems().size() : 0).sum(),
+                catalogs.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
                 skipped, elapsedMs, request.transactionId());
 
         return catalogs;
@@ -139,9 +139,9 @@ public class PostgreSQLAssembler {
             return false;
         }
 
-        Item item = objectMapper.treeToValue(itemNode, Item.class);
-        if (item == null) {
-            log.warn("assembler.row.skip reason=item-deserialise-failed itemId={}", itemId);
+        Resource resource = objectMapper.treeToValue(itemNode, Resource.class);
+        if (resource == null) {
+            log.warn("assembler.row.skip reason=resource-deserialise-failed itemId={}", itemId);
             return false;
         }
 
@@ -149,14 +149,14 @@ public class PostgreSQLAssembler {
 
         // computeIfAbsent: catalog metadata is extracted only on the first row
         Catalog catalog = catalogMap.computeIfAbsent(catalogId, id -> buildCatalog(id, catalogPayload));
-        catalog.getItems().add(item);
+        catalog.getResources().add(resource);
 
-        // Back-fill providerId from item when catalog payload lacks providerId
+        // Back-fill providerId from resource when catalog payload lacks providerId
         if (catalog.getProviderId() == null
-                && item.getProvider() != null
-                && item.getProvider().getId() != null
-                && !item.getProvider().getId().isBlank()) {
-            catalog.setProviderId(item.getProvider().getId());
+                && resource.getProvider() != null
+                && resource.getProvider().getId() != null
+                && !resource.getProvider().getId().isBlank()) {
+            catalog.setProviderId(resource.getProvider().getId());
         }
 
         // Offer extraction — uses matching_offers when present, falls back to catalog payload
@@ -170,7 +170,7 @@ public class PostgreSQLAssembler {
     private Catalog buildCatalog(String catalogId, JsonNode catalogPayload) {
         Catalog catalog = new Catalog();
         catalog.setId(catalogId);
-        catalog.setItems(new ArrayList<>(16));
+        catalog.setResources(new ArrayList<>(16));
         catalog.setOffers(new ArrayList<>(8));
 
         if (catalogPayload != null) {
@@ -285,11 +285,7 @@ public class PostgreSQLAssembler {
 
         return StreamSupport.stream(catalogsNode.spliterator(), false)
                 .map(cat -> {
-                    JsonNode itemsNode = cat.get(DiscoveryConstants.JsonFields.BECKN_ITEMS);
-                    if (itemsNode == null || !itemsNode.isArray()) {
-                        itemsNode = cat.get(DiscoveryConstants.JsonFields.BECKN_RESOURCES);
-                    }
-                    return itemsNode;
+                    return cat.get(DiscoveryConstants.JsonFields.BECKN_RESOURCES);
                 })
                 .filter(items -> items != null && items.isArray())
                 .flatMap(items -> StreamSupport.stream(items.spliterator(), false))

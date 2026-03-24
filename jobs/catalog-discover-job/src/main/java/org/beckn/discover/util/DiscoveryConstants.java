@@ -54,8 +54,6 @@ public class DiscoveryConstants {
         public static final String TYPE = "@type";
         public static final String CONTEXT = "@context";
         public static final String CATALOGS = "catalogs";
-        public static final String BECKN_ITEMS = "items";
-        /** v2.1 resource-based catalogs use "resources" instead of "items". */
         public static final String BECKN_RESOURCES = "resources";
         public static final String BECKN_ID = "id";
         public static final String BECKN_DESCRIPTOR = "descriptor";

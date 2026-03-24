@@ -47,7 +47,7 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m1","transactionId":"t1"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [{"id": "item-1",
+                    "resources": [{"id": "item-1",
                       "descriptor": {"name": "EV Station"},
                       "gps": "12.34,56.78"}],
                     "offers": []}]}
@@ -63,7 +63,7 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [{"id": "item-1",
+                    "resources": [{"id": "item-1",
                       "descriptor": {"name": null}}],
                     "offers": []}]}
                 }""";
@@ -91,10 +91,10 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m1","transactionId":"t1"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [{"id": "item-1",
+                    "resources": [{"id": "item-1",
                       "descriptor": {"name": "EV Station"}}],
                     "offers": [{"id": "offer-1",
-                      "items": ["item-1"],
+                      "resourceIds": ["item-1"],
                       "descriptor": {"name": "Offer One"}}]}]}
                 }""";
         orchestrator.processPublish(round1);
@@ -102,17 +102,17 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         var afterRound1 = itemRepository.findAll().get(0);
         assertThat(afterRound1.getPayload()).contains("offer-1").contains("Offer One");
 
-        // Round 2: update only the offer name — send null for items (accidentally omitted/nulled)
-        // The items link inside the stored offer must be preserved
+        // Round 2: update only the offer name — send null for resourceIds (accidentally omitted/nulled)
+        // The resourceIds link inside the stored offer must be preserved
         String round2 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [{"id": "item-1",
+                    "resources": [{"id": "item-1",
                       "descriptor": {"name": "EV Station"}}],
                     "offers": [{"id": "offer-1",
-                      "items": null,
+                      "resourceIds": null,
                       "descriptor": {"name": "Offer One Updated"}}]}]}
                 }""";
         orchestrator.processPublish(round2);
@@ -121,9 +121,9 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         var afterRound2 = itemRepository.findAll().get(0);
         // Offer name must be updated
         assertThat(afterRound2.getPayload()).contains("Offer One Updated");
-        // items link inside the offer must NOT be deleted despite null in round-2
+        // resourceIds link inside the offer must NOT be deleted despite null in round-2
         assertThat(afterRound2.getOfferIds()).contains("offer-1");
-        assertThat(afterRound2.getPayload()).contains("\"items\"");
+        assertThat(afterRound2.getPayload()).contains("\"resourceIds\"");
     }
 
     /**
@@ -146,12 +146,12 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m1","transactionId":"t1"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [
+                    "resources": [
                       {"id": "item-1", "descriptor": {"name": "Item One"}},
                       {"id": "item-2", "descriptor": {"name": "Item Two"}}
                     ],
                     "offers": [{"id": "offer-A",
-                      "items": ["item-1", "item-2"],
+                      "resourceIds": ["item-1", "item-2"],
                       "price": "100.00",
                       "descriptor": {"name": "Flash Sale"}}]
                   }]}
@@ -166,18 +166,18 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(item1AfterR1.getPayload()).contains("100.00");
         assertThat(item2AfterR1.getPayload()).contains("100.00");
 
-        // Round 2: item-1 is explicit; item-2 is NOT in items.
+        // Round 2: item-1 is explicit; item-2 is NOT in resources.
         // Phase 2 must locate item-2 via the offer_ids DB column and propagate the new price.
         String round2 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [
+                    "resources": [
                       {"id": "item-1", "descriptor": {"name": "Item One"}}
                     ],
                     "offers": [{"id": "offer-A",
-                      "items": ["item-1", "item-2"],
+                      "resourceIds": ["item-1", "item-2"],
                       "price": "75.00",
                       "descriptor": {"name": "Flash Sale"}}]
                   }]}
@@ -219,12 +219,12 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m1","transactionId":"t1"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [
+                    "resources": [
                       {"id": "item-1", "descriptor": {"name": "Item One"}},
                       {"id": "item-2", "descriptor": {"name": "Item Two"}}
                     ],
                     "offers": [{"id": "offer-A",
-                      "items": ["item-1", "item-2"],
+                      "resourceIds": ["item-1", "item-2"],
                       "price": "100.00",
                       "descriptor": {"name": "Flash Sale"}}]
                   }]}
@@ -233,17 +233,17 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
         assertThat(itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
 
-        // Round 2: offer-A updated with items = ["item-1"] ONLY — item-2 intentionally absent.
-        // Despite item-2 being absent from offer.items, Phase 2 MUST still update item-2
+        // Round 2: offer-A updated with resourceIds = ["item-1"] ONLY — item-2 intentionally absent.
+        // Despite item-2 being absent from offer.resourceIds, Phase 2 MUST still update item-2
         // because the DB offer_ids column is the source of truth for offer-item linkage.
         String round2 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [],
+                    "resources": [],
                     "offers": [{"id": "offer-A",
-                      "items": ["item-1"],
+                      "resourceIds": ["item-1"],
                       "price": "50.00",
                       "descriptor": {"name": "Flash Sale"}}]
                   }]}
@@ -287,12 +287,12 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m1","transactionId":"t1"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [
+                    "resources": [
                       {"id": "item-1", "descriptor": {"name": "Item One"}},
                       {"id": "item-2", "descriptor": {"name": "Item Two"}}
                     ],
                     "offers": [{"id": "offer-A",
-                      "items": ["item-1", "item-2"],
+                      "resourceIds": ["item-1", "item-2"],
                       "validThrough": "2025-12-31",
                       "descriptor": {"name": "Year-end Offer"}}]
                   }]}
@@ -302,16 +302,16 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
         assertThat(itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
 
-        // Round 2: no explicit items at all — only an updated offer.
+        // Round 2: no explicit resources at all — only an updated offer.
         // Phase 2 must propagate to BOTH items via the DB offer_ids column.
         String round2 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
                   "message": {"catalogs": [{"id": "cat-1",
-                    "items": [],
+                    "resources": [],
                     "offers": [{"id": "offer-A",
-                      "items": ["item-1", "item-2"],
+                      "resourceIds": ["item-1", "item-2"],
                       "validThrough": "2026-06-30",
                       "descriptor": {"name": "Year-end Offer"}}]
                   }]}

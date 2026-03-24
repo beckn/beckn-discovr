@@ -6,11 +6,11 @@ import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.CategoryCode;
 import org.beckn.discover.model.Constraint;
 import org.beckn.discover.model.Descriptor;
-import org.beckn.discover.model.Item;
 import org.beckn.discover.model.Location;
 import org.beckn.discover.model.Policy;
 import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Rating;
+import org.beckn.discover.model.Resource;
 import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.service.response.CatalogProcessor;
 import org.slf4j.Logger;
@@ -29,8 +29,8 @@ import java.util.function.Predicate;
  * into {@link Catalog} objects grouped by {@code catalog_id}.
  *
  * <p>
- * Each ES hit is one item document. Multiple hits from the same catalog are
- * grouped into a single {@link Catalog} with multiple {@link Item}s.
+ * Each ES hit is one resource document. Multiple hits from the same catalog are
+ * grouped into a single {@link Catalog} with multiple {@link Resource}s.
  * After grouping, each catalog is normalised via
  * {@link CatalogProcessor#processCatalog}.
  * </p>
@@ -69,7 +69,7 @@ public class EsSearchAssembler {
                 }
 
                 Catalog catalog = byCatalogId.computeIfAbsent(catalogId, id -> buildCatalog(id, doc));
-                catalog.getItems().add(buildItem(doc));
+                catalog.getResources().add(buildResource(doc));
                 mergeOffersFromDoc(catalog, doc);
             } catch (Exception e) {
                 log.warn("es.assembler.hit.failed txId={} error={}", transactionId, e.getMessage());
@@ -97,7 +97,7 @@ public class EsSearchAssembler {
         catalog.setBppId(str(doc, "bpp_id"));
         catalog.setBppUri(str(doc, "bpp_uri"));
         catalog.setDescriptor(new Descriptor("Descriptor"));
-        catalog.setItems(new ArrayList<>());
+        catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         return catalog;
     }
@@ -124,30 +124,30 @@ public class EsSearchAssembler {
     }
 
     @SuppressWarnings("unchecked")
-    private static Item buildItem(Map<String, Object> doc) {
-        Item item = new Item();
-        item.setContext(str(doc, "item_context"));
-        item.setType(str(doc, "item_type"));
-        item.setId(str(doc, "item_id"));
-        item.setDescriptor(buildDescriptor(doc));
-        item.setCategory(buildCategory(doc));
-        item.setRating(buildRating(doc));
-        item.setRateable(bool(doc, "item_rateable"));
-        item.setIsActive(bool(doc, "item_is_active"));
+    private static Resource buildResource(Map<String, Object> doc) {
+        Resource resource = new Resource();
+        resource.setContext(str(doc, "item_context"));
+        resource.setType(str(doc, "item_type"));
+        resource.setId(str(doc, "item_id"));
+        resource.setDescriptor(buildDescriptor(doc));
+        resource.setCategory(buildCategory(doc));
+        resource.setRating(buildRating(doc));
+        resource.setRateable(bool(doc, "item_rateable"));
+        resource.setIsActive(bool(doc, "item_is_active"));
         Object networkIdRaw = doc.get("network_id");
         if (networkIdRaw instanceof String s && !s.isBlank())
-            item.setNetworkId(List.of(s));
+            resource.setNetworkId(List.of(s));
         else if (networkIdRaw instanceof List<?> list)
-            item.setNetworkId((List<String>) list);
+            resource.setNetworkId((List<String>) list);
         Provider provider = buildProvider(doc);
         if (provider != null) {
             provider.setLocations(collectProviderLocations(doc));
         }
-        item.setProvider(provider);
-        item.setItemAttributes(buildAttributes(doc));
+        resource.setProvider(provider);
+        resource.setResourceAttributes(buildAttributes(doc));
 
-        // Reconstruct direct item-level locations from loc_* fields
-        item.setAvailableAt(collectItemLocations(doc));
+        // Reconstruct direct resource-level locations from loc_* fields
+        resource.setAvailableAt(collectItemLocations(doc));
 
         // v2.1: constraints and policies — present only when indexed
         Object constraintsRaw = doc.get("constraints");
@@ -156,7 +156,7 @@ public class EsSearchAssembler {
                     .filter(e -> e instanceof Map<?, ?>)
                     .map(e -> constraintFromMap((Map<String, Object>) e))
                     .toList();
-            if (!constraints.isEmpty()) item.setConstraints(constraints);
+            if (!constraints.isEmpty()) resource.setConstraints(constraints);
         }
         Object policiesRaw = doc.get("policies");
         if (policiesRaw instanceof List<?> list && !list.isEmpty()) {
@@ -164,10 +164,10 @@ public class EsSearchAssembler {
                     .filter(e -> e instanceof Map<?, ?>)
                     .map(e -> policyFromMap((Map<String, Object>) e))
                     .toList();
-            if (!policies.isEmpty()) item.setPolicies(policies);
+            if (!policies.isEmpty()) resource.setPolicies(policies);
         }
 
-        return item;
+        return resource;
     }
 
     /**
@@ -175,7 +175,7 @@ public class EsSearchAssembler {
      *
      * <p>{@code GeoShapeExtractor} on the publish side indexes location objects from
      * any path as {@code loc_*} fields. However, offer-level, provider-level,
-     * itemAttributes-level, and providerAttributes-level locations are returned via
+     * resourceAttributes-level, and providerAttributes-level locations are returned via
      * their own response structures. Only direct item children
      * (e.g. {@code availableAt}, {@code location}, or any spec-extended
      * location field) should be collected here.</p>
@@ -185,7 +185,7 @@ public class EsSearchAssembler {
                 key.contains("_items_")
                         && !key.contains("_provider_")
                         && !key.contains("_providerAttributes_")
-                        && !key.contains("_itemAttributes_")
+                        && !key.contains("_resourceAttributes_")
                         && !key.contains("_offers_"));
     }
 

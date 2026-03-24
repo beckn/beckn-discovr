@@ -49,7 +49,7 @@ public class ItemPayloadBuilder {
             ObjectNode baseSlice, JsonNode itemNode, OfferIndex offerIndex, String itemId) {
         ArrayNode itemOffers = offerIndex.getOffersForItem(itemId, objectMapper);
         ObjectNode itemSlice = baseSlice.deepCopy();
-        itemSlice.set(BecknFields.ITEMS, wrapInArray(itemNode));
+        itemSlice.set(BecknFields.RESOURCES, wrapInArray(itemNode));
         itemSlice.set(BecknFields.OFFERS, itemOffers);
         return objectMapper.createObjectNode().set(BecknFields.CATALOGS, wrapInArray(itemSlice));
     }

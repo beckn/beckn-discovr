@@ -153,7 +153,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                   "message": {
                     "catalogs": [{
                       "id": "cat-x",
-                      "items": []
+                      "resources": []
                     }]
                   }
                 }
@@ -181,7 +181,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                       "id": "cat-1",
                       "bppId": "bpp.test",
                       "bppUri": "https://bpp.example.com",
-                      "items": [{
+                      "resources": [{
                         "id": "item-1"
                       }]
                     }]

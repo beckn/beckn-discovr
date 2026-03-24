@@ -40,11 +40,12 @@ public final class BecknFields {
 
     // ── Catalog / Item fields ─────────────────────────────────────────────────
     public static final String ID              = "id";
+    /** @deprecated Retained only for excluding legacy field from copies. All new writes use RESOURCES. */
+    @Deprecated
     public static final String ITEMS           = "items";
     public static final String OFFERS          = "offers";
     public static final String DESCRIPTOR      = "descriptor";
     public static final String PROVIDER        = "provider";
-    public static final String ITEM_ATTRIBUTES = "itemAttributes";
     public static final String NAME            = "name";
     public static final String SHORT_DESC      = "shortDesc";
     public static final String LONG_DESC       = "longDesc";

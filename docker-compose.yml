@@ -177,7 +177,7 @@ services:
       - POSTGRES_PASSWORD=catalog123
       - POSTGRES_MAX_POOL_SIZE=10
       - MAX_ITEMS_PER_CATALOG=100
-      - SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/rfc-beckn-spec-design-Mar-13/api/v2.0.0/beckn.yaml
+      - SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/draft/api/v2.0.0/beckn.yaml
       - SCHEMA_CACHE_TTL_HOURS=24
       - LOGGING_LEVEL_ORG_BECKN_DISCOVER=INFO
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA=ERROR

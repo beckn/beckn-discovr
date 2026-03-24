@@ -87,11 +87,11 @@ public final class FieldExtractor {
     }
 
     /**
-     * Extracts {@code @type} from {@code itemAttributes} by iterating all
+     * Extracts {@code @type} from {@code resourceAttributes} by iterating all
      * items in the catalog and returning the first non-blank value found.
      *
      * <p>
-     * Spec path (v2.0): {@code catalogs[].items[].itemAttributes.@type}
+     * Spec path: {@code catalogs[].items[].resourceAttributes.@type}
      * (e.g. {@code "ChargingService"}).
      *
      * <p>
@@ -110,8 +110,7 @@ public final class FieldExtractor {
      *   <li>{@code context.schemaContext} — full URL; fragment after {@code #} is used as type
      *       (e.g. {@code "https://…/context.jsonld#ChargingService"} → {@code "ChargingService"}).
      *       Used for v2.0 publishes that carry only a context-level schema pointer.</li>
-     *   <li>{@code itemAttributes.@type} or {@code resourceAttributes.@type} from first item
-     *       — authoritative domain schema type.</li>
+     *   <li>{@code resourceAttributes.@type} from first item — authoritative domain schema type.</li>
      * </ol>
      *
      * @param catalogNode  normalized catalog JsonNode
@@ -130,12 +129,10 @@ public final class FieldExtractor {
                 }
             }
         }
-        // 2. itemAttributes / resourceAttributes @type from first item
+        // 2. resourceAttributes @type from first item
         if (catalogNode != null && !catalogNode.isMissingNode()) {
             for (JsonNode itemNode : iterableItems(catalogNode)) {
-                JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
-                if (attrs.isMissingNode() || !attrs.isObject())
-                    attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+                JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
                 if (attrs.isMissingNode() || !attrs.isObject())
                     continue;
                 JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
@@ -163,10 +160,7 @@ public final class FieldExtractor {
     public static Iterable<JsonNode> iterableItems(JsonNode catalogNode) {
         if (catalogNode == null)
             return List.of();
-        JsonNode field = catalogNode.path(BecknFields.ITEMS);
-        if (field.isMissingNode() || !field.isArray()) {
-            field = catalogNode.path(BecknFields.RESOURCES);
-        }
+        JsonNode field = catalogNode.path(BecknFields.RESOURCES);
         if (field.isMissingNode() || !field.isArray())
             return List.of();
         final JsonNode arr = field;
@@ -189,17 +183,13 @@ public final class FieldExtractor {
     }
 
     /**
-     * Item schema type from {@code itemAttributes.type} — Beckn v2.0.
+     * Item schema type from {@code resourceAttributes.type}.
      * Returns null when absent; callers fall back to {@link #extractSchemaTypeFromItems}.
      */
     public static String extractItemType(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
-        if (attrs.isMissingNode() || !attrs.isObject()) {
-            // v2.0 resource-based items use "resourceAttributes" instead of "itemAttributes"
-            attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
-        }
+        JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         if (!attrs.isMissingNode() && attrs.isObject()) {
             JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
             if (typeNode.isTextual()) {
@@ -211,8 +201,8 @@ public final class FieldExtractor {
     }
 
     /**
-     * Item attributes @context from itemAttributes (string or first element of array) — v2.0 format.
-     * Falls back to null when itemAttributes is missing or malformed.
+     * Item attributes @context from resourceAttributes (string or first element of array).
+     * Falls back to null when resourceAttributes is missing or malformed.
      */
     public static String extractItemAttributesContextUrl(JsonNode itemNode) {
         JsonNode attrs = itemAttributesNode(itemNode);
@@ -220,7 +210,7 @@ public final class FieldExtractor {
     }
 
     /**
-     * Item attributes @type from itemAttributes (e.g. "ChargingService") — v2.0 format.
+     * Item attributes @type from resourceAttributes (e.g. "ChargingService").
      * Returns null when missing or blank; callers should apply their own fallback.
      */
     public static String extractItemAttributesType(JsonNode itemNode) {
@@ -272,11 +262,7 @@ public final class FieldExtractor {
     private static JsonNode itemAttributesNode(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
-        if (attrs.isMissingNode() || !attrs.isObject()) {
-            // v2.0 resource-based items use "resourceAttributes" instead of "itemAttributes"
-            attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
-        }
+        JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         return (attrs.isMissingNode() || !attrs.isObject()) ? null : attrs;
     }
 }
