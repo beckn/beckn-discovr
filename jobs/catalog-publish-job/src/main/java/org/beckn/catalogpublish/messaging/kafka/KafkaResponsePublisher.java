@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.dto.ProcessingResult;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.messaging.ResponsePublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,7 +49,7 @@ public class KafkaResponsePublisher implements ResponsePublisher {
             response.set(BecknFields.MESSAGE, message);
             kafkaTemplate.send(topic, objectMapper.writeValueAsString(response));
         } catch (Exception e) {
-            log.error("response.publish.failed error={}", e.getMessage(), e);
+            log.error("event={} error={}", LogEvent.KAFKA_FAILED, e.getMessage(), e);
         }
     }
 }

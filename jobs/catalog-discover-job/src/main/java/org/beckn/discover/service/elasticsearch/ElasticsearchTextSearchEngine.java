@@ -8,6 +8,7 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.config.EsTextSearchCondition;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.engine.TextSearchEngine;
@@ -15,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Service;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -95,13 +98,18 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
             // throws SemanticSearchException on provider failure; empty Optional → no results
             Optional<List<Float>> queryVector = embeddingClient.get().embed(queryToEmbed);
             if (queryVector.isEmpty()) {
-                log.warn("es.knn.empty-vector txId={} — returning empty catalog", txId);
+                log.warn(LogEvent.ES_SEARCH_FAILED + ".empty-vector",
+                        value("transactionId", txId));
                 return List.of();
             }
 
             List<Float> vec = queryVector.get();
-            log.debug("es.knn.query index={} field=item_vector k={} numCandidates={} minScore={} txId={}",
-                    aliasName, resultLimit, knnCandidates, minScore, txId);
+            log.debug(LogEvent.ES_SEARCH_STARTED + ".knn",
+                    value("index", aliasName),
+                    value("k", resultLimit),
+                    value("numCandidates", knnCandidates),
+                    value("minScore", minScore),
+                    value("transactionId", txId));
             try {
                 SearchResponse<Map> response = esClient.search(s -> s
                         .index(aliasName)
@@ -116,17 +124,25 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                 return assembleAndLog(response, txId, start, "knn");
             } catch (ElasticsearchException e) {
                 if ("index_not_found_exception".equals(e.error().type())) {
-                    log.info("es.knn.index.not-found alias={} txId={}", aliasName, txId);
+                    log.info(LogEvent.ES_SEARCH_COMPLETED + ".knn-index-not-found",
+                            value("alias", aliasName),
+                            value("transactionId", txId));
                     return List.of();
                 }
                 long ms = Duration.between(start, Instant.now()).toMillis();
-                log.error("es.knn.failed durationMs={} txId={} error={}", ms, txId, e.getMessage(), e);
+                log.error(LogEvent.ES_SEARCH_FAILED + ".knn",
+                        value("durationMs", ms),
+                        value("transactionId", txId),
+                        value("error", e.getMessage()),
+                        e);
                 throw new Exception("Elasticsearch knn search failed for transactionId=" + txId, e);
             }
         }
 
         // ── Keyword search path (engine=native-els only) ──────────────────────
-        log.info("es.text-search.request txId={} {}", txId, buildTextSearchJson(text));
+        log.info(LogEvent.ES_SEARCH_STARTED + ".keyword",
+                value("transactionId", txId),
+                value("query", buildTextSearchJson(text)));
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                     .index(aliasName)
@@ -143,16 +159,25 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
             throw e;
         } catch (ElasticsearchException e) {
             if ("index_not_found_exception".equals(e.error().type())) {
-                log.info("es.search.index.not-found alias={} transactionId={} — no data indexed yet, returning empty",
-                        aliasName, txId);
+                log.info(LogEvent.ES_SEARCH_COMPLETED + ".index-not-found",
+                        value("alias", aliasName),
+                        value("transactionId", txId));
                 return List.of();
             }
             long ms = Duration.between(start, Instant.now()).toMillis();
-            log.error("es.search.failed durationMs={} transactionId={} error={}", ms, txId, e.getMessage(), e);
+            log.error(LogEvent.ES_SEARCH_FAILED,
+                    value("durationMs", ms),
+                    value("transactionId", txId),
+                    value("error", e.getMessage()),
+                    e);
             throw new Exception("Elasticsearch text search failed for transactionId=" + txId, e);
         } catch (Exception e) {
             long ms = Duration.between(start, Instant.now()).toMillis();
-            log.error("es.search.failed durationMs={} transactionId={} error={}", ms, txId, e.getMessage(), e);
+            log.error(LogEvent.ES_SEARCH_FAILED,
+                    value("durationMs", ms),
+                    value("transactionId", txId),
+                    value("error", e.getMessage()),
+                    e);
             throw new Exception("Elasticsearch text search failed for transactionId=" + txId, e);
         }
     }
@@ -166,9 +191,17 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                 .toList();
         List<Catalog> catalogs = assembler.assemble(hits, txId);
         long ms = Duration.between(start, Instant.now()).toMillis();
-        log.info("es.search.success mode={} catalogs={} hits={} durationMs={} transactionId={}",
-                mode, catalogs.size(), hits.size(), ms, txId);
-        perfLog.info("es.search mode={} durationMs={} catalogs={} transactionId={}", mode, ms, catalogs.size(), txId);
+        log.info(LogEvent.ES_SEARCH_COMPLETED,
+                value("mode", mode),
+                value("catalogs", catalogs.size()),
+                value("hits", hits.size()),
+                value("durationMs", ms),
+                value("transactionId", txId));
+        perfLog.info(LogEvent.ES_SEARCH_COMPLETED,
+                value("mode", mode),
+                value("durationMs", ms),
+                value("catalogs", catalogs.size()),
+                value("transactionId", txId));
         return catalogs;
     }
 

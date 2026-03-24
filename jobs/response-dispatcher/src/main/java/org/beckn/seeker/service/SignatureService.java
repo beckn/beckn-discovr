@@ -1,9 +1,9 @@
 package org.beckn.seeker.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.beckn.seeker.logging.LogEvent;
 import org.beckn.seeker.service.signature.CryptoService;
 import org.beckn.seeker.service.signature.PrivateKeyLoader;
 import org.beckn.seeker.service.signature.SignatureHeaderBuilder;
@@ -13,9 +13,10 @@ import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 import java.security.PrivateKey;
 
+import static net.logstash.logback.argument.StructuredArguments.value;
+
 /**
  * Service for generating Beckn HTTP Signatures using Ed25519 cryptographic algorithm.
- * 
  */
 @Slf4j
 @Service
@@ -54,17 +55,20 @@ public class SignatureService {
     @PostConstruct
     public void init() {
         if (enabled) {
-            log.debug("Initializing signature service with key-id-suffix: {}", uniqueKeyId);
+            log.info("{}", value("event", LogEvent.SIGNATURE_INIT),
+                    value("keyIdSuffix", uniqueKeyId));
             validateConfiguration();
             try {
                 parsedPrivateKey = privateKeyLoader.loadPrivateKey(privateKeyPem);
-                log.info("Signature service initialized successfully");
+                log.info("{}", value("event", LogEvent.SIGNATURE_GENERATED),
+                        value("status", "initialized"));
             } catch (Exception e) {
-                log.error("Failed to initialize signature service: {}", e.getMessage());
+                log.error("{}", value("event", LogEvent.SIGNATURE_FAILED),
+                        value("errorMessage", e.getMessage()));
                 throw new IllegalStateException("Invalid signature configuration: " + e.getMessage(), e);
             }
         } else {
-            log.debug("Signature service disabled");
+            log.debug("{}", value("event", LogEvent.SIGNATURE_DISABLED));
         }
     }
 
@@ -106,16 +110,18 @@ public class SignatureService {
         try {
             long created = System.currentTimeMillis() / 1000;
             long expires = created + expirySeconds;
-            
+
             String digest = cryptoService.hashMessage(requestBody);
             String signingString = signatureHeaderBuilder.buildSigningString(created, expires, digest);
             String signature = cryptoService.sign(signingString, parsedPrivateKey);
-            
-            return signatureHeaderBuilder.buildAuthorizationHeader(subscriberId, uniqueKeyId, created, expires, signature);
+
+            String header = signatureHeaderBuilder.buildAuthorizationHeader(subscriberId, uniqueKeyId, created, expires, signature);
+            log.debug("{}", value("event", LogEvent.SIGNATURE_GENERATED));
+            return header;
         } catch (Exception e) {
-            log.error("Failed to generate signature: {}", e.getMessage(), e);
+            log.error("{}", value("event", LogEvent.SIGNATURE_FAILED),
+                    value("errorMessage", e.getMessage()), e);
             throw new RuntimeException("Signature generation failed", e);
         }
     }
-
 }

@@ -5,12 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.beckn.seeker.common.BecknFields;
+import org.beckn.seeker.logging.LogEvent;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.retry.annotation.Backoff;
@@ -19,6 +19,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
  * Service for sending HTTP requests to BAP endpoints
@@ -56,13 +58,14 @@ public class HttpService {
             JsonNode context = rootNode.path(BecknFields.CONTEXT);
 
             if (context.isMissingNode()) {
-                log.error("Invalid event structure: missing context. Event: {}", eventJson);
+                log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                        value("reason", "missing context"),
+                        value("eventJson", truncate(eventJson, 2000)));
                 throw new IllegalArgumentException("Invalid event structure for BAP notification");
             }
 
             String targetUrl = null;
             String action = context.path(BecknFields.ACTION).asText();
-            // Beckn v2.0: context fields use camelCase
             JsonNode bapUriNode = context.path(BecknFields.BAP_URI);
             JsonNode bppUriNode = context.path(BecknFields.BPP_URI);
 
@@ -78,11 +81,15 @@ public class HttpService {
                 }
                 targetUrl = normalizeBaseUrl(bppUriNode.asText()) + ON_PUBLISH_ENDPOINT;
             } else {
-                log.error("Unknown or unsupported action: {}", action);
+                log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                        value("reason", "unknown action"),
+                        value("action", action));
                 throw new IllegalArgumentException("Unknown or unsupported action: " + action);
             }
 
-            log.info("Resolved target URL for action {}: {}", action, targetUrl);
+            log.info("{}", value("event", LogEvent.CALLBACK_RESOLVED),
+                    value("action", action),
+                    value("targetUrl", targetUrl));
 
             // Normalize JSON to compact format for consistent signature validation
             String requestBody = objectMapper.writeValueAsString(rootNode);
@@ -97,11 +104,13 @@ public class HttpService {
                 headers.set("Authorization", authHeader);
             }
 
-            // Create HTTP entity
             HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
 
             // Make the HTTP POST request — handle 409 as AckNoCallback (not an error)
             try {
+                log.info("{}", value("event", LogEvent.CALLBACK_SENT),
+                        value("targetUrl", targetUrl));
+
                 ResponseEntity<String> response = restTemplate.exchange(
                         targetUrl,
                         HttpMethod.POST,
@@ -113,18 +122,21 @@ public class HttpService {
 
             } catch (HttpClientErrorException e) {
                 if (e.getStatusCode() == HttpStatus.CONFLICT) {
-                    // HTTP 409 = AckNoCallback: BAP has no registered callback — log and skip
-                    log.info("AckNoCallback (HTTP 409) from {}: BAP has no registered callback, skipping", targetUrl);
+                    log.info("{}", value("event", LogEvent.CALLBACK_ACK_NO_CALLBACK),
+                            value("targetUrl", targetUrl),
+                            value("httpStatus", 409));
                     return true;
                 }
                 throw e;
             }
 
         } catch (RestClientException e) {
-            log.error("HTTP error sending callback: {}", e.getMessage(), e);
-            throw e; // Re-throw to trigger retry
+            log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                    value("errorMessage", e.getMessage()), e);
+            throw e;
         } catch (Exception e) {
-            log.error("Error sending callback response: {}", e.getMessage(), e);
+            log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                    value("errorMessage", e.getMessage()), e);
             throw new RuntimeException("Failed to send callback", e);
         }
     }
@@ -136,10 +148,12 @@ public class HttpService {
     private void parseAckResponse(ResponseEntity<String> response, String targetUrl) {
         var statusCode = response.getStatusCode();
         var body = response.getBody();
-        log.info("Callback response from {}: HTTP {}", targetUrl, statusCode);
 
         if (body == null || body.isBlank()) {
-            log.warn("Empty response body from {}", targetUrl);
+            log.warn("{}", value("event", LogEvent.CALLBACK_ACK),
+                    value("targetUrl", targetUrl),
+                    value("httpStatus", statusCode.value()),
+                    value("reason", "empty response body"));
             return;
         }
         try {
@@ -149,12 +163,23 @@ public class HttpService {
                 var error = responseNode.path(BecknFields.ERROR);
                 var errorCode = error.path(BecknFields.ERROR_CODE).asText();
                 var errorMessage = error.path(BecknFields.ERROR_MESSAGE).asText();
-                log.warn("NACK received from {}: errorCode={}, errorMessage={}", targetUrl, errorCode, errorMessage);
+                log.warn("{}", value("event", LogEvent.CALLBACK_NACK),
+                        value("targetUrl", targetUrl),
+                        value("httpStatus", statusCode.value()),
+                        value("errorCode", errorCode),
+                        value("errorMessage", errorMessage),
+                        value("responseBody", body));
             } else {
-                log.debug("ACK received from {}", targetUrl);
+                log.debug("{}", value("event", LogEvent.CALLBACK_ACK),
+                        value("targetUrl", targetUrl),
+                        value("httpStatus", statusCode.value()));
             }
         } catch (Exception e) {
-            log.warn("Could not parse ACK response body from {}: {}", targetUrl, e.getMessage());
+            log.warn("{}", value("event", LogEvent.CALLBACK_ACK),
+                    value("targetUrl", targetUrl),
+                    value("httpStatus", statusCode.value()),
+                    value("reason", "could not parse response body"),
+                    value("parseError", e.getMessage()));
         }
     }
 
@@ -163,4 +188,9 @@ public class HttpService {
         return (url != null && url.endsWith("/")) ? url.substring(0, url.length() - 1) : url;
     }
 
+    /** Truncates a string to a maximum length for safe logging. */
+    private static String truncate(String s, int maxLen) {
+        if (s == null) return null;
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...[truncated]";
+    }
 }

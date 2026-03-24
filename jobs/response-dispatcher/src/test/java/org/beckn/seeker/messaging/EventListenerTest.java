@@ -1,16 +1,16 @@
 package org.beckn.seeker.messaging;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.beckn.seeker.messaging.consumer.EventListener;
 import org.beckn.seeker.messaging.producer.EventProducer;
 import org.beckn.seeker.service.MessageProcessingService;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -31,8 +31,8 @@ class EventListenerTest {
 
     @BeforeEach
     void setUp() {
-        eventListener = new EventListener(eventProducer, messageProcessingService);
-        ReflectionTestUtils.setField(eventListener, "configuredConcurrency", "1");
+        // Use the real ObjectMapper — EventListener only uses it to parse context for MDC
+        eventListener = new EventListener(eventProducer, messageProcessingService, new ObjectMapper());
     }
 
     @Test
@@ -51,7 +51,7 @@ class EventListenerTest {
             }
             """;
         String processedResult = "SUCCESS";
-        
+
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 "catalog.discovery.response", 0, 0L, "original-key", testMessage);
 
@@ -82,8 +82,7 @@ class EventListenerTest {
             }
             """;
         String processedResult = "SUCCESS";
-        String extractedKey = "msg-456";
-        
+
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 "catalog.discovery.response", 0, 0L, null, testMessage);
 
@@ -114,7 +113,7 @@ class EventListenerTest {
             """;
         String errorMessage = "Connection timeout";
         RuntimeException processingException = new RuntimeException(errorMessage);
-        
+
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 "catalog.discovery.response", 1, 5L, "test-key", testMessage);
 
@@ -126,12 +125,12 @@ class EventListenerTest {
         // Then
         verify(messageProcessingService).processMessage(testMessage);
         verify(eventProducer).sendToDlt(
-                "test-key", 
-                testMessage, 
-                "catalog.discovery.response", 
-                1, 
-                5L, 
-                errorMessage, 
+                "test-key",
+                testMessage,
+                "catalog.discovery.response",
+                1,
+                5L,
+                errorMessage,
                 RuntimeException.class.getName()
         );
         verify(acknowledgment).acknowledge();
@@ -152,12 +151,12 @@ class EventListenerTest {
 
         // Then
         verify(eventProducer).sendToDlt(
-                eq("test-key"), 
-                isNull(), 
-                eq("test-topic"), 
-                eq(0), 
-                eq(0L), 
-                eq("Message cannot be null"), 
+                eq("test-key"),
+                isNull(),
+                eq("test-topic"),
+                eq(0),
+                eq(0L),
+                eq("Message cannot be null"),
                 eq(IllegalArgumentException.class.getName())
         );
         verify(acknowledgment).acknowledge();

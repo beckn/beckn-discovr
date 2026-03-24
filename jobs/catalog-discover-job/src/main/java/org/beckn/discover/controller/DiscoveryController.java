@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 import jakarta.servlet.http.HttpServletRequest;
 import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.config.DiscoveryProperties;
+import org.beckn.discover.logging.BecknMdcContext;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.AckResponse;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
@@ -27,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.util.ContextNormalizer;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
  * Spring Boot REST controller for Beckn discovery API.
@@ -110,21 +114,32 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));  // V1.0 snake_case → V2.0 camelCase
+        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
 
-        // Store transactionId early so GlobalExceptionHandler can include it in NACKs
-        // even when an exception is thrown before full request parsing.
-        JsonNode txnNode = requestNode.path(BecknFields.CONTEXT).path(BecknFields.TRANSACTION_ID);
-        if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
-            httpRequest.setAttribute(TRANSACTION_ID_ATTR, txnNode.asText());
+        JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
+        BecknMdcContext.populate(contextNode);
+
+        try {
+            JsonNode txnNode = contextNode.path(BecknFields.TRANSACTION_ID);
+            if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
+                httpRequest.setAttribute(TRANSACTION_ID_ATTR, txnNode.asText());
+            }
+
+            logger.info(LogEvent.REQUEST_RECEIVED,
+                    value("method", "GET"),
+                    value("transactionId", txnNode.asText("")));
+
+            authorizationService.authorizeRequest(rawBody, requestNode, headers);
+            logger.info(LogEvent.AUTH_PASSED);
+
+            validateSchema(requestNode, rawBody);
+
+            DiscoverRequest request = objectMapper.convertValue(requestNode, DiscoverRequest.class);
+            DiscoverResponse result = discoveryService.processDiscoveryRequest(request);
+            return ResponseEntity.ok(result);
+        } finally {
+            BecknMdcContext.clear();
         }
-
-        authorizationService.authorizeRequest(rawBody, requestNode, headers);
-        validateSchema(requestNode);
-
-        DiscoverRequest request = objectMapper.convertValue(requestNode, DiscoverRequest.class);
-        DiscoverResponse result = discoveryService.processDiscoveryRequest(request);
-        return ResponseEntity.ok(result);
     }
 
     /** Async pipeline: authorize → validate → publish to Kafka → ACK. */
@@ -133,64 +148,91 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));  // V1.0 snake_case → V2.0 camelCase
+        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
 
-        String transactionId = null;
-        JsonNode txnNode = requestNode.path(BecknFields.CONTEXT).path(BecknFields.TRANSACTION_ID);
-        if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
-            transactionId = txnNode.asText();
-            httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
-        }
+        JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
+        BecknMdcContext.populate(contextNode);
 
-        authorizationService.authorizeRequest(rawBody, requestNode, headers);
-        validateSchema(requestNode);
-
-        String messageId = requestNode.path(BecknFields.CONTEXT).path(BecknFields.MESSAGE_ID).asText();
-        String kafkaKey = transactionId != null ? transactionId : messageId;
-        String requestTopic = discoveryProperties.getKafka().getRequestTopic();
-        if (requestTopic == null || requestTopic.isBlank()) {
-            throw new IllegalStateException("discovery.kafka.request-topic is not configured");
-        }
-
-        // Capture effectively-final copies for lambda
-        final String logTxnId = transactionId;
-        final String logMsgId = messageId;
         try {
-            kafkaTemplate.send(requestTopic, kafkaKey, rawBody)
-                    .whenComplete((result, ex) -> {
-                        if (ex != null) {
-                            logger.error("Failed to queue async discovery request transactionId={} messageId={} topic={}",
-                                    logTxnId, logMsgId, requestTopic, ex);
-                        } else {
-                            logger.debug("Async discovery request queued transactionId={} messageId={} topic={} partition={} offset={}",
-                                    logTxnId, logMsgId, requestTopic,
-                                    result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
-                        }
-                    });
-        } catch (Exception kafkaEx) {
-            // Kafka unavailable (e.g. broker down, metadata timeout) — log and continue.
-            // POST is fire-and-forget: validation already passed, so we return ACK and
-            // let the caller retry if needed. This keeps the endpoint non-blocking even
-            // when the broker is temporarily unreachable.
-            logger.error("Failed to send async discovery request to Kafka transactionId={} messageId={} topic={}: {}",
-                    logTxnId, logMsgId, requestTopic, kafkaEx.getMessage());
+            String transactionId = null;
+            JsonNode txnNode = contextNode.path(BecknFields.TRANSACTION_ID);
+            if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
+                transactionId = txnNode.asText();
+                httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
+            }
+
+            logger.info(LogEvent.REQUEST_RECEIVED,
+                    value("method", "POST"),
+                    value("transactionId", transactionId));
+
+            authorizationService.authorizeRequest(rawBody, requestNode, headers);
+            logger.info(LogEvent.AUTH_PASSED);
+
+            validateSchema(requestNode, rawBody);
+
+            String messageId = contextNode.path(BecknFields.MESSAGE_ID).asText();
+            String kafkaKey = transactionId != null ? transactionId : messageId;
+            String requestTopic = discoveryProperties.getKafka().getRequestTopic();
+            if (requestTopic == null || requestTopic.isBlank()) {
+                throw new IllegalStateException("discovery.kafka.request-topic is not configured");
+            }
+
+            final String logTxnId = transactionId;
+            final String logMsgId = messageId;
+            try {
+                kafkaTemplate.send(requestTopic, kafkaKey, rawBody)
+                        .whenComplete((result, ex) -> {
+                            if (ex != null) {
+                                logger.error(LogEvent.KAFKA_QUEUE_FAILED,
+                                        value("transactionId", logTxnId),
+                                        value("messageId", logMsgId),
+                                        value("topic", requestTopic),
+                                        ex);
+                            } else {
+                                logger.debug(LogEvent.KAFKA_QUEUED,
+                                        value("transactionId", logTxnId),
+                                        value("messageId", logMsgId),
+                                        value("topic", requestTopic),
+                                        value("partition", result.getRecordMetadata().partition()),
+                                        value("offset", result.getRecordMetadata().offset()));
+                            }
+                        });
+            } catch (Exception kafkaEx) {
+                logger.error(LogEvent.KAFKA_QUEUE_FAILED,
+                        value("transactionId", logTxnId),
+                        value("messageId", logMsgId),
+                        value("topic", requestTopic),
+                        value("error", kafkaEx.getMessage()));
+            }
+
+            logger.info(LogEvent.KAFKA_QUEUED,
+                    value("transactionId", transactionId),
+                    value("messageId", messageId),
+                    value("topic", requestTopic));
+
+            return ResponseEntity.ok(AckResponse.ack());
+        } finally {
+            BecknMdcContext.clear();
         }
-
-        logger.info("Queued async discovery request transactionId={} messageId={} topic={}",
-                transactionId, messageId, requestTopic);
-
-        return ResponseEntity.ok(AckResponse.ack());
     }
 
-    private void validateSchema(JsonNode requestNode) {
-        logger.info("Validating request against schema");
+    private void validateSchema(JsonNode requestNode, String rawBody) {
+        logger.info(LogEvent.VALIDATE_PASSED + ".starting");
         DiscoveryValidationService.ValidationResult result = validationService.validateDiscoverRequest(requestNode);
         if (!result.isValid()) {
             String paths = result.getPaths().isEmpty() ? "root" : String.join(", ", result.getPaths());
             String msg = "Schema validation failed: " + String.join("; ", result.getErrors()) + " (paths: " + paths + ")";
-            logger.warn(msg);
+            logger.warn(LogEvent.VALIDATE_FAILED,
+                    value("errors", result.getErrors()),
+                    value("paths", result.getPaths()),
+                    value("requestBody", truncate(rawBody, 2000)));
             throw new IllegalArgumentException(msg);
         }
-        logger.info("Schema validation passed");
+        logger.info(LogEvent.VALIDATE_PASSED);
+    }
+
+    private static String truncate(String s, int maxLen) {
+        if (s == null) return null;
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...[truncated]";
     }
 }

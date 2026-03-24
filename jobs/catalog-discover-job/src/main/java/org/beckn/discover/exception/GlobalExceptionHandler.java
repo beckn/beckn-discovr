@@ -4,6 +4,7 @@ import java.util.Map;
 
 import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.common.ErrorMessages;
+import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.beckn.discover.model.AckResponse;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
  * Global exception handler — converts all unhandled exceptions into Beckn NACK responses.
@@ -52,8 +55,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler({ SemanticSearchException.class })
     public ResponseEntity<Object> handleSemanticSearchFailure(SemanticSearchException ex, WebRequest request) {
-        log.error("semantic.search.provider.unavailable error={} cause={}", ex.getMessage(),
-                ex.getCause() != null ? ex.getCause().getMessage() : "none", ex);
+        log.error(LogEvent.NACK_RESPONSE,
+                value("errorCode", ErrorCodes.NET_INTERNAL_ERROR),
+                value("error", ex.getMessage()),
+                value("cause", ex.getCause() != null ? ex.getCause().getMessage() : "none"),
+                ex);
         AckResponse ackResponse = AckResponse.nack(ErrorCodes.NET_INTERNAL_ERROR, ErrorMessages.INTERNAL_SERVER_ERROR);
         return new ResponseEntity<>(ackResponse, HttpStatus.SERVICE_UNAVAILABLE);
     }
@@ -87,6 +93,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             code = ErrorCodes.INTERNAL_ERROR;
             message = ErrorMessages.INTERNAL_SERVER_ERROR;
         }
+
+        log.warn(LogEvent.NACK_RESPONSE,
+                value("errorCode", code),
+                value("httpStatus", status.value()),
+                value("error", ex.getMessage()));
 
         AckResponse ackResponse = AckResponse.nack(code, message);
         return new ResponseEntity<>(ackResponse, status);

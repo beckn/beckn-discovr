@@ -6,11 +6,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.DiscoverRequest;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -85,29 +88,33 @@ public class DiscoveryValidationService {
 
             if (schemaId != null && (schemaId.startsWith("http://") || schemaId.startsWith("https://"))) {
                 discoverActionSchema = schemaFactory.getSchema(new java.net.URI(schemaId));
-                logger.info("Schema validation initialized from external $id: {}", schemaId);
+                logger.info(LogEvent.VALIDATE_PASSED + ".schema-init",
+                        value("schemaId", schemaId));
             } else {
                 // Intent not in root schema — use the known external URI directly
                 discoverActionSchema = schemaFactory.getSchema(
                         new java.net.URI("https://schema.beckn.io/Intent/v2.0"));
-                logger.info("Schema validation initialized from https://schema.beckn.io/Intent/v2.0");
+                logger.info(LogEvent.VALIDATE_PASSED + ".schema-init",
+                        value("schemaId", "https://schema.beckn.io/Intent/v2.0"));
             }
 
         } catch (Exception e) {
-            logger.error("Failed to initialize validation", e);
+            logger.error(LogEvent.VALIDATE_FAILED + ".schema-init",
+                    value("error", e.getMessage()),
+                    e);
             throw new RuntimeException("Failed to initialize schema validation", e);
         }
     }
 
     public ValidationResult validateDiscoverRequest(JsonNode node) {
         if (node == null || node.isNull()) {
-            logger.warn("Validation failed: Request is null");
+            logger.warn(LogEvent.VALIDATE_FAILED, value("reason", "null-request"));
             return new ValidationResult(false, List.of("Request cannot be null"), List.of("root"));
         }
 
         try {
             if (discoverActionSchema == null) {
-                logger.error("Validation schema is not initialized");
+                logger.error(LogEvent.VALIDATE_FAILED, value("reason", "schema-not-initialized"));
                 return new ValidationResult(false, List.of("Validation schema not initialized"), List.of("root"));
             }
 
@@ -180,12 +187,16 @@ public class DiscoveryValidationService {
                     .distinct()
                     .collect(Collectors.toList());
 
-            logger.error("Schema validation FAILED: {} (paths: {})",
-                    String.join("; ", errors), String.join(", ", paths));
+            logger.error(LogEvent.VALIDATE_FAILED,
+                    value("errors", errors),
+                    value("paths", paths));
             return new ValidationResult(false, errors, paths);
 
         } catch (Exception e) {
-            logger.error("Unexpected error during validation: {}", e.getMessage(), e);
+            logger.error(LogEvent.VALIDATE_FAILED,
+                    value("reason", "unexpected-error"),
+                    value("error", e.getMessage()),
+                    e);
             return new ValidationResult(false, List.of("Validation error: " + e.getMessage()), List.of("root"));
         }
     }

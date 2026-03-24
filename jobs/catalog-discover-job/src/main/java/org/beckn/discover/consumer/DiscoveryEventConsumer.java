@@ -2,11 +2,15 @@ package org.beckn.discover.consumer;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.config.DiscoveryProperties;
+import org.beckn.discover.logging.BecknMdcContext;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
+import org.beckn.discover.util.ContextNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -17,6 +21,8 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
  * Kafka Consumer for Discovery Events.
@@ -73,49 +79,68 @@ public class DiscoveryEventConsumer {
             @Header(KafkaHeaders.OFFSET) long offset,
             @Header(KafkaHeaders.RECEIVED_TIMESTAMP) long timestamp) {
 
-        logger.info("Received discovery event partition={} offset={} timestamp={}", partition, offset, timestamp);
+        logger.info(LogEvent.CONSUMER_RECEIVED,
+                value("partition", partition),
+                value("offset", offset),
+                value("timestamp", timestamp));
 
         // 1. Parse — do NOT ack on failure; let Kafka retry / route to DLT
         JsonNode requestNode;
         try {
             requestNode = objectMapper.readTree(message);
         } catch (Exception e) {
-            logger.error("Failed to parse Kafka message partition={} offset={} — not acknowledging",
-                    partition, offset, e);
+            logger.error(LogEvent.CONSUMER_PARSE_FAILED,
+                    value("partition", partition),
+                    value("offset", offset),
+                    value("rawMessage", truncate(message, 2000)),
+                    e);
             return; // no ack → Kafka retries
         }
 
-        // 2. Schema validation — ack on failure to avoid infinite retry loops
-        DiscoveryValidationService.ValidationResult validation =
-                validationService.validateDiscoverRequest(requestNode);
-        if (!validation.isValid()) {
-            logger.error("Kafka message failed schema validation partition={} offset={} errors={} — acknowledging to prevent infinite retry",
-                    partition, offset, validation.getErrors());
-            acknowledgment.acknowledge();
-            return;
-        }
+        // Normalize and populate MDC as early as possible
+        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
+        BecknMdcContext.populate(requestNode.path(BecknFields.CONTEXT));
 
-        // 3. Process
         try {
+            // 2. Schema validation — ack on failure to avoid infinite retry loops
+            DiscoveryValidationService.ValidationResult validation =
+                    validationService.validateDiscoverRequest(requestNode);
+            if (!validation.isValid()) {
+                logger.error(LogEvent.CONSUMER_VALIDATE_FAILED,
+                        value("partition", partition),
+                        value("offset", offset),
+                        value("errors", validation.getErrors()),
+                        value("rawMessage", truncate(message, 2000)));
+                acknowledgment.acknowledge();
+                return;
+            }
+
+            // 3. Process
             DiscoverRequest discoverRequest = objectMapper.treeToValue(requestNode, DiscoverRequest.class);
 
             if (discoverRequest.getContext() != null) {
-                logger.info("Processing discovery request messageId={} bapId={} transactionId={}",
-                        discoverRequest.getContext().getMessageId(),
-                        discoverRequest.getContext().getBapId(),
-                        discoverRequest.getContext().getTransactionId());
+                logger.info(LogEvent.CONSUMER_RECEIVED + ".processing",
+                        value("messageId", discoverRequest.getContext().getMessageId()),
+                        value("bapId", discoverRequest.getContext().getBapId()),
+                        value("transactionId", discoverRequest.getContext().getTransactionId()));
             }
 
             DiscoverResponse response = discoveryService.processDiscoveryRequest(discoverRequest);
             acknowledgment.acknowledge();
-            logger.info("Successfully processed discovery event partition={} offset={}", partition, offset);
+            logger.info(LogEvent.QUERY_COMPLETED,
+                    value("partition", partition),
+                    value("offset", offset));
 
             publishResponse(response, discoverRequest);
 
         } catch (Exception e) {
-            logger.error("Error processing discovery event partition={} offset={} — acknowledging to prevent infinite retry",
-                    partition, offset, e);
+            logger.error(LogEvent.QUERY_FAILED,
+                    value("partition", partition),
+                    value("offset", offset),
+                    e);
             acknowledgment.acknowledge();
+        } finally {
+            BecknMdcContext.clear();
         }
     }
 
@@ -130,17 +155,35 @@ public class DiscoveryEventConsumer {
     private void publishResponse(DiscoverResponse response, DiscoverRequest request) {
         String responseTopic = discoveryProperties.getKafka().getResponseTopic();
         if (responseTopic == null || responseTopic.isBlank()) {
-            logger.warn("discovery.kafka.response-topic is not configured — response will not be published");
+            logger.warn(LogEvent.RESPONSE_PUBLISH_FAILED,
+                    value("reason", "response-topic-not-configured"));
             return;
         }
         try {
             String responseJson = objectMapper.writeValueAsString(response);
             String transactionId = request.getContext() != null ? request.getContext().getTransactionId() : null;
-            kafkaTemplate.send(responseTopic, transactionId, responseJson);
-            logger.info("Published discovery response to topic={} transactionId={}", responseTopic, transactionId);
+            kafkaTemplate.send(responseTopic, transactionId, responseJson)
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
+                                    value("topic", responseTopic),
+                                    value("transactionId", transactionId),
+                                    ex);
+                        } else {
+                            logger.info(LogEvent.RESPONSE_PUBLISHED,
+                                    value("topic", responseTopic),
+                                    value("transactionId", transactionId));
+                        }
+                    });
         } catch (Exception e) {
-            logger.error("Failed to publish discovery response to topic={} — BAP callback will not be sent",
-                    responseTopic, e);
+            logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
+                    value("topic", responseTopic),
+                    e);
         }
+    }
+
+    private static String truncate(String s, int maxLen) {
+        if (s == null) return null;
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...[truncated]";
     }
 }

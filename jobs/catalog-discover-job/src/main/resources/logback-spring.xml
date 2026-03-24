@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+  <springProperty scope="context" name="appName"
+                  source="spring.application.name" defaultValue="catalog-discover-job"/>
+
+  <!-- ── Production profile: structured JSON via Logstash encoder ─────────── -->
+  <springProfile name="!test">
+
+    <!-- JSON encoder — promotes all MDC keys to top-level JSON fields -->
+    <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <includeContext>false</includeContext>
+        <includeMdcKeyName>correlationId</includeMdcKeyName>
+        <includeMdcKeyName>transactionId</includeMdcKeyName>
+        <includeMdcKeyName>messageId</includeMdcKeyName>
+        <includeMdcKeyName>bapId</includeMdcKeyName>
+        <includeMdcKeyName>bapUri</includeMdcKeyName>
+        <includeMdcKeyName>bppId</includeMdcKeyName>
+        <includeMdcKeyName>bppUri</includeMdcKeyName>
+        <includeMdcKeyName>networkId</includeMdcKeyName>
+        <includeMdcKeyName>action</includeMdcKeyName>
+        <includeMdcKeyName>version</includeMdcKeyName>
+        <customFields>{"service":"${appName}"}</customFields>
+        <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSZ</timestampPattern>
+      </encoder>
+    </appender>
+
+    <!-- Async wrapper: off-loads log I/O from application threads -->
+    <appender name="ASYNC_JSON" class="ch.qos.logback.classic.AsyncAppender">
+      <appender-ref ref="JSON_STDOUT"/>
+      <queueSize>1024</queueSize>
+      <discardingThreshold>0</discardingThreshold>
+      <includeCallerData>false</includeCallerData>
+      <neverBlock>true</neverBlock>
+    </appender>
+
+    <!-- Application loggers -->
+    <logger name="org.beckn.discover" level="INFO" additivity="false">
+      <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+
+    <!-- Performance logger — separate from main app logger so it can be tuned independently -->
+    <logger name="org.beckn.discover.performance" level="INFO" additivity="false">
+      <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+
+    <!-- Reduce noise from framework internals -->
+    <logger name="org.springframework.kafka"   level="WARN"  additivity="false"><appender-ref ref="ASYNC_JSON"/></logger>
+    <logger name="org.apache.kafka"            level="WARN"  additivity="false"><appender-ref ref="ASYNC_JSON"/></logger>
+    <logger name="org.hibernate"               level="WARN"  additivity="false"><appender-ref ref="ASYNC_JSON"/></logger>
+    <logger name="org.flywaydb"                level="INFO"  additivity="false"><appender-ref ref="ASYNC_JSON"/></logger>
+    <logger name="org.hibernate.SQL"           level="WARN"  additivity="false"><appender-ref ref="ASYNC_JSON"/></logger>
+
+    <root level="WARN">
+      <appender-ref ref="ASYNC_JSON"/>
+    </root>
+
+  </springProfile>
+
+  <!-- ── Test profile: plain-text to keep test output readable ─────────────── -->
+  <springProfile name="test">
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%mdc] - %msg%n</pattern>
+      </encoder>
+    </appender>
+
+    <logger name="org.beckn.discover"   level="INFO" additivity="false"><appender-ref ref="CONSOLE"/></logger>
+    <logger name="org.hibernate.SQL"    level="WARN" additivity="false"><appender-ref ref="CONSOLE"/></logger>
+    <logger name="org.apache.kafka"     level="WARN" additivity="false"><appender-ref ref="CONSOLE"/></logger>
+    <logger name="org.springframework.kafka" level="WARN" additivity="false"><appender-ref ref="CONSOLE"/></logger>
+
+    <root level="WARN">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+
+  </springProfile>
+
+</configuration>

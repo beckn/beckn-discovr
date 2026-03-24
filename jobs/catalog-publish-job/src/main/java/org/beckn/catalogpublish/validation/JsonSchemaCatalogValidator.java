@@ -8,6 +8,7 @@ import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.exception.ValidationException;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -40,7 +41,7 @@ public class JsonSchemaCatalogValidator implements CatalogMessageValidator {
     public JsonSchemaCatalogValidator(AppProperties props, ObjectMapper objectMapper) throws Exception {
         String specUrl = props.catalog().schemaUrl();
         validateSpecUrl(specUrl);
-        log.info("validator.loading schemaUrl={}", specUrl);
+        log.info("event={} schemaUrl={}", LogEvent.VALIDATE_PASSED, specUrl);
 
         String yaml = fetchYaml(specUrl);
 
@@ -66,7 +67,7 @@ public class JsonSchemaCatalogValidator implements CatalogMessageValidator {
         JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
         this.schema = factory.getSchema(schemaJson);
 
-        log.info("validator.ready schemaComponent=CatalogPublishAction");
+        log.info("event={} schemaComponent=CatalogPublishAction", LogEvent.VALIDATE_PASSED);
     }
 
     @Override
