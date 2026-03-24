@@ -801,20 +801,20 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         String item1Json = "{" +
                 "\"@type\": \"Catalog\"," +
                 "\"id\": \"" + catalogId + "\"," +
-                "\"items\": [{\"id\": \"item-1\", \"descriptor\": {\"name\": \"Item 1\"}}]," +
+                "\"resources\": [{\"id\": \"item-1\", \"descriptor\": {\"name\": \"Item 1\"}}]," +
                 "\"offers\": [{" +
                 "  \"id\": \"offer-1\"," +
-                "  \"items\": [\"item-1\"]," +
+                "  \"resourceIds\": [\"item-1\"]," +
                 "  \"descriptor\": { \"name\": \"Offer 1\" }" +
                 "}]" +
                 "}";
         String item2Json = "{" +
                 "\"@type\": \"Catalog\"," +
                 "\"id\": \"" + catalogId + "\"," +
-                "\"items\": [{\"id\": \"item-2\", \"descriptor\": {\"name\": \"Item 2\"}}]," +
+                "\"resources\": [{\"id\": \"item-2\", \"descriptor\": {\"name\": \"Item 2\"}}]," +
                 "\"offers\": [{" +
                 "  \"id\": \"offer-2\"," +
-                "  \"items\": [\"item-2\"]," +
+                "  \"resourceIds\": [\"item-2\"]," +
                 "  \"descriptor\": { \"name\": \"Offer 2\" }" +
                 "}]" +
                 "}";

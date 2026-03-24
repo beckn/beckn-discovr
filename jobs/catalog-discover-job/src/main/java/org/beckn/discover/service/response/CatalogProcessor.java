@@ -49,8 +49,6 @@ public class CatalogProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogProcessor.class);
 
-    private static final String DEFAULT_ITEM_CONTEXT = "https://schema.beckn.io/";
-    private static final String DEFAULT_ITEM_TYPE = "Item";
     private static final String DEFAULT_DESCRIPTOR_TYPE = "Descriptor";
 
     // ── Catalog normalization ────────────────────────────────────────────────
@@ -118,10 +116,8 @@ public class CatalogProcessor {
     }
 
     private void normalizeAttributes(Attributes attrs) {
-        if (DiscoveryServiceUtil.isBlank(attrs.getContext()))
-            attrs.setContext(DEFAULT_ITEM_CONTEXT);
-        if (DiscoveryServiceUtil.isBlank(attrs.getType()))
-            attrs.setType(DEFAULT_ITEM_TYPE);
+        // @context and @type on resourceAttributes are required fields from the publisher.
+        // We do not default them — if absent, they remain null (omitted from JSON via @JsonInclude).
     }
 
     private void normalizeProvider(Provider provider) {

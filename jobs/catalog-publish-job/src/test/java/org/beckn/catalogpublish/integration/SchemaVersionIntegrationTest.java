@@ -47,7 +47,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                         "resources": [
                           {
                             "@context": "https://schema.beckn.io/",
-                            "@type": "Item",
+                            "@type": "beckn:Resource",
                             "id": "item-v21-001",
                             "descriptor": {
                               "name": "Smart EV Charger v2.1",
@@ -67,8 +67,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                             "policies": [
                               {"type": "cancellation", "terms": "No refunds after session start"},
                               {"type": "payment", "terms": "Prepaid via app only"}
-                            ],
-                            "networkId": ["net-001"]
+                            ]
                           }
                         ],
                         "offers": []
@@ -121,7 +120,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                         "resources": [
                           {
                             "@context": "https://schema.beckn.io/",
-                            "@type": "Item",
+                            "@type": "beckn:Resource",
                             "id": "item-v21-002",
                             "descriptor": {
                               "name": "Slot Booking Service",
@@ -176,7 +175,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                         "resources": [
                           {
                             "@context": "https://schema.beckn.io/",
-                            "@type": "Item",
+                            "@type": "beckn:Resource",
                             "id": "item-multi-001",
                             "descriptor": {"name": "CCS2 Charger"},
                             "provider": {"id": "prov-001"},
@@ -188,7 +187,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                           },
                           {
                             "@context": "https://schema.beckn.io/",
-                            "@type": "Item",
+                            "@type": "beckn:Resource",
                             "id": "item-multi-002",
                             "descriptor": {"name": "Type2 Charger"},
                             "provider": {"id": "prov-001"},
@@ -244,7 +243,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                         "id": "cat-clean-001",
                         "resources": [
                           {
-                            "@type": "Item",
+                            "@type": "beckn:Resource",
                             "id": "item-clean-001",
                             "descriptor": {"name": "Clean Item"},
                             "provider": {"id": "prov-clean-001"},
@@ -272,7 +271,10 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                 .as("schema_version must not be stored in the payload JSON")
                 .doesNotContain("\"schema_version\"");
         assertThat(item.getPayload())
-                .as("beckn: prefixed fields must not appear in stored payloads")
-                .doesNotContain("\"beckn:");
+                .as("legacy beckn: prefixed field keys must not appear in stored payloads")
+                .doesNotContain("\"beckn:items\"")
+                .doesNotContain("\"beckn:descriptor\"")
+                .doesNotContain("\"beckn:provider\"")
+                .doesNotContain("\"beckn:offers\"");
     }
 }

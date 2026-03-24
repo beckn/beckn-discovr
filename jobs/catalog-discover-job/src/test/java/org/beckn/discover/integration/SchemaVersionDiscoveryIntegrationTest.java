@@ -139,7 +139,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                       "resources": [
                         {
                           "@context": "%s",
-                          "@type": "Item",
+                          "@type": "beckn:Resource",
                           "id": "%s",
                           "descriptor": {
                             "name": "%s",
@@ -228,8 +228,11 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                 .as("schema_version must not appear anywhere in the on_discover response JSON")
                 .doesNotContain("schema_version");
         assertThat(responseJson)
-                .as("beckn: prefixed fields must not appear in the response")
-                .doesNotContain("\"beckn:");
+                .as("legacy beckn: prefixed field keys must not appear in the response")
+                .doesNotContain("\"beckn:items\"")
+                .doesNotContain("\"beckn:descriptor\"")
+                .doesNotContain("\"beckn:provider\"")
+                .doesNotContain("\"beckn:offers\"");
     }
 
     @Test
@@ -317,7 +320,11 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
 
         String responseJson = objectMapper.writeValueAsString(response);
         assertThat(responseJson).doesNotContain("schema_version");
-        assertThat(responseJson).doesNotContain("\"beckn:");
+        assertThat(responseJson)
+                .doesNotContain("\"beckn:items\"")
+                .doesNotContain("\"beckn:descriptor\"")
+                .doesNotContain("\"beckn:provider\"")
+                .doesNotContain("\"beckn:offers\"");
     }
 
     @Test

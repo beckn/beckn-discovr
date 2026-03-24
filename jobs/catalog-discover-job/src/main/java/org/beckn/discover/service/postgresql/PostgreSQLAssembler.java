@@ -295,7 +295,7 @@ public class PostgreSQLAssembler {
                 .orElse(null);
     }
 
-    /** Returns {@code true} for the v2.1 unprefixed form ({@code "Item"}). */
+    /** Returns {@code true} for the v2.1 resource type ({@code "beckn:Resource"}). */
     private static boolean isItemType(String type) {
         return DiscoveryConstants.ITEM_TYPE.equals(type);
     }

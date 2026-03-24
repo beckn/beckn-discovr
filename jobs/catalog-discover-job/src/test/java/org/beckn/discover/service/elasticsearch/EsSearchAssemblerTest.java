@@ -387,29 +387,6 @@ class EsSearchAssemblerTest {
         assertThat(resource.getRating().getReviewText()).isEqualTo("Excellent service and fast charging");
     }
 
-    @Test
-    void hitWithNetworkIdAsString_wrapsInList() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        // ES may return network_id as a single string when indexed as keyword
-        doc.put("network_id", "ondc-ev");
-
-        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-7");
-
-        Resource resource = catalogs.get(0).getResources().get(0);
-        assertThat(resource.getNetworkId()).isNotNull().containsExactly("ondc-ev");
-    }
-
-    @Test
-    void hitWithNetworkIdAsList_setsDirectly() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("network_id", List.of("ondc-ev", "beckn-open"));
-
-        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-8");
-
-        Resource resource = catalogs.get(0).getResources().get(0);
-        assertThat(resource.getNetworkId()).isNotNull().containsExactly("ondc-ev", "beckn-open");
-    }
-
     // ── Fixtures ─────────────────────────────────────────────────────────────
 
     private static Map<String, Object> evChargerDoc(String catalogId, String bppId,

@@ -134,11 +134,6 @@ public class EsSearchAssembler {
         resource.setRating(buildRating(doc));
         resource.setRateable(bool(doc, "item_rateable"));
         resource.setIsActive(bool(doc, "item_is_active"));
-        Object networkIdRaw = doc.get("network_id");
-        if (networkIdRaw instanceof String s && !s.isBlank())
-            resource.setNetworkId(List.of(s));
-        else if (networkIdRaw instanceof List<?> list)
-            resource.setNetworkId((List<String>) list);
         Provider provider = buildProvider(doc);
         if (provider != null) {
             provider.setLocations(collectProviderLocations(doc));
