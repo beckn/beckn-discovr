@@ -423,7 +423,11 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .isNotEmpty();
         catalog.getOffers().forEach(offer -> {
             @SuppressWarnings("unchecked")
-            List<String> refs = (List<String>) ((Map<?, ?>) offer).get("items");
+            Map<?, ?> offerMap = (Map<?, ?>) offer;
+            // v2.0 offers use "resourceIds"; legacy uses "items"
+            List<String> refs = offerMap.containsKey("resourceIds")
+                    ? (List<String>) offerMap.get("resourceIds")
+                    : (List<String>) offerMap.get("items");
             Assertions.assertThat(refs).contains("ev-charger-ccs2-001");
         });
     }
@@ -444,7 +448,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
             Assertions.assertThat(offer.has("price")).isTrue();
             Assertions.assertThat(offer.path("price").path("value").asDouble()).isLessThan(20.0);
             Assertions.assertThat(offer.path("price").path("currency").asText()).isEqualTo("INR");
-            Assertions.assertThat(offer.has("items")).isTrue();
+            // v2.0 offers use "resourceIds" for item references; legacy uses "items"
+            Assertions.assertThat(offer.has("resourceIds") || offer.has("items")).isTrue();
         }
     }
 
@@ -944,9 +949,11 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .extracting(Item::getId)
                 .containsExactly("ev-charger-ccs2-001");
 
-        // Assert: Offer references match returned items
+        // Assert: Offer references match returned items (v2.0 uses "resourceIds", legacy uses "items")
         @SuppressWarnings("unchecked")
-        List<String> offerItems = (List<String>) offer.get("items");
+        List<String> offerItems = offer.containsKey("resourceIds")
+                ? (List<String>) offer.get("resourceIds")
+                : (List<String>) offer.get("items");
         List<String> returnedItemIds = catalog.getItems().stream()
                 .map(Item::getId)
                 .collect(Collectors.toList());
@@ -1365,11 +1372,14 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
                 String offerId = (String) offer.get("id");
 
+                // v2.0 offers use "resourceIds"; legacy uses "items"
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("items");
+                List<String> offerItemIds = offer.containsKey("resourceIds")
+                        ? (List<String>) offer.get("resourceIds")
+                        : (List<String>) offer.get("items");
 
                 Assertions.assertThat(offerItemIds)
-                        .as("Offer %s must have items array", offerId)
+                        .as("Offer %s must have resourceIds (or items) array", offerId)
                         .isNotNull()
                         .isNotEmpty();
 
@@ -1521,9 +1531,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
                 
+                // v2.0 offers use "resourceIds"; legacy uses "items"
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("items");
-                
+                List<String> offerItemIds = offer.containsKey("resourceIds")
+                        ? (List<String>) offer.get("resourceIds")
+                        : (List<String>) offer.get("items");
+
                 // Assert: Offer items belong to this catalog
                 for (String offerItemId : offerItemIds) {
                     Assertions.assertThat(catalogItemIds)

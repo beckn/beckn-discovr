@@ -40,6 +40,14 @@ public final class BecknFields {
     public static final String NAME            = "name";
     public static final String CATALOGS        = "catalogs";
 
+    // ── v2.0 Resource fields (alias for Item with resourceAttributes) ─────────
+    public static final String RESOURCES           = "resources";
+    public static final String RESOURCE_ATTRIBUTES = "resourceAttributes";
+
     // ── on_discover specific ─────────────────────────────────────────────────
     public static final String IN_REPLY_TO     = "inReplyTo";
+
+    // ── Action values (v2.0 slash notation) ─────────────────────────────────
+    public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
+    public static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
 }

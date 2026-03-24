@@ -301,12 +301,20 @@ public class CatalogProcessor {
     }
 
     /**
-     * Extracts item ID references from an offer map ({@code items}).
+     * Extracts item/resource ID references from an offer map.
+     * <p>
+     * v2.0 offer-scoped resource references use {@code "resourceIds"};
+     * older payloads use {@code "items"}. Both are checked in order.
      */
     public static Set<String> offerItemIds(Object offer) {
         if (!(offer instanceof Map<?, ?> map))
             return Collections.emptySet();
-        Object itemsObj = map.get(BecknFields.ITEMS);
+        // v2.0: "resourceIds" (offer → resource references)
+        Object itemsObj = map.get("resourceIds");
+        // Legacy fallback: "items"
+        if (itemsObj == null) {
+            itemsObj = map.get(BecknFields.ITEMS);
+        }
         if (itemsObj instanceof List<?> list) {
             return list.stream().filter(Objects::nonNull).map(Object::toString).collect(Collectors.toSet());
         }

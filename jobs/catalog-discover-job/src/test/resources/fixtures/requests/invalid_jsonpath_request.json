@@ -20,7 +20,7 @@
     "intent": {
       "filters": {
         "type": "jsonpath",
-        "expression": "$.catalogs[*] ? (@.items[*] == )"
+        "expression": "$.catalogs[*] ? (@.resources[*] == )"
       }
     }
   }

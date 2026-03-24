@@ -9,11 +9,13 @@
     "catalogs": [
       {
         "id": "cat-1",
-        "items": [],
+        "resources": [],
         "offers": [
           {
             "id": "offer-A",
-            "descriptor": {"name": "Offer A Updated"}
+            "descriptor": {
+              "name": "Offer A Updated"
+            }
           }
         ]
       }

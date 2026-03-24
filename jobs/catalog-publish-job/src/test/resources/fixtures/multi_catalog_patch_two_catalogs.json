@@ -9,21 +9,25 @@
     "catalogs": [
       {
         "id": "cat-1",
-        "items": [],
+        "resources": [],
         "offers": [
           {
             "id": "offer-A",
-            "descriptor": { "name": "Offer A Updated" }
+            "descriptor": {
+              "name": "Offer A Updated"
+            }
           }
         ]
       },
       {
         "id": "cat-2",
-        "items": [],
+        "resources": [],
         "offers": [
           {
             "id": "offer-C",
-            "descriptor": { "name": "Offer C Updated" }
+            "descriptor": {
+              "name": "Offer C Updated"
+            }
           }
         ]
       }

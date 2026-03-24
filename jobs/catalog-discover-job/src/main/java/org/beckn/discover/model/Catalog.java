@@ -40,10 +40,13 @@ public class Catalog {
     @JsonProperty("validity")
     private TimePeriod validity;
 
-    @NotNull(message = "items is required")
     @Valid
     @JsonProperty(BecknFields.ITEMS)
     private List<Item> items;
+
+    @Valid
+    @JsonProperty(BecknFields.RESOURCES)
+    private List<Resource> resources;
 
     @JsonProperty(BecknFields.OFFERS)
     private List<Object> offers;
@@ -73,6 +76,7 @@ public class Catalog {
         copy.validity = this.validity;
         copy.offers = this.offers;
         copy.items = newItems;
+        copy.resources = this.resources;
         return copy;
     }
 
@@ -103,6 +107,9 @@ public class Catalog {
 
     public List<Item> getItems() { return items; }
     public void setItems(List<Item> items) { this.items = items; }
+
+    public List<Resource> getResources() { return resources; }
+    public void setResources(List<Resource> resources) { this.resources = resources; }
 
     public List<Object> getOffers() { return offers; }
     public void setOffers(List<Object> offers) { this.offers = offers; }

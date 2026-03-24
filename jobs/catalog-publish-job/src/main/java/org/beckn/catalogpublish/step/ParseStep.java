@@ -6,6 +6,7 @@ import org.beckn.catalogpublish.dto.CatalogContext;
 import org.beckn.catalogpublish.dto.ParsedCatalogMessage;
 import org.beckn.catalogpublish.exception.PayloadParseException;
 import org.beckn.catalogpublish.common.BecknFields;
+import org.beckn.catalogpublish.util.BecknFieldNormalizer;
 import org.beckn.catalogpublish.util.FieldExtractor;
 import org.springframework.stereotype.Component;
 
@@ -35,6 +36,7 @@ public class ParseStep {
 
     public String extractCatalogIdSafe(JsonNode catalogNode) {
         return FieldExtractor.extractString(catalogNode, BecknFields.ID)
+                .or(() -> FieldExtractor.extractString(catalogNode, BecknFields.ID_V20)) // old v2.0: beckn:id
                 .orElse("unknown");
     }
 
@@ -59,6 +61,11 @@ public class ParseStep {
         JsonNode catalogs = message.isMissingNode() ? root.path(BecknFields.CATALOGS) : message.path(BecknFields.CATALOGS);
         if (catalogs.isMissingNode() || !catalogs.isArray())
             return List.of();
-        return StreamSupport.stream(catalogs.spliterator(), false).toList();
+        // Normalize each catalog: strips beckn: prefix from field names so all downstream steps
+        // use canonical field names regardless of whether the BAP sent old v2.0 (beckn:id, beckn:items)
+        // or new v2.1 (id, resources) format.
+        return StreamSupport.stream(catalogs.spliterator(), false)
+                .map(c -> BecknFieldNormalizer.normalizeCatalog(c, objectMapper))
+                .toList();
     }
 }

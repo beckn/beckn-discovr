@@ -20,7 +20,7 @@
         "intent": {
             "filters": {
                 "type": "jsonpath",
-                "expression": "$.catalogs[*] ? (exists(@.items[*] ? (@.descriptor.name == \"DC Fast Charger - CCS2 (60kW)\")) && exists(@.offers[*] ? (@.price.value < 20)))"
+                "expression": "$.catalogs[*] ? (exists(@.resources[*] ? (@.descriptor.name == \"DC Fast Charger - CCS2 (60kW)\")) && exists(@.offers[*] ? (@.price.value < 20)))"
             }
         }
     }

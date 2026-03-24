@@ -103,9 +103,13 @@ public final class FieldExtractor {
             return "unknown";
         for (JsonNode itemNode : iterableItems(catalogNode)) {
             JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
+            if (attrs.isMissingNode() || !attrs.isObject()) {
+                // v2.0 resource-based items use "resourceAttributes" instead of "itemAttributes"
+                attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+            }
             if (attrs.isMissingNode() || !attrs.isObject())
                 continue;
-            // itemAttributes uses "@type" (JSON-LD) as the schema type field
+            // itemAttributes/resourceAttributes uses "@type" (JSON-LD) as the schema type field
             JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
             if (!typeNode.isMissingNode() && typeNode.isTextual()) {
                 String val = typeNode.asText();
@@ -131,7 +135,16 @@ public final class FieldExtractor {
     public static Iterable<JsonNode> iterableItems(JsonNode catalogNode) {
         if (catalogNode == null)
             return List.of();
+        // v2.1 canonical: items
         JsonNode field = catalogNode.path(BecknFields.ITEMS);
+        if (field.isMissingNode() || !field.isArray()) {
+            // Old v2.0 format: beckn:items (non-normalized payload — e.g. EsFailureConsumer retry path)
+            field = catalogNode.path(BecknFields.ITEMS_V20);
+        }
+        if (field.isMissingNode() || !field.isArray()) {
+            // New v2.1 resource-based catalogs use "resources"
+            field = catalogNode.path(BecknFields.RESOURCES);
+        }
         if (field.isMissingNode() || !field.isArray())
             return List.of();
         final JsonNode arr = field;
@@ -161,6 +174,10 @@ public final class FieldExtractor {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
         JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
+        if (attrs.isMissingNode() || !attrs.isObject()) {
+            // v2.0 resource-based items use "resourceAttributes" instead of "itemAttributes"
+            attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+        }
         if (!attrs.isMissingNode() && attrs.isObject()) {
             JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
             if (typeNode.isTextual()) {
@@ -234,6 +251,10 @@ public final class FieldExtractor {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
         JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
+        if (attrs.isMissingNode() || !attrs.isObject()) {
+            // v2.0 resource-based items use "resourceAttributes" instead of "itemAttributes"
+            attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+        }
         return (attrs.isMissingNode() || !attrs.isObject()) ? null : attrs;
     }
 }

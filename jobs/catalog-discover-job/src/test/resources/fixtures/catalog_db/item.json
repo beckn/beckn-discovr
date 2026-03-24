@@ -20,7 +20,7 @@
               "@type": "beckn:Offer",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
               "id": "offer-ccs2-60kw-kwh",
-              "items": [
+              "resourceIds": [
                 "ev-charger-ccs2-001"
               ],
               "price": {
@@ -61,7 +61,7 @@
               "@type": "beckn:Offer",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
               "id": "offer-ccs2-120kw-kwh",
-              "items": [
+              "resourceIds": [
                 "ev-charger-ccs2-002"
               ],
               "price": {
@@ -103,7 +103,7 @@
               "@type": "beckn:Offer",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
               "id": "offer-type2-22kw-kwh",
-              "items": [
+              "resourceIds": [
                 "ev-charger-type2-001"
               ],
               "price": {
@@ -156,7 +156,7 @@
               "https://example.com/images/charging-station-banner.png"
             ]
           },
-          "items": [
+          "resources": [
             {
               "@type": "beckn:Item",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
@@ -210,7 +210,7 @@
                   }
                 }
               ],
-              "itemAttributes": {
+              "resourceAttributes": {
                 "@type": "ChargingService",
                 "evseId": "IN*ECO*BTM*01*CCS2*A",
                 "ocppId": "IN-ECO-BTM-01",
@@ -288,7 +288,7 @@
               "@type": "beckn:Offer",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
               "id": "offer-ccs2-60kw-kwh",
-              "items": [
+              "resourceIds": [
                 "ev-charger-ccs2-001"
               ],
               "price": {
@@ -329,7 +329,7 @@
               "@type": "beckn:Offer",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
               "id": "offer-ccs2-120kw-kwh",
-              "items": [
+              "resourceIds": [
                 "ev-charger-ccs2-002"
               ],
               "price": {
@@ -371,7 +371,7 @@
               "@type": "beckn:Offer",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
               "id": "offer-type2-22kw-kwh",
-              "items": [
+              "resourceIds": [
                 "ev-charger-type2-001"
               ],
               "price": {
@@ -424,7 +424,7 @@
               "https://example.com/images/charging-station-banner.png"
             ]
           },
-          "items": [
+          "resources": [
             {
               "@type": "beckn:Item",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
@@ -478,7 +478,7 @@
                   }
                 }
               ],
-              "itemAttributes": {
+              "resourceAttributes": {
                 "@type": "ChargingService",
                 "evseId": "IN*GC*KOR*01*CCS2*A",
                 "ocppId": "IN-GC-KOR-01",
@@ -557,7 +557,7 @@
               "@type": "beckn:Offer",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
               "id": "offer-ccs2-60kw-kwh",
-              "items": [
+              "resourceIds": [
                 "ev-charger-ccs2-001"
               ],
               "price": {
@@ -598,7 +598,7 @@
               "@type": "beckn:Offer",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
               "id": "offer-ccs2-120kw-kwh",
-              "items": [
+              "resourceIds": [
                 "ev-charger-ccs2-002"
               ],
               "price": {
@@ -640,7 +640,7 @@
               "@type": "beckn:Offer",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
               "id": "offer-type2-22kw-kwh",
-              "items": [
+              "resourceIds": [
                 "ev-charger-type2-001"
               ],
               "price": {
@@ -693,7 +693,7 @@
               "https://example.com/images/charging-station-banner.png"
             ]
           },
-          "items": [
+          "resources": [
             {
               "@type": "beckn:Item",
               "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
@@ -747,7 +747,7 @@
                   }
                 }
               ],
-              "itemAttributes": {
+              "resourceAttributes": {
                 "@type": "ChargingService",
                 "evseId": "IN*PG*IND*01*TYPE2*A",
                 "ocppId": "IN-PG-IND-01",

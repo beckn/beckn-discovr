@@ -9,10 +9,12 @@
     "catalogs": [
       {
         "id": "cat-1",
-        "items": [
+        "resources": [
           {
             "id": "item-1",
-            "descriptor": { "name": "EV Station Updated" }
+            "descriptor": {
+              "name": "EV Station Updated"
+            }
           }
         ],
         "offers": []

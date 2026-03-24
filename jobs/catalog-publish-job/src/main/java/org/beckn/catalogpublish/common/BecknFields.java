@@ -41,6 +41,12 @@ public final class BecknFields {
     // ── Catalog / Item fields (v2.0 — no beckn: prefix) ─────────────────────
     public static final String ID              = "id";
     public static final String ITEMS           = "items";
+    /**
+     * Old Catalog v2.0 format uses {@code "beckn:"} prefix on catalog-level fields.
+     * New v2.1 format uses plain camelCase.
+     */
+    public static final String ITEMS_V20       = "beckn:items";
+    public static final String ID_V20          = "beckn:id";
     public static final String OFFERS          = "offers";
     public static final String DESCRIPTOR      = "descriptor";
     public static final String PROVIDER        = "provider";
@@ -52,6 +58,12 @@ public final class BecknFields {
     public static final String PROVIDER_ID     = "providerId";
     public static final String CATALOG_ID      = "catalogId";
 
+    // ── v2.0 Resource fields (alias for Item with resourceAttributes) ─────────
+    public static final String RESOURCES           = "resources";
+    public static final String RESOURCE_ATTRIBUTES = "resourceAttributes";
+    /** v2.0 Offer field: IDs of resources this offer applies to (replaces {@code items} in offers). */
+    public static final String RESOURCE_IDS        = "resourceIds";
+
     // ── v2.1 Item fields ─────────────────────────────────────────────────────
     public static final String CONSTRAINTS     = "constraints";
     public static final String POLICIES        = "policies";
@@ -62,4 +74,8 @@ public final class BecknFields {
     public static final String PRICE           = "price";
     public static final String CURRENCY        = "currency";
     public static final String VALUE           = "value";
+
+    // ── Action values (v2.0 slash notation) ─────────────────────────────────
+    public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
+    public static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
 }

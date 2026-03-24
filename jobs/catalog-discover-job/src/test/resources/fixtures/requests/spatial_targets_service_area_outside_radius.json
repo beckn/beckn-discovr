@@ -21,7 +21,7 @@
       "spatial": [
         {
           "op": "s_dwithin",
-          "targets": "$.catalogs[*].items[*].itemAttributes.serviceArea.geo",
+          "targets": "$.catalogs[*].resources[*].resourceAttributes.serviceArea.geo",
           "geometry": {
             "type": "Point",
             "coordinates": [77.5946, 12.9716]

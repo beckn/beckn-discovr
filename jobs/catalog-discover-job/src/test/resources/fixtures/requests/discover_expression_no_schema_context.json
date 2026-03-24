@@ -12,7 +12,7 @@
     "intent": {
       "filters": {
         "type": "jsonpath",
-        "expression": "$.catalogs[*].items[*] ? (@.itemAttributes.evseId == \"IN*ECO*BTM*01*CCS2*A\")"
+        "expression": "$.catalogs[*].resources[*] ? (@.resourceAttributes.evseId == \"IN*ECO*BTM*01*CCS2*A\")"
       }
     }
   }

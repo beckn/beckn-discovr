@@ -294,7 +294,19 @@ public class PostgreSQLAssembler {
         if (catalogsNode == null || !catalogsNode.isArray()) return null;
 
         return StreamSupport.stream(catalogsNode.spliterator(), false)
-                .map(cat -> cat.get(DiscoveryConstants.JsonFields.BECKN_ITEMS))
+                .map(cat -> {
+                    // Canonical: "items" (v2.1 / normalized v2.0)
+                    JsonNode itemsNode = cat.get(DiscoveryConstants.JsonFields.BECKN_ITEMS);
+                    // Old un-normalized v2.0 payloads stored with beckn: prefix
+                    if (itemsNode == null || !itemsNode.isArray()) {
+                        itemsNode = cat.get(DiscoveryConstants.JsonFields.BECKN_ITEMS_V20);
+                    }
+                    // New v2.1 resource-based catalogs use "resources"
+                    if (itemsNode == null || !itemsNode.isArray()) {
+                        itemsNode = cat.get(DiscoveryConstants.JsonFields.BECKN_RESOURCES);
+                    }
+                    return itemsNode;
+                })
                 .filter(items -> items != null && items.isArray())
                 .flatMap(items -> StreamSupport.stream(items.spliterator(), false))
                 .filter(node -> itemId != null
