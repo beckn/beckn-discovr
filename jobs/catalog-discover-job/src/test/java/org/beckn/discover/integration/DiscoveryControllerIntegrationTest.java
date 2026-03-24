@@ -86,11 +86,11 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .andExpect(jsonPath(
                                                 "$.message.catalogs[0].items[0].itemAttributes.connectorType")
                                                 .value("CCS2"))
-                                // Validate offers
+                                // Validate offers (v2.0 uses "resourceIds" for item references)
                                 .andExpect(jsonPath("$.message.catalogs[0].offers", hasSize(greaterThanOrEqualTo(1))))
                                 .andExpect(jsonPath("$.message.catalogs[0].offers[0].id").exists())
-                                .andExpect(jsonPath("$.message.catalogs[0].offers[0].items").isArray())
-                                .andExpect(jsonPath("$.message.catalogs[0].offers[0].items[0]")
+                                .andExpect(jsonPath("$.message.catalogs[0].offers[0].resourceIds").isArray())
+                                .andExpect(jsonPath("$.message.catalogs[0].offers[0].resourceIds[0]")
                                                 .value("ev-charger-ccs2-001"));
         }
 

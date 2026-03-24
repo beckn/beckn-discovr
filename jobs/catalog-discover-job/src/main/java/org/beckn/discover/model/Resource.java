@@ -1,6 +1,5 @@
 package org.beckn.discover.model;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.validation.Valid;
@@ -9,13 +8,15 @@ import jakarta.validation.constraints.NotNull;
 import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.util.StringOrArrayDeserializer;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Item DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
+ * Resource DTO — Beckn Protocol v2.0.
+ * Equivalent to Item but uses {@code resourceAttributes} instead of {@code itemAttributes}.
+ * Used in catalogs that publish resources (e.g. timeslots, seats, subscriptions) rather than
+ * physical/tangible items.
  */
-public class Item {
+public class Resource {
 
     @JsonProperty("@context")
     private String context;
@@ -59,11 +60,10 @@ public class Item {
     @JsonProperty(BecknFields.PROVIDER)
     private Provider provider;
 
-    @NotNull(message = "itemAttributes is required")
+    @NotNull(message = "resourceAttributes is required")
     @Valid
-    @JsonProperty(BecknFields.ITEM_ATTRIBUTES)
-    @JsonAlias(BecknFields.RESOURCE_ATTRIBUTES)
-    private Attributes itemAttributes;
+    @JsonProperty(BecknFields.RESOURCE_ATTRIBUTES)
+    private Attributes resourceAttributes;
 
     @JsonProperty("constraints")
     private List<Constraint> constraints;
@@ -72,17 +72,17 @@ public class Item {
     private List<Policy> policies;
 
     // Default constructor
-    public Item() {}
+    public Resource() {}
 
     // Constructor with required fields
-    public Item(String context, String type, String id, Descriptor descriptor, Provider provider,
-            Attributes itemAttributes) {
+    public Resource(String context, String type, String id, Descriptor descriptor, Provider provider,
+            Attributes resourceAttributes) {
         this.context = context;
         this.type = type;
         this.id = id;
         this.descriptor = descriptor;
         this.provider = provider;
-        this.itemAttributes = itemAttributes;
+        this.resourceAttributes = resourceAttributes;
     }
 
     // Getters and Setters
@@ -122,8 +122,8 @@ public class Item {
     public Provider getProvider() { return provider; }
     public void setProvider(Provider provider) { this.provider = provider; }
 
-    public Attributes getItemAttributes() { return itemAttributes; }
-    public void setItemAttributes(Attributes itemAttributes) { this.itemAttributes = itemAttributes; }
+    public Attributes getResourceAttributes() { return resourceAttributes; }
+    public void setResourceAttributes(Attributes resourceAttributes) { this.resourceAttributes = resourceAttributes; }
 
     public List<Constraint> getConstraints() { return constraints; }
     public void setConstraints(List<Constraint> constraints) { this.constraints = constraints; }
@@ -133,6 +133,6 @@ public class Item {
 
     @Override
     public String toString() {
-        return "Item{id='" + id + "', provider=" + provider + ", itemAttributes=" + itemAttributes + '}';
+        return "Resource{id='" + id + "', provider=" + provider + ", resourceAttributes=" + resourceAttributes + '}';
     }
 }

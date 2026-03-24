@@ -1,156 +1,156 @@
 {
-    "context": {
-        "version": "2.0.0",
-        "action": "catalog/publish",
-        "domain": "beckn.one:deg:ev-charging:*",
-        "timestamp": "2024-01-15T10:30:05Z",
-        "transactionId": "2b4d69aa-22e4-4c78-9f56-5a7b9e2b2002",
-        "messageId": "a1eabf26-29f5-4a01-9d4e-4c5c9d1a3d02",
+  "context": {
+    "version": "2.0.0",
+    "action": "catalog/publish",
+    "domain": "beckn.one:deg:ev-charging:*",
+    "timestamp": "2024-01-15T10:30:05Z",
+    "transactionId": "2b4d69aa-22e4-4c78-9f56-5a7b9e2b2002",
+    "messageId": "a1eabf26-29f5-4a01-9d4e-4c5c9d1a3d02",
+    "bppId": "bpp.example.com1",
+    "bppUri": "https://bpp.example.com1",
+    "ttl": "PT30S"
+  },
+  "message": {
+    "catalogs": [
+      {
+        "@context": "https://schema.beckn.io/",
+        "@type": "Catalog",
+        "id": "catalog-ev-charging-001",
         "bppId": "bpp.example.com1",
         "bppUri": "https://bpp.example.com1",
-        "ttl": "PT30S"
-    },
-    "message": {
-        "catalogs": [
-            {
-                "@context": "https://schema.beckn.io/",
-                "@type": "Catalog",
-                "id": "catalog-ev-charging-001",
-                "bppId": "bpp.example.com1",
-                "bppUri": "https://bpp.example.com1",
-                "descriptor": {
-                    "@type": "Descriptor",
-                    "name": "EV Charging Services Network",
-                    "shortDesc": "Comprehensive network of fast charging stations across Bengaluru"
+        "descriptor": {
+          "@type": "Descriptor",
+          "name": "EV Charging Services Network",
+          "shortDesc": "Comprehensive network of fast charging stations across Bengaluru"
+        },
+        "validity": {
+          "@type": "TimePeriod",
+          "startDate": "2024-10-01T00:00:00Z",
+          "endDate": "2025-01-15T23:59:59Z"
+        },
+        "resources": [
+          {
+            "@context": "https://schema.beckn.io/",
+            "@type": "Item",
+            "id": "ev-charger-ccs2-001",
+            "descriptor": {
+              "@type": "Descriptor",
+              "name": "DC Fast Charger - CCS2 (60kW)",
+              "shortDesc": "High-speed DC charging station with CCS2 connector",
+              "longDesc": "Ultra-fast DC charging station supporting CCS2 connector type with 60kW maximum power output. Features advanced thermal management and smart charging capabilities."
+            },
+            "category": {
+              "@type": "CategoryCode",
+              "codeValue": "ev-charging",
+              "name": "EV Charging"
+            },
+            "availabilityWindow": [
+              {
+                "@type": "TimePeriod",
+                "startTime": "06:00:00Z",
+                "endTime": "22:00:00Z"
+              }
+            ],
+            "rateable": true,
+            "rating": {
+              "@type": "Rating",
+              "ratingValue": 4.5,
+              "ratingCount": 128
+            },
+            "isActive": true,
+            "networkId": "bap.net/ev-charging",
+            "provider": {
+              "id": "ecopower-charging",
+              "descriptor": {
+                "@type": "Descriptor",
+                "name": "EcoPower Charging Pvt Ltd"
+              }
+            },
+            "resourceAttributes": {
+              "context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
+              "type": "ChargingService",
+              "connectorType": "CCS2",
+              "maxPowerKW": 60,
+              "minPowerKW": 5,
+              "socketCount": 2,
+              "reservationSupported": true,
+              "serviceLocation": {
+                "@type": "Location",
+                "geo": {
+                  "type": "Point",
+                  "coordinates": [
+                    99.5946,
+                    12.9716
+                  ]
                 },
-                "validity": {
-                    "@type": "TimePeriod",
-                    "startDate": "2024-10-01T00:00:00Z",
-                    "endDate": "2025-01-15T23:59:59Z"
-                },
-                "items": [
-                    {
-                        "@context": "https://schema.beckn.io/",
-                        "@type": "Item",
-                        "id": "ev-charger-ccs2-001",
-                        "descriptor": {
-                            "@type": "Descriptor",
-                            "name": "DC Fast Charger - CCS2 (60kW)",
-                            "shortDesc": "High-speed DC charging station with CCS2 connector",
-                            "longDesc": "Ultra-fast DC charging station supporting CCS2 connector type with 60kW maximum power output. Features advanced thermal management and smart charging capabilities."
-                        },
-                        "category": {
-                            "@type": "CategoryCode",
-                            "codeValue": "ev-charging",
-                            "name": "EV Charging"
-                        },
-                        "availabilityWindow": [
-                            {
-                                "@type": "TimePeriod",
-                                "startTime": "06:00:00Z",
-                                "endTime": "22:00:00Z"
-                            }
-                        ],
-                        "rateable": true,
-                        "rating": {
-                            "@type": "Rating",
-                            "ratingValue": 4.5,
-                            "ratingCount": 128
-                        },
-                        "isActive": true,
-                        "networkId": "bap.net/ev-charging",
-                        "provider": {
-                            "id": "ecopower-charging",
-                            "descriptor": {
-                                "@type": "Descriptor",
-                                "name": "EcoPower Charging Pvt Ltd"
-                            }
-                        },
-                        "itemAttributes": {
-                            "context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
-                            "type": "ChargingService",
-                            "connectorType": "CCS2",
-                            "maxPowerKW": 60,
-                            "minPowerKW": 5,
-                            "socketCount": 2,
-                            "reservationSupported": true,
-                            "serviceLocation": {
-                                "@type": "Location",
-                                "geo": {
-                                    "type": "Point",
-                                    "coordinates": [
-                                        99.5946,
-                                        12.9716
-                                    ]
-                                },
-                                "address": {
-                                    "streetAddress": "EcoPower BTM Hub, 100 Ft Rd",
-                                    "addressLocality": "Bengaluru",
-                                    "addressRegion": "Karnataka",
-                                    "postalCode": "560076",
-                                    "addressCountry": "IN"
-                                }
-                            },
-                            "amenityFeature": [
-                                "RESTAURANT",
-                                "RESTROOM"
-                            ],
-                            "ocppId": "IN-ECO-BTM-01",
-                            "evseId": "IN*ECO*BTM*01*CCS2*A",
-                            "roamingNetwork": "GreenRoam",
-                            "parkingType": "Mall",
-                            "connectorId": "CCS2-A",
-                            "powerType": "DC",
-                            "connectorFormat": "CABLE",
-                            "chargingSpeed": "FAST",
-                            "stationStatus": "Available"
-                        }
-                    }
-                ],
-                "offers": [
-                    {
-                        "@context": "https://schema.beckn.io/",
-                        "@type": "Offer",
-                        "id": "offer-ccs2-60kw-kwh",
-                        "descriptor": {
-                            "@type": "Descriptor",
-                            "name": "Per-kWh Tariff - CCS2 60kW"
-                        },
-                        "items": [
-                            "ev-charger-ccs2-001"
-                        ],
-                        "price": {
-                            "currency": "INR",
-                            "value": 22.1,
-                            "applicableQuantity": {
-                                "unitText": "Kilowatt Hour",
-                                "unitCode": "KWH",
-                                "unitQuantity": 1.1
-                            }
-                        },
-                        "validity": {
-                            "@type": "TimePeriod",
-                            "startDate": "2025-10-01T00:00:00Z",
-                            "endDate": "2026-03-31T23:59:59Z"
-                        },
-                        "acceptedPaymentMethod": [
-                            "UPI",
-                            "CREDIT_CARD",
-                            "WALLET"
-                        ],
-                        "offerAttributes": {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingOffer/v1/context.jsonld",
-                            "@type": "ChargingOffer",
-                            "buyerFinderFee": {
-                                "feeType": "PERCENTAGE",
-                                "feeValue": 2.5
-                            },
-                            "idleFeePolicy": "₹2/min after 10 min post-charge"
-                        },
-                        "provider": "ecopower-charging"
-                    }
-                ]
+                "address": {
+                  "streetAddress": "EcoPower BTM Hub, 100 Ft Rd",
+                  "addressLocality": "Bengaluru",
+                  "addressRegion": "Karnataka",
+                  "postalCode": "560076",
+                  "addressCountry": "IN"
+                }
+              },
+              "amenityFeature": [
+                "RESTAURANT",
+                "RESTROOM"
+              ],
+              "ocppId": "IN-ECO-BTM-01",
+              "evseId": "IN*ECO*BTM*01*CCS2*A",
+              "roamingNetwork": "GreenRoam",
+              "parkingType": "Mall",
+              "connectorId": "CCS2-A",
+              "powerType": "DC",
+              "connectorFormat": "CABLE",
+              "chargingSpeed": "FAST",
+              "stationStatus": "Available"
             }
+          }
+        ],
+        "offers": [
+          {
+            "@context": "https://schema.beckn.io/",
+            "@type": "Offer",
+            "id": "offer-ccs2-60kw-kwh",
+            "descriptor": {
+              "@type": "Descriptor",
+              "name": "Per-kWh Tariff - CCS2 60kW"
+            },
+            "resourceIds": [
+              "ev-charger-ccs2-001"
+            ],
+            "price": {
+              "currency": "INR",
+              "value": 22.1,
+              "applicableQuantity": {
+                "unitText": "Kilowatt Hour",
+                "unitCode": "KWH",
+                "unitQuantity": 1.1
+              }
+            },
+            "validity": {
+              "@type": "TimePeriod",
+              "startDate": "2025-10-01T00:00:00Z",
+              "endDate": "2026-03-31T23:59:59Z"
+            },
+            "acceptedPaymentMethod": [
+              "UPI",
+              "CREDIT_CARD",
+              "WALLET"
+            ],
+            "offerAttributes": {
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingOffer/v1/context.jsonld",
+              "@type": "ChargingOffer",
+              "buyerFinderFee": {
+                "feeType": "PERCENTAGE",
+                "feeValue": 2.5
+              },
+              "idleFeePolicy": "₹2/min after 10 min post-charge"
+            },
+            "provider": "ecopower-charging"
+          }
         ]
-    }
+      }
+    ]
+  }
 }

@@ -9,35 +9,74 @@
     "catalogs": [
       {
         "id": "cat-1",
-        "items": [
-          {"id": "item-1", "descriptor": {"name": "Item One"}},
-          {"id": "item-2", "descriptor": {"name": "Item Two"}},
-          {"id": "item-3", "descriptor": {"name": "Item Three"}}
+        "resources": [
+          {
+            "id": "item-1",
+            "descriptor": {
+              "name": "Item One"
+            }
+          },
+          {
+            "id": "item-2",
+            "descriptor": {
+              "name": "Item Two"
+            }
+          },
+          {
+            "id": "item-3",
+            "descriptor": {
+              "name": "Item Three"
+            }
+          }
         ],
         "offers": [
           {
             "id": "offer-A",
-            "descriptor": {"name": "Offer A Original"},
-            "items": ["item-1", "item-2"]
+            "descriptor": {
+              "name": "Offer A Original"
+            },
+            "resourceIds": [
+              "item-1",
+              "item-2"
+            ]
           },
           {
             "id": "offer-B",
-            "descriptor": {"name": "Offer B"},
-            "items": ["item-3"]
+            "descriptor": {
+              "name": "Offer B"
+            },
+            "resourceIds": [
+              "item-3"
+            ]
           }
         ]
       },
       {
         "id": "cat-2",
-        "items": [
-          {"id": "item-4", "descriptor": {"name": "Item Four"}},
-          {"id": "item-5", "descriptor": {"name": "Item Five"}}
+        "resources": [
+          {
+            "id": "item-4",
+            "descriptor": {
+              "name": "Item Four"
+            }
+          },
+          {
+            "id": "item-5",
+            "descriptor": {
+              "name": "Item Five"
+            }
+          }
         ],
         "offers": [
           {
             "id": "offer-C",
-            "descriptor": {"name": "Offer C"},
-            "items": ["item-4", "item-5"]
+            "descriptor": {
+              "name": "Offer C"
+            },
+            "resourceIds": [
+              "item-4",
+              "item-5"
+            ]
           }
         ]
       }

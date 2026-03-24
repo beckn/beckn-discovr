@@ -20,7 +20,7 @@
     "intent": {
       "filters": {
         "type": "jsonpath",
-        "expression": "$.catalogs[*].items[*] ? (@.itemAttributes.connectorType == \"ChaDeMo\")"
+        "expression": "$.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"ChaDeMo\")"
       }
     }
   }

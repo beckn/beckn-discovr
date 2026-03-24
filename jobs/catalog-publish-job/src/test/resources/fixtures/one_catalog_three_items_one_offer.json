@@ -9,28 +9,52 @@
     "catalogs": [
       {
         "id": "cat-1",
-        "items": [
+        "resources": [
           {
             "id": "item-1",
-            "descriptor": { "name": "Item One" },
-            "availableAt": [{ "gps": "12.9716,77.5946" }]
+            "descriptor": {
+              "name": "Item One"
+            },
+            "availableAt": [
+              {
+                "gps": "12.9716,77.5946"
+              }
+            ]
           },
           {
             "id": "item-2",
-            "descriptor": { "name": "Item Two" },
-            "availableAt": [{ "gps": "12.9153,77.6104" }]
+            "descriptor": {
+              "name": "Item Two"
+            },
+            "availableAt": [
+              {
+                "gps": "12.9153,77.6104"
+              }
+            ]
           },
           {
             "id": "item-3",
-            "descriptor": { "name": "Item Three" },
-            "availableAt": [{ "gps": "12.9716,77.6254" }]
+            "descriptor": {
+              "name": "Item Three"
+            },
+            "availableAt": [
+              {
+                "gps": "12.9716,77.6254"
+              }
+            ]
           }
         ],
         "offers": [
           {
             "id": "offer-1",
-            "descriptor": { "name": "Offer One Original" },
-            "items": ["item-1", "item-2", "item-3"]
+            "descriptor": {
+              "name": "Offer One Original"
+            },
+            "resourceIds": [
+              "item-1",
+              "item-2",
+              "item-3"
+            ]
           }
         ]
       }

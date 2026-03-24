@@ -227,7 +227,7 @@ public abstract class BaseIntegrationTest {
             // Fallback: seed geometry for the EV charging test fixture.
             // Path format matches catalog-publish-job and request targets.
             // Used by spatialQueryUsesPostgisTargets — s_dwithin with radius 1000m.
-            String path = "$.catalogs[*].items[*].availableAt[*].geo";
+            String path = "$.catalogs[*].resources[*].availableAt[*].geo";
             insertItemLocationGeom("ev-charger-ccs2-001", path, 77.5946, 12.9716);
             insertItemLocationGeom("ev-charger-ccs2-002", path, 77.5700, 12.9800);
         }
@@ -417,9 +417,10 @@ public abstract class BaseIntegrationTest {
                 .as("Offer must have id")
                 .isNotNull();
 
-        Object itemsObj = offer.get("items");
+        // v2.0 offers use "resourceIds"; fall back to "items" for backward compat
+        Object itemsObj = offer.containsKey("resourceIds") ? offer.get("resourceIds") : offer.get("items");
         Assertions.assertThat(itemsObj)
-                .as("Offer must have items array")
+                .as("Offer must have resourceIds (or items) array")
                 .isNotNull();
         Assertions.assertThat(itemsObj).isInstanceOf(List.class);
 

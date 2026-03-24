@@ -20,12 +20,12 @@
         "intent": {
             "filters": {
                 "type": "jsonpath",
-                "expression": "$.catalogs[*].items[*] ? (@.itemAttributes.connectorType == \"CCS2\")"
+                "expression": "$.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"CCS2\")"
             },
             "spatial": [
                 {
                     "op": "s_dwithin",
-                    "targets": "$.catalogs[*].items[*].availableAt[*].geo",
+                    "targets": "$.catalogs[*].resources[*].availableAt[*].geo",
                     "geometry": {
                         "type": "Point",
                         "coordinates": [

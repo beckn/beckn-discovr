@@ -20,7 +20,7 @@
     "intent": {
       "filters": {
         "type": "jsonpath",
-        "expression": "$.catalogs[*].items[*] ? (@.itemAttributes.connectorType == \"CCS2\" && @.itemAttributes.maxPowerKW > 150)"
+        "expression": "$.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"CCS2\" && @.resourceAttributes.maxPowerKW > 150)"
       }
     }
   }

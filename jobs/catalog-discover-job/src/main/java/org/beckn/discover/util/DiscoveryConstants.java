@@ -60,6 +60,10 @@ public class DiscoveryConstants {
         public static final String CONTEXT = "@context";
         public static final String CATALOGS = "catalogs";
         public static final String BECKN_ITEMS = "items";
+        /** Old Catalog v2.0 format uses beckn: prefixed field names (e.g. stored before ParseStep normalization). */
+        public static final String BECKN_ITEMS_V20 = "beckn:items";
+        /** v2.1 resource-based catalogs use "resources" instead of "items". */
+        public static final String BECKN_RESOURCES = "resources";
         public static final String BECKN_ID = "id";
         public static final String BECKN_DESCRIPTOR = "descriptor";
         public static final String BECKN_PROVIDER_ID = "providerId";

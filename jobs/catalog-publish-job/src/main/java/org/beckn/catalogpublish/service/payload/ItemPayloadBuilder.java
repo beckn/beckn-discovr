@@ -35,7 +35,9 @@ public class ItemPayloadBuilder {
         // buildDenormalizedPayloadFromSlice deep-copies this slice per item, so shallow refs are safe here.
         ObjectNode slice = objectMapper.createObjectNode();
         catalogNode.fields().forEachRemaining(e -> {
-            if (!BecknFields.ITEMS.equals(e.getKey()) && !BecknFields.OFFERS.equals(e.getKey()))
+            // Exclude items/resources (per-item data) and offers — added back per-item in buildDenormalizedPayloadFromSlice
+            if (!BecknFields.ITEMS.equals(e.getKey()) && !BecknFields.RESOURCES.equals(e.getKey())
+                    && !BecknFields.OFFERS.equals(e.getKey()))
                 slice.set(e.getKey(), e.getValue());
         });
         if (!slice.has(BecknFields.BPP_ID)) slice.put(BecknFields.BPP_ID, ctx.bppId());
