@@ -88,6 +88,9 @@ public final class BecknFields {
     public static final String TRY              = "try";
     public static final String LINEAGE          = "lineage";
 
+    // ── Catalog validity field ────────────────────────────────────────────────
+    public static final String VALIDITY          = "validity";
+
     // ── Catalog new fields (v2.1 schema update) ──────────────────────────────
     public static final String ADD_ONS           = "addOns";
     public static final String ADD_ON_ATTRIBUTES = "addOnAttributes";

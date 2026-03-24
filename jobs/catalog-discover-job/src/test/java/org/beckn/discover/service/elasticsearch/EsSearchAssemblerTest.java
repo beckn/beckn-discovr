@@ -387,6 +387,76 @@ class EsSearchAssemblerTest {
         assertThat(resource.getRating().getReviewText()).isEqualTo("Excellent service and fast charging");
     }
 
+    // ── Validity tests ────────────────────────────────────────────────────────
+
+    @Test
+    void hitWithCatalogValidity_populatesValidityOnCatalog() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("catalog_validity", Map.of(
+                "@type", "TimePeriod",
+                "startDate", "2024-10-01T00:00:00Z",
+                "endDate", "2025-01-15T23:59:59Z"));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-val-1");
+
+        assertThat(catalogs).hasSize(1);
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getValidity()).isNotNull();
+        assertThat(catalog.getValidity().getType()).isEqualTo("TimePeriod");
+        assertThat(catalog.getValidity().getStartDate()).isNotNull();
+        assertThat(catalog.getValidity().getStartDate().toString()).startsWith("2024-10-01");
+        assertThat(catalog.getValidity().getEndDate()).isNotNull();
+        assertThat(catalog.getValidity().getEndDate().toString()).startsWith("2025-01-15");
+    }
+
+    @Test
+    void hitWithCatalogValidityWithTimes_populatesStartEndTime() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("catalog_validity", Map.of(
+                "@type", "TimePeriod",
+                "startTime", "09:00",
+                "endTime", "18:00"));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-val-2");
+
+        assertThat(catalogs).hasSize(1);
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getValidity()).isNotNull();
+        assertThat(catalog.getValidity().getStartTime()).isEqualTo("09:00");
+        assertThat(catalog.getValidity().getEndTime()).isEqualTo("18:00");
+    }
+
+    @Test
+    void hitWithoutCatalogValidity_validityIsNull() {
+        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-val-3");
+
+        assertThat(catalogs).hasSize(1);
+        assertThat(catalogs.get(0).getValidity()).isNull();
+    }
+
+    @Test
+    void multipleCatalogHits_eachCatalogRetainsItsOwnValidity() {
+        Map<String, Object> doc1 = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger A"));
+        doc1.put("catalog_validity", Map.of(
+                "@type", "TimePeriod",
+                "startDate", "2024-01-01T00:00:00Z",
+                "endDate", "2024-06-30T23:59:59Z"));
+
+        Map<String, Object> doc2 = new java.util.HashMap<>(evChargerDoc("cat-2", "bpp-2", "item-2", "Charger B"));
+        // cat-2 has no validity
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc1, doc2), "tx-val-4");
+
+        assertThat(catalogs).hasSize(2);
+        Catalog cat1 = catalogs.stream().filter(c -> "cat-1".equals(c.getId())).findFirst().orElseThrow();
+        Catalog cat2 = catalogs.stream().filter(c -> "cat-2".equals(c.getId())).findFirst().orElseThrow();
+        assertThat(cat1.getValidity()).isNotNull();
+        assertThat(cat1.getValidity().getType()).isEqualTo("TimePeriod");
+        assertThat(cat2.getValidity()).isNull();
+    }
+
     // ── Fixtures ─────────────────────────────────────────────────────────────
 
     private static Map<String, Object> evChargerDoc(String catalogId, String bppId,
