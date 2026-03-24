@@ -1,5 +1,6 @@
 package org.beckn.catalogpublish.controller;
 
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
 import org.beckn.catalogpublish.util.CorrelationContext;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
@@ -37,7 +38,7 @@ public class CatalogPushService {
             correlationContext.populateFallback();
             orchestrator.processPublish(rawBody);
         } catch (Exception e) {
-            log.error("catalog.push.async.failed error={}", ErrorSanitizer.sanitize(e));
+            log.error("event={} error={}", LogEvent.CONSUMER_ERROR, ErrorSanitizer.sanitize(e));
         } finally {
             correlationContext.clear();
         }

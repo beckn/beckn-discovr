@@ -1,5 +1,6 @@
 package org.beckn.discover.service.nlweb;
 
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.service.NLWebService;
 import org.beckn.discover.service.engine.QueryRequest;
@@ -8,6 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -74,7 +77,9 @@ public class NLWebTextSearchEngine implements TextSearchEngine {
         }
 
         String txId = context.transactionId();
-        log.info("nlweb.search.start transactionId={} query='{}'", txId, text);
+        log.info(LogEvent.NLWEB_SEARCH_STARTED,
+                value("transactionId", txId),
+                value("query", text));
         Instant start = Instant.now();
 
         try {
@@ -82,9 +87,14 @@ public class NLWebTextSearchEngine implements TextSearchEngine {
             List<Catalog> catalogs = assembler.assemble(rawResponse, txId);
 
             long ms = Duration.between(start, Instant.now()).toMillis();
-            log.info("nlweb.search.success catalogs={} durationMs={} transactionId={}",
-                    catalogs.size(), ms, txId);
-            perfLog.info("nlweb.search durationMs={} catalogs={} transactionId={}", ms, catalogs.size(), txId);
+            log.info(LogEvent.NLWEB_SEARCH_COMPLETED,
+                    value("catalogs", catalogs.size()),
+                    value("durationMs", ms),
+                    value("transactionId", txId));
+            perfLog.info(LogEvent.NLWEB_SEARCH_COMPLETED,
+                    value("durationMs", ms),
+                    value("catalogs", catalogs.size()),
+                    value("transactionId", txId));
 
             return catalogs;
 
@@ -92,8 +102,11 @@ public class NLWebTextSearchEngine implements TextSearchEngine {
             throw e; // validation errors propagate without wrapping
         } catch (Exception e) {
             long ms = Duration.between(start, Instant.now()).toMillis();
-            log.error("nlweb.search.failed durationMs={} transactionId={} error={}",
-                    ms, txId, e.getMessage(), e);
+            log.error(LogEvent.NLWEB_SEARCH_FAILED,
+                    value("durationMs", ms),
+                    value("transactionId", txId),
+                    value("error", e.getMessage()),
+                    e);
             throw new Exception("NLWeb text search failed for transactionId=" + txId, e);
         }
     }

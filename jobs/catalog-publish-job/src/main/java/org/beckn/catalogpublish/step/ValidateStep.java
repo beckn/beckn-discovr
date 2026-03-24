@@ -3,11 +3,18 @@ package org.beckn.catalogpublish.step;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.dto.ParsedCatalogMessage;
+import org.beckn.catalogpublish.exception.ValidationException;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.validation.CatalogMessageValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ValidateStep {
+
+    private static final Logger log = LoggerFactory.getLogger(ValidateStep.class);
+    private static final int SNIPPET_LEN = 500;
 
     private final CatalogMessageValidator validator;
 
@@ -33,6 +40,15 @@ public class ValidateStep {
         // If the root has a "message" wrapper, validate that; otherwise validate root directly
         // (handles both {context,message} envelope and raw {catalogs} payloads)
         JsonNode nodeToValidate = messageNode.isMissingNode() ? root : messageNode;
-        validator.validate(nodeToValidate);
+        try {
+            validator.validate(nodeToValidate);
+        } catch (ValidationException e) {
+            String rootText = root.toString();
+            String snippet = rootText.length() > SNIPPET_LEN
+                    ? rootText.substring(0, SNIPPET_LEN) + "…"
+                    : rootText;
+            log.warn("event={} errors={} bodySnippet={}", LogEvent.VALIDATE_FAILED, e.getErrors(), snippet);
+            throw e;
+        }
     }
 }

@@ -1,11 +1,14 @@
 package org.beckn.discover.service.postgresql;
 
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.service.engine.QueryEngine;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -58,13 +61,15 @@ public class PostgreSQLQueryEngine implements QueryEngine {
     @Override
     public List<Catalog> executeFilterQuery(QueryRequest request) throws Exception {
         Instant start = Instant.now();
-        log.debug("engine.filter.start transactionId={}", request.transactionId());
+        log.debug(LogEvent.QUERY_STARTED + ".filter", value("transactionId", request.transactionId()));
 
         List<Map<String, Object>> rows = queryService.executeJsonPathQuery(request);
         List<Catalog> catalogs = assembler.assemble(rows, request);
 
-        log.info("engine.filter.done catalogs={} durationMs={} transactionId={}",
-                catalogs.size(), elapsed(start), request.transactionId());
+        log.info(LogEvent.QUERY_COMPLETED + ".filter",
+                value("catalogs", catalogs.size()),
+                value("durationMs", elapsed(start)),
+                value("transactionId", request.transactionId()));
         return catalogs;
     }
 
@@ -74,13 +79,15 @@ public class PostgreSQLQueryEngine implements QueryEngine {
     @Override
     public List<Catalog> executeSpatialQuery(QueryRequest request) throws Exception {
         Instant start = Instant.now();
-        log.debug("engine.spatial.start transactionId={}", request.transactionId());
+        log.debug(LogEvent.QUERY_STARTED + ".spatial", value("transactionId", request.transactionId()));
 
         List<Map<String, Object>> rows = queryService.executeSpatialQuery(request);
         List<Catalog> catalogs = assembler.assemble(rows, request);
 
-        log.info("engine.spatial.done catalogs={} durationMs={} transactionId={}",
-                catalogs.size(), elapsed(start), request.transactionId());
+        log.info(LogEvent.QUERY_COMPLETED + ".spatial",
+                value("catalogs", catalogs.size()),
+                value("durationMs", elapsed(start)),
+                value("transactionId", request.transactionId()));
         return catalogs;
     }
 
@@ -95,20 +102,23 @@ public class PostgreSQLQueryEngine implements QueryEngine {
     @Override
     public Optional<List<Catalog>> executeCombinedQuery(QueryRequest request) throws Exception {
         Instant start = Instant.now();
-        log.debug("engine.combined.start transactionId={}", request.transactionId());
+        log.debug(LogEvent.QUERY_STARTED + ".combined", value("transactionId", request.transactionId()));
 
         Optional<List<Map<String, Object>>> rowsOpt = queryService.executeCombinedQuery(request);
 
         if (rowsOpt.isEmpty()) {
-            log.info("engine.combined.skip reason=no-spatial-conditions transactionId={}",
-                    request.transactionId());
+            log.info(LogEvent.QUERY_COMPLETED + ".combined-skip",
+                    value("reason", "no-spatial-conditions"),
+                    value("transactionId", request.transactionId()));
             return Optional.empty();
         }
 
         List<Catalog> catalogs = assembler.assemble(rowsOpt.get(), request);
 
-        log.info("engine.combined.done catalogs={} durationMs={} transactionId={}",
-                catalogs.size(), elapsed(start), request.transactionId());
+        log.info(LogEvent.QUERY_COMPLETED + ".combined",
+                value("catalogs", catalogs.size()),
+                value("durationMs", elapsed(start)),
+                value("transactionId", request.transactionId()));
         return Optional.of(catalogs);
     }
 

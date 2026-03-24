@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.http.HttpServletRequest;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.config.AppProperties;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -53,19 +54,19 @@ public class CatalogPushController {
             HttpServletRequest request) {
 
         if (rawBytes.length > maxPayloadSize) {
-            log.warn("catalog.push.rejected.oversized sizeBytes={} limit={}", rawBytes.length, maxPayloadSize);
+            log.warn("event={} sizeBytes={} limit={}", LogEvent.PUSH_REJECTED, rawBytes.length, maxPayloadSize);
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Payload too large");
         }
 
         if (signatureVerificationEnabled) {
             // TODO: integrate Beckn HTTP signature verification (Ed25519 + registry lookup)
-            log.warn("catalog.push.signature-verification-enabled-but-not-implemented — skipping");
+            log.warn("event={} reason=signature-verification-not-implemented", LogEvent.PUSH_REJECTED);
         }
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         String enrichedBody = enrichContextIfNeeded(rawBody);
 
-        log.info("catalog.push.received sizeBytes={}", rawBytes.length);
+        log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
         pushService.processAsync(enrichedBody);
 
         return ResponseEntity.accepted().body(ACK_RESPONSE);
@@ -126,7 +127,7 @@ public class CatalogPushController {
 
             return objectMapper.writeValueAsString(root);
         } catch (Exception e) {
-            log.warn("catalog.push.context-enrichment.failed falling back to raw body error={}", e.toString());
+            log.warn("event={} reason=context-enrichment-failed error={}", LogEvent.PUSH_REJECTED, e.toString());
             return rawBody;
         }
     }

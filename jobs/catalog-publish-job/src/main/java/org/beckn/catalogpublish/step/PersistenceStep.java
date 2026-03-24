@@ -19,6 +19,7 @@ import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.common.SchemaVersion;
 import org.beckn.catalogpublish.store.ItemLocationCollectionStore;
 import org.beckn.catalogpublish.store.ItemStore;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.FieldExtractor;
 import org.slf4j.Logger;
@@ -186,7 +187,7 @@ public class PersistenceStep {
             } catch (Exception e) {
                 String sanitized = ErrorSanitizer.sanitize(e);
                 errors.add(new ProcessingError(itemId, ProcessingErrorCode.NET_INTERNAL_ERROR, sanitized));
-                log.warn("item.build.failed itemId={} catalogId={} error={}", itemId, catalogId, sanitized);
+                log.warn("event={} itemId={} catalogId={} error={}", LogEvent.PERSIST_FAILED, itemId, catalogId, sanitized);
             }
         }
 
@@ -235,15 +236,15 @@ public class PersistenceStep {
                                         linkedItem.getProviderId(), linkedItem.getContextUrl(),
                                         linkedItem.getSchemaVersion()),
                                 payload));
-                        log.debug("offer.propagated itemId={} offers={}", linkedItem.getId(),
-                                Arrays.toString(linkedItem.getOfferIds()));
+                        log.debug("event={} itemId={} offers={}", LogEvent.PERSIST_COMPLETED,
+                                linkedItem.getId(), Arrays.toString(linkedItem.getOfferIds()));
                     }
                 } catch (Exception e) {
                     String sanitized = ErrorSanitizer.sanitize(e);
                     errors.add(
                             new ProcessingError(linkedItem.getId(), ProcessingErrorCode.NET_INTERNAL_ERROR, sanitized));
-                    log.warn("offer.propagation.failed itemId={} catalogId={} error={}",
-                            linkedItem.getId(), catalogId, sanitized);
+                    log.warn("event={} itemId={} catalogId={} error={}",
+                            LogEvent.PERSIST_FAILED, linkedItem.getId(), catalogId, sanitized);
                 }
             }
         }
@@ -267,8 +268,8 @@ public class PersistenceStep {
                 })
                 .toList();
         locationStore.saveLocations(allLocations);
-        log.info("catalog.persisted catalogId={} items={} locations={} errors={}",
-                catalogId, savedItems.size(), allLocations.size(), errors.size());
+        log.info("event={} catalogId={} items={} locations={} errors={}",
+                LogEvent.PERSIST_COMPLETED, catalogId, savedItems.size(), allLocations.size(), errors.size());
         return new CatalogBatch(catalogId, ctx, schemaType, op,
                 List.copyOf(savedItems), List.copyOf(errors), Map.copyOf(payloadNodeById));
     }

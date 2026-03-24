@@ -1,25 +1,29 @@
 package org.beckn.seeker.messaging.consumer;
 
-import org.beckn.seeker.messaging.producer.EventProducer;
-import org.beckn.seeker.service.MessageProcessingService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.beans.factory.annotation.Value;
+import org.beckn.seeker.common.BecknFields;
+import org.beckn.seeker.logging.BecknMdcContext;
+import org.beckn.seeker.logging.LogEvent;
+import org.beckn.seeker.messaging.producer.EventProducer;
+import org.beckn.seeker.service.MessageProcessingService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class EventListener {
-    
+
     private final EventProducer eventProducer;
     private final MessageProcessingService messageProcessingService;
-
-    @Value("${spring.kafka.listener.concurrency:1}")
-    private String configuredConcurrency;
+    private final ObjectMapper objectMapper;
 
     @KafkaListener(
         topics = "${topics.input}",
@@ -27,48 +31,63 @@ public class EventListener {
         concurrency = "${spring.kafka.listener.concurrency:1}"
     )
     public void listen(ConsumerRecord<String, String> record, Acknowledgment ack) {
-        log.info("Using configured concurrency: {}", configuredConcurrency);
-        String value = record.value();
+        String rawValue = record.value();
         String key = record.key();
-        
-        log.info("Received message from topic: {}, partition: {}, offset: {}", 
-                record.topic(), record.partition(), record.offset());
-        log.debug("Message key: {}, Message length: {}", key, value != null ? value.length() : 0);
-        
-        try {
-            // Process the discovery response message (send to BAP)
-            String result = messageProcessingService.processMessage(value);
-            
-            log.info("Successfully processed discovery response from {} - Result: {}", record.topic(), result);
-            
-            // Commit offset only after successful processing
-            ack.acknowledge();
-            
-        } catch (Exception e) {
-            log.error("Error processing discovery response from topic {}: {}", record.topic(), e.getMessage(), e);
 
-            // Use original Kafka key or a simple fallback
+        // Populate MDC from Beckn context if the message is parseable JSON
+        try {
+            if (rawValue != null) {
+                JsonNode root = objectMapper.readTree(rawValue);
+                JsonNode context = root.path(BecknFields.CONTEXT);
+                if (!context.isMissingNode()) {
+                    BecknMdcContext.populate(context);
+                }
+            }
+        } catch (Exception ignored) {
+            // Non-JSON messages still get processed; MDC will just lack context fields
+        }
+
+        try {
+            log.info("{}", value("event", LogEvent.CONSUMER_RECEIVED),
+                    value("topic", record.topic()),
+                    value("partition", record.partition()),
+                    value("offset", record.offset()));
+
+            String result = messageProcessingService.processMessage(rawValue);
+
+            log.info("{}", value("event", LogEvent.CONSUMER_PROCESSED),
+                    value("result", result));
+
+            ack.acknowledge();
+
+        } catch (Exception e) {
+            log.error("{}", value("event", LogEvent.CONSUMER_ERROR),
+                    value("topic", record.topic()),
+                    value("errorMessage", e.getMessage()), e);
+
             String messageKey = key != null ? key : "unknown";
 
             try {
-                // Send all failures to DLT after retries are exhausted
                 eventProducer.sendToDlt(
                         messageKey,
-                        value,
+                        rawValue,
                         record.topic(),
                         record.partition(),
                         record.offset(),
                         e.getMessage(),
                         e.getClass().getName()
                 );
-                log.warn("Failed after retries - sent to DLT");
+                log.warn("{}", value("event", LogEvent.DLT_SENT),
+                        value("topic", record.topic()),
+                        value("key", messageKey));
             } catch (Exception dltEx) {
-                log.error("Failed to send message to DLT — message will be lost: {}", dltEx.getMessage(), dltEx);
+                log.error("{}", value("event", LogEvent.DLT_FAILED),
+                        value("errorMessage", dltEx.getMessage()), dltEx);
             } finally {
-                // Always acknowledge so the listener is not stuck on a poison pill
                 ack.acknowledge();
             }
+        } finally {
+            BecknMdcContext.clear();
         }
     }
-    
 }

@@ -12,11 +12,14 @@ import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Rating;
 import org.beckn.discover.model.Resource;
 import org.beckn.discover.common.BecknFields;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.service.response.CatalogProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -64,7 +67,8 @@ public class EsSearchAssembler {
             try {
                 String catalogId = str(doc, "catalog_id");
                 if (catalogId == null) {
-                    log.warn("es.assembler.missing-catalog-id txId={}", transactionId);
+                    log.warn(LogEvent.ES_SEARCH_COMPLETED + ".assembler-missing-catalog-id",
+                            value("transactionId", transactionId));
                     continue;
                 }
 
@@ -72,7 +76,9 @@ public class EsSearchAssembler {
                 catalog.getResources().add(buildResource(doc));
                 mergeOffersFromDoc(catalog, doc);
             } catch (Exception e) {
-                log.warn("es.assembler.hit.failed txId={} error={}", transactionId, e.getMessage());
+                log.warn(LogEvent.ES_SEARCH_FAILED + ".assembler-hit",
+                        value("transactionId", transactionId),
+                        value("error", e.getMessage()));
             }
         }
 
@@ -83,7 +89,10 @@ public class EsSearchAssembler {
                 result.add(processed);
         }
 
-        log.debug("es.assembler.done hits={} catalogs={} txId={}", hits.size(), result.size(), transactionId);
+        log.debug(LogEvent.ES_SEARCH_COMPLETED + ".assembled",
+                value("hits", hits.size()),
+                value("catalogs", result.size()),
+                value("transactionId", transactionId));
         return result;
     }
 
