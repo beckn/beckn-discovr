@@ -88,7 +88,8 @@ public class PersistenceStep {
     public CatalogBatch persistItemsAndLocations(JsonNode catalogNode, CatalogContext ctx, CatalogOperation op) {
         String catalogId = FieldExtractor.requireString(catalogNode, "id");
         JsonNode allOffers = FieldExtractor.extractOffersOrEmpty(catalogNode);
-        String schemaType = FieldExtractor.extractSchemaTypeFromItems(catalogNode);
+        // Gap 2 fix: pass context node so context.schemaContext is used when item @type is absent
+        String schemaType = FieldExtractor.extractSchemaType(catalogNode, ctx.contextNode());
 
         ObjectNode baseSlice = payloadBuilder.buildCatalogMetadataSlice(catalogNode, ctx);
         OfferIndex offerIndex = OfferIndex.build(allOffers, objectMapper);

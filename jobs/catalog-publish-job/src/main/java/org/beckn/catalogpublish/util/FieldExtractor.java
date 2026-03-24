@@ -99,22 +99,50 @@ public final class FieldExtractor {
      * hit is sufficient. Returns {@code "unknown"} when no item carries the field.
      */
     public static String extractSchemaTypeFromItems(JsonNode catalogNode) {
-        if (catalogNode == null || catalogNode.isMissingNode())
-            return "unknown";
-        for (JsonNode itemNode : iterableItems(catalogNode)) {
-            JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
-            if (attrs.isMissingNode() || !attrs.isObject()) {
-                // v2.0 resource-based items use "resourceAttributes" instead of "itemAttributes"
-                attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+        return extractSchemaType(catalogNode, null);
+    }
+
+    /**
+     * Extracts schema type with context.schemaContext support (Gap 2 fix).
+     *
+     * <p>Priority order (matches beckn-catalg indexer ParseStep behaviour):
+     * <ol>
+     *   <li>{@code context.schemaContext} — full URL; fragment after {@code #} is used as type
+     *       (e.g. {@code "https://…/context.jsonld#ChargingService"} → {@code "ChargingService"}).
+     *       Used for v2.0 publishes that carry only a context-level schema pointer.</li>
+     *   <li>{@code itemAttributes.@type} or {@code resourceAttributes.@type} from first item
+     *       — authoritative domain schema type.</li>
+     * </ol>
+     *
+     * @param catalogNode  normalized catalog JsonNode
+     * @param contextNode  the {@code context} JsonNode from the Kafka message root; may be null
+     */
+    public static String extractSchemaType(JsonNode catalogNode, JsonNode contextNode) {
+        // 1. context.schemaContext — extract fragment after '#' as schema type
+        if (contextNode != null && !contextNode.isMissingNode()) {
+            JsonNode scNode = contextNode.path(BecknFields.SCHEMA_CONTEXT);
+            if (scNode.isTextual()) {
+                String sc = scNode.asText().trim();
+                if (!sc.isBlank()) {
+                    int h = sc.lastIndexOf('#');
+                    // Fragment present → use as schema type; otherwise use full URL
+                    return h >= 0 && h < sc.length() - 1 ? sc.substring(h + 1) : sc;
+                }
             }
-            if (attrs.isMissingNode() || !attrs.isObject())
-                continue;
-            // itemAttributes/resourceAttributes uses "@type" (JSON-LD) as the schema type field
-            JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
-            if (!typeNode.isMissingNode() && typeNode.isTextual()) {
-                String val = typeNode.asText();
-                if (!val.isBlank())
-                    return val;
+        }
+        // 2. itemAttributes / resourceAttributes @type from first item
+        if (catalogNode != null && !catalogNode.isMissingNode()) {
+            for (JsonNode itemNode : iterableItems(catalogNode)) {
+                JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
+                if (attrs.isMissingNode() || !attrs.isObject())
+                    attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+                if (attrs.isMissingNode() || !attrs.isObject())
+                    continue;
+                JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
+                if (typeNode.isTextual()) {
+                    String val = typeNode.asText();
+                    if (!val.isBlank()) return val;
+                }
             }
         }
         return "unknown";
