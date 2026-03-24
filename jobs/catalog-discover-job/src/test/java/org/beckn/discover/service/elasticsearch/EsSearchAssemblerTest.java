@@ -417,7 +417,7 @@ class EsSearchAssemblerTest {
         return Map.ofEntries(
                 Map.entry("catalog_id", catalogId != null ? catalogId : ""),
                 Map.entry("catalog_context", "https://custom.catalog.context"),
-                Map.entry("catalog_type", "beckn:Catalog"),
+                Map.entry("catalog_type", "Catalog"),
                 Map.entry("bpp_id", bppId),
                 Map.entry("bpp_uri", "https://bpp.example.com"),
                 Map.entry("network_id", "ondc-ev"),

@@ -38,15 +38,9 @@ public final class BecknFields {
     public static final String JSON_LD_TYPE    = "@type";
     public static final String JSON_LD_CONTEXT = "@context";
 
-    // ── Catalog / Item fields (v2.0 — no beckn: prefix) ─────────────────────
+    // ── Catalog / Item fields ─────────────────────────────────────────────────
     public static final String ID              = "id";
     public static final String ITEMS           = "items";
-    /**
-     * Old Catalog v2.0 format uses {@code "beckn:"} prefix on catalog-level fields.
-     * New v2.1 format uses plain camelCase.
-     */
-    public static final String ITEMS_V20       = "beckn:items";
-    public static final String ID_V20          = "beckn:id";
     public static final String OFFERS          = "offers";
     public static final String DESCRIPTOR      = "descriptor";
     public static final String PROVIDER        = "provider";

@@ -219,13 +219,13 @@ public class CatalogProcessor {
         if (DiscoveryServiceUtil.isBlank(catalog.getContext()))
             catalog.setContext(DiscoveryConstants.DEFAULT_CATALOG_CONTEXT);
         if (DiscoveryServiceUtil.isBlank(catalog.getType()))
-            catalog.setType(DiscoveryConstants.BECKN_CATALOG_TYPE);
+            catalog.setType(DiscoveryConstants.CATALOG_TYPE);
     }
 
     // ── Offer operations ─────────────────────────────────────────────────────
 
     /**
-     * Removes duplicate offers within a catalog by {@code beckn:id} / {@code id}.
+     * Removes duplicate offers within a catalog by {@code id}.
      * No-op when the catalog has ≤1 offer.
      */
     public void deduplicateOffers(Catalog catalog) {
@@ -358,7 +358,7 @@ public class CatalogProcessor {
             if (DiscoveryServiceUtil.isBlank(required))
                 return true;
             if (DiscoveryServiceUtil.isNotBlank(itemType)
-                    && DiscoveryServiceUtil.extractLocalType(itemType).equals(required))
+                    && itemType.equals(required))
                 return true;
         }
         return false;

@@ -332,7 +332,7 @@ public class DiscoveryProperties {
         /**
          * List of catalog-level attributes to extract from catalog.payload
          * These attributes will be merged into the catalog object in the response
-         * Default: ["beckn:offers"] - extracts offers from catalog payload
+         * Default: ["offers"] - extracts offers from catalog payload
          */
         private java.util.List<String> catalogAttributesToExtract = java.util.List.of("offers");
 

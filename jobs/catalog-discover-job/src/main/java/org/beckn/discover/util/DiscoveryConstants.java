@@ -17,19 +17,14 @@ public class DiscoveryConstants {
     public static final String DEFAULT_OFFER_ATTRIBUTE = "offers";
 
     /**
-     * Beckn Item type identifier (v2.0 prefixed form)
-     */
-    public static final String BECKN_ITEM_TYPE = "beckn:Item";
-
-    /**
      * Item type identifier (v2.1 unprefixed form)
      */
     public static final String ITEM_TYPE = "Item";
 
     /**
-     * Beckn Catalog type identifier
+     * Catalog type identifier (v2.1 unprefixed form)
      */
-    public static final String BECKN_CATALOG_TYPE = "beckn:Catalog";
+    public static final String CATALOG_TYPE = "Catalog";
 
     /**
      * Beckn Offer type identifier (from schema)
@@ -60,8 +55,6 @@ public class DiscoveryConstants {
         public static final String CONTEXT = "@context";
         public static final String CATALOGS = "catalogs";
         public static final String BECKN_ITEMS = "items";
-        /** Old Catalog v2.0 format uses beckn: prefixed field names (e.g. stored before ParseStep normalization). */
-        public static final String BECKN_ITEMS_V20 = "beckn:items";
         /** v2.1 resource-based catalogs use "resources" instead of "items". */
         public static final String BECKN_RESOURCES = "resources";
         public static final String BECKN_ID = "id";

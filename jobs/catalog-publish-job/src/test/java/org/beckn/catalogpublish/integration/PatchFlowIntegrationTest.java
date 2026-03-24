@@ -36,7 +36,7 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
 
     /**
      * Null fields in the second publish must NOT delete existing stored data.
-     * The item's gps, beckn:id, and other fields published in round-1 must survive
+     * The item's gps, id, and other fields published in round-1 must survive
      * even when the round-2 publish sends those fields as null.
      */
     @Test
@@ -75,13 +75,13 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(afterRound2.getPayload()).contains("EV Station");
         // absent gps must not delete the stored gps
         assertThat(afterRound2.getPayload()).contains("12.34,56.78");
-        // beckn:id must remain intact
+        // item id must remain intact
         assertThat(afterRound2.getId()).isEqualTo("item-1");
     }
 
     /**
      * Null fields inside an offer in the second publish must NOT delete existing offer data,
-     * specifically the beckn:items item-link array that associates the offer to items.
+     * specifically the resourceIds item-link array that associates the offer to items.
      */
     @Test
     void upsertPublish_nullFieldInOffer_doesNotDeleteOfferItemLink() {
@@ -130,13 +130,13 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
      * Offer propagation via DB offer_ids column — explicit item list: when an offer is updated
      * in the incoming payload, every item that references that offer via the offer_ids[] DB
      * column must receive the updated offer data, even if it is NOT listed in the
-     * incoming beckn:items array.
+     * incoming resources array.
      *
      * <p>Round 1 publishes item-1 and item-2 both linked to offer-A (both get
      * offer_ids = ["offer-A"] stored in the DB).
      * Round 2 explicitly lists only item-1 but sends an updated offer-A.
      * Phase 2 must query the DB by offer_ids column and propagate the update to item-2
-     * independently of what offer.beckn:items says in the request.
+     * independently of what offer.resourceIds says in the request.
      */
     @Test
     void upsertPublish_offerUpdate_propagatesToUnlistedLinkedItems() {
@@ -195,7 +195,7 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                 .doesNotContain("100.00");
         assertThat(item1AfterR2.getOfferIds()).contains("offer-A");
 
-        // item-2: NOT in round-2 beckn:items — must be updated via Phase 2 DB column lookup
+        // item-2: NOT in round-2 resources — must be updated via Phase 2 DB column lookup
         assertThat(item2AfterR2.getPayload())
                 .as("item-2 (Phase 2 propagation via offer_ids column) must have new price")
                 .contains("75.00")
@@ -204,12 +204,12 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
-     * Offer propagation via DB offer_ids column — offer.beckn:items is NOT the source of truth:
-     * even if the incoming offer does NOT mention item-2 in its beckn:items array, item-2 must
+     * Offer propagation via DB offer_ids column — offer.resourceIds is NOT the source of truth:
+     * even if the incoming offer does NOT mention item-2 in its resourceIds array, item-2 must
      * still receive the offer update because it has the offer in its offer_ids[] DB column.
      *
      * <p>This verifies that Phase 2 queries the DB by offer_ids column — it does NOT use
-     * offer.beckn:items to decide which items to update.
+     * offer.resourceIds to decide which items to update.
      */
     @Test
     void upsertPublish_offerUpdate_propagatesViaDbColumn_notOfferBecknItems() {
@@ -260,10 +260,10 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                 .contains("50.00")
                 .doesNotContain("100.00");
 
-        // item-2: offer-A does NOT mention it in round-2 beckn:items, but DB offer_ids has "offer-A"
-        // Phase 2 must still propagate the update using the DB column, not offer.beckn:items
+        // item-2: offer-A does NOT mention it in round-2 resourceIds, but DB offer_ids has "offer-A"
+        // Phase 2 must still propagate the update using the DB column, not offer.resourceIds
         assertThat(item2.getPayload())
-                .as("item-2 must be updated via DB offer_ids column even though offer.beckn:items omits it")
+                .as("item-2 must be updated via DB offer_ids column even though offer.resourceIds omits it")
                 .contains("50.00")
                 .doesNotContain("100.00");
         // offer_ids column must still contain offer-A (the link is preserved)
@@ -276,7 +276,7 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
      * updated and all updated items must be reflected in the saved batch.
      *
      * <p>Round 1 publishes item-1 and item-2 both linked to offer-A.
-     * Round 2 sends an empty beckn:items array with only an updated offer-A.
+     * Round 2 sends an empty resources array with only an updated offer-A.
      * Both items must receive the updated offer data via Phase 2 DB column lookup.
      */
     @Test

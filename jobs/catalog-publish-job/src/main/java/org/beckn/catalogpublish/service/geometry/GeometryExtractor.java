@@ -22,7 +22,7 @@ import java.util.Optional;
  * {@code gps}, {@code geo} (GeoJSON Point/Polygon), or {@code polygon}, records
  * (itemId, absolutePath, geom) for storage in {@code item_location_collection}.
  * Paths use JSONPath-style with {@code [*]} for array indices so they match discovery API targets,
- * e.g. {@code $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo}.
+ * e.g. {@code $.catalogs[*].resources[*].availableAt[*].geo}.
  */
 @Service
 public class GeometryExtractor {
@@ -112,7 +112,7 @@ public class GeometryExtractor {
 
     /**
      * JSONPath-style segment: path + "." + key.
-     * Example: "$" → "$.catalogs", "$.catalogs[*]" → "$.catalogs[*].beckn:items".
+     * Example: "$" → "$.catalogs", "$.catalogs[*]" → "$.catalogs[*].resources".
      */
     private static String pathSegment(String path, String key) {
         return "$".equals(path) ? "$." + key : path + "." + key;

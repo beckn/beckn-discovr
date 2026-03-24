@@ -21,7 +21,7 @@ import static org.mockito.Mockito.when;
  * Unit tests for {@link CatalogDocumentAssembler}.
  * Verifies that new ES fields (item_attributes_type, item_attributes_context,
  * constraints, policies, schema_version) are populated correctly for both
- * Beckn Item v2.0 (beckn: prefixed) and v2.1 (unprefixed) payloads.
+ * Beckn Item v2.0 and v2.1 (unprefixed) payloads.
  *
  * NOTE: The assembler receives the already-normalized payload from ElasticIndexStep
  * (via PersistenceStep), so both v2.0 and v2.1 items arrive with unprefixed field names.
@@ -74,7 +74,7 @@ class CatalogDocumentAssemblerTest {
     @Test
     void assemble_v20NormalizedItem_populatesItemAttributesTypeAndContext() throws Exception {
         // The payload received by the assembler is the stored payload.
-        // For a v2.0 item that was stored as-is (original beckn: prefixed),
+        // For a v2.0 item that was stored as-is (original unprefixed),
         // the assembler processes whatever field names are in the stored payload.
         // Here we test with the canonical (normalized) form since ElasticIndexStep
         // normalizes before calling the assembler.

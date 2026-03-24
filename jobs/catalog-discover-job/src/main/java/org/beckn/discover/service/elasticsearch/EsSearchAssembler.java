@@ -177,7 +177,7 @@ public class EsSearchAssembler {
      * any path as {@code loc_*} fields. However, offer-level, provider-level,
      * itemAttributes-level, and providerAttributes-level locations are returned via
      * their own response structures. Only direct item children
-     * (e.g. {@code beckn:availableAt}, {@code beckn:location}, or any spec-extended
+     * (e.g. {@code availableAt}, {@code location}, or any spec-extended
      * location field) should be collected here.</p>
      */
     private static List<Location> collectItemLocations(Map<String, Object> doc) {
@@ -191,7 +191,7 @@ public class EsSearchAssembler {
 
     /**
      * Collects provider-level location fields (e.g.
-     * {@code loc_catalogs_beckn_items_beckn_provider_beckn_locations})
+     * {@code loc_catalogs_items_provider_locations})
      * for {@link Provider#setLocations}.
      */
     private static List<Location> collectProviderLocations(Map<String, Object> doc) {

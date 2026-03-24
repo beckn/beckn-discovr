@@ -32,14 +32,14 @@ import java.util.stream.Collectors;
  * process it with the same schema:
  * <pre>{@code
  * {
- * "context": { "bpp_id": "...", "bpp_uri": "..." },
+ * "context": { "bppId": "...", "bppUri": "..." },
  * "message": {
  * "catalogs": [
  * {
  * "id": "cat-1",
- * "beckn:bppId": "...",
- * "beckn:items": [ ...all merged item nodes... ],
- * "beckn:offers": [ ...all unique offers across items... ]
+ * "bppId": "...",
+ * "resources": [ ...all merged item nodes... ],
+ * "offers": [ ...all unique offers across items... ]
  * }
  * ]
  * }
@@ -63,7 +63,7 @@ public class CatalogPublishPayloadAssembler {
      * {@link LinkedHashMap}). Within each group, item nodes and offers are
      * extracted
      * directly from the pre-parsed {@link CatalogBatch#payloadNodes()} — no JSON
-     * re-parsing occurs. Offers are deduplicated by {@code beckn:id}; first-seen
+     * re-parsing occurs. Offers are deduplicated by {@code id}; first-seen
      * wins,
      * which correctly handles the case where the same offer appears in multiple
      * items'
