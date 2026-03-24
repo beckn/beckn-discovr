@@ -1,12 +1,10 @@
 package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.beckn.discover.common.BecknFields;
-import org.beckn.discover.util.StringOrArrayDeserializer;
 
 import java.util.List;
 
@@ -50,10 +48,6 @@ public class Resource {
 
     @JsonProperty("isActive")
     private Boolean isActive;
-
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
-    @JsonProperty(BecknFields.NETWORK_ID)
-    private List<String> networkId;
 
     @NotNull(message = "provider is required")
     @Valid
@@ -115,9 +109,6 @@ public class Resource {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
-
-    public List<String> getNetworkId() { return networkId; }
-    public void setNetworkId(List<String> networkId) { this.networkId = networkId; }
 
     public Provider getProvider() { return provider; }
     public void setProvider(Provider provider) { this.provider = provider; }

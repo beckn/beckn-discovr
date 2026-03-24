@@ -31,7 +31,7 @@
         "resources": [
           {
             "@context": "https://schema.beckn.io/",
-            "@type": "Item",
+            "@type": "beckn:Resource",
             "id": "ev-charger-ccs2-001",
             "descriptor": {
               "@type": "Descriptor",
@@ -58,7 +58,6 @@
               "ratingCount": 128
             },
             "isActive": true,
-            "networkId": "bap.net/ev-charging",
             "provider": {
               "id": "ecopower-charging",
               "descriptor": {

@@ -11,25 +11,25 @@
       "offers": [
         {
           "id": "fast-charging-offer-001",
-          "items": ["ev-charger-ccs2-001"],
+          "resourceIds": ["ev-charger-ccs2-001"],
           "price_value": 15.0,
           "price_currency": "INR"
         },
         {
           "id": "super-fast-offer-002",
-          "items": ["ev-charger-ccs2-002"],
+          "resourceIds": ["ev-charger-ccs2-002"],
           "price_value": 25.0,
           "price_currency": "INR"
         },
         {
           "id": "standard-offer-003",
-          "items": ["ev-charger-chademo-001"],
+          "resourceIds": ["ev-charger-chademo-001"],
           "price_value": 10.0,
           "price_currency": "INR"
         },
         {
           "id": "combo-offer-004",
-          "items": ["ev-charger-ccs2-001", "ev-charger-ccs2-002"],
+          "resourceIds": ["ev-charger-ccs2-001", "ev-charger-ccs2-002"],
           "price_value": 35.0,
           "price_currency": "INR"
         }
@@ -46,13 +46,13 @@
       "offers": [
         {
           "id": "eco-offer-001",
-          "items": ["solar-charger-ccs2-001"],
+          "resourceIds": ["solar-charger-ccs2-001"],
           "price_value": 12.0,
           "price_currency": "INR"
         },
         {
           "id": "eco-offer-002",
-          "items": ["solar-charger-ccs2-002"],
+          "resourceIds": ["solar-charger-ccs2-002"],
           "price_value": 20.0,
           "price_currency": "INR"
         }
@@ -69,13 +69,13 @@
       "offers": [
         {
           "id": "home-offer-001",
-          "items": ["home-charger-type2-001"],
+          "resourceIds": ["home-charger-type2-001"],
           "price_value": 5.0,
           "price_currency": "INR"
         },
         {
           "id": "home-offer-002",
-          "items": ["home-charger-type2-002"],
+          "resourceIds": ["home-charger-type2-002"],
           "price_value": 8.0,
           "price_currency": "INR"
         }

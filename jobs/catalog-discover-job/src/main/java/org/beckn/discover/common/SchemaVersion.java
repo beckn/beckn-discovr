@@ -20,17 +20,13 @@ public enum SchemaVersion {
     }
 
     /**
-     * Detects the schema version from the {@code @type} value of an item node.
+     * Detects the schema version from the {@code @type} value of a resource node.
      * <ul>
-     *   <li>{@code "beckn:Item"} → V2_0 (legacy: retained for backward-compatible reads of persisted v2.0 data)</li>
-     *   <li>{@code "Item"} → V2_1</li>
+     *   <li>{@code "beckn:Resource"} → V2_1</li>
      *   <li>null / anything else → V2_1 (default: all new publishes are v2.1)</li>
      * </ul>
      */
     public static SchemaVersion fromTypeValue(String typeValue) {
-        // Legacy: retained for backward-compatible reads of persisted v2.0 data
-        if ("beckn:Item".equals(typeValue)) return V2_0;
-        if ("Item".equals(typeValue)) return V2_1;
         return V2_1;
     }
 }

@@ -80,7 +80,7 @@ class CatalogDocumentAssemblerTest {
         // normalizes before calling the assembler.
         JsonNode payload = buildPayload("""
                 {
-                  "@type": "beckn:Item",
+                  "@type": "beckn:Resource",
                   "@context": "https://schema.beckn.io/item/v2.0/",
                   "id": "item-001",
                   "descriptor": {"name": "EV Charger"},
@@ -103,7 +103,7 @@ class CatalogDocumentAssemblerTest {
     void assemble_v21Item_populatesItemAttributesTypeAndContext() throws Exception {
         JsonNode payload = buildPayload("""
                 {
-                  "@type": "Item",
+                  "@type": "beckn:Resource",
                   "@context": "https://schema.beckn.io/",
                   "id": "item-v21-001",
                   "descriptor": {"name": "Smart Meter"},
@@ -128,7 +128,7 @@ class CatalogDocumentAssemblerTest {
     void assemble_withSchemaVersion20_setsSchemaVersion() throws Exception {
         JsonNode payload = buildPayload("""
                 {
-                  "@type": "beckn:Item",
+                  "@type": "beckn:Resource",
                   "id": "item-v20",
                   "descriptor": {"name": "Item V20"},
                   "provider": {"id": "prov-1"},
@@ -154,7 +154,7 @@ class CatalogDocumentAssemblerTest {
 
         JsonNode payload = buildPayload("""
                 {
-                  "@type": "Item",
+                  "@type": "beckn:Resource",
                   "id": "item-v21",
                   "descriptor": {"name": "v2.1 Item"},
                   "provider": {"id": "prov-1"},
@@ -173,7 +173,7 @@ class CatalogDocumentAssemblerTest {
     void assemble_v21ItemWithConstraints_populatesConstraintsField() throws Exception {
         JsonNode payload = buildPayload("""
                 {
-                  "@type": "Item",
+                  "@type": "beckn:Resource",
                   "id": "item-v21",
                   "descriptor": {"name": "Charging Service"},
                   "provider": {"id": "prov-1"},
@@ -199,7 +199,7 @@ class CatalogDocumentAssemblerTest {
     void assemble_v21ItemWithPolicies_populatesPoliciesField() throws Exception {
         JsonNode payload = buildPayload("""
                 {
-                  "@type": "Item",
+                  "@type": "beckn:Resource",
                   "id": "item-v21",
                   "descriptor": {"name": "Charging Service"},
                   "provider": {"id": "prov-1"},
@@ -223,7 +223,7 @@ class CatalogDocumentAssemblerTest {
     void assemble_itemWithNoConstraintsOrPolicies_fieldsAbsent() throws Exception {
         JsonNode payload = buildPayload("""
                 {
-                  "@type": "Item",
+                  "@type": "beckn:Resource",
                   "id": "item-no-constraints",
                   "descriptor": {"name": "Plain Item"},
                   "provider": {"id": "prov-1"},
@@ -447,7 +447,7 @@ class CatalogDocumentAssemblerTest {
     void assemble_v21ItemWithConstraintsAndPolicies_textBlobIncludesTerms() throws Exception {
         JsonNode payload = buildPayload("""
                 {
-                  "@type": "Item",
+                  "@type": "beckn:Resource",
                   "id": "item-text-blob",
                   "descriptor": {"name": "Slot Booking"},
                   "provider": {"id": "prov-1"},
