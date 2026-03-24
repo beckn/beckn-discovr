@@ -11,6 +11,7 @@ import org.beckn.discover.model.Policy;
 import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Rating;
 import org.beckn.discover.model.Resource;
+import org.beckn.discover.model.TimePeriod;
 import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.service.response.CatalogProcessor;
@@ -98,6 +99,7 @@ public class EsSearchAssembler {
 
     // ── Builders ─────────────────────────────────────────────────────────────
 
+    @SuppressWarnings("unchecked")
     private static Catalog buildCatalog(String catalogId, Map<String, Object> doc) {
         Catalog catalog = new Catalog();
         catalog.setContext(str(doc, "catalog_context"));
@@ -108,7 +110,25 @@ public class EsSearchAssembler {
         catalog.setDescriptor(new Descriptor("Descriptor"));
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
+        Object validityRaw = doc.get("catalog_validity");
+        if (validityRaw instanceof Map<?, ?> validityMap) {
+            catalog.setValidity(timePeriodFromMap((Map<String, Object>) validityMap));
+        }
         return catalog;
+    }
+
+    private static TimePeriod timePeriodFromMap(Map<String, Object> map) {
+        TimePeriod tp = new TimePeriod();
+        if (map.get("@type") instanceof String s) tp.setType(s);
+        if (map.get("startDate") instanceof String s) {
+            try { tp.setStartDate(java.time.OffsetDateTime.parse(s)); } catch (Exception ignored) {}
+        }
+        if (map.get("endDate") instanceof String s) {
+            try { tp.setEndDate(java.time.OffsetDateTime.parse(s)); } catch (Exception ignored) {}
+        }
+        if (map.get("startTime") instanceof String s) tp.setStartTime(s);
+        if (map.get("endTime") instanceof String s) tp.setEndTime(s);
+        return tp;
     }
 
     /**

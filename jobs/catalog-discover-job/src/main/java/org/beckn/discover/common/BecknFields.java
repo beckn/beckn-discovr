@@ -58,6 +58,9 @@ public final class BecknFields {
     public static final String RESOURCES           = "resources";
     public static final String RESOURCE_ATTRIBUTES = "resourceAttributes";
 
+    // ── Catalog validity field ────────────────────────────────────────────────
+    public static final String VALIDITY        = "validity";
+
     // ── Discover message fields ───────────────────────────────────────────────
     public static final String INTENT          = "intent";
     public static final String TEXT_SEARCH     = "textSearch";

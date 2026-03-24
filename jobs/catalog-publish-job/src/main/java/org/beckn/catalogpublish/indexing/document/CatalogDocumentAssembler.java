@@ -74,6 +74,10 @@ public class CatalogDocumentAssembler {
         doc.put("bpp_id", bppId);
         doc.put("bpp_uri", bppUri);
         doc.put("network_id", networkIds);
+        JsonNode validityNode = catalog.path(BecknFields.VALIDITY);
+        if (!validityNode.isMissingNode() && validityNode.isObject()) {
+            doc.put("catalog_validity", objectMapper.convertValue(validityNode, Map.class));
+        }
         doc.put("schema_type", schemaType);
         doc.put("item_context", text(itemNode, BecknFields.JSON_LD_CONTEXT));
         doc.put("item_type", text(itemNode, BecknFields.JSON_LD_TYPE));
@@ -84,10 +88,11 @@ public class CatalogDocumentAssembler {
         doc.put("item_image", arrayToList(desc.path(BecknFields.IMAGES)));
         doc.put("item_category_code", text(itemNode.path("category"), "codeValue"));
         doc.put("item_category_name", text(itemNode.path("category"), BecknFields.NAME));
-        doc.put("item_rateable", bool(itemNode, "rateable"));
-        doc.put("item_is_active", bool(itemNode, "isActive"));
-        doc.put("item_rating_value", dbl(itemNode.path("rating"), "ratingValue"));
-        doc.put("item_rating_count", integer(itemNode.path("rating"), "ratingCount"));
+        putIfPresent(doc, "item_rateable", boolOrNull(itemNode, "rateable"));
+        putIfPresent(doc, "item_is_active", boolOrNull(itemNode, "isActive"));
+        JsonNode ratingNode = itemNode.path("rating");
+        putIfPresent(doc, "item_rating_value", dblOrNull(ratingNode, "ratingValue"));
+        putIfPresent(doc, "item_rating_count", intOrNull(ratingNode, "ratingCount"));
         doc.put("item_provider_id", text(itemNode.path(BecknFields.PROVIDER), BecknFields.ID));
         doc.put("item_provider_name", text(itemNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
         doc.put("item_descriptor_thumbnail_image", text(desc, "thumbnailImage"));
@@ -238,16 +243,40 @@ public class CatalogDocumentAssembler {
         return n.path(f).asText(null);
     }
 
-    private boolean bool(JsonNode n, String f) {
-        return n.path(f).asBoolean(false);
+    /**
+     * Returns the boolean value of a field only when it is explicitly present and boolean-typed.
+     * Returns null when the field is missing — prevents indexing a false default for absent fields.
+     */
+    private Boolean boolOrNull(JsonNode n, String f) {
+        JsonNode field = n.path(f);
+        return field.isBoolean() ? field.booleanValue() : null;
     }
 
-    private double dbl(JsonNode n, String f) {
-        return n.path(f).asDouble(0.0);
+    /**
+     * Returns the double value of a field only when it is explicitly present and numeric.
+     * Returns null when the field is missing — prevents indexing a 0.0 default for absent fields.
+     */
+    private Double dblOrNull(JsonNode n, String f) {
+        JsonNode field = n.path(f);
+        return field.isNumber() ? field.doubleValue() : null;
     }
 
-    private int integer(JsonNode n, String f) {
-        return n.path(f).asInt(0);
+    /**
+     * Returns the int value of a field only when it is explicitly present and numeric.
+     * Returns null when the field is missing — prevents indexing a 0 default for absent fields.
+     */
+    private Integer intOrNull(JsonNode n, String f) {
+        JsonNode field = n.path(f);
+        return field.isNumber() ? field.intValue() : null;
+    }
+
+    /**
+     * Puts a key into the document map only when the value is non-null.
+     * This avoids storing ES fields with null/default values that would be
+     * misread as real data during search result assembly.
+     */
+    private static void putIfPresent(Map<String, Object> doc, String key, Object value) {
+        if (value != null) doc.put(key, value);
     }
 
     private List<String> arrayToList(JsonNode n) {
