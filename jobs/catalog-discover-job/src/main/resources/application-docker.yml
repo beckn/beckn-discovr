@@ -59,7 +59,7 @@ discovery:
     password: ${POSTGRES_PASSWORD:catalog123}
     # Catalog-level attributes to extract from catalog.payload
     catalog-attributes-to-extract:
-      - "beckn:offers"
+      - "offers"
 
 # Management and monitoring
 management:

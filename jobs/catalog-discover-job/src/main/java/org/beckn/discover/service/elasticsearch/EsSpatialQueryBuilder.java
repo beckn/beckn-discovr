@@ -245,11 +245,16 @@ public class EsSpatialQueryBuilder {
      * Normalizes a full JSONPath to an ES field name.
      * Works for location fields anywhere in the payload — items, offers, or any custom field.
      *
-     * Input:  $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo
-     * Output: loc_catalogs_beckn_items_beckn_availableAt
+     * Both v2.0-style paths (with beckn: prefix) and v2.1-style paths (plain) produce the
+     * same ES field name, because catalog payloads are normalized before indexing.
      *
-     * Input:  $.catalogs[*].beckn:offers[*].beckn:location.geo
-     * Output: loc_catalogs_beckn_offers_beckn_location
+     * Input:  $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo  (v2.0 subscriber path)
+     * Input:  $.catalogs[*].items[*].availableAt[*].geo              (v2.1 subscriber path)
+     * Output (both): loc_catalogs_items_availableAt
+     *
+     * Input:  $.catalogs[*].beckn:offers[*].beckn:location.geo  (v2.0)
+     * Input:  $.catalogs[*].offers[*].location.geo              (v2.1)
+     * Output (both): loc_catalogs_offers_location
      */
     static String toFieldName(String path) {
         if (path == null) return null;
@@ -259,8 +264,11 @@ public class EsSpatialQueryBuilder {
         if (rel.endsWith(".geo")) rel = rel.substring(0, rel.length() - 4);
         // Remove array wildcards
         rel = rel.replace("[*]", "");
-        // Replace : and . with _
-        rel = rel.replace(":", "_").replace(".", "_");
+        // Strip beckn: prefix from all path segments so v2.0 and v2.1 subscriber paths
+        // resolve to the same ES field (catalog payloads are normalized before indexing)
+        rel = rel.replace("beckn:", "");
+        // Replace remaining . with _
+        rel = rel.replace(".", "_");
         if (rel.isBlank()) return null;
         return "loc_" + rel;
     }
