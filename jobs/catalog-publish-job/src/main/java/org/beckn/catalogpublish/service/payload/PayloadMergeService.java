@@ -142,16 +142,16 @@ public class PayloadMergeService {
 
     private JsonNode rewrapItemInDenormalized(JsonNode denorm, JsonNode mergedItem) {
         // denorm is freshly parsed from the DB string inside mergeItemPayload — we own it.
-        // Mutate the items array in-place; no deep copy of the catalog wrapper needed.
+        // Mutate the resources array in-place; no deep copy of the catalog wrapper needed.
         JsonNode catalogsNode = denorm.path("catalogs");
         if (catalogsNode.isArray() && !catalogsNode.isEmpty()) {
             ObjectNode catalog = (ObjectNode) catalogsNode.get(0);
-            catalog.set("items", objectMapper.createArrayNode().add(mergedItem));
+            catalog.set(BecknFields.RESOURCES, objectMapper.createArrayNode().add(mergedItem));
             return denorm;
         }
         // Fallback: malformed denorm — build minimal structure from scratch.
         ObjectNode catalog = objectMapper.createObjectNode();
-        catalog.set("items", objectMapper.createArrayNode().add(mergedItem));
+        catalog.set(BecknFields.RESOURCES, objectMapper.createArrayNode().add(mergedItem));
         return objectMapper.createObjectNode()
                 .set("catalogs", objectMapper.createArrayNode().add(catalog));
     }

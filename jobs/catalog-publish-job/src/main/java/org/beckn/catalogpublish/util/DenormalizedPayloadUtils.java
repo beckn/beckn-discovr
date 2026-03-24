@@ -5,7 +5,7 @@ import org.beckn.catalogpublish.common.BecknFields;
 
 /**
  * Shared helpers for denormalized catalog payloads.
- * Payload shape (v2.0): {@code { "catalogs": [ { "items": [ itemNode ] } ] }}.
+ * Payload shape: {@code { "catalogs": [ { "resources": [ itemNode ] } ] }}.
  */
 public final class DenormalizedPayloadUtils {
 
@@ -13,11 +13,11 @@ public final class DenormalizedPayloadUtils {
     }
 
     /**
-     * Returns the first item node from a denormalized payload root.
-     * Uses v2.0 field name {@code catalogs[0].items[0]}.
+     * Returns the first resource node from a denormalized payload root.
+     * Uses field name {@code catalogs[0].resources[0]}.
      *
      * @param root denormalized payload root (has "catalogs" array)
-     * @return first item node, or null if missing or empty
+     * @return first resource node, or null if missing or empty
      */
     public static JsonNode getFirstItemNode(JsonNode root) {
         if (root == null || root.isMissingNode())
@@ -26,9 +26,9 @@ public final class DenormalizedPayloadUtils {
         if (!catalogs.isArray() || catalogs.isEmpty())
             return null;
         JsonNode cat = catalogs.get(0);
-        JsonNode items = cat.path(BecknFields.ITEMS);
-        if (items.isMissingNode() || !items.isArray() || items.isEmpty())
+        JsonNode resources = cat.path(BecknFields.RESOURCES);
+        if (resources.isMissingNode() || !resources.isArray() || resources.isEmpty())
             return null;
-        return items.get(0);
+        return resources.get(0);
     }
 }

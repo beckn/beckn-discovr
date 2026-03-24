@@ -61,7 +61,7 @@ class CatalogDocumentAssemblerTest {
                       "bppId": "bpp.example.com",
                       "bppUri": "https://bpp.example.com",
                       "descriptor": {"name": "Test Catalog"},
-                      "items": [%s],
+                      "resources": [%s],
                       "offers": []
                     }
                   ]
@@ -85,7 +85,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-001",
                   "descriptor": {"name": "EV Charger"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {
+                  "resourceAttributes": {
                     "@context": "https://example.org/charging.jsonld",
                     "@type": "ChargingService",
                     "powerKw": 60
@@ -108,7 +108,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-v21-001",
                   "descriptor": {"name": "Smart Meter"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {
+                  "resourceAttributes": {
                     "@context": "https://example.org/meter.jsonld",
                     "@type": "SmartMeter",
                     "resolution": "1kW"
@@ -132,7 +132,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-v20",
                   "descriptor": {"name": "Item V20"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "ServiceItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "ServiceItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -158,7 +158,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-v21",
                   "descriptor": {"name": "v2.1 Item"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "SmartMeter", "@context": "https://example.org"}
+                  "resourceAttributes": {"@type": "SmartMeter", "@context": "https://example.org"}
                 }
                 """);
 
@@ -177,7 +177,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-v21",
                   "descriptor": {"name": "Charging Service"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "ChargingService", "@context": "https://ctx"},
+                  "resourceAttributes": {"@type": "ChargingService", "@context": "https://ctx"},
                   "constraints": [
                     {"type": "location", "value": "Bangalore"},
                     {"type": "time", "value": "09:00-21:00"}
@@ -203,7 +203,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-v21",
                   "descriptor": {"name": "Charging Service"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "ChargingService", "@context": "https://ctx"},
+                  "resourceAttributes": {"@type": "ChargingService", "@context": "https://ctx"},
                   "policies": [
                     {"type": "cancellation", "terms": "No refunds"},
                     {"type": "payment", "terms": "Prepaid only"}
@@ -227,7 +227,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-no-constraints",
                   "descriptor": {"name": "Plain Item"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -249,7 +249,7 @@ class CatalogDocumentAssemblerTest {
                     "thumbnailImage": "https://example.org/thumb.jpg"
                   },
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -273,7 +273,7 @@ class CatalogDocumentAssemblerTest {
                     ]
                   },
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -299,7 +299,7 @@ class CatalogDocumentAssemblerTest {
                     ]
                   },
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -326,7 +326,7 @@ class CatalogDocumentAssemblerTest {
                       {"type": "closure", "message": "Public holiday closure"}
                     ]
                   },
-                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -353,7 +353,7 @@ class CatalogDocumentAssemblerTest {
                       {"@type": "ReturnPolicy", "name": "30-day returns"}
                     ]
                   },
-                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -378,7 +378,7 @@ class CatalogDocumentAssemblerTest {
                     "ratingValue": 4.8,
                     "reviewText": "Excellent service and fast charging"
                   },
-                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -403,7 +403,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-multi-net",
                   "descriptor": {"name": "Multi Net Item"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -429,7 +429,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-single-net",
                   "descriptor": {"name": "Single Net Item"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
@@ -451,7 +451,7 @@ class CatalogDocumentAssemblerTest {
                   "id": "item-text-blob",
                   "descriptor": {"name": "Slot Booking"},
                   "provider": {"id": "prov-1"},
-                  "itemAttributes": {"@type": "BookingService", "@context": "https://ctx"},
+                  "resourceAttributes": {"@type": "BookingService", "@context": "https://ctx"},
                   "constraints": [{"type": "location", "value": "Mumbai"}],
                   "policies": [{"type": "cancellation", "terms": "24h notice required"}]
                 }

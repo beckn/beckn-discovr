@@ -5,7 +5,7 @@ import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
-import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Resource;
 import org.beckn.discover.service.DiscoveryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -136,7 +136,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                       "bppUri": "%s",
                       "descriptor": {"name": "Schema Test Catalog"},
                       "offers": [],
-                      "items": [
+                      "resources": [
                         {
                           "@context": "%s",
                           "@type": "Item",
@@ -146,7 +146,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                             "shortDesc": "Next-gen charger"
                           },
                           "provider": {"id": "%s"},
-                          "itemAttributes": {
+                          "resourceAttributes": {
                             "@context": "%s",
                             "@type": "ChargingService",
                             "connectorType": "CCS2",
@@ -185,7 +185,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
 
         DiscoverRequest request = new DiscoverRequest();
         request.setContext(ctx);
-        request.setFilters("$.catalogs[*].items[*]");
+        request.setFilters("$.catalogs[*].resources[*]");
         return request;
     }
 
@@ -210,18 +210,18 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Catalog not found: " + CAT_ID));
 
-        assertThat(catalog.getItems()).isNotEmpty();
+        assertThat(catalog.getResources()).isNotEmpty();
 
-        Item item = catalog.getItems().stream()
+        Resource resource = catalog.getResources().stream()
                 .filter(i -> "schema-test-v21-001".equals(i.getId()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Item schema-test-v21-001 not found"));
 
-        assertThat(item.getId()).isEqualTo("schema-test-v21-001");
-        assertThat(item.getDescriptor()).isNotNull();
-        assertThat(item.getDescriptor().getName()).isEqualTo("v2.1 CCS2 Charger");
-        assertThat(item.getItemAttributes()).isNotNull();
-        assertThat(item.getItemAttributes().getType()).isEqualTo("ChargingService");
+        assertThat(resource.getId()).isEqualTo("schema-test-v21-001");
+        assertThat(resource.getDescriptor()).isNotNull();
+        assertThat(resource.getDescriptor().getName()).isEqualTo("v2.1 CCS2 Charger");
+        assertThat(resource.getResourceAttributes()).isNotNull();
+        assertThat(resource.getResourceAttributes().getType()).isEqualTo("ChargingService");
 
         String responseJson = objectMapper.writeValueAsString(response);
         assertThat(responseJson)
@@ -250,21 +250,21 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Catalog not found: " + CAT_ID));
 
-        Item item = catalog.getItems().stream()
+        Resource resource = catalog.getResources().stream()
                 .filter(i -> "schema-test-v21-002".equals(i.getId()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Item schema-test-v21-002 not found"));
 
-        assertThat(item.getId()).isEqualTo("schema-test-v21-002");
-        assertThat(item.getDescriptor().getName()).isEqualTo("v2.1 Smart Charger");
-        assertThat(item.getItemAttributes()).isNotNull();
-        assertThat(item.getItemAttributes().getType()).isEqualTo("ChargingService");
+        assertThat(resource.getId()).isEqualTo("schema-test-v21-002");
+        assertThat(resource.getDescriptor().getName()).isEqualTo("v2.1 Smart Charger");
+        assertThat(resource.getResourceAttributes()).isNotNull();
+        assertThat(resource.getResourceAttributes().getType()).isEqualTo("ChargingService");
 
-        assertThat(item.getConstraints())
+        assertThat(resource.getConstraints())
                 .as("v2.1 item must have constraints in on_discover response")
                 .isNotNull()
                 .isNotEmpty();
-        assertThat(item.getPolicies())
+        assertThat(resource.getPolicies())
                 .as("v2.1 item must have policies in on_discover response")
                 .isNotNull()
                 .isNotEmpty();
@@ -293,27 +293,27 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Catalog not found: " + CAT_ID));
 
-        List<String> itemIds = catalog.getItems().stream()
-                .map(Item::getId).toList();
+        List<String> itemIds = catalog.getResources().stream()
+                .map(Resource::getId).toList();
         assertThat(itemIds)
-                .as("Both items must be returned")
+                .as("Both resources must be returned")
                 .contains("schema-test-item-a", "schema-test-item-b");
 
-        Item itemA = catalog.getItems().stream()
+        Resource resourceA = catalog.getResources().stream()
                 .filter(i -> "schema-test-item-a".equals(i.getId()))
                 .findFirst()
                 .orElseThrow();
-        Item itemB = catalog.getItems().stream()
+        Resource resourceB = catalog.getResources().stream()
                 .filter(i -> "schema-test-item-b".equals(i.getId()))
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(itemA.getDescriptor().getName()).isEqualTo("CCS2 Charger");
-        assertThat(itemA.getItemAttributes().getType()).isEqualTo("ChargingService");
-        assertThat(itemA.getConstraints()).isNotNull().isNotEmpty();
+        assertThat(resourceA.getDescriptor().getName()).isEqualTo("CCS2 Charger");
+        assertThat(resourceA.getResourceAttributes().getType()).isEqualTo("ChargingService");
+        assertThat(resourceA.getConstraints()).isNotNull().isNotEmpty();
 
-        assertThat(itemB.getDescriptor().getName()).isEqualTo("Type2 Charger");
-        assertThat(itemB.getItemAttributes().getType()).isEqualTo("ChargingService");
+        assertThat(resourceB.getDescriptor().getName()).isEqualTo("Type2 Charger");
+        assertThat(resourceB.getResourceAttributes().getType()).isEqualTo("ChargingService");
 
         String responseJson = objectMapper.writeValueAsString(response);
         assertThat(responseJson).doesNotContain("schema_version");
@@ -335,15 +335,15 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                 .findFirst()
                 .orElseThrow();
 
-        Item item = catalog.getItems().stream()
+        Resource resource = catalog.getResources().stream()
                 .filter(i -> "schema-test-prov-001".equals(i.getId()))
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(item.getProvider())
+        assertThat(resource.getProvider())
                 .as("Provider must be populated for v2.1 item")
                 .isNotNull();
-        assertThat(item.getProvider().getId()).isEqualTo(PROV_ID);
-        assertThat(item.getItemAttributes().getType()).isEqualTo("ChargingService");
+        assertThat(resource.getProvider().getId()).isEqualTo(PROV_ID);
+        assertThat(resource.getResourceAttributes().getType()).isEqualTo("ChargingService");
     }
 }

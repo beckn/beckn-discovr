@@ -149,7 +149,8 @@ public class CatalogPublishPayloadAssembler {
         // Copy catalog-level fields; items and offers are assembled below.
         ObjectNode catalogNode = objectMapper.createObjectNode();
         catalogTemplate.fields().forEachRemaining(entry -> {
-            if (!BecknFields.ITEMS.equals(entry.getKey()) && !BecknFields.OFFERS.equals(entry.getKey())) {
+            if (!BecknFields.ITEMS.equals(entry.getKey()) && !BecknFields.RESOURCES.equals(entry.getKey())
+                    && !BecknFields.OFFERS.equals(entry.getKey())) {
                 catalogNode.set(entry.getKey(), entry.getValue());
             }
         });
@@ -162,7 +163,8 @@ public class CatalogPublishPayloadAssembler {
             if (node == null)
                 continue;
             JsonNode payloadCatalog = node.path(BecknFields.CATALOGS).path(0);
-            JsonNode itemNode = payloadCatalog.path(BecknFields.ITEMS).path(0);
+            JsonNode resourcesNode = payloadCatalog.path(BecknFields.RESOURCES);
+            JsonNode itemNode = resourcesNode.path(0);
             if (!itemNode.isMissingNode()) {
                 itemsArray.add(itemNode);
             }
@@ -180,7 +182,7 @@ public class CatalogPublishPayloadAssembler {
         ArrayNode offersArray = objectMapper.createArrayNode();
         offerById.values().forEach(offersArray::add);
 
-        catalogNode.set(BecknFields.ITEMS, itemsArray);
+        catalogNode.set(BecknFields.RESOURCES, itemsArray);
         catalogNode.set(BecknFields.OFFERS, offersArray);
         return catalogNode;
     }

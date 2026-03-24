@@ -19,10 +19,10 @@ class ItemPayloadBuilderTest {
     void buildCatalogMetadataSlice_removesItemsAndOffers() {
         ObjectNode catalog = mapper.createObjectNode();
         catalog.put("id", "c1");
-        catalog.putArray("items").add(mapper.createObjectNode());
+        catalog.putArray("resources").add(mapper.createObjectNode());
         CatalogContext ctx = new CatalogContext("b1", "http://b1", new String[0], null);
         JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
-        assertThat(slice.has("items")).isFalse();
+        assertThat(slice.has("resources")).isFalse();
         assertThat(slice.has("offers")).isFalse();
         assertThat(slice.path("bppId").asText()).isEqualTo("b1");
     }

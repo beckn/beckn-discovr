@@ -57,6 +57,11 @@ public class JsonSchemaCatalogValidator implements CatalogMessageValidator {
 
         resolveRefs(catalogPublishAction, schemas);
 
+        // Patch oneOf → anyOf on schemas where both branches match simultaneously.
+        // Context: oneOf [V2.0, V1.0] — a valid V2.0 context also matches the permissive
+        // V1.0 branch, so oneOf fails. anyOf requires at least one branch to match.
+        patchOneOfToAnyOf(catalogPublishAction);
+
         String schemaJson = objectMapper.writeValueAsString(catalogPublishAction);
         JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
         this.schema = factory.getSchema(schemaJson);
@@ -155,6 +160,29 @@ public class JsonSchemaCatalogValidator implements CatalogMessageValidator {
         } else if (node instanceof List<?> list) {
             for (var item : list) {
                 resolveRefsInternal(item, schemas, resolving);
+            }
+        }
+    }
+
+    /**
+     * Recursively walks the resolved schema and converts any {@code oneOf} arrays to {@code anyOf}.
+     * This is needed because schemas like {@code Context: oneOf [V2.0, V1.0]} fail when a valid
+     * V2.0 context also matches the permissive V1.0 branch ({@code oneOf} requires exactly one match).
+     * {@code anyOf} requires at least one match, which is the correct semantic.
+     */
+    @SuppressWarnings("unchecked")
+    private static void patchOneOfToAnyOf(Object node) {
+        if (node instanceof Map<?, ?> map) {
+            var m = (Map<String, Object>) map;
+            if (m.containsKey("oneOf")) {
+                m.put("anyOf", m.remove("oneOf"));
+            }
+            for (var value : m.values()) {
+                patchOneOfToAnyOf(value);
+            }
+        } else if (node instanceof List<?> list) {
+            for (var item : list) {
+                patchOneOfToAnyOf(item);
             }
         }
     }

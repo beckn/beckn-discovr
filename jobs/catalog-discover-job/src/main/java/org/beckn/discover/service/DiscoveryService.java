@@ -332,32 +332,32 @@ public class DiscoveryService {
             return List.of();
         }
 
-        Set<String> spatialItemIds = spatialResult.stream()
-                .filter(c -> c.getItems() != null)
-                .flatMap(c -> c.getItems().stream())
-                .map(item -> item.getId())
+        Set<String> spatialResourceIds = spatialResult.stream()
+                .filter(c -> c.getResources() != null)
+                .flatMap(c -> c.getResources().stream())
+                .map(r -> r.getId())
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
         List<Catalog> intersected = filterResult.stream()
-                .filter(catalog -> catalog.getItems() != null)
+                .filter(catalog -> catalog.getResources() != null)
                 .map(catalog -> {
-                    List<org.beckn.discover.model.Item> matchingItems = catalog.getItems().stream()
-                            .filter(item -> item.getId() != null && spatialItemIds.contains(item.getId()))
+                    List<org.beckn.discover.model.Resource> matchingResources = catalog.getResources().stream()
+                            .filter(r -> r.getId() != null && spatialResourceIds.contains(r.getId()))
                             .collect(Collectors.toList());
 
-                    if (matchingItems.isEmpty()) return null;
+                    if (matchingResources.isEmpty()) return null;
 
-                    // Clone the catalog with only the intersecting items
+                    // Clone the catalog with only the intersecting resources
                     Catalog narrowed = shallowCopyCatalog(catalog);
-                    narrowed.setItems(matchingItems);
+                    narrowed.setResources(matchingResources);
                     return narrowed;
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        log.info("discovery.intersect.done filterCatalogs={} spatialItemIds={} intersectedCatalogs={} transactionId={}",
-                filterResult.size(), spatialItemIds.size(), intersected.size(), transactionId);
+        log.info("discovery.intersect.done filterCatalogs={} spatialResourceIds={} intersectedCatalogs={} transactionId={}",
+                filterResult.size(), spatialResourceIds.size(), intersected.size(), transactionId);
         return intersected;
     }
 
@@ -376,7 +376,7 @@ public class DiscoveryService {
         copy.setBppUri(src.getBppUri());
         copy.setValidity(src.getValidity());
         copy.setOffers(src.getOffers() != null ? new java.util.ArrayList<>(src.getOffers()) : new java.util.ArrayList<>());
-        copy.setItems(new java.util.ArrayList<>());
+        copy.setResources(new java.util.ArrayList<>());
         return copy;
     }
 

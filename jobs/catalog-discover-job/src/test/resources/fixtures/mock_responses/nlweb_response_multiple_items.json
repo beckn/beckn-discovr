@@ -29,7 +29,7 @@
                                         "name": "Provider 1"
                                     }
                                 },
-                                "itemAttributes": {
+                                "resourceAttributes": {
                                     "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
                                     "@type": "ChargingService"
                                 }
@@ -49,7 +49,7 @@
                                         "name": "Provider 2"
                                     }
                                 },
-                                "itemAttributes": {
+                                "resourceAttributes": {
                                     "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/FoodService/v1/context.jsonld",
                                     "@type": "FoodService"
                                 }
@@ -69,7 +69,7 @@
                                         "name": "Provider 3"
                                     }
                                 },
-                                "itemAttributes": {
+                                "resourceAttributes": {
                                     "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/RideService/v1/context.jsonld",
                                     "@type": "RideService"
                                 }

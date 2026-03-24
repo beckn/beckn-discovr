@@ -85,10 +85,10 @@ public class CatalogPipeline {
         step5RemoveEmptyCatalogs(work, request.transactionId());
 
         long ms = (System.nanoTime() - t0) / 1_000_000;
-        log.info("pipeline.done input={} output={} items={} durationMs={} transactionId={}",
+        log.info("pipeline.done input={} output={} resources={} durationMs={} transactionId={}",
                 inputSize,
                 work.size(),
-                work.stream().mapToInt(c -> c.getItems() != null ? c.getItems().size() : 0).sum(),
+                work.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
                 ms,
                 request.transactionId());
 
@@ -144,7 +144,7 @@ public class CatalogPipeline {
     private void step5RemoveEmptyCatalogs(List<Catalog> catalogs, String transactionId) {
         int before = catalogs.size();
         catalogs.removeIf(c -> {
-            boolean empty = c.getItems() == null || c.getItems().isEmpty();
+            boolean empty = c.getResources() == null || c.getResources().isEmpty();
             if (empty) {
                 log.debug("pipeline.step5.removedEmptyCatalog id={} transactionId={}",
                         c.getId(), transactionId);
@@ -161,7 +161,7 @@ public class CatalogPipeline {
 
     private static int totalItems(List<Catalog> catalogs) {
         return catalogs.stream()
-                .map(Catalog::getItems)
+                .map(Catalog::getResources)
                 .filter(Objects::nonNull)
                 .mapToInt(List::size)
                 .sum();

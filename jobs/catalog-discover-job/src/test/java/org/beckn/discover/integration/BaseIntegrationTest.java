@@ -6,7 +6,7 @@ import org.assertj.core.api.Assertions;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverResponse;
-import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Resource;
 import okhttp3.mockwebserver.MockWebServer;
 import org.beckn.discover.model.Context;
 import org.postgresql.util.PGobject;
@@ -385,21 +385,21 @@ public abstract class BaseIntegrationTest {
         Assertions.assertThat(catalog.getId())
                 .as("Catalog must have ID")
                 .isNotBlank();
-        Assertions.assertThat(catalog.getItems())
-                .as("Catalog must have items")
+        Assertions.assertThat(catalog.getResources())
+                .as("Catalog must have resources")
                 .isNotNull()
                 .isNotEmpty();
 
-        // Validate each item has required fields
-        for (Item item : catalog.getItems()) {
-            Assertions.assertThat(item.getId())
-                    .as("Item must have ID")
+        // Validate each resource has required fields
+        for (Resource resource : catalog.getResources()) {
+            Assertions.assertThat(resource.getId())
+                    .as("Resource must have ID")
                     .isNotBlank();
-            Assertions.assertThat(item.getDescriptor())
-                    .as("Item must have descriptor")
+            Assertions.assertThat(resource.getDescriptor())
+                    .as("Resource must have descriptor")
                     .isNotNull();
-            Assertions.assertThat(item.getItemAttributes())
-                    .as("Item must have itemAttributes")
+            Assertions.assertThat(resource.getResourceAttributes())
+                    .as("Resource must have resourceAttributes")
                     .isNotNull();
         }
     }
@@ -417,10 +417,9 @@ public abstract class BaseIntegrationTest {
                 .as("Offer must have id")
                 .isNotNull();
 
-        // v2.0 offers use "resourceIds"; fall back to "items" for backward compat
-        Object itemsObj = offer.containsKey("resourceIds") ? offer.get("resourceIds") : offer.get("items");
+        Object itemsObj = offer.get("resourceIds");
         Assertions.assertThat(itemsObj)
-                .as("Offer must have resourceIds (or items) array")
+                .as("Offer must have resourceIds array")
                 .isNotNull();
         Assertions.assertThat(itemsObj).isInstanceOf(List.class);
 

@@ -36,11 +36,7 @@ public class CatalogDocumentAssembler {
     /** Called from EsFailureConsumer — all fields extracted from stored payload. */
     public Map<String, Object> assemble(JsonNode payloadNode, String indexKey) {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
-        JsonNode itemsOrResources = catalog.path(BecknFields.ITEMS);
-        if (itemsOrResources.isMissingNode() || !itemsOrResources.isArray()) {
-            itemsOrResources = catalog.path(BecknFields.RESOURCES);
-        }
-        JsonNode itemNode = itemsOrResources.path(0);
+        JsonNode itemNode = catalog.path(BecknFields.RESOURCES).path(0);
         JsonNode netNode = itemNode.path(BecknFields.NETWORK_ID);
         List<String> networkIds;
         if (netNode.isArray()) {
@@ -66,12 +62,7 @@ public class CatalogDocumentAssembler {
     private Map<String, Object> build(JsonNode payloadNode, String schemaType, List<String> networkIds,
             String itemId, String bppId, String bppUri, String schemaVersion) {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
-        JsonNode itemsOrResources = catalog.path(BecknFields.ITEMS);
-        if (itemsOrResources.isMissingNode() || !itemsOrResources.isArray()) {
-            // v2.0 resource-based catalogs use "resources" instead of "items"
-            itemsOrResources = catalog.path(BecknFields.RESOURCES);
-        }
-        JsonNode itemNode = itemsOrResources.path(0);
+        JsonNode itemNode = catalog.path(BecknFields.RESOURCES).path(0);
         JsonNode desc = itemNode.path(BecknFields.DESCRIPTOR);
 
         Map<String, Object> doc = new LinkedHashMap<>();
@@ -111,11 +102,7 @@ public class CatalogDocumentAssembler {
 
         geoShapeExtractor.extractGeoShapes(payloadNode).forEach(doc::put);
 
-        JsonNode attrs = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
-        if (attrs.isMissingNode() || !attrs.isObject()) {
-            // v2.0 resource-based items use "resourceAttributes" instead of "itemAttributes"
-            attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
-        }
+        JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         if (!attrs.isMissingNode() && attrs.isObject()) {
             doc.put("item_attributes", flattenJsonLd(attrs));
             // Dedicated top-level ES fields for @type and @context so they can be
@@ -176,11 +163,8 @@ public class CatalogDocumentAssembler {
         // Text from all location objects anywhere in itemNode (any key, any depth)
         collectLocationText(itemNode, parts);
 
-        // All text from itemAttributes/resourceAttributes — recursive deep walk
-        JsonNode attrsForText = itemNode.path(BecknFields.ITEM_ATTRIBUTES);
-        if (attrsForText.isMissingNode()) {
-            attrsForText = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
-        }
+        // All text from resourceAttributes — recursive deep walk
+        JsonNode attrsForText = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         collectStrings(attrsForText, parts);
 
         // v2.1: text from constraints and policies

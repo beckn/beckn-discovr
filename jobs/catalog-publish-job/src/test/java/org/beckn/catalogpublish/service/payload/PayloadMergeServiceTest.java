@@ -14,10 +14,10 @@ class PayloadMergeServiceTest {
 
     @Test
     void mergeItemPayload_patchOverwritesField() throws Exception {
-        String existing = "{\"catalogs\":[{\"items\":[{\"a\":1,\"b\":2}],\"offers\":[]}]}";
+        String existing = "{\"catalogs\":[{\"resources\":[{\"a\":1,\"b\":2}],\"offers\":[]}]}";
         JsonNode patch = mapper.createObjectNode().put("b", 99);
         JsonNode result = service.mergeItemPayload(existing, patch);
-        JsonNode item = result.path("catalogs").path(0).path("items").path(0);
+        JsonNode item = result.path("catalogs").path(0).path("resources").path(0);
         assertThat(item.path("a").asInt()).isEqualTo(1);
         assertThat(item.path("b").asInt()).isEqualTo(99);
     }
@@ -71,10 +71,10 @@ class PayloadMergeServiceTest {
         // Arrays are never recursed into — array elements are treated as
         // wholesale replacements, consistent with RFC 7396 array semantics.
         JsonNode node = mapper.readTree(
-                "{\"items\":[\"item-1\",\"item-2\"],\"nullField\":null}");
+                "{\"resourceIds\":[\"item-1\",\"item-2\"],\"nullField\":null}");
         JsonNode result = service.stripNulls(node);
-        assertThat(result.path("items").isArray()).isTrue();
-        assertThat(result.path("items").size()).isEqualTo(2);
+        assertThat(result.path("resourceIds").isArray()).isTrue();
+        assertThat(result.path("resourceIds").size()).isEqualTo(2);
         assertThat(result.has("nullField")).isFalse();
     }
 
@@ -100,7 +100,7 @@ class PayloadMergeServiceTest {
     @Test
     void mergeItemPayload_nullFieldInPatch_doesNotDeleteExistingData() throws Exception {
         // Stored item has id + descriptor with name + gps
-        String existing = "{\"catalogs\":[{\"items\":[{"
+        String existing = "{\"catalogs\":[{\"resources\":[{"
                 + "\"id\":\"item-1\","
                 + "\"descriptor\":{\"name\":\"EV Station\"},"
                 + "\"gps\":\"12.34,56.78\""
@@ -112,7 +112,7 @@ class PayloadMergeServiceTest {
         JsonNode strippedPatch = service.stripNulls(itemPatch);
         JsonNode result = service.mergeItemPayload(existing, strippedPatch);
 
-        JsonNode mergedItem = result.path("catalogs").path(0).path("items").path(0);
+        JsonNode mergedItem = result.path("catalogs").path(0).path("resources").path(0);
         // id must be preserved
         assertThat(mergedItem.path("id").asText()).isEqualTo("item-1");
         // null name was stripped → stored name is preserved
@@ -123,12 +123,12 @@ class PayloadMergeServiceTest {
 
     @Test
     void mergeOfferIntoPayload_nullFieldInOffer_doesNotDeleteExistingOfferData() throws Exception {
-        // Stored payload with one offer that has id + items link + descriptor
+        // Stored payload with one offer that has id + resourceIds link + descriptor
         JsonNode payload = mapper.readTree(
-                "{\"catalogs\":[{\"items\":[{\"id\":\"item-1\"}],"
+                "{\"catalogs\":[{\"resources\":[{\"id\":\"item-1\"}],"
                         + "\"offers\":[{"
                         + "\"id\":\"offer-1\","
-                        + "\"items\":[\"item-1\"],"
+                        + "\"resourceIds\":[\"item-1\"],"
                         + "\"descriptor\":{\"name\":\"Offer One\"}"
                         + "}]}]}");
 
@@ -143,9 +143,9 @@ class PayloadMergeServiceTest {
         JsonNode mergedOffer = payload.path("catalogs").path(0).path("offers").path(0);
         // id must be preserved
         assertThat(mergedOffer.path("id").asText()).isEqualTo("offer-1");
-        // items link must be preserved — not deleted by null name field
-        assertThat(mergedOffer.path("items").isArray()).isTrue();
-        assertThat(mergedOffer.path("items").size()).isEqualTo(1);
+        // resourceIds link must be preserved — not deleted by null name field
+        assertThat(mergedOffer.path("resourceIds").isArray()).isTrue();
+        assertThat(mergedOffer.path("resourceIds").size()).isEqualTo(1);
         // null name was stripped → stored name is preserved
         assertThat(mergedOffer.path("descriptor").path("name").asText()).isEqualTo("Offer One");
     }

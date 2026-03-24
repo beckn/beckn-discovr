@@ -34,7 +34,7 @@ class ParseStepTest {
     @Test
     void parse_extractsContextAndCatalogs() {
         String msg = """
-                {"context":{"bppId":"b1","bppUri":"http://b1"},"message":{"catalogs":[{"id":"c1","items":[]}]}}
+                {"context":{"bppId":"b1","bppUri":"http://b1"},"message":{"catalogs":[{"id":"c1","resources":[]}]}}
                 """;
         var parsed = parseStep.parse(msg);
         assertThat(parsed.context().bppId()).isEqualTo("b1");
