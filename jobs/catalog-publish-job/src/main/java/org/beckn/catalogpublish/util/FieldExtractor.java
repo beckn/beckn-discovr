@@ -163,14 +163,8 @@ public final class FieldExtractor {
     public static Iterable<JsonNode> iterableItems(JsonNode catalogNode) {
         if (catalogNode == null)
             return List.of();
-        // v2.1 canonical: items
         JsonNode field = catalogNode.path(BecknFields.ITEMS);
         if (field.isMissingNode() || !field.isArray()) {
-            // Old v2.0 format: beckn:items (non-normalized payload — e.g. EsFailureConsumer retry path)
-            field = catalogNode.path(BecknFields.ITEMS_V20);
-        }
-        if (field.isMissingNode() || !field.isArray()) {
-            // New v2.1 resource-based catalogs use "resources"
             field = catalogNode.path(BecknFields.RESOURCES);
         }
         if (field.isMissingNode() || !field.isArray())

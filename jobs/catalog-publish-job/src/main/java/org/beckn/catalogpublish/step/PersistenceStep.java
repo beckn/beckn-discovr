@@ -18,7 +18,6 @@ import org.beckn.catalogpublish.service.payload.PayloadMergeService;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.common.SchemaVersion;
 import org.beckn.catalogpublish.store.ItemLocationCollectionStore;
-import org.beckn.catalogpublish.util.BecknFieldNormalizer;
 import org.beckn.catalogpublish.store.ItemStore;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.FieldExtractor;
@@ -96,13 +95,11 @@ public class PersistenceStep {
 
         // Build the incoming offer map early — needed by both Phase 1 (upsert) and
         // Phase 2 (propagation).
-        // Keyed by beckn:id for O(1) lookup; offers without an id are skipped.
+        // Keyed by id for O(1) lookup; offers without an id are skipped.
         Map<String, JsonNode> incomingOfferById = buildIncomingOfferMap(allOffers);
 
-        // Phase 0: collect (itemId, originalItemNode, normalizedItemNode) triples in declaration order.
+        // Phase 0: collect (itemId, itemNode, itemNode) triples in declaration order.
         // Items with unresolvable IDs go straight to errors.
-        // Normalization happens here so that extractItemId can always use the canonical "id" field name,
-        // while the original (unnormalized) node is preserved for payload storage.
         record IdAndNode(String itemId, JsonNode itemNode, JsonNode normalizedItemNode) {
         }
         List<IdAndNode> pairs = new ArrayList<>();
@@ -110,8 +107,7 @@ public class PersistenceStep {
         String catalogContextUrl = FieldExtractor.extractContextUrl(catalogNode);
         for (JsonNode itemNode : FieldExtractor.iterableItems(catalogNode)) {
             try {
-                JsonNode normalizedForId = BecknFieldNormalizer.normalizeItem(itemNode, objectMapper);
-                pairs.add(new IdAndNode(extractItemId(normalizedForId), itemNode, normalizedForId));
+                pairs.add(new IdAndNode(extractItemId(itemNode), itemNode, itemNode));
             } catch (Exception e) {
                 errors.add(new ProcessingError("unknown", ProcessingErrorCode.NET_INTERNAL_ERROR,
                         ErrorSanitizer.sanitize(e)));
@@ -136,8 +132,7 @@ public class PersistenceStep {
             JsonNode itemNode = pair.itemNode();            // original — stored in DB
             JsonNode normalizedItemNode = pair.normalizedItemNode(); // canonical — used for extraction
             try {
-                // Detect schema version from the original (unnormalized) item node.
-                SchemaVersion version = BecknFieldNormalizer.detectVersion(itemNode);
+                SchemaVersion version = SchemaVersion.V2_1;
 
                 Item existing = existingById.get(itemId);
                 JsonNode payload;
@@ -149,7 +144,7 @@ public class PersistenceStep {
 
                     // Determine which incoming offers apply to this item.
                     // Primary source of truth: the offer_ids DB column (tracks all linked offers
-                    // regardless of what offer.beckn:items says in the current request).
+                    // regardless of what offer.resourceIds says in the current request).
                     // Secondary: offer.id — allows newly declared linkages in this request.
                     Set<String> offerIdsToApply = new HashSet<>();
                     if (existing.getOfferIds() != null)

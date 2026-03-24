@@ -802,7 +802,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
     void offersAreMergedFromMultipleItemsInSameCatalog() throws Exception {
         String catalogId = "catalog-1";
         String item1Json = "{" +
-                "\"@type\": \"beckn:Catalog\"," +
+                "\"@type\": \"Catalog\"," +
                 "\"id\": \"" + catalogId + "\"," +
                 "\"items\": [{\"id\": \"item-1\", \"descriptor\": {\"name\": \"Item 1\"}}]," +
                 "\"offers\": [{" +
@@ -812,7 +812,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 "}]" +
                 "}";
         String item2Json = "{" +
-                "\"@type\": \"beckn:Catalog\"," +
+                "\"@type\": \"Catalog\"," +
                 "\"id\": \"" + catalogId + "\"," +
                 "\"items\": [{\"id\": \"item-2\", \"descriptor\": {\"name\": \"Item 2\"}}]," +
                 "\"offers\": [{" +

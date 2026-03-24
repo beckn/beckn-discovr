@@ -16,7 +16,7 @@ import java.util.*;
  * Builds Elasticsearch geo_shape queries from Beckn SpatialConstraint objects.
  *
  * Each constraint targets a specific location field in the ES document via the
- * path normalization: $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo → loc_beckn_availableAt.geo
+ * path normalization: $.catalogs[*].resources[*].availableAt[*].geo → loc_catalogs_resources_availableAt.geo
  */
 @Component
 @ConditionalOnProperty(name = "discovery.spatial.engine", havingValue = "elasticsearch")
@@ -245,16 +245,11 @@ public class EsSpatialQueryBuilder {
      * Normalizes a full JSONPath to an ES field name.
      * Works for location fields anywhere in the payload — items, offers, or any custom field.
      *
-     * Both v2.0-style paths (with beckn: prefix) and v2.1-style paths (plain) produce the
-     * same ES field name, because catalog payloads are normalized before indexing.
+     * Input:  $.catalogs[*].items[*].availableAt[*].geo
+     * Output: loc_catalogs_items_availableAt
      *
-     * Input:  $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo  (v2.0 subscriber path)
-     * Input:  $.catalogs[*].items[*].availableAt[*].geo              (v2.1 subscriber path)
-     * Output (both): loc_catalogs_items_availableAt
-     *
-     * Input:  $.catalogs[*].beckn:offers[*].beckn:location.geo  (v2.0)
-     * Input:  $.catalogs[*].offers[*].location.geo              (v2.1)
-     * Output (both): loc_catalogs_offers_location
+     * Input:  $.catalogs[*].offers[*].location.geo
+     * Output: loc_catalogs_offers_location
      */
     static String toFieldName(String path) {
         if (path == null) return null;
@@ -264,10 +259,7 @@ public class EsSpatialQueryBuilder {
         if (rel.endsWith(".geo")) rel = rel.substring(0, rel.length() - 4);
         // Remove array wildcards
         rel = rel.replace("[*]", "");
-        // Strip beckn: prefix from all path segments so v2.0 and v2.1 subscriber paths
-        // resolve to the same ES field (catalog payloads are normalized before indexing)
-        rel = rel.replace("beckn:", "");
-        // Replace remaining . with _
+        // Replace . with _
         rel = rel.replace(".", "_");
         if (rel.isBlank()) return null;
         return "loc_" + rel;

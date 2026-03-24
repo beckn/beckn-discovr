@@ -106,16 +106,6 @@ public final class DiscoveryServiceUtil {
         return f.isEmpty() ? null : f;
     }
 
-    /**
-     * Strips namespace prefix from a qualified type string.
-     * E.g. "beckn:Item" → "Item", "Item" → "Item"
-     */
-    public static String extractLocalType(String qualifiedType) {
-        if (qualifiedType == null) return "";
-        int c = qualifiedType.indexOf(':');
-        return c < 0 ? qualifiedType : qualifiedType.substring(c + 1);
-    }
-
     // --- SQL utilities ---
 
     /**

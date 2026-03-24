@@ -7,7 +7,6 @@ import org.beckn.discover.model.Descriptor;
 import org.beckn.discover.model.Item;
 import org.beckn.discover.model.TimePeriod;
 import org.beckn.discover.service.engine.QueryRequest;
-import org.beckn.discover.util.BecknFieldNormalizer;
 import org.beckn.discover.util.DiscoveryConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -128,8 +127,6 @@ public class PostgreSQLAssembler {
         }
 
         String itemId = (String) row.get("id");
-        String schemaVersion = row.containsKey("schema_version")
-                ? String.valueOf(row.get("schema_version")) : "2.0";
         JsonNode itemPayload = toJsonNode(row.get("item_payload"));
         if (itemPayload == null) {
             log.warn("assembler.row.skip reason=null-payload itemId={}", itemId);
@@ -142,14 +139,7 @@ public class PostgreSQLAssembler {
             return false;
         }
 
-        // Normalize v2.0 items (beckn: prefixed fields) to canonical form before
-        // deserializing into the Item DTO — the DTO uses unprefixed field names.
-        // v2.1 items are already in canonical form; normalizeItem is idempotent.
-        JsonNode nodeForDeserialization = "2.0".equals(schemaVersion)
-                ? BecknFieldNormalizer.normalizeItem(itemNode, objectMapper)
-                : itemNode;
-
-        Item item = objectMapper.treeToValue(nodeForDeserialization, Item.class);
+        Item item = objectMapper.treeToValue(itemNode, Item.class);
         if (item == null) {
             log.warn("assembler.row.skip reason=item-deserialise-failed itemId={}", itemId);
             return false;
@@ -161,7 +151,7 @@ public class PostgreSQLAssembler {
         Catalog catalog = catalogMap.computeIfAbsent(catalogId, id -> buildCatalog(id, catalogPayload));
         catalog.getItems().add(item);
 
-        // Back-fill providerId from item when catalog payload lacks beckn:providerId
+        // Back-fill providerId from item when catalog payload lacks providerId
         if (catalog.getProviderId() == null
                 && item.getProvider() != null
                 && item.getProvider().getId() != null
@@ -187,7 +177,7 @@ public class PostgreSQLAssembler {
             extractCatalogAttributes(catalog, catalogPayload);
         } else {
             catalog.setContext(DiscoveryConstants.DEFAULT_CATALOG_CONTEXT);
-            catalog.setType(DiscoveryConstants.BECKN_CATALOG_TYPE);
+            catalog.setType(DiscoveryConstants.CATALOG_TYPE);
         }
         return catalog;
     }
@@ -217,7 +207,7 @@ public class PostgreSQLAssembler {
      * <ol>
      *   <li>{@code matching_offers} column — present only for selection-path
      *       (offer-scoped) queries; accumulated across all matching rows.</li>
-     *   <li>{@code beckn:offers} from the catalog payload — static offers.
+     *   <li>{@code offers} from the catalog payload — static offers.
      *       Merged <b>only on the first row</b> (when the offers list is still
      *       empty) to avoid N-row duplication when a catalog has multiple items.</li>
      * </ol>
@@ -234,7 +224,7 @@ public class PostgreSQLAssembler {
         }
         // Fallback: static offers from the catalog payload — always merge across all rows.
         // Duplicates (same offer in every item row) are removed by
-        // CatalogPipeline.step2DeduplicateOffers which deduplicates by beckn:id.
+        // CatalogPipeline.step2DeduplicateOffers which deduplicates by id.
         if (catalogPayload != null
                 && catalogPayload.has(DiscoveryConstants.DEFAULT_OFFER_ATTRIBUTE)) {
             mergeOffers(catalog, catalogPayload.get(DiscoveryConstants.DEFAULT_OFFER_ATTRIBUTE));
@@ -273,15 +263,15 @@ public class PostgreSQLAssembler {
      * Extracts the item {@link JsonNode} from the payload.
      * Two payload shapes are supported:
      * <ol>
-     *   <li>Direct item payload — root node has {@code @type = beckn:Item}</li>
+     *   <li>Direct item payload — root node has {@code @type = Item}</li>
      *   <li>Catalog-wrapped payload — item lives inside
-     *       {@code payload.catalogs[0].beckn:items[*]}</li>
+     *       {@code payload.catalogs[0].items[*]}</li>
      * </ol>
      */
     private JsonNode extractItemNode(String itemId, JsonNode itemPayload) {
         if (itemPayload == null) return null;
 
-        // Shape 1: direct item — accepts both "beckn:Item" (v2.0) and "Item" (v2.1)
+        // Shape 1: direct item
         if (itemPayload.has(DiscoveryConstants.JsonFields.TYPE)
                 && isItemType(itemPayload.get(DiscoveryConstants.JsonFields.TYPE).asText())
                 && (itemId == null || itemId.equals(
@@ -295,13 +285,7 @@ public class PostgreSQLAssembler {
 
         return StreamSupport.stream(catalogsNode.spliterator(), false)
                 .map(cat -> {
-                    // Canonical: "items" (v2.1 / normalized v2.0)
                     JsonNode itemsNode = cat.get(DiscoveryConstants.JsonFields.BECKN_ITEMS);
-                    // Old un-normalized v2.0 payloads stored with beckn: prefix
-                    if (itemsNode == null || !itemsNode.isArray()) {
-                        itemsNode = cat.get(DiscoveryConstants.JsonFields.BECKN_ITEMS_V20);
-                    }
-                    // New v2.1 resource-based catalogs use "resources"
                     if (itemsNode == null || !itemsNode.isArray()) {
                         itemsNode = cat.get(DiscoveryConstants.JsonFields.BECKN_RESOURCES);
                     }
@@ -315,9 +299,9 @@ public class PostgreSQLAssembler {
                 .orElse(null);
     }
 
-    /** Returns {@code true} for both the v2.0 prefixed form ({@code "beckn:Item"}) and the v2.1 unprefixed form ({@code "Item"}). */
+    /** Returns {@code true} for the v2.1 unprefixed form ({@code "Item"}). */
     private static boolean isItemType(String type) {
-        return DiscoveryConstants.BECKN_ITEM_TYPE.equals(type) || DiscoveryConstants.ITEM_TYPE.equals(type);
+        return DiscoveryConstants.ITEM_TYPE.equals(type);
     }
 
     /** Returns the first element of {@code payload.catalogs}, or {@code null}. */

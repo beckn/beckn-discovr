@@ -33,7 +33,7 @@ import java.util.Optional;
 /**
  * Post-commit ES indexing step.
  *
- * Groups items by schema type (@type from beckn:itemAttributes) and
+ * Groups items by schema type (@type from resourceAttributes) and
  * bulk-indexes
  * each group into its per-type ES index. Failed items are published to
  * the Kafka failure topic for async retry instead of being lost.

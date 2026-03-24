@@ -2,14 +2,10 @@ package org.beckn.discover.service.nlweb;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.beckn.discover.common.SchemaVersion;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.NLWebResponse;
 import org.beckn.discover.service.response.CatalogProcessor;
-import org.beckn.discover.util.BecknFieldNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -156,40 +152,11 @@ public class NLWebAssembler {
     }
 
     /**
-     * Detects the schema version from the first item in schema_object.catalogs and,
-     * when v2.0 is detected, normalizes all catalog item nodes by stripping beckn: prefixes.
-     * v2.1 nodes (already unprefixed) pass through unchanged — idempotent.
+     * All NLWeb catalog nodes are v2.1 (upstream rejects v2.0 payloads).
+     * Returns the node unchanged.
      */
-    private JsonNode normalizeCatalogNodes(JsonNode contentItemNode) {
-        JsonNode schemaObject = contentItemNode.path("schema_object");
-        JsonNode catalogs = schemaObject.path("catalogs");
-        if (!catalogs.isArray() || catalogs.isEmpty()) {
-            return contentItemNode;
-        }
-        JsonNode firstCatalog = catalogs.path(0);
-        JsonNode items = firstCatalog.path("items");
-        if (!items.isArray() || items.isEmpty()) {
-            return contentItemNode;
-        }
-        SchemaVersion version = BecknFieldNormalizer.detectVersion(items.path(0));
-        if (version != SchemaVersion.V2_0) {
-            return contentItemNode;
-        }
-        // Build normalized version: deep-copy the contentItemNode with normalized catalog items
-        ObjectNode result = contentItemNode.deepCopy();
-        ObjectNode resultSchemaObject = (ObjectNode) result.path("schema_object");
-        ArrayNode resultCatalogs = (ArrayNode) resultSchemaObject.path("catalogs");
-        for (int ci = 0; ci < resultCatalogs.size(); ci++) {
-            ObjectNode catalogNode = (ObjectNode) resultCatalogs.get(ci);
-            JsonNode catalogItems = catalogNode.path("items");
-            if (!catalogItems.isArray()) continue;
-            ArrayNode normalizedItems = objectMapper.createArrayNode();
-            for (JsonNode rawItem : catalogItems) {
-                normalizedItems.add(BecknFieldNormalizer.normalizeItem(rawItem, objectMapper));
-            }
-            catalogNode.set("items", normalizedItems);
-        }
-        return result;
+    private static JsonNode normalizeCatalogNodes(JsonNode contentItemNode) {
+        return contentItemNode;
     }
 
     private void addOrSkip(

@@ -253,7 +253,7 @@ public abstract class BaseIntegrationTest {
      * </p>
      *
      * @param itemId the FK into {@code item.id}
-     * @param path   the path token (e.g. {@code $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo})
+     * @param path   the path token (e.g. {@code $.catalogs[*].resources[*].availableAt[*].geo})
      * @param lon    longitude (x), in degrees
      * @param lat    latitude (y), in degrees
      */

@@ -23,7 +23,7 @@ import java.util.Objects;
  *       PostgreSQL already filters in SQL; this step acts as a safety net
  *       and is the <em>primary</em> filter for NLWeb / Elasticsearch.</li>
  *   <li><b>deduplicateOffers</b> — removes duplicate offers within each
- *       catalog (by {@code beckn:id} / {@code id}).</li>
+ *       catalog (by {@code id}).</li>
  *   <li><b>filterItemsByOfferReferences</b> — when an offer-scoped query
  *       has populated offers, restricts items to only those referenced by
  *       at least one offer.</li>

@@ -12,13 +12,15 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration tests for dual Beckn Item v2.0 / v2.1 schema support.
+ * Integration tests for Beckn Item v2.1 schema support.
  *
- * Tests that:
- * 1. v2.0 items (beckn: prefixed) are persisted with schema_version = "2.0"
- *    and their original payload (with beckn: prefixes) is stored intact.
- * 2. v2.1 items (unprefixed, with constraints/policies) are persisted with
- *    schema_version = "2.1" and their payload is stored intact.
+ * All upstream payloads are now guaranteed v2.1 format. The API rejects old
+ * v2.0 (beckn: prefixed) payloads before they reach the pipeline.
+ *
+ * Tests verify that:
+ * 1. v2.1 items are persisted with schema_version = "2.1".
+ * 2. Field extraction (name, type, provider) works correctly.
+ * 3. schema_version is stored in the DB column but never appears in the payload JSON.
  */
 class SchemaVersionIntegrationTest extends BaseIntegrationTest {
 
@@ -27,136 +29,6 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
-
-    // ── v2.0 round-trip ───────────────────────────────────────────────────────
-
-    @Test
-    void publishV20Catalog_itemPersistedWithSchemaVersion20() throws Exception {
-        String message = """
-                {
-                  "context": {
-                    "bppId": "bpp-v20.example.com",
-                    "bppUri": "https://bpp-v20.example.com",
-                    "messageId": "msg-v20-001",
-                    "transactionId": "tx-v20-001",
-                    "networkId": ["net-001"]
-                  },
-                  "message": {
-                    "catalogs": [
-                      {
-                        "id": "cat-v20-001",
-                        "items": [
-                          {
-                            "@context": "https://schema.beckn.io/item/v2.0/",
-                            "@type": "beckn:Item",
-                            "beckn:id": "item-v20-001",
-                            "beckn:descriptor": {
-                              "beckn:name": "DC Fast Charger v2.0",
-                              "beckn:shortDesc": "60kW CCS2 charger"
-                            },
-                            "beckn:provider": {
-                              "beckn:id": "provider-v20-001"
-                            },
-                            "beckn:itemAttributes": {
-                              "@context": "https://example.org/charging.jsonld",
-                              "@type": "ChargingService",
-                              "beckn:powerKw": 60,
-                              "beckn:connectorType": "CCS2"
-                            },
-                            "beckn:networkId": ["net-001"]
-                          }
-                        ],
-                        "offers": []
-                      }
-                    ]
-                  }
-                }
-                """;
-
-        var outcome = orchestrator.processPublish(message);
-        assertThat(outcome.results()).hasSize(1);
-        assertThat(outcome.results().get(0).catalogId()).isEqualTo("cat-v20-001");
-
-        List<Item> items = itemRepository.findAll();
-        assertThat(items).hasSize(1);
-
-        Item item = items.get(0);
-        assertThat(item.getId()).isEqualTo("item-v20-001");
-        assertThat(item.getSchemaVersion())
-                .as("v2.0 item must have schema_version = '2.0'")
-                .isEqualTo("2.0");
-
-        // Original payload must contain beckn: prefixed fields
-        JsonNode payload = objectMapper.readTree(item.getPayload());
-        JsonNode itemNode = payload.path("catalogs").path(0).path("items").path(0);
-        assertThat(itemNode.isMissingNode())
-                .as("items[0] must exist in stored payload")
-                .isFalse();
-        assertThat(itemNode.has("beckn:id") || itemNode.has("id"))
-                .as("stored payload must contain the item id field")
-                .isTrue();
-
-        // schema_version must NOT appear anywhere in the stored payload JSON
-        String payloadStr = item.getPayload();
-        assertThat(payloadStr)
-                .as("schema_version must not be stored in the payload JSON")
-                .doesNotContain("\"schema_version\"");
-    }
-
-    @Test
-    void publishV20Catalog_storedPayloadPreservesOriginalBecknPrefixedFields() throws Exception {
-        String message = """
-                {
-                  "context": {
-                    "bppId": "bpp-v20.example.com",
-                    "bppUri": "https://bpp-v20.example.com",
-                    "messageId": "msg-v20-002",
-                    "transactionId": "tx-v20-002"
-                  },
-                  "message": {
-                    "catalogs": [
-                      {
-                        "id": "cat-v20-002",
-                        "items": [
-                          {
-                            "@context": "https://schema.beckn.io/item/v2.0/",
-                            "@type": "beckn:Item",
-                            "beckn:id": "item-v20-002",
-                            "beckn:descriptor": {
-                              "beckn:name": "Type2 Charger",
-                              "beckn:shortDesc": "AC charger"
-                            },
-                            "beckn:provider": {"beckn:id": "provider-v20-002"},
-                            "beckn:itemAttributes": {
-                              "@context": "https://example.org/charging.jsonld",
-                              "@type": "ChargingService",
-                              "beckn:connectorType": "Type2"
-                            }
-                          }
-                        ],
-                        "offers": []
-                      }
-                    ]
-                  }
-                }
-                """;
-
-        orchestrator.processPublish(message);
-
-        List<Item> items = itemRepository.findAll();
-        assertThat(items).hasSize(1);
-        Item item = items.get(0);
-
-        // The stored payload is the denormalized payload built by ItemPayloadBuilder,
-        // which starts from the original item node. Check that item name extraction
-        // worked correctly via the normalized form.
-        assertThat(item.getName())
-                .as("Item name must be extracted correctly from normalized v2.0 fields")
-                .isEqualTo("Type2 Charger");
-        assertThat(item.getSchemaVersion()).isEqualTo("2.0");
-    }
-
-    // ── v2.1 round-trip ───────────────────────────────────────────────────────
 
     @Test
     void publishV21Catalog_itemPersistedWithSchemaVersion21() throws Exception {
@@ -222,12 +94,10 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                 .as("Name must be extracted from v2.1 descriptor")
                 .isEqualTo("Smart EV Charger v2.1");
 
-        // The stored payload must contain the constraints and policies from the original v2.1 item
         JsonNode payload = objectMapper.readTree(item.getPayload());
         JsonNode itemNode = payload.path("catalogs").path(0).path("items").path(0);
         assertThat(itemNode.isMissingNode()).isFalse();
 
-        // schema_version must NOT appear in the stored payload JSON
         String payloadStr = item.getPayload();
         assertThat(payloadStr)
                 .as("schema_version must not be stored in the payload JSON")
@@ -289,40 +159,38 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
         assertThat(item.getSchemaVersion()).isEqualTo("2.1");
     }
 
-    // ── Mixed catalog ─────────────────────────────────────────────────────────
-
     @Test
-    void publishMixedCatalog_v20AndV21_bothPersistedWithCorrectSchemaVersion() throws Exception {
+    void publishMultipleV21Items_allPersistedWithSchemaVersion21() throws Exception {
         String message = """
                 {
                   "context": {
-                    "bppId": "bpp-mixed.example.com",
-                    "bppUri": "https://bpp-mixed.example.com",
-                    "messageId": "msg-mixed-001",
-                    "transactionId": "tx-mixed-001"
+                    "bppId": "bpp-multi.example.com",
+                    "bppUri": "https://bpp-multi.example.com",
+                    "messageId": "msg-multi-001",
+                    "transactionId": "tx-multi-001"
                   },
                   "message": {
                     "catalogs": [
                       {
-                        "id": "cat-mixed-001",
+                        "id": "cat-multi-001",
                         "items": [
                           {
-                            "@context": "https://schema.beckn.io/item/v2.0/",
-                            "@type": "beckn:Item",
-                            "beckn:id": "item-mixed-v20",
-                            "beckn:descriptor": {"beckn:name": "v2.0 Charger"},
-                            "beckn:provider": {"beckn:id": "prov-001"},
-                            "beckn:itemAttributes": {
+                            "@context": "https://schema.beckn.io/",
+                            "@type": "Item",
+                            "id": "item-multi-001",
+                            "descriptor": {"name": "CCS2 Charger"},
+                            "provider": {"id": "prov-001"},
+                            "itemAttributes": {
                               "@context": "https://ctx.example.org",
                               "@type": "ChargingService",
-                              "beckn:connectorType": "CCS2"
+                              "connectorType": "CCS2"
                             }
                           },
                           {
                             "@context": "https://schema.beckn.io/",
                             "@type": "Item",
-                            "id": "item-mixed-v21",
-                            "descriptor": {"name": "v2.1 Charger"},
+                            "id": "item-multi-002",
+                            "descriptor": {"name": "Type2 Charger"},
                             "provider": {"id": "prov-001"},
                             "itemAttributes": {
                               "@context": "https://ctx.example.org",
@@ -344,27 +212,67 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
         List<Item> items = itemRepository.findAll();
         assertThat(items).hasSize(2);
 
-        Item v20Item = items.stream()
-                .filter(i -> "item-mixed-v20".equals(i.getId()))
+        Item item1 = items.stream()
+                .filter(i -> "item-multi-001".equals(i.getId()))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("v2.0 item not found"));
-        Item v21Item = items.stream()
-                .filter(i -> "item-mixed-v21".equals(i.getId()))
+                .orElseThrow(() -> new AssertionError("item-multi-001 not found"));
+        Item item2 = items.stream()
+                .filter(i -> "item-multi-002".equals(i.getId()))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("v2.1 item not found"));
+                .orElseThrow(() -> new AssertionError("item-multi-002 not found"));
 
-        assertThat(v20Item.getSchemaVersion())
-                .as("v2.0 item must have schema_version = '2.0'")
-                .isEqualTo("2.0");
-        assertThat(v20Item.getName())
-                .as("v2.0 item name must be extracted from beckn:descriptor.beckn:name")
-                .isEqualTo("v2.0 Charger");
+        assertThat(item1.getSchemaVersion()).isEqualTo("2.1");
+        assertThat(item1.getName()).isEqualTo("CCS2 Charger");
 
-        assertThat(v21Item.getSchemaVersion())
-                .as("v2.1 item must have schema_version = '2.1'")
-                .isEqualTo("2.1");
-        assertThat(v21Item.getName())
-                .as("v2.1 item name must be extracted from descriptor.name")
-                .isEqualTo("v2.1 Charger");
+        assertThat(item2.getSchemaVersion()).isEqualTo("2.1");
+        assertThat(item2.getName()).isEqualTo("Type2 Charger");
+    }
+
+    @Test
+    void publishV21Catalog_schemaVersionNotInPayloadJson() throws Exception {
+        String message = """
+                {
+                  "context": {
+                    "bppId": "bpp-clean.example.com",
+                    "bppUri": "https://bpp-clean.example.com",
+                    "messageId": "msg-clean-001",
+                    "transactionId": "tx-clean-001"
+                  },
+                  "message": {
+                    "catalogs": [
+                      {
+                        "id": "cat-clean-001",
+                        "items": [
+                          {
+                            "@type": "Item",
+                            "id": "item-clean-001",
+                            "descriptor": {"name": "Clean Item"},
+                            "provider": {"id": "prov-clean-001"},
+                            "itemAttributes": {
+                              "@type": "ChargingService",
+                              "connectorType": "CCS2"
+                            }
+                          }
+                        ],
+                        "offers": []
+                      }
+                    ]
+                  }
+                }
+                """;
+
+        orchestrator.processPublish(message);
+
+        List<Item> items = itemRepository.findAll();
+        assertThat(items).hasSize(1);
+        Item item = items.get(0);
+
+        assertThat(item.getSchemaVersion()).isEqualTo("2.1");
+        assertThat(item.getPayload())
+                .as("schema_version must not be stored in the payload JSON")
+                .doesNotContain("\"schema_version\"");
+        assertThat(item.getPayload())
+                .as("beckn: prefixed fields must not appear in stored payloads")
+                .doesNotContain("\"beckn:");
     }
 }

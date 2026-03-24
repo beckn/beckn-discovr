@@ -1,6 +1,5 @@
 package org.beckn.discover.integration;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
@@ -18,14 +17,15 @@ import java.sql.Timestamp;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration tests for dual Beckn Item v2.0 / v2.1 schema version support
- * in the catalog-discover-job.
+ * Integration tests for Beckn Item v2.1 schema support in the catalog-discover-job.
+ *
+ * All stored payloads use v2.1 (unprefixed) format — the upstream API rejects
+ * old v2.0 (beckn: prefixed) payloads before they reach the pipeline.
  *
  * Each test inserts items directly into the DB then drives discovery via
  * {@link DiscoveryService} and asserts the on_discover response structure.
@@ -39,7 +39,6 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private DiscoveryService discoveryService;
 
-    // Minimal catalog/provider/item catalog_id for these tests
     private static final String CAT_ID  = "cat-schema-test";
     private static final String PROV_ID = "prov-schema-test";
     private static final String BPP_ID  = "bpp-schema-test.example.com";
@@ -49,8 +48,6 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
 
     @BeforeEach
     void cleanSchemaTestRows() {
-        // Remove rows from previous test runs in this class — BaseIntegrationTest
-        // loads the shared EV fixture via @BeforeAll which we keep intact.
         jdbcTemplate.execute("DELETE FROM item_location_collection WHERE item_id LIKE 'schema-test-%'");
         jdbcTemplate.execute("DELETE FROM item WHERE id LIKE 'schema-test-%'");
         jdbcTemplate.update("DELETE FROM provider WHERE id = ?", PROV_ID);
@@ -67,7 +64,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
             ps.setString(1, CAT_ID);
             ps.setString(2, "Schema Test Catalog");
             ps.setString(3, CONTEXT_URL);
-            ps.setString(4, "beckn:Catalog");
+            ps.setString(4, "Catalog");
             ps.setString(5, BPP_ID);
             ps.setString(6, BPP_URI);
             ps.setObject(7, pgJsonb("{}"));
@@ -84,7 +81,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
             ps.setString(1, PROV_ID);
             ps.setString(2, "Test Provider");
             ps.setString(3, CONTEXT_URL);
-            ps.setString(4, "beckn:Provider");
+            ps.setString(4, "Provider");
             ps.setString(5, BPP_ID);
             ps.setString(6, BPP_URI);
             ps.setString(7, CAT_ID);
@@ -127,49 +124,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
         }
     }
 
-    private String v20ItemPayload(String itemId) {
-        // Uses beckn: prefixed field names on item-level fields as stored by the
-        // catalog-publish-job for Beckn Protocol v2.0 items. The assembler's
-        // extractItemNode locates items via the unprefixed "id" key, then
-        // BecknFieldNormalizer strips the beckn: prefix before DTO deserialization.
-        return String.format("""
-                {
-                  "catalogs": [
-                    {
-                      "@type": "beckn:Catalog",
-                      "@context": "%s",
-                      "id": "%s",
-                      "bppId": "%s",
-                      "bppUri": "%s",
-                      "descriptor": {"name": "Schema Test Catalog"},
-                      "offers": [],
-                      "items": [
-                        {
-                          "@context": "%s",
-                          "@type": "beckn:Item",
-                          "id": "%s",
-                          "beckn:descriptor": {
-                            "@type": "beckn:Descriptor",
-                            "beckn:name": "v2.0 CCS2 Charger",
-                            "beckn:shortDesc": "DC fast charger"
-                          },
-                          "beckn:provider": {"beckn:id": "%s"},
-                          "beckn:itemAttributes": {
-                            "@context": "%s",
-                            "@type": "ChargingService",
-                            "connectorType": "CCS2",
-                            "powerKw": 60
-                          },
-                          "beckn:networkId": "bap.net/ev-charging"
-                        }
-                      ]
-                    }
-                  ]
-                }
-                """, CONTEXT_URL, CAT_ID, BPP_ID, BPP_URI, CONTEXT_URL, itemId, PROV_ID, CONTEXT_URL);
-    }
-
-    private String v21ItemPayload(String itemId) {
+    private String v21ItemPayload(String itemId, String itemName) {
         return String.format("""
                 {
                   "catalogs": [
@@ -187,7 +142,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                           "@type": "Item",
                           "id": "%s",
                           "descriptor": {
-                            "name": "v2.1 Smart Charger",
+                            "name": "%s",
                             "shortDesc": "Next-gen charger"
                           },
                           "provider": {"id": "%s"},
@@ -210,7 +165,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                     }
                   ]
                 }
-                """, CONTEXT_URL, CAT_ID, BPP_ID, BPP_URI, CONTEXT_URL, itemId, PROV_ID, CONTEXT_URL);
+                """, CONTEXT_URL, CAT_ID, BPP_ID, BPP_URI, CONTEXT_URL, itemId, itemName, PROV_ID, CONTEXT_URL);
     }
 
     private DiscoverRequest buildRequest(String transactionId, String schemaContextUrl) {
@@ -228,10 +183,6 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
             ctx.setSchemaContext(List.of(schemaContextUrl));
         }
 
-        // Use a broad JSONPath filter that matches all items in any catalog,
-        // so the request routes via Path B (PostgreSQL filter query).
-        // With no filters, routing goes to Path D (NLWeb text search) which
-        // requires a non-null query string.
         DiscoverRequest request = new DiscoverRequest();
         request.setContext(ctx);
         request.setFilters("$.catalogs[*].items[*]");
@@ -241,17 +192,17 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
     // ── Tests ─────────────────────────────────────────────────────────────────
 
     @Test
-    void discoverV20Item_returnedWithCorrectFields_noSchemaVersionInResponse() throws Exception {
+    void discoverV21Item_returnedWithCorrectFields_noSchemaVersionInResponse() throws Exception {
         insertCatalog();
         insertProvider();
-        insertItem("schema-test-v20-001", "2.0", v20ItemPayload("schema-test-v20-001"));
+        insertItem("schema-test-v21-001", "2.1", v21ItemPayload("schema-test-v21-001", "v2.1 CCS2 Charger"));
 
-        DiscoverRequest request = buildRequest("tx-schema-v20-001", CONTEXT_URL);
+        DiscoverRequest request = buildRequest("tx-schema-v21-001", CONTEXT_URL);
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
 
         assertThat(response).isNotNull();
         assertThat(response.getContext().getAction()).isEqualTo("on_discover");
-        assertThat(response.getContext().getTransactionId()).isEqualTo("tx-schema-v20-001");
+        assertThat(response.getContext().getTransactionId()).isEqualTo("tx-schema-v21-001");
 
         List<Catalog> catalogs = response.getCatalogs();
         Catalog catalog = catalogs.stream()
@@ -262,30 +213,32 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
         assertThat(catalog.getItems()).isNotEmpty();
 
         Item item = catalog.getItems().stream()
-                .filter(i -> "schema-test-v20-001".equals(i.getId()))
+                .filter(i -> "schema-test-v21-001".equals(i.getId()))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("Item schema-test-v20-001 not found"));
+                .orElseThrow(() -> new AssertionError("Item schema-test-v21-001 not found"));
 
-        assertThat(item.getId()).isEqualTo("schema-test-v20-001");
+        assertThat(item.getId()).isEqualTo("schema-test-v21-001");
         assertThat(item.getDescriptor()).isNotNull();
-        assertThat(item.getDescriptor().getName()).isEqualTo("v2.0 CCS2 Charger");
+        assertThat(item.getDescriptor().getName()).isEqualTo("v2.1 CCS2 Charger");
         assertThat(item.getItemAttributes()).isNotNull();
         assertThat(item.getItemAttributes().getType()).isEqualTo("ChargingService");
 
-        // schema_version must NOT appear in the serialized response JSON
         String responseJson = objectMapper.writeValueAsString(response);
         assertThat(responseJson)
                 .as("schema_version must not appear anywhere in the on_discover response JSON")
                 .doesNotContain("schema_version");
+        assertThat(responseJson)
+                .as("beckn: prefixed fields must not appear in the response")
+                .doesNotContain("\"beckn:");
     }
 
     @Test
     void discoverV21Item_constraintsAndPoliciesPresent_noSchemaVersionInResponse() throws Exception {
         insertCatalog();
         insertProvider();
-        insertItem("schema-test-v21-001", "2.1", v21ItemPayload("schema-test-v21-001"));
+        insertItem("schema-test-v21-002", "2.1", v21ItemPayload("schema-test-v21-002", "v2.1 Smart Charger"));
 
-        DiscoverRequest request = buildRequest("tx-schema-v21-001", CONTEXT_URL);
+        DiscoverRequest request = buildRequest("tx-schema-v21-002", CONTEXT_URL);
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
 
         assertThat(response).isNotNull();
@@ -298,16 +251,15 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                 .orElseThrow(() -> new AssertionError("Catalog not found: " + CAT_ID));
 
         Item item = catalog.getItems().stream()
-                .filter(i -> "schema-test-v21-001".equals(i.getId()))
+                .filter(i -> "schema-test-v21-002".equals(i.getId()))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("Item schema-test-v21-001 not found"));
+                .orElseThrow(() -> new AssertionError("Item schema-test-v21-002 not found"));
 
-        assertThat(item.getId()).isEqualTo("schema-test-v21-001");
+        assertThat(item.getId()).isEqualTo("schema-test-v21-002");
         assertThat(item.getDescriptor().getName()).isEqualTo("v2.1 Smart Charger");
         assertThat(item.getItemAttributes()).isNotNull();
         assertThat(item.getItemAttributes().getType()).isEqualTo("ChargingService");
 
-        // v2.1 constraints and policies must be present in the response
         assertThat(item.getConstraints())
                 .as("v2.1 item must have constraints in on_discover response")
                 .isNotNull()
@@ -317,7 +269,6 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                 .isNotNull()
                 .isNotEmpty();
 
-        // schema_version must NOT appear in the serialized response JSON
         String responseJson = objectMapper.writeValueAsString(response);
         assertThat(responseJson)
                 .as("schema_version must not appear anywhere in the on_discover response JSON")
@@ -325,13 +276,13 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void discoverMixedCatalog_bothV20AndV21_returnedCorrectly() throws Exception {
+    void discoverMultipleV21Items_allReturnedCorrectly() throws Exception {
         insertCatalog();
         insertProvider();
-        insertItem("schema-test-v20-mix", "2.0", v20ItemPayload("schema-test-v20-mix"));
-        insertItem("schema-test-v21-mix", "2.1", v21ItemPayload("schema-test-v21-mix"));
+        insertItem("schema-test-item-a", "2.1", v21ItemPayload("schema-test-item-a", "CCS2 Charger"));
+        insertItem("schema-test-item-b", "2.1", v21ItemPayload("schema-test-item-b", "Type2 Charger"));
 
-        DiscoverRequest request = buildRequest("tx-schema-mix-001", CONTEXT_URL);
+        DiscoverRequest request = buildRequest("tx-schema-multi-001", CONTEXT_URL);
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
 
         assertThat(response).isNotNull();
@@ -345,41 +296,37 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
         List<String> itemIds = catalog.getItems().stream()
                 .map(Item::getId).toList();
         assertThat(itemIds)
-                .as("Both v2.0 and v2.1 items must be returned")
-                .contains("schema-test-v20-mix", "schema-test-v21-mix");
+                .as("Both items must be returned")
+                .contains("schema-test-item-a", "schema-test-item-b");
 
-        Item v20Item = catalog.getItems().stream()
-                .filter(i -> "schema-test-v20-mix".equals(i.getId()))
+        Item itemA = catalog.getItems().stream()
+                .filter(i -> "schema-test-item-a".equals(i.getId()))
                 .findFirst()
                 .orElseThrow();
-        Item v21Item = catalog.getItems().stream()
-                .filter(i -> "schema-test-v21-mix".equals(i.getId()))
+        Item itemB = catalog.getItems().stream()
+                .filter(i -> "schema-test-item-b".equals(i.getId()))
                 .findFirst()
                 .orElseThrow();
 
-        // v2.0 item: descriptor name populated from normalized beckn:descriptor.beckn:name
-        assertThat(v20Item.getDescriptor().getName()).isEqualTo("v2.0 CCS2 Charger");
-        assertThat(v20Item.getItemAttributes().getType()).isEqualTo("ChargingService");
+        assertThat(itemA.getDescriptor().getName()).isEqualTo("CCS2 Charger");
+        assertThat(itemA.getItemAttributes().getType()).isEqualTo("ChargingService");
+        assertThat(itemA.getConstraints()).isNotNull().isNotEmpty();
 
-        // v2.1 item: descriptor name populated directly, constraints present
-        assertThat(v21Item.getDescriptor().getName()).isEqualTo("v2.1 Smart Charger");
-        assertThat(v21Item.getItemAttributes().getType()).isEqualTo("ChargingService");
-        assertThat(v21Item.getConstraints()).isNotNull().isNotEmpty();
-        assertThat(v21Item.getPolicies()).isNotNull().isNotEmpty();
+        assertThat(itemB.getDescriptor().getName()).isEqualTo("Type2 Charger");
+        assertThat(itemB.getItemAttributes().getType()).isEqualTo("ChargingService");
 
-        // schema_version must not appear in the response
         String responseJson = objectMapper.writeValueAsString(response);
         assertThat(responseJson).doesNotContain("schema_version");
+        assertThat(responseJson).doesNotContain("\"beckn:");
     }
 
     @Test
-    void discoverV20Item_normalizationMapsFieldsCorrectly() throws Exception {
+    void discoverV21Item_providerIdExtractedCorrectly() throws Exception {
         insertCatalog();
         insertProvider();
-        // Store a v2.0 item where all fields use beckn: prefix
-        insertItem("schema-test-v20-norm", "2.0", v20ItemPayload("schema-test-v20-norm"));
+        insertItem("schema-test-prov-001", "2.1", v21ItemPayload("schema-test-prov-001", "Provider Test Charger"));
 
-        DiscoverRequest request = buildRequest("tx-schema-v20-norm", CONTEXT_URL);
+        DiscoverRequest request = buildRequest("tx-schema-prov-001", CONTEXT_URL);
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
 
         List<Catalog> catalogs = response.getCatalogs();
@@ -389,17 +336,14 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                 .orElseThrow();
 
         Item item = catalog.getItems().stream()
-                .filter(i -> "schema-test-v20-norm".equals(i.getId()))
+                .filter(i -> "schema-test-prov-001".equals(i.getId()))
                 .findFirst()
                 .orElseThrow();
 
-        // Provider ID must be extracted correctly from v2.0 payload via normalization
         assertThat(item.getProvider())
-                .as("Provider must be populated for v2.0 item")
+                .as("Provider must be populated for v2.1 item")
                 .isNotNull();
         assertThat(item.getProvider().getId()).isEqualTo(PROV_ID);
-
-        // itemAttributes @type must be populated correctly
         assertThat(item.getItemAttributes().getType()).isEqualTo("ChargingService");
     }
 }

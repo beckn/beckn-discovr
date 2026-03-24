@@ -147,7 +147,7 @@ public class CatalogDocumentAssembler {
             return List.of();
         List<Map<String, Object>> result = new ArrayList<>();
         for (JsonNode offer : offersNode) {
-            // Preserve the full original offer structure with all beckn:* field names
+            // Preserve the full original offer structure with all field names
             Map<String, Object> o = objectMapper.convertValue(offer, Map.class);
             result.add(o);
         }
