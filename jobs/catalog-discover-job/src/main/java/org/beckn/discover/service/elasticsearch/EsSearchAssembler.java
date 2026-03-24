@@ -274,7 +274,7 @@ public class EsSearchAssembler {
         String code = str(doc, "item_category_code");
         if (code == null)
             return null;
-        CategoryCode cat = new CategoryCode("schema:CategoryCode", code);
+        CategoryCode cat = new CategoryCode("CategoryCode", code);
         cat.setName(str(doc, "item_category_name"));
         return cat;
     }
