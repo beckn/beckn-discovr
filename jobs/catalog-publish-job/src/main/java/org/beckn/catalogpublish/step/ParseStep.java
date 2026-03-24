@@ -7,6 +7,7 @@ import org.beckn.catalogpublish.dto.ParsedCatalogMessage;
 import org.beckn.catalogpublish.exception.PayloadParseException;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.util.BecknFieldNormalizer;
+import org.beckn.catalogpublish.util.ContextNormalizer;
 import org.beckn.catalogpublish.util.FieldExtractor;
 import org.springframework.stereotype.Component;
 
@@ -50,6 +51,7 @@ public class ParseStep {
 
     private CatalogContext extractContext(JsonNode root) {
         JsonNode ctx = FieldExtractor.requireNode(root, BecknFields.CONTEXT);
+        ContextNormalizer.normalize(ctx);  // V1.0 snake_case → V2.0 camelCase
         String bppId = FieldExtractor.requireString(ctx, BecknFields.BPP_ID);
         String bppUri = FieldExtractor.requireString(ctx, BecknFields.BPP_URI);
         String[] netIds = FieldExtractor.extractNetworkIds(ctx);

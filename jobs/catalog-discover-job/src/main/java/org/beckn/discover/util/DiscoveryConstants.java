@@ -70,6 +70,8 @@ public class DiscoveryConstants {
         public static final String BECKN_BPP_ID = "bppId";
         public static final String BECKN_BPP_URI = "bppUri";
         public static final String BECKN_VALIDITY = "validity";
+        /** v2.1 catalog-level addOns field. */
+        public static final String ADD_ONS = "addOns";
     }
 
     private DiscoveryConstants() {

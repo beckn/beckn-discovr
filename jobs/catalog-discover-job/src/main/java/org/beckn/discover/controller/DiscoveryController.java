@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.discover.util.ContextNormalizer;
 
 /**
  * Spring Boot REST controller for Beckn discovery API.
@@ -109,6 +110,7 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
+        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));  // V1.0 snake_case → V2.0 camelCase
 
         // Store transactionId early so GlobalExceptionHandler can include it in NACKs
         // even when an exception is thrown before full request parsing.
@@ -131,6 +133,7 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
+        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));  // V1.0 snake_case → V2.0 camelCase
 
         String transactionId = null;
         JsonNode txnNode = requestNode.path(BecknFields.CONTEXT).path(BecknFields.TRANSACTION_ID);

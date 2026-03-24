@@ -78,4 +78,27 @@ public final class BecknFields {
     // ── Action values (v2.0 slash notation) ─────────────────────────────────
     public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
     public static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
+
+    // ── Context V1.0 field names (snake_case — legacy Beckn v1.x) ────────────
+    public static final String BAP_ID_V1         = "bap_id";
+    public static final String BAP_URI_V1        = "bap_uri";
+    public static final String BPP_ID_V1         = "bpp_id";
+    public static final String BPP_URI_V1        = "bpp_uri";
+    public static final String MESSAGE_ID_V1     = "message_id";
+    public static final String TRANSACTION_ID_V1 = "transaction_id";
+    public static final String DOMAIN_V1         = "domain";
+    public static final String LOCATION_V1       = "location";
+
+    // ── Context V2.0 new fields ───────────────────────────────────────────────
+    public static final String TRY              = "try";
+    public static final String LINEAGE          = "lineage";
+
+    // ── Catalog new fields (v2.1 schema update) ──────────────────────────────
+    public static final String ADD_ONS           = "addOns";
+    public static final String ADD_ON_ATTRIBUTES = "addOnAttributes";
+    public static final String ADD_ON_IDS        = "addOnIds";
+    public static final String CONSIDERATION_IDS = "considerationIds";
+    public static final String FULFILLMENT_IDS   = "fulfillmentIds";
+    public static final String AVAILABLE_TO      = "availableTo";
+    public static final String VISIBLE_TO        = "visibleTo";
 }
