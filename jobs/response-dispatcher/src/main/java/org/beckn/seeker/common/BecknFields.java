@@ -40,8 +40,7 @@ public final class BecknFields {
     public static final String NAME            = "name";
     public static final String CATALOGS        = "catalogs";
 
-    // ── v2.0 Resource fields (alias for Item with resourceAttributes) ─────────
-    public static final String RESOURCES           = "resources";
+    // ── v2.1 Resource fields ─────────────────────────────────────────────────
     public static final String RESOURCE_ATTRIBUTES = "resourceAttributes";
 
     // ── on_discover specific ─────────────────────────────────────────────────
