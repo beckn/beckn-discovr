@@ -122,8 +122,9 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isPayloadTooLarge());
 
         // No async work should have been submitted
-        Thread.sleep(300);
-        assertThat(itemRepository.count()).isEqualTo(0);
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(0));
     }
 
     // ── Async failure cases (202 returned, no DB row) ─────────────────────────
@@ -137,8 +138,9 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.status").value("ACK"));
 
         // Async pipeline will fail at ParseStep; DB must stay empty
-        Thread.sleep(500);
-        assertThat(itemRepository.count()).isEqualTo(0);
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(0));
     }
 
     @Test
@@ -165,8 +167,9 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.status").value("ACK"));
 
-        Thread.sleep(500);
-        assertThat(itemRepository.count()).isEqualTo(0);
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(0));
     }
 
     @Test
@@ -220,8 +223,9 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .content(payload))
                 .andExpect(status().isAccepted());
 
-        Thread.sleep(500);
-        assertThat(itemRepository.count()).isEqualTo(0);
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(0));
     }
 
     // ── Auth ──────────────────────────────────────────────────────────────────

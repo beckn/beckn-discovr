@@ -418,7 +418,7 @@ public class DiscoveryProperties {
     }
 
     public static class Schema {
-        private String url = "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/api-specs/beckn-protocol-api.yaml";
+        private String url = "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/draft/api/v2.0.0/beckn.yaml";
         private long cacheTtlHours = 1;
         private int fetchTimeoutSeconds = 30;
         private int maxRetries = 3;
