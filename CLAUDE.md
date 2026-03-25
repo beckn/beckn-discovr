@@ -36,7 +36,8 @@ BAPs send `discover` requests → Discovr queries the catalog index → delivers
 | Beckn auth (HTTP signatures) | `service/authorization/AuthorizationService.java` |
 | Async Kafka consumer | `consumer/DiscoveryEventConsumer.java` |
 | Config properties | `config/DiscoveryProperties.java` · `src/main/resources/application.yml` |
-| Domain models | `model/Context.java`, `model/Catalog.java`, `model/Item.java`, `model/Provider.java`, `model/Descriptor.java`, `model/AckResponse.java` |
+| Domain models | `model/Context.java`, `model/Catalog.java`, `model/Resource.java`, `model/Provider.java`, `model/Descriptor.java`, `model/AckResponse.java` |
+| Logging constants | `logging/LogEvent.java`, `logging/MdcField.java`, `logging/BecknMdcContext.java` |
 | Integration test base | `src/test/java/.../integration/BaseIntegrationTest.java` |
 
 ### Catalog Publish Job (`jobs/catalog-publish-job/src/main/java/org/beckn/catalogpublish/`)
@@ -54,37 +55,53 @@ BAPs send `discover` requests → Discovr queries the catalog index → delivers
 
 | Task | File |
 |------|------|
-| Kafka consumer | `messaging/consumer/EventConsumer.java` |
+| Kafka consumer | `messaging/consumer/EventListener.java` |
 | HTTP callback delivery | `service/HttpService.java` |
 | Beckn HTTP signature | `service/SignatureService.java` |
+| Logging constants | `logging/LogEvent.java`, `logging/MdcField.java`, `logging/BecknMdcContext.java` |
 | Config | `config/SeekerProperties.java` · `src/main/resources/application.yml` |
 
 ---
 
-## Beckn Protocol v2.0 — Applied (March 2026)
+## Beckn Protocol v2.1 — Applied (March 2026)
 
-All three jobs have been migrated to Beckn Protocol v2.0:
+All three jobs are fully migrated to Beckn Protocol v2.1. **No legacy v2.0/v1.0 support.**
 
-### Context fields (camelCase)
-`transactionId`, `messageId`, `bapId`, `bapUri`, `bppId`, `bppUri`, `networkId` (String, not List), `schemaContext`. Field `coreVersion` removed.
+### Context fields (camelCase, `additionalProperties: false`)
+`action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId` (uuid), `networkId` (String), `timestamp` (date-time), `transactionId` (uuid), `version` (const `"2.0.0"`), `ttl`, `try`, `lineage`. **No `domain`, `schemaContext`, `country`, `city` in context** — `schemaContext` moved to `message.intent`.
 
-### Catalog/Item fields (no `beckn:` prefix)
-`id`, `descriptor`, `items`, `offers`, `provider`, `itemAttributes`, `name`, `shortDesc`, `longDesc`, `images`, `networkId`
+### Resource fields (v2.1 — no `beckn:` prefix, no `items`)
+`@context`, `@type` (`"beckn:Resource"`), `id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`, `rating`, `category`. **No `items` array — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.** **No `networkId` on resources — only on context.**
+
+### Offer fields
+`@type` (`"beckn:Offer"`), `id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`
 
 ### ACK/NACK format
 - ACK: `{"status":"ACK"}` — no transactionId, no timestamp
 - NACK: `{"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}`
 - HTTP 409 = `AckNoCallback` — log and skip, not an error
 
+### Action values (from spec endpoint paths)
+- Discover request: `"action": "discover"`
+- on_discover callback: `"action": "on_discover"`
+- Publish request: `"action": "catalog/publish"`
+- on_publish callback: `"action": "catalog/on_publish"`
+
 ### on_discover response structure
 ```json
 {
   "context": {"action":"on_discover","messageId":"...","bapId":"...","transactionId":"...",...},
   "message": {
-    "catalogs": [{"id":"...","descriptor":{"name":"..."},"items":[...],"offers":[...]}]
+    "catalogs": [{"id":"...","descriptor":{"name":"..."},"resources":[...],"offers":[...]}],
+    "inReplyTo": {"messageId":"..."}
   }
 }
 ```
+
+### Schema Validation
+- **Discover job**: Validates full request body against `DiscoverAction` endpoint schema from `paths["/discover"]` in beckn.yaml. Enforces `action: const: "discover"`, context structure, and intent structure in one pass.
+- **Publish API (Node.js)**: Validates full body against `CatalogPublishAction` endpoint schema from `paths["/catalog/publish"]` in beckn.yaml. Enforces `action: const: "catalog/publish"`.
+- Schema loaded at startup, cached (Caffeine 1hr TTL), fail-fast on load failure.
 
 ---
 
@@ -146,14 +163,37 @@ docker compose up -d
 
 ---
 
+## Structured Logging
+
+All three jobs use **LogstashEncoder** (structured JSON) with unified MDC fields:
+
+| MDC Field | Set by | Description |
+|-----------|--------|-------------|
+| `correlationId` | BecknMdcContext | UUID per processing unit |
+| `transactionId` | BecknMdcContext | From Beckn context |
+| `messageId` | BecknMdcContext | From Beckn context |
+| `bapId`, `bapUri` | BecknMdcContext | BAP identifiers |
+| `bppId`, `bppUri` | BecknMdcContext | BPP identifiers |
+| `networkId` | BecknMdcContext | From context.networkId |
+| `action` | BecknMdcContext | Beckn action value |
+
+- **LogEvent constants** in `logging/LogEvent.java` — no hardcoded log strings
+- **Log levels**: DEBUG=internal steps, INFO=milestones, WARN=validation failures/NACK, ERROR=unrecoverable
+- **Error context**: full requestBody on validation fail, authHeader on auth fail, responseBody on callback error
+- **OTel-ready**: add Java agent as JVM flag, zero code changes
+
+---
+
 ## Elasticsearch Mapping Template
 
 `config/es-index-template.json` — applies to `catalogs-*` index pattern.
 
 Critical rules:
-- **`item_attributes.@context` and `item_attributes.@type`** must be explicit `keyword` mappings inside the `item_attributes` object — never left to dynamic mapping (dynamic template ordering is undefined; silent breakage if wrong template fires first)
-- **`network_id`** is `keyword` (not text) — handles multi-network arrays natively; do not add `.raw` sub-field
+- **`item_attributes.@context` and `item_attributes.@type`** must be explicit `keyword` mappings inside the `item_attributes` object — never left to dynamic mapping
+- **`catalog_validity`** is explicit object mapping with `startDate`/`endDate` as `date` type
+- **`network_id`** is `keyword` (not text) — from context, not from resources
 - **`item_provider_name`** is `text` with a `raw` keyword sub-field for exact-match filtering
+- **`item_rateable`, `item_rating_value`, `item_rating_count`** use nullable wrappers — absent from ES doc when not in catalog data (no false defaults)
 - When adding new `item_attributes.*` fields: add them as explicit mappings, never rely on dynamic templates for attributes fields
 
 ---
@@ -166,7 +206,8 @@ Critical rules:
 - **No `Thread.sleep()` in tests** — use deadline-based poll loops from `BaseIntegrationTest`
 - **Validate callback URLs before HTTP POST** — SSRF risk
 - **No `new ObjectMapper()`** — inject Spring Boot's auto-configured bean
-- **Beckn v2.0 field names only** — no `beckn:` prefix, no snake_case context fields
+- **Beckn v2.1 field names only** — `resources` not `items`, `resourceAttributes` not `itemAttributes`, `resourceIds` not `items` in offers, `@type: "beckn:Resource"`, `networkId` only on context
+- **No fabricated defaults** — don't default `@context`/`@type` on resourceAttributes; they're required publisher fields
 - **Topic names from `@ConfigurationProperties`** — never hardcoded string literals
 - **Kafka publish**: `kafkaTemplate.send().whenComplete(...)` — never `.get()`
 - **Per-job Gradle wrappers**: run `./gradlew` from the specific job directory
