@@ -1,75 +1,80 @@
 package org.beckn.discover.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 
 import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
  * Beckn Context DTO containing message metadata.
- * 
+ *
  * Represents the context information from Beckn Discovery requests including
  * message identification, transaction details, and timestamps.
- * Based on schema.json DiscoveryContext (extends base Context).
- * 
+ * Based on Beckn Protocol v2.0 Context schema (camelCase field names).
+ *
  * @version 2.0.0
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Context {
 
     @NotBlank(message = "Message ID is required")
-    @JsonProperty("message_id")
+    @JsonProperty(BecknFields.MESSAGE_ID)
+    @JsonAlias(BecknFields.MESSAGE_ID_V1)
     private String messageId;
 
     @NotBlank(message = "BAP ID is required")
-    @JsonProperty("bap_id")
+    @JsonProperty(BecknFields.BAP_ID)
+    @JsonAlias(BecknFields.BAP_ID_V1)
     private String bapId;
 
     @NotBlank(message = "Transaction ID is required")
-    @JsonProperty("transaction_id")
+    @JsonProperty(BecknFields.TRANSACTION_ID)
+    @JsonAlias(BecknFields.TRANSACTION_ID_V1)
     private String transactionId;
 
     @NotNull(message = "Timestamp is required")
-    @JsonProperty("timestamp")
+    @JsonProperty(BecknFields.TIMESTAMP)
     private OffsetDateTime timestamp;
 
-    @JsonProperty("domain")
+    @JsonProperty(BecknFields.DOMAIN)
     private String domain;
 
-    @JsonProperty("action")
+    @JsonProperty(BecknFields.ACTION)
     private String action;
 
-    @JsonProperty("version")
+    @JsonProperty(BecknFields.VERSION)
     private String version;
 
-    @JsonProperty("bpp_id")
+    @JsonProperty(BecknFields.BPP_ID)
+    @JsonAlias(BecknFields.BPP_ID_V1)
     private String bppId;
 
-    @JsonProperty("bpp_uri")
+    @JsonProperty(BecknFields.BPP_URI)
+    @JsonAlias(BecknFields.BPP_URI_V1)
     private String bppUri;
 
-    @JsonProperty("country")
+    @JsonProperty(BecknFields.COUNTRY)
     private String country;
 
-    @JsonProperty("city")
+    @JsonProperty(BecknFields.CITY)
     private String city;
 
-    @JsonProperty("ttl")
+    @JsonProperty(BecknFields.TTL)
     private String ttl;
 
-    @JsonProperty("core_version")
-    private String coreVersion;
-
-    @JsonProperty("bap_uri")
+    @JsonProperty(BecknFields.BAP_URI)
+    @JsonAlias(BecknFields.BAP_URI_V1)
     private String bapUri;
 
-    @JsonProperty("network_id")
-    private List<String> networkId;
+    @JsonProperty(BecknFields.NETWORK_ID)
+    private String networkId;
 
-    @JsonProperty("schema_context")
+    @JsonProperty(BecknFields.SCHEMA_CONTEXT)
     private List<String> schemaContext;
 
     // Default constructor
@@ -98,140 +103,56 @@ public class Context {
         this.country = other.country;
         this.city = other.city;
         this.ttl = other.ttl;
-        this.coreVersion = other.coreVersion;
         this.bapUri = other.bapUri;
-        this.networkId = other.networkId != null ? new java.util.ArrayList<>(other.networkId) : null;
+        this.networkId = other.networkId;
         this.schemaContext = other.schemaContext != null ? new java.util.ArrayList<>(other.schemaContext) : null;
     }
 
     // Getters and Setters
-    public String getMessageId() {
-        return messageId;
-    }
+    public String getMessageId() { return messageId; }
+    public void setMessageId(String messageId) { this.messageId = messageId; }
 
-    public void setMessageId(String messageId) {
-        this.messageId = messageId;
-    }
+    public String getBapId() { return bapId; }
+    public void setBapId(String bapId) { this.bapId = bapId; }
 
-    public String getBapId() {
-        return bapId;
-    }
+    public String getTransactionId() { return transactionId; }
+    public void setTransactionId(String transactionId) { this.transactionId = transactionId; }
 
-    public void setBapId(String bapId) {
-        this.bapId = bapId;
-    }
+    public OffsetDateTime getTimestamp() { return timestamp; }
+    public void setTimestamp(OffsetDateTime timestamp) { this.timestamp = timestamp; }
 
-    public String getTransactionId() {
-        return transactionId;
-    }
+    public String getDomain() { return domain; }
+    public void setDomain(String domain) { this.domain = domain; }
 
-    public void setTransactionId(String transactionId) {
-        this.transactionId = transactionId;
-    }
+    public String getAction() { return action; }
+    public void setAction(String action) { this.action = action; }
 
-    public OffsetDateTime getTimestamp() {
-        return timestamp;
-    }
+    public String getVersion() { return version; }
+    public void setVersion(String version) { this.version = version; }
 
-    public void setTimestamp(OffsetDateTime timestamp) {
-        this.timestamp = timestamp;
-    }
+    public String getBppId() { return bppId; }
+    public void setBppId(String bppId) { this.bppId = bppId; }
 
-    public String getDomain() {
-        return domain;
-    }
+    public String getBppUri() { return bppUri; }
+    public void setBppUri(String bppUri) { this.bppUri = bppUri; }
 
-    public void setDomain(String domain) {
-        this.domain = domain;
-    }
+    public String getCountry() { return country; }
+    public void setCountry(String country) { this.country = country; }
 
-    public String getAction() {
-        return action;
-    }
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
 
-    public void setAction(String action) {
-        this.action = action;
-    }
+    public String getTtl() { return ttl; }
+    public void setTtl(String ttl) { this.ttl = ttl; }
 
-    public String getVersion() {
-        return version;
-    }
+    public String getBapUri() { return bapUri; }
+    public void setBapUri(String bapUri) { this.bapUri = bapUri; }
 
-    public void setVersion(String version) {
-        this.version = version;
-    }
+    public String getNetworkId() { return networkId; }
+    public void setNetworkId(String networkId) { this.networkId = networkId; }
 
-    public String getBppId() {
-        return bppId;
-    }
-
-    public void setBppId(String bppId) {
-        this.bppId = bppId;
-    }
-
-    public String getBppUri() {
-        return bppUri;
-    }
-
-    public void setBppUri(String bppUri) {
-        this.bppUri = bppUri;
-    }
-
-    public String getCountry() {
-        return country;
-    }
-
-    public void setCountry(String country) {
-        this.country = country;
-    }
-
-    public String getCity() {
-        return city;
-    }
-
-    public void setCity(String city) {
-        this.city = city;
-    }
-
-    public String getTtl() {
-        return ttl;
-    }
-
-    public void setTtl(String ttl) {
-        this.ttl = ttl;
-    }
-
-    public String getCoreVersion() {
-        return coreVersion;
-    }
-
-    public void setCoreVersion(String coreVersion) {
-        this.coreVersion = coreVersion;
-    }
-
-    public String getBapUri() {
-        return bapUri;
-    }
-
-    public void setBapUri(String bapUri) {
-        this.bapUri = bapUri;
-    }
-
-    public List<String> getNetworkId() {
-        return networkId;
-    }
-
-    public void setNetworkId(List<String> networkId) {
-        this.networkId = networkId;
-    }
-
-    public List<String> getSchemaContext() {
-        return schemaContext;
-    }
-
-    public void setSchemaContext(List<String> schemaContext) {
-        this.schemaContext = schemaContext;
-    }
+    public List<String> getSchemaContext() { return schemaContext; }
+    public void setSchemaContext(List<String> schemaContext) { this.schemaContext = schemaContext; }
 
     @Override
     public String toString() {

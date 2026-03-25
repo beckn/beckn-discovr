@@ -2,157 +2,83 @@ package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.beckn.discover.common.BecknFields;
 
 /**
- * ACK/NACK Response DTO
- * 
- * Represents acknowledgment response for Beckn discovery requests.
- * Based on schema.json AckResponse structure.
- * 
- * Returns ACK for successful receipt/validation or NACK for errors.
- * 
+ * ACK/NACK Response DTO — Beckn Protocol v2.0 format.
+ *
+ * ACK:  {@code {"status": "ACK"}}
+ * NACK: {@code {"status": "NACK", "error": {"errorCode": "...", "errorMessage": "..."}}}
+ *
  * @version 2.0.0
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AckResponse {
 
-    @JsonProperty("transaction_id")
-    private String transactionId;
+    @JsonProperty(BecknFields.STATUS)
+    private String status; // "ACK" or "NACK"
 
-    @JsonProperty("timestamp")
-    private String timestamp;
-
-    @JsonProperty("ack_status")
-    private String ackStatus; // "ACK" or "NACK"
-
-    @JsonProperty("error")
+    @JsonProperty(BecknFields.ERROR)
     private ErrorDetail error;
 
-    // Default constructor
     public AckResponse() {}
 
-    // Constructor for ACK
-    public AckResponse(String transactionId, String timestamp, String ackStatus) {
-        this.transactionId = transactionId;
-        this.timestamp = timestamp;
-        this.ackStatus = ackStatus;
+    public AckResponse(String status) {
+        this.status = status;
     }
 
-    // Constructor for NACK with error
-    public AckResponse(String transactionId, String timestamp, String ackStatus, ErrorDetail error) {
-        this.transactionId = transactionId;
-        this.timestamp = timestamp;
-        this.ackStatus = ackStatus;
+    public AckResponse(String status, ErrorDetail error) {
+        this.status = status;
         this.error = error;
     }
 
     // Static factory methods
-    public static AckResponse ack(String transactionId, String timestamp) {
-        return new AckResponse(transactionId, timestamp, "ACK");
+    public static AckResponse ack() {
+        return new AckResponse("ACK");
     }
 
-    public static AckResponse nack(String transactionId, String timestamp, String code, 
-                                   String paths, String message) {
-        ErrorDetail error = new ErrorDetail(code, paths, message);
-        return new AckResponse(transactionId, timestamp, "NACK", error);
+    public static AckResponse nack(String errorCode, String errorMessage) {
+        return new AckResponse("NACK", new ErrorDetail(errorCode, errorMessage));
     }
 
-    // Getters and setters
-    public String getTransactionId() {
-        return transactionId;
-    }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
-    public void setTransactionId(String transactionId) {
-        this.transactionId = transactionId;
-    }
-
-    public String getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(String timestamp) {
-        this.timestamp = timestamp;
-    }
-
-    public String getAckStatus() {
-        return ackStatus;
-    }
-
-    public void setAckStatus(String ackStatus) {
-        this.ackStatus = ackStatus;
-    }
-
-    public ErrorDetail getError() {
-        return error;
-    }
-
-    public void setError(ErrorDetail error) {
-        this.error = error;
-    }
+    public ErrorDetail getError() { return error; }
+    public void setError(ErrorDetail error) { this.error = error; }
 
     @Override
     public String toString() {
-        return "AckResponse{" +
-                "transactionId='" + transactionId + '\'' +
-                ", timestamp='" + timestamp + '\'' +
-                ", ackStatus='" + ackStatus + '\'' +
-                ", error=" + error +
-                '}';
+        return "AckResponse{status='" + status + "', error=" + error + '}';
     }
 
     /**
-     * Error Detail DTO
+     * Error Detail DTO — Beckn Protocol v2.0 format.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ErrorDetail {
-        @JsonProperty("code")
-        private String code;
+        @JsonProperty(BecknFields.ERROR_CODE)
+        private String errorCode;
 
-        @JsonProperty("paths")
-        private String paths;
-
-        @JsonProperty("message")
-        private String message;
+        @JsonProperty(BecknFields.ERROR_MESSAGE)
+        private String errorMessage;
 
         public ErrorDetail() {}
 
-        public ErrorDetail(String code, String paths, String message) {
-            this.code = code;
-            this.paths = paths;
-            this.message = message;
+        public ErrorDetail(String errorCode, String errorMessage) {
+            this.errorCode = errorCode;
+            this.errorMessage = errorMessage;
         }
 
-        public String getCode() {
-            return code;
-        }
+        public String getErrorCode() { return errorCode; }
+        public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
 
-        public void setCode(String code) {
-            this.code = code;
-        }
-
-        public String getPaths() {
-            return paths;
-        }
-
-        public void setPaths(String paths) {
-            this.paths = paths;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public void setMessage(String message) {
-            this.message = message;
-        }
+        public String getErrorMessage() { return errorMessage; }
+        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
 
         @Override
         public String toString() {
-            return "ErrorDetail{" +
-                    "code='" + code + '\'' +
-                    ", paths='" + paths + '\'' +
-                    ", message='" + message + '\'' +
-                    '}';
+            return "ErrorDetail{errorCode='" + errorCode + "', errorMessage='" + errorMessage + "'}";
         }
     }
 }

@@ -57,6 +57,9 @@ public class Item {
     @Column(name = "offer_ids", columnDefinition = "text[]")
     private String[] offerIds;
 
+    @Column(name = "schema_version", nullable = false)
+    private String schemaVersion;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -69,7 +72,8 @@ public class Item {
     }
 
     public static Item from(String id, String payload, String[] offerIds, CatalogContext ctx,
-            String catalogId, String name, String type, String providerId, String contextUrl) {
+            String catalogId, String name, String type, String providerId, String contextUrl,
+            String schemaVersion) {
         Item item = new Item();
         item.id = id;
         item.bppId = ctx.bppId();
@@ -82,6 +86,7 @@ public class Item {
         item.networkIds = ctx.networkIds() != null ? ctx.networkIds() : new String[0];
         item.payload = payload;
         item.offerIds = offerIds != null ? offerIds : new String[0];
+        item.schemaVersion = schemaVersion != null ? schemaVersion : "2.0";
         return item;
     }
 
@@ -143,6 +148,10 @@ public class Item {
     /** Returns a defensive copy; callers must not mutate the returned array. */
     public String[] getOfferIds() {
         return offerIds != null ? offerIds.clone() : new String[0];
+    }
+
+    public String getSchemaVersion() {
+        return schemaVersion;
     }
 
     public LocalDateTime getCreatedAt() {

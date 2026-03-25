@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.catalogpublish.dto.CatalogContext;
 import org.beckn.catalogpublish.dto.ParsedCatalogMessage;
 import org.beckn.catalogpublish.exception.PayloadParseException;
+import org.beckn.catalogpublish.common.BecknFields;
+import org.beckn.catalogpublish.util.ContextNormalizer;
 import org.beckn.catalogpublish.util.FieldExtractor;
 import org.springframework.stereotype.Component;
 
@@ -33,8 +35,7 @@ public class ParseStep {
     }
 
     public String extractCatalogIdSafe(JsonNode catalogNode) {
-        return FieldExtractor.extractString(catalogNode, "id")
-                .or(() -> FieldExtractor.extractString(catalogNode, "beckn:id"))
+        return FieldExtractor.extractString(catalogNode, BecknFields.ID)
                 .orElse("unknown");
     }
 
@@ -47,18 +48,20 @@ public class ParseStep {
     }
 
     private CatalogContext extractContext(JsonNode root) {
-        JsonNode ctx = FieldExtractor.requireNode(root, "context");
-        String bppId = FieldExtractor.requireString(ctx, "bpp_id");
-        String bppUri = FieldExtractor.requireString(ctx, "bpp_uri");
+        JsonNode ctx = FieldExtractor.requireNode(root, BecknFields.CONTEXT);
+        ContextNormalizer.normalize(ctx);  // V1.0 snake_case → V2.0 camelCase
+        String bppId = FieldExtractor.requireString(ctx, BecknFields.BPP_ID);
+        String bppUri = FieldExtractor.requireString(ctx, BecknFields.BPP_URI);
         String[] netIds = FieldExtractor.extractNetworkIds(ctx);
         return new CatalogContext(bppId, bppUri, netIds, ctx);
     }
 
     private List<JsonNode> extractCatalogs(JsonNode root) {
-        JsonNode message = root.path("message");
-        JsonNode catalogs = message.isMissingNode() ? root.path("catalogs") : message.path("catalogs");
+        JsonNode message = root.path(BecknFields.MESSAGE);
+        JsonNode catalogs = message.isMissingNode() ? root.path(BecknFields.CATALOGS) : message.path(BecknFields.CATALOGS);
         if (catalogs.isMissingNode() || !catalogs.isArray())
             return List.of();
-        return StreamSupport.stream(catalogs.spliterator(), false).toList();
+        return StreamSupport.stream(catalogs.spliterator(), false)
+                .toList();
     }
 }

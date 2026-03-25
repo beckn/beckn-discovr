@@ -62,12 +62,20 @@ public final class DiscoveryServiceUtil {
 
     /** Single pass over context schema URLs to extract both types and base URLs. */
     public static SchemaContextParts extractSchemaContextParts(Context context) {
-        if (context == null || isNullOrEmpty(context.getSchemaContext())) {
+        if (context == null) {
+            return new SchemaContextParts(Collections.emptyList(), Collections.emptyList());
+        }
+        return extractSchemaContextParts(context.getSchemaContext());
+    }
+
+    /** Single pass over a raw URL list to extract both type fragments and base URLs. */
+    public static SchemaContextParts extractSchemaContextParts(List<String> rawUrls) {
+        if (isNullOrEmpty(rawUrls)) {
             return new SchemaContextParts(Collections.emptyList(), Collections.emptyList());
         }
         HashSet<String> distinctTypes = new HashSet<>();
         HashSet<String> distinctUrls = new HashSet<>();
-        for (String rawUrl : context.getSchemaContext()) {
+        for (String rawUrl : rawUrls) {
             String base = extractBaseUrl(rawUrl);
             String type = extractFragment(rawUrl);
             if (base != null && !base.isBlank()) {
@@ -104,16 +112,6 @@ public final class DiscoveryServiceUtil {
         if (h < 0 || h == url.length() - 1) return null;
         String f = url.substring(h + 1).trim();
         return f.isEmpty() ? null : f;
-    }
-
-    /**
-     * Strips namespace prefix from a qualified type string.
-     * E.g. "beckn:Item" → "Item", "Item" → "Item"
-     */
-    public static String extractLocalType(String qualifiedType) {
-        if (qualifiedType == null) return "";
-        int c = qualifiedType.indexOf(':');
-        return c < 0 ? qualifiedType : qualifiedType.substring(c + 1);
     }
 
     // --- SQL utilities ---

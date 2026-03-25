@@ -26,7 +26,8 @@ public final class QueryBuilderHelper {
     // ============================
 
     /** Base item SELECT — used by JSONPath and spatial queries. */
-    public static final String BASE_SELECT = "SELECT i.id, i.catalog_id, i.payload AS item_payload FROM item i";
+    public static final String BASE_SELECT = "SELECT i.id, i.catalog_id, i.payload AS item_payload, "
+            + "COALESCE(i.schema_version, '2.0') AS schema_version FROM item i";
 
     /**
      * Item SELECT with filter-result column. Use when user supplies a selection
@@ -36,7 +37,7 @@ public final class QueryBuilderHelper {
      */
     public static final String BASE_SELECT_WITH_FILTER_RESULT = "SELECT i.id, i.catalog_id, "
             + "jsonb_path_query_array(i.payload, CAST(? AS jsonpath)) AS matching_offers, "
-            + "i.payload AS item_payload FROM item i";
+            + "i.payload AS item_payload, COALESCE(i.schema_version, '2.0') AS schema_version FROM item i";
 
     /**
      * Column alias for the filter-result projection. Used when reading result rows.

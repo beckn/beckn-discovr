@@ -25,7 +25,7 @@ class ParseStepTest {
 
     @Test
     void parse_throwsWhenNoCatalogs() {
-        String msg = "{\"context\":{\"bpp_id\":\"b1\",\"bpp_uri\":\"http://b1\"},\"message\":{\"catalogs\":[]}}";
+        String msg = "{\"context\":{\"bppId\":\"b1\",\"bppUri\":\"http://b1\"},\"message\":{\"catalogs\":[]}}";
         assertThatThrownBy(() -> parseStep.parse(msg))
                 .isInstanceOf(PayloadParseException.class)
                 .hasMessageContaining("No catalogs");
@@ -34,7 +34,7 @@ class ParseStepTest {
     @Test
     void parse_extractsContextAndCatalogs() {
         String msg = """
-                {"context":{"bpp_id":"b1","bpp_uri":"http://b1"},"message":{"catalogs":[{"id":"c1","beckn:items":[]}]}}
+                {"context":{"bppId":"b1","bppUri":"http://b1"},"message":{"catalogs":[{"id":"c1","resources":[]}]}}
                 """;
         var parsed = parseStep.parse(msg);
         assertThat(parsed.context().bppId()).isEqualTo("b1");

@@ -7,6 +7,7 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.indexing.EsIndexManager;
 import org.beckn.catalogpublish.indexing.EsIndexerMetrics;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +53,7 @@ public class BulkIndexService {
         try {
             indexManager.ensureIndex(indexName);
         } catch (Exception e) {
-            log.error("es.bulk.ensure-index.failed index={} error={}", indexName, ErrorSanitizer.sanitize(e));
+            log.error("event={} reason=ensure-index-failed index={} error={}", LogEvent.ES_FAILED, indexName, ErrorSanitizer.sanitize(e));
             return BulkIndexResult.allFailed(toFailedDocs(docs, "index ensure failed: " + e.getMessage()));
         }
 
@@ -62,16 +63,16 @@ public class BulkIndexService {
             } catch (ConnectException | SocketTimeoutException e) {
                 last = e;
                 metrics.incrementRetried();
-                log.warn("es.bulk.retry attempt={}/{} index={} error={}", attempt, retryAttempts, indexName, e.getMessage());
+                log.warn("event={} attempt={}/{} index={} error={}", LogEvent.ES_FAILED, attempt, retryAttempts, indexName, e.getMessage());
                 if (attempt < retryAttempts) sleep(delay);
                 delay *= 2;
             } catch (Exception e) {
                 // Non-transient (mapping conflict, auth) — don't retry
-                log.error("es.bulk.non-retryable index={} error={}", indexName, ErrorSanitizer.sanitize(e));
+                log.error("event={} reason=non-retryable index={} error={}", LogEvent.ES_FAILED, indexName, ErrorSanitizer.sanitize(e));
                 return BulkIndexResult.allFailed(toFailedDocs(docs, e.getMessage()));
             }
         }
-        log.error("es.bulk.retries-exhausted index={}", indexName);
+        log.error("event={} reason=retries-exhausted index={}", LogEvent.ES_FAILED, indexName);
         metrics.incrementBatchFailure();
         return BulkIndexResult.allFailed(toFailedDocs(docs, last != null ? last.getMessage() : "retries exhausted"));
     }
@@ -94,7 +95,7 @@ public class BulkIndexService {
                 failed.add(new BulkIndexResult.FailedDoc(
                         extractItemId(item.id()), extractBppId(item.id()), item.error().reason()));
                 metrics.incrementItemFailure();
-                log.error("es.item.index.failed docId={} reason={}", item.id(), item.error().reason());
+                log.error("event={} docId={} reason={}", LogEvent.ES_FAILED, item.id(), item.error().reason());
             } else {
                 succeeded.add(item.id());
                 metrics.incrementIndexed();

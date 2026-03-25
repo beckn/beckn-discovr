@@ -16,6 +16,13 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
       properties:
         spring.json.add.type.headers: false
+        # In integration tests there is no real Kafka broker; send() is fire-and-forget
+        # with whenComplete so errors are logged and ignored. Set max.block.ms to a very
+        # short value so the producer metadata-fetch doesn't block the request thread
+        # for the full 60-second default when the broker is unavailable.
+        max.block.ms: 100
+        request.timeout.ms: 100
+        delivery.timeout.ms: 200
     listener:
       ack-mode: manual_immediate
       concurrency: 1
@@ -24,7 +31,7 @@ spring:
 # Discovery Service Configuration
 discovery:
   kafka:
-    request-topic: catalog.v2.discovery.requests
+    request-topic: catalog.discovery.request
     response-topic: catalog.discovery.response
   
   text-search:
@@ -39,7 +46,7 @@ discovery:
 
   # Schema Validation Configuration
   schema:
-    url: ${SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/beckn.yaml}
+    url: ${SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/rfc-beckn-spec-design-Mar-13/api/v2.0.0/beckn.yaml}
     cache-ttl-hours: ${SCHEMA_CACHE_TTL_HOURS:1}
     fetch-timeout-seconds: ${SCHEMA_FETCH_TIMEOUT_SECONDS:30}
     max-retries: ${SCHEMA_FETCH_MAX_RETRIES:3}

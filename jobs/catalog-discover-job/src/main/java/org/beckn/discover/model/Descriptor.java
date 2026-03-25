@@ -1,96 +1,79 @@
 package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotBlank;
+import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * Descriptor DTO
- * 
- * Represents the descriptor information for items, catalogs, and providers.
+ * Descriptor DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
  */
 public class Descriptor {
 
-    @NotBlank(message = "@type is required")
     @JsonProperty("@type")
     private String type;
 
-    @JsonProperty("schema:name")
+    @JsonProperty(BecknFields.NAME)
     private String name;
 
-    @JsonProperty("beckn:shortDesc")
+    @JsonProperty(BecknFields.SHORT_DESC)
     private String shortDesc;
 
-    @JsonProperty("beckn:longDesc")
+    @JsonProperty(BecknFields.LONG_DESC)
     private String longDesc;
 
-    @JsonProperty("schema:image")
+    @JsonProperty(BecknFields.IMAGES)
     private List<String> image;
+
+    @JsonProperty("thumbnailImage")
+    private String thumbnailImage;
+
+    @JsonProperty("docs")
+    private List<Map<String, Object>> docs;
+
+    @JsonProperty("mediaFile")
+    private List<Map<String, Object>> mediaFile;
 
     // Default constructor
     public Descriptor() {}
 
-    // Constructor with required fields
     public Descriptor(String type) {
         this.type = type;
     }
 
-    // Constructor with type and name
     public Descriptor(String type, String name) {
         this.type = type;
         this.name = name;
     }
 
     // Getters and Setters
-    public String getType() {
-        return type;
-    }
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
-    public void setType(String type) {
-        this.type = type;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public String getName() {
-        return name;
-    }
+    public String getShortDesc() { return shortDesc; }
+    public void setShortDesc(String shortDesc) { this.shortDesc = shortDesc; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getLongDesc() { return longDesc; }
+    public void setLongDesc(String longDesc) { this.longDesc = longDesc; }
 
-    public String getShortDesc() {
-        return shortDesc;
-    }
+    public List<String> getImage() { return image; }
+    public void setImage(List<String> image) { this.image = image; }
 
-    public void setShortDesc(String shortDesc) {
-        this.shortDesc = shortDesc;
-    }
+    public String getThumbnailImage() { return thumbnailImage; }
+    public void setThumbnailImage(String thumbnailImage) { this.thumbnailImage = thumbnailImage; }
 
-    public String getLongDesc() {
-        return longDesc;
-    }
+    public List<Map<String, Object>> getDocs() { return docs; }
+    public void setDocs(List<Map<String, Object>> docs) { this.docs = docs; }
 
-    public void setLongDesc(String longDesc) {
-        this.longDesc = longDesc;
-    }
-
-    public List<String> getImage() {
-        return image;
-    }
-
-    public void setImage(List<String> image) {
-        this.image = image;
-    }
+    public List<Map<String, Object>> getMediaFile() { return mediaFile; }
+    public void setMediaFile(List<Map<String, Object>> mediaFile) { this.mediaFile = mediaFile; }
 
     @Override
     public String toString() {
-        return "Descriptor{" +
-                "type='" + type + '\'' +
-                ", name='" + name + '\'' +
-                ", shortDesc='" + shortDesc + '\'' +
-                ", longDesc='" + longDesc + '\'' +
-                ", image=" + image +
-                '}';
+        return "Descriptor{type='" + type + "', name='" + name + "'}";
     }
 }

@@ -4,32 +4,32 @@
       "id": "ev-charging-network-blr",
       "name": "EV Charging Network Bangalore",
       "context_url": "https://schema.beckn.org/core/v2/context.jsonld",
-      "type": "beckn:Catalog",
+      "type": "Catalog",
       "bpp_id": "bpp-ev-charging.example.com",
       "bpp_uri": "https://bpp-ev-charging.example.com",
-      "payload_string": "{\"beckn:id\": \"ev-charging-network-blr\", \"beckn:descriptor\": {\"schema:name\": \"EV Charging Network Bangalore\"}}",
+      "payload_string": "{\"id\": \"ev-charging-network-blr\", \"descriptor\": {\"name\": \"EV Charging Network Bangalore\"}}",
       "offers": [
         {
           "id": "fast-charging-offer-001",
-          "items": ["ev-charger-ccs2-001"],
+          "resourceIds": ["ev-charger-ccs2-001"],
           "price_value": 15.0,
           "price_currency": "INR"
         },
         {
           "id": "super-fast-offer-002",
-          "items": ["ev-charger-ccs2-002"],
+          "resourceIds": ["ev-charger-ccs2-002"],
           "price_value": 25.0,
           "price_currency": "INR"
         },
         {
           "id": "standard-offer-003",
-          "items": ["ev-charger-chademo-001"],
+          "resourceIds": ["ev-charger-chademo-001"],
           "price_value": 10.0,
           "price_currency": "INR"
         },
         {
           "id": "combo-offer-004",
-          "items": ["ev-charger-ccs2-001", "ev-charger-ccs2-002"],
+          "resourceIds": ["ev-charger-ccs2-001", "ev-charger-ccs2-002"],
           "price_value": 35.0,
           "price_currency": "INR"
         }
@@ -39,20 +39,20 @@
       "id": "solar-charging-network-blr",
       "name": "Solar Charging Network Bangalore",
       "context_url": "https://schema.beckn.org/solar/v1/context.jsonld",
-      "type": "beckn:Catalog",
+      "type": "Catalog",
       "bpp_id": "bpp-solar.example.com",
       "bpp_uri": "https://bpp-solar.example.com",
-      "payload_string": "{\"beckn:id\": \"solar-charging-network-blr\", \"beckn:descriptor\": {\"schema:name\": \"Solar Charging Network Bangalore\"}}",
+      "payload_string": "{\"id\": \"solar-charging-network-blr\", \"descriptor\": {\"name\": \"Solar Charging Network Bangalore\"}}",
       "offers": [
         {
           "id": "eco-offer-001",
-          "items": ["solar-charger-ccs2-001"],
+          "resourceIds": ["solar-charger-ccs2-001"],
           "price_value": 12.0,
           "price_currency": "INR"
         },
         {
           "id": "eco-offer-002",
-          "items": ["solar-charger-ccs2-002"],
+          "resourceIds": ["solar-charger-ccs2-002"],
           "price_value": 20.0,
           "price_currency": "INR"
         }
@@ -62,20 +62,20 @@
       "id": "home-charging-network-mum",
       "name": "Home Charging Solutions Mumbai",
       "context_url": "https://schema.beckn.org/core/v2/context.jsonld",
-      "type": "beckn:Catalog",
+      "type": "Catalog",
       "bpp_id": "bpp-home-charging.example.com",
       "bpp_uri": "https://bpp-home-charging.example.com",
-      "payload_string": "{\"beckn:id\": \"home-charging-network-mum\", \"beckn:descriptor\": {\"schema:name\": \"Home Charging Solutions Mumbai\"}}",
+      "payload_string": "{\"id\": \"home-charging-network-mum\", \"descriptor\": {\"name\": \"Home Charging Solutions Mumbai\"}}",
       "offers": [
         {
           "id": "home-offer-001",
-          "items": ["home-charger-type2-001"],
+          "resourceIds": ["home-charger-type2-001"],
           "price_value": 5.0,
           "price_currency": "INR"
         },
         {
           "id": "home-offer-002",
-          "items": ["home-charger-type2-002"],
+          "resourceIds": ["home-charger-type2-002"],
           "price_value": 8.0,
           "price_currency": "INR"
         }
@@ -87,7 +87,7 @@
       "id": "ev-charger-ccs2-001",
       "name": "DC Fast Charger CCS2 60kW",
       "context_url": "https://schema.beckn.org/core/v2/context.jsonld",
-      "type": "beckn:EvChargingStation",
+      "type": "EvChargingStation",
       "catalog_id": "ev-charging-network-blr",
       "provider_id": "ecopower-charging",
       "bpp_id": "bpp-ev-charging.example.com",
@@ -105,7 +105,7 @@
       "id": "ev-charger-ccs2-002",
       "name": "DC Fast Charger CCS2 120kW",
       "context_url": "https://schema.beckn.org/core/v2/context.jsonld",
-      "type": "beckn:EvChargingStation",
+      "type": "EvChargingStation",
       "catalog_id": "ev-charging-network-blr",
       "provider_id": "ecopower-charging",
       "bpp_id": "bpp-ev-charging.example.com",
@@ -123,7 +123,7 @@
       "id": "ev-charger-chademo-001",
       "name": "DC Fast Charger CHAdeMO 50kW",
       "context_url": "https://schema.beckn.org/core/v2/context.jsonld",
-      "type": "beckn:EvChargingStation",
+      "type": "EvChargingStation",
       "catalog_id": "ev-charging-network-blr",
       "provider_id": "ecopower-charging",
       "bpp_id": "bpp-ev-charging.example.com",
@@ -141,7 +141,7 @@
       "id": "solar-charger-ccs2-001",
       "name": "Solar Powered Charger CCS2 50kW",
       "context_url": "https://schema.beckn.org/solar/v1/context.jsonld",
-      "type": "beckn:SolarChargingStation",
+      "type": "SolarChargingStation",
       "catalog_id": "solar-charging-network-blr",
       "provider_id": "solar-energy-co",
       "bpp_id": "bpp-solar.example.com",
@@ -160,7 +160,7 @@
       "id": "solar-charger-ccs2-002",
       "name": "Solar Powered Charger CCS2 100kW",
       "context_url": "https://schema.beckn.org/solar/v1/context.jsonld",
-      "type": "beckn:SolarChargingStation",
+      "type": "SolarChargingStation",
       "catalog_id": "solar-charging-network-blr",
       "provider_id": "solar-energy-co",
       "bpp_id": "bpp-solar.example.com",
@@ -179,7 +179,7 @@
       "id": "home-charger-type2-001",
       "name": "Home Charger Type 2 7kW",
       "context_url": "https://schema.beckn.org/core/v2/context.jsonld",
-      "type": "beckn:HomeCharger",
+      "type": "HomeCharger",
       "catalog_id": "home-charging-network-mum",
       "provider_id": "home-charge-india",
       "bpp_id": "bpp-home-charging.example.com",
@@ -197,7 +197,7 @@
       "id": "home-charger-type2-002",
       "name": "Home Charger Type 2 11kW",
       "context_url": "https://schema.beckn.org/core/v2/context.jsonld",
-      "type": "beckn:HomeCharger",
+      "type": "HomeCharger",
       "catalog_id": "home-charging-network-mum",
       "provider_id": "home-charge-india",
       "bpp_id": "bpp-home-charging.example.com",

@@ -1,9 +1,11 @@
 package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
 
@@ -19,12 +21,12 @@ public class DiscoverResponse {
 
     @NotNull(message = "Context is required")
     @Valid
-    @JsonProperty("context")
+    @JsonProperty(BecknFields.CONTEXT)
     private Context context;
 
     @NotNull(message = "Message is required")
     @Valid
-    @JsonProperty("message")
+    @JsonProperty(BecknFields.MESSAGE)
     private ResponseMessage message;
 
     // No root-level catalogs in new schema; catalogs live under message
@@ -72,16 +74,25 @@ public class DiscoverResponse {
     }
 
     /**
-     * Response Message DTO containing catalogs
+     * Response Message DTO containing catalogs and inReplyTo.
      */
     public static class ResponseMessage {
-        @JsonProperty("catalogs")
+        @JsonProperty(BecknFields.CATALOGS)
         private List<Catalog> catalogs;
+
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @JsonProperty("inReplyTo")
+        private InReplyTo inReplyTo;
 
         public ResponseMessage() {}
 
         public ResponseMessage(List<Catalog> catalogs) {
             this.catalogs = catalogs;
+        }
+
+        public ResponseMessage(List<Catalog> catalogs, InReplyTo inReplyTo) {
+            this.catalogs = catalogs;
+            this.inReplyTo = inReplyTo;
         }
 
         public List<Catalog> getCatalogs() {
@@ -92,11 +103,61 @@ public class DiscoverResponse {
             this.catalogs = catalogs;
         }
 
+        public InReplyTo getInReplyTo() {
+            return inReplyTo;
+        }
+
+        public void setInReplyTo(InReplyTo inReplyTo) {
+            this.inReplyTo = inReplyTo;
+        }
+
         @Override
         public String toString() {
             return "ResponseMessage{" +
                     "catalogs=" + catalogs +
+                    ", inReplyTo=" + inReplyTo +
                     '}';
+        }
+    }
+
+    /**
+     * Identifies the discover request this response is replying to.
+     * Placed inside {@code message} per Beckn Protocol v2.0/v2.1 spec.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class InReplyTo {
+        @JsonProperty("messageId")
+        private String messageId;
+
+        @JsonProperty("digest")
+        private String digest;
+
+        public InReplyTo() {}
+
+        public InReplyTo(String messageId, String digest) {
+            this.messageId = messageId;
+            this.digest = digest;
+        }
+
+        public String getMessageId() {
+            return messageId;
+        }
+
+        public void setMessageId(String messageId) {
+            this.messageId = messageId;
+        }
+
+        public String getDigest() {
+            return digest;
+        }
+
+        public void setDigest(String digest) {
+            this.digest = digest;
+        }
+
+        @Override
+        public String toString() {
+            return "InReplyTo{messageId='" + messageId + "', digest='" + digest + "'}";
         }
     }
 }

@@ -8,6 +8,7 @@ import org.beckn.catalogpublish.indexing.EsIndexManager;
 import org.beckn.catalogpublish.indexing.bulk.BulkIndexResult;
 import org.beckn.catalogpublish.indexing.bulk.BulkIndexService;
 import org.beckn.catalogpublish.indexing.document.CatalogDocumentAssembler;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,7 +71,7 @@ public class EsFailureConsumer {
         try {
             msg = mapper.readValue(json, EsFailureMessage.class);
         } catch (Exception e) {
-            log.error("es.failure.consumer.parse.error error={}", ErrorSanitizer.sanitize(e));
+            log.error("event={} reason=parse-error error={}", LogEvent.CONSUMER_ERROR, ErrorSanitizer.sanitize(e));
             return; // commit offset — malformed message cannot be retried
         }
 
@@ -85,16 +86,16 @@ public class EsFailureConsumer {
             BulkIndexResult result = bulkIndexService.index(msg.indexKey(), List.of(doc));
 
             if (result.hasFailures()) {
-                log.warn("es.failure.consumer.retry.failed itemId={} attempt={}",
-                        msg.itemId(), msg.attempt());
+                log.warn("event={} reason=retry-failed itemId={} attempt={}",
+                        LogEvent.ES_FAILED, msg.itemId(), msg.attempt());
                 failurePublisher.republish(msg);
             } else {
                 metrics.incrementRecovered();
-                log.info("es.failure.consumer.recovered itemId={}", msg.itemId());
+                log.info("event={} itemId={}", LogEvent.ES_INDEXED, msg.itemId());
             }
         } catch (Exception e) {
-            log.error("es.failure.consumer.error itemId={} error={}",
-                    msg.itemId(), ErrorSanitizer.sanitize(e));
+            log.error("event={} itemId={} error={}",
+                    LogEvent.ES_FAILED, msg.itemId(), ErrorSanitizer.sanitize(e));
             failurePublisher.republish(msg);
         }
     }
@@ -103,12 +104,12 @@ public class EsFailureConsumer {
 
     private void routeToDlq(EsFailureMessage msg) {
         metrics.incrementPermanentFailure();
-        log.error("es.failure.permanent itemId={} bppId={} attempts={}", msg.itemId(), msg.bppId(), msg.attempt());
+        log.error("event={} reason=permanent-failure itemId={} bppId={} attempts={}", LogEvent.ES_FAILED, msg.itemId(), msg.bppId(), msg.attempt());
         try {
             kafka.send(finalDlqTopic, msg.bppId(), mapper.writeValueAsString(msg));
         } catch (Exception e) {
-            log.error("es.failure.dlq.publish.failed itemId={} error={}",
-                    msg.itemId(), ErrorSanitizer.sanitize(e));
+            log.error("event={} reason=dlq-publish-failed itemId={} error={}",
+                    LogEvent.KAFKA_FAILED, msg.itemId(), ErrorSanitizer.sanitize(e));
         }
     }
 }

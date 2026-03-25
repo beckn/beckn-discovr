@@ -11,6 +11,7 @@ import org.beckn.catalogpublish.messaging.FailedMessagePublisher;
 import org.beckn.catalogpublish.messaging.ResponsePublisher;
 import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.util.CorrelationContext;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
@@ -69,35 +70,35 @@ public class CatalogPublishConsumer {
         try {
             int rawByteLen = payloadSizeBytes(raw);
             if (rawByteLen > maxPayloadSize) {
-                log.warn("msg.rejected.oversized op={} topic={} offset={} sizeBytes={} limit={}",
-                        operation, topic, offset, rawByteLen, maxPayloadSize);
+                log.warn("event={} op={} topic={} offset={} sizeBytes={} limit={}",
+                        LogEvent.CONSUMER_REJECTED, operation, topic, offset, rawByteLen, maxPayloadSize);
                 rejectAndAck(raw, "Payload too large", operation, ack);
                 return;
             }
 
             correlationContext.populateFallback();
-            log.info("msg.received op={} topic={} offset={}", operation, topic, offset);
+            log.info("event={} op={} topic={} offset={}", LogEvent.CONSUMER_RECEIVED, operation, topic, offset);
 
             PublishOutcome outcome = handler.apply(raw);
             List<ProcessingResult> results = outcome.results();
 
             if (!results.isEmpty() && results.stream().allMatch(r -> r.status() == ProcessingStatus.INTERNAL_ERROR)) {
-                log.error("msg.all-internal-error op={} topic={} offset={} count={} — retrying",
-                        operation, topic, offset, results.size());
+                log.error("event={} op={} topic={} offset={} count={} — retrying",
+                        LogEvent.CONSUMER_ERROR, operation, topic, offset, results.size());
                 throw new RuntimeException("All " + results.size() + " catalog(s) returned INTERNAL_ERROR");
             }
 
             responsePublisher.publishResponse(outcome.context().contextNode(), results);
             metrics.recordMessageSuccess(operation);
-            log.info("msg.processed op={} topic={} offset={} results={}", operation, topic, offset, results.size());
+            log.info("event={} op={} topic={} offset={} results={}", LogEvent.CONSUMER_PROCESSED, operation, topic, offset, results.size());
             ack.acknowledge();
 
         } catch (PayloadParseException | ValidationException e) {
-            log.warn("msg.rejected op={} topic={} offset={} reason={}", operation, topic, offset,
+            log.warn("event={} op={} topic={} offset={} reason={}", LogEvent.CONSUMER_REJECTED, operation, topic, offset,
                     ErrorSanitizer.sanitize(e));
             rejectAndAck(raw, ErrorSanitizer.sanitize(e), operation, ack);
         } catch (Exception e) {
-            log.error("msg.failed op={} topic={} offset={} error={}", operation, topic, offset,
+            log.error("event={} op={} topic={} offset={} error={}", LogEvent.CONSUMER_ERROR, operation, topic, offset,
                     ErrorSanitizer.sanitize(e));
             throw e;
         } finally {

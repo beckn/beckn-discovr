@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.fge.jsonpatch.mergepatch.JsonMergePatch;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.exception.PayloadMergeException;
 import org.beckn.catalogpublish.util.DenormalizedPayloadUtils;
 import org.springframework.stereotype.Service;
@@ -51,7 +52,7 @@ public class PayloadMergeService {
         ArrayNode offers = getOffersArray(payload);
         Map<String, Integer> index = new HashMap<>(Math.max(offers.size() * 2, 4));
         for (int i = 0; i < offers.size(); i++) {
-            String id = offers.get(i).path("beckn:id").asText(null);
+            String id = offers.get(i).path(BecknFields.ID).asText(null);
             if (id != null)
                 index.put(id, i);
         }
@@ -140,34 +141,32 @@ public class PayloadMergeService {
     }
 
     private JsonNode rewrapItemInDenormalized(JsonNode denorm, JsonNode mergedItem) {
-        // denorm is freshly parsed from the DB string inside mergeItemPayload — we own
-        // it.
-        // Mutate the items array in-place; no deep copy of the catalog wrapper needed.
+        // denorm is freshly parsed from the DB string inside mergeItemPayload — we own it.
+        // Mutate the resources array in-place; no deep copy of the catalog wrapper needed.
         JsonNode catalogsNode = denorm.path("catalogs");
         if (catalogsNode.isArray() && !catalogsNode.isEmpty()) {
             ObjectNode catalog = (ObjectNode) catalogsNode.get(0);
-            catalog.set("beckn:items", objectMapper.createArrayNode().add(mergedItem));
+            catalog.set(BecknFields.RESOURCES, objectMapper.createArrayNode().add(mergedItem));
             return denorm;
         }
         // Fallback: malformed denorm — build minimal structure from scratch.
         ObjectNode catalog = objectMapper.createObjectNode();
-        catalog.set("beckn:items", objectMapper.createArrayNode().add(mergedItem));
+        catalog.set(BecknFields.RESOURCES, objectMapper.createArrayNode().add(mergedItem));
         return objectMapper.createObjectNode()
                 .set("catalogs", objectMapper.createArrayNode().add(catalog));
     }
 
     private ArrayNode getOffersArray(JsonNode payload) {
-        JsonNode cat = payload.path("catalogs").path(0);
-        // path(0) returns MissingNode (not ObjectNode) when catalogs is absent or
-        // empty.
+        JsonNode cat = payload.path(BecknFields.CATALOGS).path(0);
+        // path(0) returns MissingNode (not ObjectNode) when catalogs is absent or empty.
         // Casting MissingNode → ObjectNode throws ClassCastException; guard explicitly.
         if (cat.isMissingNode() || !(cat instanceof ObjectNode catObj)) {
             throw new IllegalStateException("payload missing catalogs[0] — cannot merge offer");
         }
-        JsonNode offers = catObj.path("beckn:offers");
+        JsonNode offers = catObj.path(BecknFields.OFFERS);
         if (!offers.isArray()) {
             ArrayNode arr = objectMapper.createArrayNode();
-            catObj.set("beckn:offers", arr);
+            catObj.set(BecknFields.OFFERS, arr);
             return arr;
         }
         return (ArrayNode) offers;

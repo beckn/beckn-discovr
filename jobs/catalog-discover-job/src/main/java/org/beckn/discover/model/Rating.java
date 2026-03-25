@@ -13,17 +13,23 @@ import jakarta.validation.constraints.Min;
  */
 public class Rating {
 
+    @JsonProperty("@context")
+    private String context;
+
     @NotBlank(message = "@type is required")
     @JsonProperty("@type")
     private String type;
 
+    @JsonProperty("reviewText")
+    private String reviewText;
+
     @DecimalMin(value = "0.0", message = "Rating value must be at least 0.0")
     @DecimalMax(value = "5.0", message = "Rating value must be at most 5.0")
-    @JsonProperty("beckn:ratingValue")
+    @JsonProperty("ratingValue")
     private Double ratingValue;
 
     @Min(value = 0, message = "Rating count must be at least 0")
-    @JsonProperty("beckn:ratingCount")
+    @JsonProperty("ratingCount")
     private Integer ratingCount;
 
     // Default constructor
@@ -42,6 +48,9 @@ public class Rating {
     }
 
     // Getters and Setters
+    public String getContext() { return context; }
+    public void setContext(String context) { this.context = context; }
+
     public String getType() {
         return type;
     }
@@ -49,6 +58,9 @@ public class Rating {
     public void setType(String type) {
         this.type = type;
     }
+
+    public String getReviewText() { return reviewText; }
+    public void setReviewText(String reviewText) { this.reviewText = reviewText; }
 
     public Double getRatingValue() {
         return ratingValue;

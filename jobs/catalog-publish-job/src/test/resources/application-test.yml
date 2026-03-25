@@ -22,13 +22,13 @@ app:
     topics:
       ingestion-requests: catalog.v2.upload.requests
       catalog-events: catalog.v2.catalog.events
-      responses: catalog.responses
+      responses: catalog.discovery.response
       failed: catalog.v2.failed
 
   catalog:
     max-payload-size: 5242880
     validation-enabled: false
-    schema-file: catalog-upload-request-schema-v7.json
+    schema-url: https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/draft/api/v2.0.0/beckn.yaml
     parallel-catalog-threshold: 1
 
   http:

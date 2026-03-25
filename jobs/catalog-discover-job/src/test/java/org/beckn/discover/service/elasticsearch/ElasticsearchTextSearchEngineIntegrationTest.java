@@ -10,7 +10,7 @@ import co.elastic.clients.transport.rest_client.RestClientTransport;
 import org.apache.http.HttpHost;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.model.Catalog;
-import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Resource;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.response.CatalogProcessor;
 import org.elasticsearch.client.RestClient;
@@ -111,15 +111,15 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         assertThat(catalog.getId()).isEqualTo("cat-ev-001");
         assertThat(catalog.getBppId()).isEqualTo("bpp-ecopower");
         assertThat(catalog.getBppUri()).isEqualTo("https://bpp.ecopower.com");
-        assertThat(catalog.getItems()).hasSize(1);
+        assertThat(catalog.getResources()).hasSize(1);
 
-        Item item = catalog.getItems().get(0);
-        assertThat(item.getId()).isEqualTo("ev-charger-001");
-        assertThat(item.getDescriptor().getName()).isEqualTo("DC Fast Charger CCS2 60kW");
-        assertThat(item.getDescriptor().getShortDesc()).isEqualTo("60kW DC fast charger for EV");
-        assertThat(item.getProvider().getId()).isEqualTo("ecopower-charging");
-        assertThat(item.getProvider().getDescriptor().getName()).isEqualTo("EcoPower Charging Pvt Ltd");
-        assertThat(item.getIsActive()).isTrue();
+        Resource resource = catalog.getResources().get(0);
+        assertThat(resource.getId()).isEqualTo("ev-charger-001");
+        assertThat(resource.getDescriptor().getName()).isEqualTo("DC Fast Charger CCS2 60kW");
+        assertThat(resource.getDescriptor().getShortDesc()).isEqualTo("60kW DC fast charger for EV");
+        assertThat(resource.getProvider().getId()).isEqualTo("ecopower-charging");
+        assertThat(resource.getProvider().getDescriptor().getName()).isEqualTo("EcoPower Charging Pvt Ltd");
+        assertThat(resource.getIsActive()).isTrue();
     }
 
     /**
@@ -136,9 +136,9 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         Catalog catalog = catalogs.get(0);
         assertThat(catalog.getId()).isEqualTo("cat-ev-001");
         assertThat(catalog.getBppId()).isEqualTo("bpp-ecopower");
-        assertThat(catalog.getItems()).hasSize(2);
-        assertThat(catalog.getItems())
-                .extracting(Item::getId)
+        assertThat(catalog.getResources()).hasSize(2);
+        assertThat(catalog.getResources())
+                .extracting(Resource::getId)
                 .containsExactlyInAnyOrder("ev-charger-001", "ev-charger-002");
     }
 
@@ -161,18 +161,18 @@ class ElasticsearchTextSearchEngineIntegrationTest {
 
     /**
      * "GreenVolt" appears ONLY in ev-charger-003. Verifies that item_attributes
-     * from the ES flat doc are correctly mapped to the Attributes model.
+     * from the ES flat doc are correctly mapped to the resourceAttributes model.
      */
     @Test
-    void search_matchingItem_itemAttributesPopulated() throws Exception {
+    void search_matchingItem_resourceAttributesPopulated() throws Exception {
         List<Catalog> catalogs = searchEngine.search("GreenVolt", queryRequest("tx-4"));
 
         assertThat(catalogs).hasSize(1);
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getId()).isEqualTo("ev-charger-003");
-        assertThat(item.getItemAttributes()).isNotNull();
-        assertThat(item.getItemAttributes().getAttribute("connectorType")).isEqualTo("CHAdeMO");
-        assertThat(item.getItemAttributes().getAttribute("maxPowerKW")).isEqualTo(50);
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getId()).isEqualTo("ev-charger-003");
+        assertThat(resource.getResourceAttributes()).isNotNull();
+        assertThat(resource.getResourceAttributes().getAttribute("connectorType")).isEqualTo("CHAdeMO");
+        assertThat(resource.getResourceAttributes().getAttribute("maxPowerKW")).isEqualTo(50);
     }
 
     /**
@@ -183,13 +183,13 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     void search_matchingItem_ratingAndCategoryPopulated() throws Exception {
         List<Catalog> catalogs = searchEngine.search("CCS2", queryRequest("tx-5"));
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getRating()).isNotNull();
-        assertThat(item.getRating().getRatingValue()).isEqualTo(4.5);
-        assertThat(item.getRating().getRatingCount()).isEqualTo(120);
-        assertThat(item.getCategory()).isNotNull();
-        assertThat(item.getCategory().getCodeValue()).isEqualTo("EV_CHARGING");
-        assertThat(item.getCategory().getName()).isEqualTo("EV Charging");
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getRating()).isNotNull();
+        assertThat(resource.getRating().getRatingValue()).isEqualTo(4.5);
+        assertThat(resource.getRating().getRatingCount()).isEqualTo(120);
+        assertThat(resource.getCategory()).isNotNull();
+        assertThat(resource.getCategory().getCodeValue()).isEqualTo("EV_CHARGING");
+        assertThat(resource.getCategory().getName()).isEqualTo("EV Charging");
     }
 
     @Test

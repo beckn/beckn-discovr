@@ -1,0 +1,31 @@
+spring:
+  kafka:
+    bootstrap-servers: kafka:9092
+
+# HTTP Client Configuration
+http:
+  client:
+    timeout: 30000
+    connection-timeout: 10000
+  retry:
+    max-attempts: 3
+    initial-delay: 1000
+    max-delay: 10000
+    multiplier: 2.0
+
+# Topics Configuration
+topics:
+  input: discovr.discover.out.responses
+  dlt: discovr.dispatcher.dlt.responses
+
+# HTTP Signature Configuration
+signing:
+  enabled: false
+  key-id-suffix: ""
+  expiry-seconds: 3600
+  private-key: ""
+  subscriber-id: ""
+
+logging:
+  level:
+    org.beckn.seeker: DEBUG

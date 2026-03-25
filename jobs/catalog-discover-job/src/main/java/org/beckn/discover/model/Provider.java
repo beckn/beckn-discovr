@@ -4,39 +4,45 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * Provider DTO
- * 
- * Represents a provider that offers items in the catalog.
+ * Provider DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
  */
 public class Provider {
 
-    @NotBlank(message = "beckn:id is required")
-    @JsonProperty("beckn:id")
+    @NotBlank(message = "id is required")
+    @JsonProperty(BecknFields.ID)
     private String id;
 
-    @NotNull(message = "beckn:descriptor is required")
+    @NotNull(message = "descriptor is required")
     @Valid
-    @JsonProperty("beckn:descriptor")
+    @JsonProperty(BecknFields.DESCRIPTOR)
     private Descriptor descriptor;
 
-    @JsonProperty("beckn:validity")
+    @JsonProperty("validity")
     private TimePeriod validity;
 
-    @JsonProperty("beckn:locations")
+    @JsonProperty("locations")
     private List<Location> locations;
 
-    @JsonProperty("beckn:rateable")
+    @JsonProperty("rateable")
     private Boolean rateable;
 
-    @JsonProperty("beckn:rating")
+    @JsonProperty("rating")
     private Rating rating;
 
-    @JsonProperty("beckn:providerAttributes")
+    @JsonProperty("providerAttributes")
     private Attributes providerAttributes;
+
+    @JsonProperty("alerts")
+    private List<Map<String, Object>> alerts;
+
+    @JsonProperty("policies")
+    private List<Policy> policies;
 
     // Default constructor
     public Provider() {}
@@ -48,72 +54,35 @@ public class Provider {
     }
 
     // Getters and Setters
-    public String getId() {
-        return id;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public void setId(String id) {
-        this.id = id;
-    }
+    public Descriptor getDescriptor() { return descriptor; }
+    public void setDescriptor(Descriptor descriptor) { this.descriptor = descriptor; }
 
-    public Descriptor getDescriptor() {
-        return descriptor;
-    }
+    public TimePeriod getValidity() { return validity; }
+    public void setValidity(TimePeriod validity) { this.validity = validity; }
 
-    public void setDescriptor(Descriptor descriptor) {
-        this.descriptor = descriptor;
-    }
+    public List<Location> getLocations() { return locations; }
+    public void setLocations(List<Location> locations) { this.locations = locations; }
 
-    public TimePeriod getValidity() {
-        return validity;
-    }
+    public Boolean getRateable() { return rateable; }
+    public void setRateable(Boolean rateable) { this.rateable = rateable; }
 
-    public void setValidity(TimePeriod validity) {
-        this.validity = validity;
-    }
+    public Rating getRating() { return rating; }
+    public void setRating(Rating rating) { this.rating = rating; }
 
-    public List<Location> getLocations() {
-        return locations;
-    }
+    public Attributes getProviderAttributes() { return providerAttributes; }
+    public void setProviderAttributes(Attributes providerAttributes) { this.providerAttributes = providerAttributes; }
 
-    public void setLocations(List<Location> locations) {
-        this.locations = locations;
-    }
+    public List<Map<String, Object>> getAlerts() { return alerts; }
+    public void setAlerts(List<Map<String, Object>> alerts) { this.alerts = alerts; }
 
-    public Boolean getRateable() {
-        return rateable;
-    }
-
-    public void setRateable(Boolean rateable) {
-        this.rateable = rateable;
-    }
-
-    public Rating getRating() {
-        return rating;
-    }
-
-    public void setRating(Rating rating) {
-        this.rating = rating;
-    }
-
-    public Attributes getProviderAttributes() {
-        return providerAttributes;
-    }
-
-    public void setProviderAttributes(Attributes providerAttributes) {
-        this.providerAttributes = providerAttributes;
-    }
+    public List<Policy> getPolicies() { return policies; }
+    public void setPolicies(List<Policy> policies) { this.policies = policies; }
 
     @Override
     public String toString() {
-        return "Provider{" +
-                "id='" + id + '\'' +
-                ", descriptor=" + descriptor +
-                ", validity=" + validity +
-                ", locations=" + locations +
-                ", rateable=" + rateable +
-                ", rating=" + rating +
-                ", providerAttributes=" + providerAttributes +
-                '}';
+        return "Provider{id='" + id + "', descriptor=" + descriptor + '}';
     }
 }

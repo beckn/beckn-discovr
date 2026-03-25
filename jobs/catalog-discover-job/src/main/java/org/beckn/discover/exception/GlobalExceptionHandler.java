@@ -1,15 +1,12 @@
 package org.beckn.discover.exception;
 
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.UUID;
 
 import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.common.ErrorMessages;
+import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.beckn.discover.controller.DiscoveryController;
 import org.beckn.discover.model.AckResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -21,6 +18,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
  * Global exception handler — converts all unhandled exceptions into Beckn NACK responses.
@@ -44,49 +43,41 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    private static final java.util.regex.Pattern PATHS_PATTERN = java.util.regex.Pattern
-            .compile("\\(paths:\\s*([^)]+)\\)");
-    private static final java.util.regex.Pattern ERROR_PATH_PATTERN = java.util.regex.Pattern
-            .compile("\\$\\.([\\w.]+):");
-
     // ── Spring MVC infrastructure exceptions (malformed JSON, wrong method, …) ─
 
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(
             Exception ex, Object body, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-        return buildErrorResponse(ex, status, request);
+        return buildErrorResponse(ex, status);
     }
 
     // ── Application exceptions ─────────────────────────────────────────────────
 
     @ExceptionHandler({ SemanticSearchException.class })
     public ResponseEntity<Object> handleSemanticSearchFailure(SemanticSearchException ex, WebRequest request) {
-        log.error("semantic.search.provider.unavailable error={} cause={}", ex.getMessage(),
-                ex.getCause() != null ? ex.getCause().getMessage() : "none", ex);
-        String transactionId = extractTransactionId(ex, request);
-        String timestamp = ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-        AckResponse ackResponse = AckResponse.nack(transactionId, timestamp,
-                ErrorCodes.NET_INTERNAL_ERROR, "message.text_search", ErrorMessages.INTERNAL_SERVER_ERROR);
+        log.error(LogEvent.NACK_RESPONSE,
+                value("errorCode", ErrorCodes.NET_INTERNAL_ERROR),
+                value("error", ex.getMessage()),
+                value("cause", ex.getCause() != null ? ex.getCause().getMessage() : "none"),
+                ex);
+        AckResponse ackResponse = AckResponse.nack(ErrorCodes.NET_INTERNAL_ERROR, ErrorMessages.INTERNAL_SERVER_ERROR);
         return new ResponseEntity<>(ackResponse, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     @ExceptionHandler({ IllegalArgumentException.class })
-    public ResponseEntity<Object> handleBadRequest(Exception ex, WebRequest request) {
-        return buildErrorResponse(ex, HttpStatus.BAD_REQUEST, request);
+    public ResponseEntity<Object> handleBadRequest(Exception ex) {
+        return buildErrorResponse(ex, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler({ Exception.class })
-    public ResponseEntity<Object> handleInternal(Exception ex, WebRequest request) {
-        return buildErrorResponse(ex, HttpStatus.INTERNAL_SERVER_ERROR, request);
+    public ResponseEntity<Object> handleInternal(Exception ex) {
+        return buildErrorResponse(ex, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     // ── Shared builder ─────────────────────────────────────────────────────────
 
-    private ResponseEntity<Object> buildErrorResponse(Exception ex, HttpStatusCode status, WebRequest webRequest) {
-        String transactionId = extractTransactionId(ex, webRequest);
-        String timestamp = ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+    private ResponseEntity<Object> buildErrorResponse(Exception ex, HttpStatusCode status) {
         String code;
-        String paths;
         String message;
 
         if (ex instanceof ErrorResponseException ere) {
@@ -94,62 +85,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             Map<String, Object> props = pd.getProperties();
             code = props != null && props.containsKey("code") ? (String) props.get("code")
                     : ErrorCodes.INTERNAL_ERROR;
-            paths = props != null && props.containsKey("paths") ? (String) props.get("paths") : "server";
-            String txnId = props != null && props.containsKey("transactionId") ? (String) props.get("transactionId")
-                    : null;
-            if (txnId != null) transactionId = txnId;
             message = pd.getDetail();
         } else if (status == HttpStatus.BAD_REQUEST || ex instanceof IllegalArgumentException) {
             code = ErrorCodes.INVALID_REQUEST;
-            String field = extractInvalidFieldFromMessage(ex.getMessage());
-            paths = (field != null && !field.isEmpty()) ? field : "context.schema_context";
             message = ex.getMessage();
         } else {
             code = ErrorCodes.INTERNAL_ERROR;
-            paths = "server";
             message = ErrorMessages.INTERNAL_SERVER_ERROR;
         }
 
-        AckResponse ackResponse = AckResponse.nack(transactionId, timestamp, code, paths, message);
+        log.warn(LogEvent.NACK_RESPONSE,
+                value("errorCode", code),
+                value("httpStatus", status.value()),
+                value("error", ex.getMessage()));
+
+        AckResponse ackResponse = AckResponse.nack(code, message);
         return new ResponseEntity<>(ackResponse, status);
     }
 
-    /**
-     * Resolves the transaction ID for the NACK response.
-     *
-     * <p>Priority:</p>
-     * <ol>
-     *   <li>Request attribute {@value DiscoveryController#TRANSACTION_ID_ATTR} — set by the
-     *       controller early in the pipeline before any exception can be thrown.</li>
-     *   <li>Random UUID fallback when no attribute is available (e.g. errors before parsing).</li>
-     * </ol>
-     */
-    private String extractTransactionId(Exception ex, WebRequest webRequest) {
-        if (webRequest != null) {
-            Object attr = webRequest.getAttribute(DiscoveryController.TRANSACTION_ID_ATTR, WebRequest.SCOPE_REQUEST);
-            if (attr instanceof String s && !s.isBlank()) {
-                return s;
-            }
-        }
-        return UUID.randomUUID().toString();
-    }
-
-    private String extractInvalidFieldFromMessage(String msg) {
-        if (msg == null) return null;
-
-        java.util.regex.Matcher pathsMatcher = PATHS_PATTERN.matcher(msg);
-        if (pathsMatcher.find()) {
-            String pathsStr = pathsMatcher.group(1).trim();
-            String normalizedPath = pathsStr.replaceAll("^\\$\\.?", "").replaceAll("\\$\\.", "");
-            String[] paths = normalizedPath.split(",\\s*");
-            return paths[0].trim();
-        }
-
-        java.util.regex.Matcher errorPathMatcher = ERROR_PATH_PATTERN.matcher(msg);
-        if (errorPathMatcher.find()) {
-            return errorPathMatcher.group(1);
-        }
-
-        return null;
-    }
 }

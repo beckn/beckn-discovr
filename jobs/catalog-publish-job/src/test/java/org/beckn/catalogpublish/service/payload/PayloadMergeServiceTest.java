@@ -14,10 +14,10 @@ class PayloadMergeServiceTest {
 
     @Test
     void mergeItemPayload_patchOverwritesField() throws Exception {
-        String existing = "{\"catalogs\":[{\"beckn:items\":[{\"a\":1,\"b\":2}],\"beckn:offers\":[]}]}";
+        String existing = "{\"catalogs\":[{\"resources\":[{\"a\":1,\"b\":2}],\"offers\":[]}]}";
         JsonNode patch = mapper.createObjectNode().put("b", 99);
         JsonNode result = service.mergeItemPayload(existing, patch);
-        JsonNode item = result.path("catalogs").path(0).path("beckn:items").path(0);
+        JsonNode item = result.path("catalogs").path(0).path("resources").path(0);
         assertThat(item.path("a").asInt()).isEqualTo(1);
         assertThat(item.path("b").asInt()).isEqualTo(99);
     }
@@ -34,36 +34,36 @@ class PayloadMergeServiceTest {
     @Test
     void stripNulls_removesTopLevelNullField() {
         ObjectNode node = mapper.createObjectNode()
-                .put("beckn:id", "offer-1")
-                .putNull("beckn:someField");
+                .put("id", "offer-1")
+                .putNull("someField");
         JsonNode result = service.stripNulls(node);
-        assertThat(result.has("beckn:id")).isTrue();
-        assertThat(result.path("beckn:id").asText()).isEqualTo("offer-1");
-        assertThat(result.has("beckn:someField")).isFalse();
+        assertThat(result.has("id")).isTrue();
+        assertThat(result.path("id").asText()).isEqualTo("offer-1");
+        assertThat(result.has("someField")).isFalse();
     }
 
     @Test
     void stripNulls_removesNestedNullField() {
         ObjectNode nested = mapper.createObjectNode()
-                .put("schema:name", "EV Station")
-                .putNull("schema:description");
+                .put("name", "EV Station")
+                .putNull("description");
         ObjectNode node = mapper.createObjectNode()
-                .put("beckn:id", "item-1");
-        node.set("beckn:descriptor", nested);
+                .put("id", "item-1");
+        node.set("descriptor", nested);
         JsonNode result = service.stripNulls(node);
-        assertThat(result.path("beckn:id").asText()).isEqualTo("item-1");
-        assertThat(result.path("beckn:descriptor").path("schema:name").asText()).isEqualTo("EV Station");
-        assertThat(result.path("beckn:descriptor").has("schema:description")).isFalse();
+        assertThat(result.path("id").asText()).isEqualTo("item-1");
+        assertThat(result.path("descriptor").path("name").asText()).isEqualTo("EV Station");
+        assertThat(result.path("descriptor").has("description")).isFalse();
     }
 
     @Test
     void stripNulls_preservesNonNullFields() {
         ObjectNode node = mapper.createObjectNode()
-                .put("beckn:id", "offer-1")
-                .put("beckn:price", 100);
+                .put("id", "offer-1")
+                .put("price", 100);
         JsonNode result = service.stripNulls(node);
-        assertThat(result.path("beckn:id").asText()).isEqualTo("offer-1");
-        assertThat(result.path("beckn:price").asInt()).isEqualTo(100);
+        assertThat(result.path("id").asText()).isEqualTo("offer-1");
+        assertThat(result.path("price").asInt()).isEqualTo(100);
     }
 
     @Test
@@ -71,11 +71,11 @@ class PayloadMergeServiceTest {
         // Arrays are never recursed into — array elements are treated as
         // wholesale replacements, consistent with RFC 7396 array semantics.
         JsonNode node = mapper.readTree(
-                "{\"beckn:items\":[\"item-1\",\"item-2\"],\"beckn:nullField\":null}");
+                "{\"resourceIds\":[\"item-1\",\"item-2\"],\"nullField\":null}");
         JsonNode result = service.stripNulls(node);
-        assertThat(result.path("beckn:items").isArray()).isTrue();
-        assertThat(result.path("beckn:items").size()).isEqualTo(2);
-        assertThat(result.has("beckn:nullField")).isFalse();
+        assertThat(result.path("resourceIds").isArray()).isTrue();
+        assertThat(result.path("resourceIds").size()).isEqualTo(2);
+        assertThat(result.has("nullField")).isFalse();
     }
 
     @Test
@@ -88,68 +88,65 @@ class PayloadMergeServiceTest {
     @Test
     void stripNulls_doesNotModifyOriginalNode() {
         ObjectNode node = mapper.createObjectNode()
-                .put("beckn:id", "offer-1")
-                .putNull("beckn:toRemove");
+                .put("id", "offer-1")
+                .putNull("toRemove");
         service.stripNulls(node);
         // original must be unchanged — stripNulls works on a deep copy
-        assertThat(node.has("beckn:toRemove")).isTrue();
+        assertThat(node.has("toRemove")).isTrue();
     }
 
     // ── null-safe merge behaviour (the core upsert guarantee) ────────────────
 
     @Test
     void mergeItemPayload_nullFieldInPatch_doesNotDeleteExistingData() throws Exception {
-        // Stored item has beckn:id + descriptor with name + gps
-        String existing = "{\"catalogs\":[{\"beckn:items\":[{"
-                + "\"beckn:id\":\"item-1\","
-                + "\"beckn:descriptor\":{\"schema:name\":\"EV Station\"},"
+        // Stored item has id + descriptor with name + gps
+        String existing = "{\"catalogs\":[{\"resources\":[{"
+                + "\"id\":\"item-1\","
+                + "\"descriptor\":{\"name\":\"EV Station\"},"
                 + "\"gps\":\"12.34,56.78\""
-                + "}],\"beckn:offers\":[]}]}";
+                + "}],\"offers\":[]}]}";
 
-        // Incoming publish sets name to null and omits gps — neither should delete
-        // stored data
+        // Incoming publish sets name to null and omits gps — neither should delete stored data
         JsonNode itemPatch = mapper.readTree(
-                "{\"beckn:id\":\"item-1\",\"beckn:descriptor\":{\"schema:name\":null}}");
+                "{\"id\":\"item-1\",\"descriptor\":{\"name\":null}}");
         JsonNode strippedPatch = service.stripNulls(itemPatch);
         JsonNode result = service.mergeItemPayload(existing, strippedPatch);
 
-        JsonNode mergedItem = result.path("catalogs").path(0).path("beckn:items").path(0);
-        // beckn:id must be preserved
-        assertThat(mergedItem.path("beckn:id").asText()).isEqualTo("item-1");
-        // null schema:name was stripped → stored name is preserved
-        assertThat(mergedItem.path("beckn:descriptor").path("schema:name").asText()).isEqualTo("EV Station");
+        JsonNode mergedItem = result.path("catalogs").path(0).path("resources").path(0);
+        // id must be preserved
+        assertThat(mergedItem.path("id").asText()).isEqualTo("item-1");
+        // null name was stripped → stored name is preserved
+        assertThat(mergedItem.path("descriptor").path("name").asText()).isEqualTo("EV Station");
         // gps was absent in patch → preserved
         assertThat(mergedItem.path("gps").asText()).isEqualTo("12.34,56.78");
     }
 
     @Test
     void mergeOfferIntoPayload_nullFieldInOffer_doesNotDeleteExistingOfferData() throws Exception {
-        // Stored payload with one offer that has beckn:id + beckn:items link +
-        // descriptor
+        // Stored payload with one offer that has id + resourceIds link + descriptor
         JsonNode payload = mapper.readTree(
-                "{\"catalogs\":[{\"beckn:items\":[{\"beckn:id\":\"item-1\"}],"
-                        + "\"beckn:offers\":[{"
-                        + "\"beckn:id\":\"offer-1\","
-                        + "\"beckn:items\":[\"item-1\"],"
-                        + "\"beckn:descriptor\":{\"schema:name\":\"Offer One\"}"
+                "{\"catalogs\":[{\"resources\":[{\"id\":\"item-1\"}],"
+                        + "\"offers\":[{"
+                        + "\"id\":\"offer-1\","
+                        + "\"resourceIds\":[\"item-1\"],"
+                        + "\"descriptor\":{\"name\":\"Offer One\"}"
                         + "}]}]}");
 
-        // Incoming offer update: updates name to null (accidentally) — ID link must be
-        // preserved
+        // Incoming offer update: updates name to null (accidentally) — ID link must be preserved
         JsonNode incomingOffer = mapper.readTree(
-                "{\"beckn:id\":\"offer-1\",\"beckn:descriptor\":{\"schema:name\":null}}");
+                "{\"id\":\"offer-1\",\"descriptor\":{\"name\":null}}");
         JsonNode strippedOffer = service.stripNulls(incomingOffer);
 
         service.mergeOfferIntoPayload(payload, strippedOffer, "offer-1",
                 service.buildOfferIndex(payload));
 
-        JsonNode mergedOffer = payload.path("catalogs").path(0).path("beckn:offers").path(0);
-        // beckn:id must be preserved
-        assertThat(mergedOffer.path("beckn:id").asText()).isEqualTo("offer-1");
-        // beckn:items link must be preserved — not deleted by null name field
-        assertThat(mergedOffer.path("beckn:items").isArray()).isTrue();
-        assertThat(mergedOffer.path("beckn:items").size()).isEqualTo(1);
+        JsonNode mergedOffer = payload.path("catalogs").path(0).path("offers").path(0);
+        // id must be preserved
+        assertThat(mergedOffer.path("id").asText()).isEqualTo("offer-1");
+        // resourceIds link must be preserved — not deleted by null name field
+        assertThat(mergedOffer.path("resourceIds").isArray()).isTrue();
+        assertThat(mergedOffer.path("resourceIds").size()).isEqualTo(1);
         // null name was stripped → stored name is preserved
-        assertThat(mergedOffer.path("beckn:descriptor").path("schema:name").asText()).isEqualTo("Offer One");
+        assertThat(mergedOffer.path("descriptor").path("name").asText()).isEqualTo("Offer One");
     }
 }
