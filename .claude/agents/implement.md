@@ -36,13 +36,21 @@ Read first. Read every file you will touch or depend on. Find how similar things
 - `var` where type is obvious.
 - Text blocks for multiline SQL/JSON.
 
-### 3. Beckn Protocol v2.0
-- Context fields: `transactionId`, `messageId`, `bapId`, `bapUri`, `bppId`, `bppUri`, `networkId` (String).
-- Catalog fields: no `beckn:` prefix — `id`, `descriptor`, `items`, `offers`, `provider`, `itemAttributes`.
-- ACK: `{"status":"ACK"}` — no transaction_id, no timestamp.
+### 3. Beckn Protocol v2.1
+- Context fields: `action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId`, `networkId` (String — **context only, not on resources**), `timestamp`, `transactionId`, `version` (const `"2.0.0"`), `ttl`, `try`, `lineage`. No `domain`, `schemaContext` in context.
+- Resource fields: `@type: "beckn:Resource"`, `id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`. **No `items` array — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.**
+- Offer fields: `@type: "beckn:Offer"`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`).
+- ACK: `{"status":"ACK"}`.
 - NACK: `{"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}`.
 - HTTP 409 = AckNoCallback — log and skip, not an error.
-- on_discover: `{"context":{...,"action":"on_discover"},"message":{"catalogs":[...]}}`.
+- Action values: `discover`, `on_discover`, `catalog/publish`, `catalog/on_publish`.
+- on_discover: `{"context":{...,"action":"on_discover"},"message":{"catalogs":[{..."resources":[...],"offers":[...]}]}}`.
+
+### 3a. Logging
+- Use `LogEvent` constants from `logging/LogEvent.java` — no hardcoded log strings.
+- Use `BecknMdcContext.populate(contextNode)` at entry points — MDC auto-included in JSON logs.
+- Log levels: DEBUG=internal, INFO=milestones, WARN=validation/retry, ERROR=unrecoverable.
+- On errors: include `value("requestBody", truncate(body, 2000))` for debugging.
 
 ### 4. Security
 - Parameterized SQL always — no concatenation.
