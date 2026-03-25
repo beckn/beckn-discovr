@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * branches to reject the payload — validation fails for mixed payloads.</p>
  */
 @TestPropertySource(properties = {
-    "discovery.schema.url=file:///Users/manju/Documents/Projects/beckn/protocol-specifications-v2/api/v2.0.0/beckn.yaml"
+    "discovery.schema.url=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/draft/api/v2.0.0/beckn.yaml"
 })
 class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
 

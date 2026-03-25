@@ -119,8 +119,8 @@
               }
             },
             "resourceAttributes": {
-              "context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
-              "type": "ChargingService",
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
+              "@type": "ChargingService",
               "connectorType": "CCS2",
               "maxPowerKW": 60,
               "minPowerKW": 5,
@@ -215,8 +215,8 @@
               }
             },
             "resourceAttributes": {
-              "context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
-              "type": "ChargingService",
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
+              "@type": "ChargingService",
               "connectorType": "CCS2",
               "maxPowerKW": 120,
               "minPowerKW": 10,
@@ -312,8 +312,8 @@
               }
             },
             "resourceAttributes": {
-              "context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
-              "type": "ChargingService",
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
+              "@type": "ChargingService",
               "connectorType": "Type2",
               "maxPowerKW": 22,
               "minPowerKW": 3,
