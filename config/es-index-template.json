@@ -21,6 +21,16 @@
         "catalog_type":       { "type": "keyword" },
         "catalog_name":       { "type": "text", "fields": { "raw": { "type": "keyword" } } },
         "catalog_images":     { "type": "keyword" },
+        "catalog_validity": {
+          "type": "object",
+          "properties": {
+            "@type":     { "type": "keyword" },
+            "startDate": { "type": "date" },
+            "endDate":   { "type": "date" },
+            "startTime": { "type": "keyword" },
+            "endTime":   { "type": "keyword" }
+          }
+        },
         "item_id":            { "type": "keyword" },
         "item_context":       { "type": "keyword" },
         "item_type":          { "type": "keyword" },
