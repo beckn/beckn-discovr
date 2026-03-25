@@ -124,16 +124,16 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
         @Test
         void postDiscoverWithMissingTransactionIdReturnsSuccess() throws Exception {
-                // Note: transaction_id is optional in the schema, so this passes validation.
-                // POST is async — returns ACK (transaction_id will be null/absent).
+                // Context V2.0 requires transactionId — a request missing it fails schema validation.
                 String payload = readFixture("invalid_missing_transaction_id.json");
 
                 ResultActions result = mockMvc.perform(post("/beckn/discover")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
-                result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                result.andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"));
         }
 
         @Test

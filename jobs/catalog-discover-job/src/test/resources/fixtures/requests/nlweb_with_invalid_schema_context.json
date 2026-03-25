@@ -1,22 +1,21 @@
 {
   "context": {
-    "domain": "beckn.one:mobility:ev-charging:*",
-    "action": "beckn/discover",
+    "action": "discover",
     "version": "2.0.0",
     "messageId": "550e8400-e29b-41d4-a716-446655440000",
     "transactionId": "a9aaecca-10b7-4d19-b640-b047a7c62196",
     "bapId": "example-bap.com",
     "bapUri": "https://example-bap.com",
-    "timestamp": "2024-01-15T10:30:00Z",
-    "schemaContext": [
-      "not-a-url",
-      "random text",
-      "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"
-    ]
+    "timestamp": "2024-01-15T10:30:00Z"
   },
   "message": {
     "intent": {
-      "textSearch": "ev charging stations"
+      "textSearch": "ev charging stations",
+      "schemaContext": [
+        "not-a-url",
+        "random text",
+        "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"
+      ]
     }
   }
 }

@@ -145,7 +145,7 @@ class SeekerNotifierIntegrationTest {
           "context": {
             "messageId": "msg-456",
             "bppUri": "https://bpp.example.com",
-            "action": "on_catalog_publish"
+            "action": "catalog/on_publish"
           },
           "catalog": {
             "providers": []

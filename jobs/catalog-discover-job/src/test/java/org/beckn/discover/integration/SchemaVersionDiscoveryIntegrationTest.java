@@ -174,18 +174,17 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
         ctx.setMessageId(UUID.randomUUID().toString());
         ctx.setBapId("bap.test.example.com");
         ctx.setBapUri("https://bap.test.example.com/callback");
-        ctx.setDomain("beckn.one:mobility:ev-charging:*");
         ctx.setAction("discover");
         ctx.setVersion("2.0.0");
         ctx.setTimestamp(OffsetDateTime.of(2026, 3, 22, 10, 0, 0, 0, ZoneOffset.UTC));
         ctx.setNetworkId("bap.net/ev-charging");
-        if (schemaContextUrl != null) {
-            ctx.setSchemaContext(List.of(schemaContextUrl));
-        }
 
         DiscoverRequest request = new DiscoverRequest();
         request.setContext(ctx);
         request.setFilters("$.catalogs[*].resources[*]");
+        if (schemaContextUrl != null) {
+            request.getMessage().getIntent().setSchemaContext(List.of(schemaContextUrl));
+        }
         return request;
     }
 

@@ -1,21 +1,20 @@
 {
   "context": {
-    "domain": "beckn.one:retail:food:*",
-    "action": "beckn/discover",
+    "action": "discover",
     "version": "2.0.0",
     "bapId": "test.bap.com",
     "bapUri": "https://test.bap.com",
     "transactionId": "550e8400-e29b-41d4-a716-446655440003",
     "messageId": "660e8400-e29b-41d4-a716-446655440003",
     "timestamp": "2024-01-15T10:00:00Z",
-    "ttl": "PT30S",
-    "schemaContext": [
-      "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/FoodService/v1/context.jsonld"
-    ]
+    "ttl": "PT30S"
   },
   "message": {
     "intent": {
-      "textSearch": "ev charging stations"
+      "textSearch": "ev charging stations",
+      "schemaContext": [
+        "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/FoodService/v1/context.jsonld"
+      ]
     }
   }
 }

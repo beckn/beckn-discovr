@@ -41,7 +41,7 @@ public class HttpService {
     private static final String ON_PUBLISH_ENDPOINT = "/catalog/on_publish";
 
     private static final String ACTION_ON_DISCOVER = "on_discover";
-    private static final String ACTION_ON_CATALOG_PUBLISH = "on_catalog_publish";
+    private static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
 
     /**
      * Sends the callback response to the appropriate endpoint (BAP or BPP).

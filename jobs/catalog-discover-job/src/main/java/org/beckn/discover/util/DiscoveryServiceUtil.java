@@ -62,12 +62,20 @@ public final class DiscoveryServiceUtil {
 
     /** Single pass over context schema URLs to extract both types and base URLs. */
     public static SchemaContextParts extractSchemaContextParts(Context context) {
-        if (context == null || isNullOrEmpty(context.getSchemaContext())) {
+        if (context == null) {
+            return new SchemaContextParts(Collections.emptyList(), Collections.emptyList());
+        }
+        return extractSchemaContextParts(context.getSchemaContext());
+    }
+
+    /** Single pass over a raw URL list to extract both type fragments and base URLs. */
+    public static SchemaContextParts extractSchemaContextParts(List<String> rawUrls) {
+        if (isNullOrEmpty(rawUrls)) {
             return new SchemaContextParts(Collections.emptyList(), Collections.emptyList());
         }
         HashSet<String> distinctTypes = new HashSet<>();
         HashSet<String> distinctUrls = new HashSet<>();
-        for (String rawUrl : context.getSchemaContext()) {
+        for (String rawUrl : rawUrls) {
             String base = extractBaseUrl(rawUrl);
             String type = extractFragment(rawUrl);
             if (base != null && !base.isBlank()) {

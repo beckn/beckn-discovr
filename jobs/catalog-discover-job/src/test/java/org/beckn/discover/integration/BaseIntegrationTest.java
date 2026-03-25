@@ -133,16 +133,11 @@ public abstract class BaseIntegrationTest {
         context.setMessageId(messageId);
         context.setBapId("https://evcharging-bap.example.com");
         context.setBapUri("https://evcharging-bap.example.com/callback");
-        context.setDomain("beckn.one:mobility:ev-charging:*");
         context.setAction("discover");
         context.setVersion("2.0.0");
-        context.setCountry("IND");
-        context.setCity("std:BLR");
         context.setTtl("PT10M");
         context.setTimestamp(OffsetDateTime.of(2025, 8, 14, 10, 30, 0, 0, ZoneOffset.UTC));
         context.setNetworkId("bap.net/ev-charging");
-        context.setSchemaContext(java.util.List.of(
-                "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"));
         return context;
     }
 

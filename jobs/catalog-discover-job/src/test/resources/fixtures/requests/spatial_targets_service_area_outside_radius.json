@@ -1,16 +1,10 @@
 {
   "context": {
-    "domain": "beckn.one:mobility:ev-charging:*",
-    "action": "beckn/discover",
+    "action": "discover",
     "version": "2.0.0",
-    "country": "IND",
-    "city": "std:BLR",
     "bapId": "https://evcharging-bap.example.com",
     "bapUri": "https://evcharging-bap.example.com/callback",
     "networkId": "bap.net/ev-charging",
-    "schemaContext": [
-      "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"
-    ],
     "transactionId": "c1d2e3f4-a5b6-7890-cdef-123456789012",
     "messageId": "d2e3f4a5-b6c7-8901-def0-234567890123",
     "ttl": "PT10M",
