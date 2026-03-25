@@ -13,59 +13,44 @@ tools:
 
 You are a **migration specialist** for Beckn Protocol changes in Beckn Discovr.
 
-## Beckn Protocol v2.0 Migration Reference
+## Beckn Protocol v2.1 Migration Reference
 
-### Context field renames (snake_case → camelCase)
+### Resource/Catalog field changes (v2.0 → v2.1)
 | Old | New |
 |-----|-----|
-| `transaction_id` | `transactionId` |
-| `message_id` | `messageId` |
-| `bpp_id` | `bppId` |
-| `bpp_uri` | `bppUri` |
-| `bap_id` | `bapId` |
-| `bap_uri` | `bapUri` |
-| `network_id` | `networkId` (also List→String) |
-| `schema_context` | `schemaContext` |
-| `core_version` | removed |
+| `items` (array) | `resources` |
+| `itemAttributes` | `resourceAttributes` |
+| `@type: "Item"` | `@type: "beckn:Resource"` |
+| `@type: "beckn:Item"` | `@type: "beckn:Resource"` |
+| Offer `items` (refs) | `resourceIds` |
+| `validity.start` | `validity.startDate` |
+| `validity.end` | `validity.endDate` |
+| `networkId` on resources | Remove (context only) |
+| `domain` in context | Remove (not v2.1) |
+| `schemaContext` in context | Move to `message.intent` |
+| `action: "beckn/discover"` | Check spec — may be `"discover"` |
 
-### Catalog/Item field changes
+### Action values (from spec endpoint paths)
+| Endpoint | Action const |
+|----------|-------------|
+| `/discover` | `discover` |
+| `/on_discover` | `on_discover` |
+| `/catalog/publish` | `catalog/publish` |
+| `/catalog/on_publish` | `catalog/on_publish` |
+
+### Logging migration
 | Old | New |
 |-----|-----|
-| `beckn:id` | `id` |
-| `beckn:items` | `items` |
-| `beckn:offers` | `offers` |
-| `beckn:descriptor` | `descriptor` |
-| `beckn:provider` | `provider` |
-| `beckn:itemAttributes` | `itemAttributes` |
-| `beckn:networkId` | `networkId` |
-| `schema:name` | `name` |
-| `beckn:shortDesc` | `shortDesc` |
-| `beckn:longDesc` | `longDesc` |
-| `schema:image` | `images` |
+| Inline log strings | `LogEvent.*` constants from `logging/LogEvent.java` |
+| No MDC | `BecknMdcContext.populate(contextNode)` at entry points |
+| `logging.pattern.console` in YAML | `logback-spring.xml` with LogstashEncoder |
 
-### ACK/NACK format
+### ES document changes
 | Old | New |
 |-----|-----|
-| `{"ack_status":"ACK","transaction_id":"...","timestamp":"..."}` | `{"status":"ACK"}` |
-| `{"ack_status":"NACK","error":{"code":"...","paths":"...","message":"..."}}` | `{"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}` |
-
-### Test assertion renames
-| Old jsonPath | New jsonPath |
-|-----|-----|
-| `$.ack_status` | `$.status` |
-| `$.error.code` | `$.error.errorCode` |
-| `$.error.message` | `$.error.errorMessage` |
-| `$.error.paths` | remove (not in v2.0) |
-| `$.transaction_id` | remove (not in v2.0 ACK) |
-| `$.timestamp` | remove (not in v2.0 ACK) |
-
-### Elasticsearch field changes
-| Old | New |
-|-----|-----|
-| `item_id` (from `beckn:id`) | `item_id` (from `id`) — no rename, but source field changed |
-| `item_attributes.@context` | explicit `keyword` mapping (never dynamic) |
-| `item_attributes.@type` | explicit `keyword` mapping (never dynamic) |
-| `network_id` (array) | `network_id` (keyword, single String) |
+| `BecknFields.ITEMS` in CacheWriteStep | `BecknFields.RESOURCES` |
+| `item_rateable` always written | `putIfPresent()` — absent when not in data |
+| No `catalog_validity` | Explicit mapping in es-index-template.json |
 
 ## Workflow
 
