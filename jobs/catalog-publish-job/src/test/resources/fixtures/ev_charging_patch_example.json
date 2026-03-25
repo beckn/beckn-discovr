@@ -66,8 +66,8 @@
               }
             },
             "resourceAttributes": {
-              "context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
-              "type": "ChargingService",
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
+              "@type": "ChargingService",
               "connectorType": "CCS2",
               "maxPowerKW": 60,
               "minPowerKW": 5,
