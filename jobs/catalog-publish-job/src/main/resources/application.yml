@@ -28,7 +28,7 @@ app:
   catalog:
     max-payload-size: 5242880
     validation-enabled: true
-    schema-url: ${BECKN_PROTOCOL_API_SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/beckn-ext-apis/api/v2.0.0/beckn.yaml}
+    schema-url: ${BECKN_PROTOCOL_API_SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/draft/api/v2.0.0/beckn.yaml}
     parallel-catalog-threshold: 3
     # Thread pool size for parallel catalog processing within a single message.
     processing-pool-size: 8
