@@ -9,7 +9,9 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -32,24 +34,41 @@ public class YamlAwareUriFetcher implements URIFetcher {
 
     @Override
     public InputStream fetch(URI uri) throws IOException {
-        InputStream inputStream = uri.toURL().openStream();
-        
+        URLConnection conn = uri.toURL().openConnection();
+        if (conn instanceof HttpURLConnection http) {
+            http.setRequestProperty("Accept", "application/json, application/yaml, text/yaml, */*");
+        }
+        conn.connect();
+
+        String contentType = conn.getContentType() != null ? conn.getContentType().toLowerCase() : "";
         String uriString = uri.toString().toLowerCase();
-        if (uriString.endsWith(".yaml") || uriString.endsWith(".yml")) {
+        boolean looksLikeYaml = uriString.endsWith(".yaml") || uriString.endsWith(".yml")
+                || contentType.contains("yaml");
+
+        byte[] raw;
+        try (InputStream is = conn.getInputStream()) {
+            raw = is.readAllBytes();
+        }
+
+        if (!looksLikeYaml) {
+            // Detect YAML by content: YAML starts with a bare key (e.g. "$id:", "---")
+            // rather than a JSON object/array opener.
+            String trimmed = new String(raw, StandardCharsets.UTF_8).stripLeading();
+            looksLikeYaml = !trimmed.isEmpty() && trimmed.charAt(0) != '{' && trimmed.charAt(0) != '[';
+        }
+
+        if (looksLikeYaml) {
             try {
                 @SuppressWarnings("unchecked")
-                Map<String, Object> yamlMap = yamlParser.load(inputStream);
-                inputStream.close();
-                
+                Map<String, Object> yamlMap = yamlParser.load(new ByteArrayInputStream(raw));
                 String jsonString = objectMapper.writeValueAsString(yamlMap);
                 return new ByteArrayInputStream(jsonString.getBytes(StandardCharsets.UTF_8));
             } catch (Exception e) {
-                inputStream.close();
                 logger.error("Failed to convert YAML to JSON for URI: {}", uri, e);
                 throw new IOException("Failed to convert YAML to JSON: " + e.getMessage(), e);
             }
-        } else {
-            return inputStream;
         }
+
+        return new ByteArrayInputStream(raw);
     }
 }

@@ -1,6 +1,7 @@
 package org.beckn.catalogpublish.util;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.exception.FieldExtractionException;
 
 import java.util.List;
@@ -40,29 +41,24 @@ public final class FieldExtractor {
     }
 
     /**
-     * Extracts {@code network_id} values from a Beckn {@code context} node.
+     * Extracts {@code networkId} values from a Beckn v2.0 {@code context} node.
      * The field may be a JSON string or a JSON array of strings.
      */
     public static String[] extractNetworkIds(JsonNode contextNode) {
         if (contextNode == null || contextNode.isMissingNode())
             return new String[0];
-        return extractNetworkArray(contextNode.path("network_id"));
+        return extractNetworkArray(contextNode.path(BecknFields.NETWORK_ID));
     }
 
     /**
-     * Extracts {@code beckn:networkId} values from a Beckn item node.
-     * Used by the catalog router to determine the leaf network of an item.
-     *
-     * <p>
-     * Handles both prefixed ({@code beckn:networkId}) and unprefixed
-     * ({@code networkId}) field names, and both string and array values.
+     * Extracts {@code networkId} from a Beckn v2.0 item node.
+     * In v2.0, {@code networkId} is a single string (not an array).
+     * Returns a single-element array if present, or empty array if absent.
      */
     public static String[] extractItemNetworkIds(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return new String[0];
-        JsonNode field = itemNode.path("beckn:networkId");
-        if (field.isMissingNode())
-            field = itemNode.path("networkId");
+        JsonNode field = itemNode.path(BecknFields.NETWORK_ID);
         return extractNetworkArray(field);
     }
 
@@ -86,19 +82,16 @@ public final class FieldExtractor {
     public static JsonNode extractOffersOrEmpty(JsonNode catalogNode) {
         if (catalogNode == null)
             return null;
-        JsonNode n = catalogNode.path("beckn:offers");
-        if (n.isMissingNode())
-            n = catalogNode.path("offers");
+        JsonNode n = catalogNode.path(BecknFields.OFFERS);
         return n.isMissingNode() ? null : n;
     }
 
     /**
-     * Extracts {@code @type} from {@code beckn:itemAttributes} by iterating all
-     * items
-     * in the catalog and returning the first non-blank value found.
+     * Extracts {@code @type} from {@code resourceAttributes} by iterating all
+     * items in the catalog and returning the first non-blank value found.
      *
      * <p>
-     * Spec path: {@code catalogs[].beckn:items[].beckn:itemAttributes.@type}
+     * Spec path: {@code catalogs[].items[].resourceAttributes.@type}
      * (e.g. {@code "ChargingService"}).
      *
      * <p>
@@ -106,50 +99,68 @@ public final class FieldExtractor {
      * hit is sufficient. Returns {@code "unknown"} when no item carries the field.
      */
     public static String extractSchemaTypeFromItems(JsonNode catalogNode) {
-        if (catalogNode == null || catalogNode.isMissingNode())
-            return "unknown";
-        for (JsonNode itemNode : iterableItems(catalogNode)) {
-            JsonNode attrs = itemNode.path("beckn:itemAttributes");
-            if (attrs.isMissingNode())
-                attrs = itemNode.path("itemAttributes");
-            if (attrs.isMissingNode() || !attrs.isObject())
-                continue;
-            JsonNode typeNode = attrs.path("@type");
-            if (!typeNode.isMissingNode() && typeNode.isTextual()) {
-                String val = typeNode.asText();
-                if (!val.isBlank())
-                    return val;
+        return extractSchemaType(catalogNode, null);
+    }
+
+    /**
+     * Extracts schema type with context.schemaContext support (Gap 2 fix).
+     *
+     * <p>Priority order (matches beckn-catalg indexer ParseStep behaviour):
+     * <ol>
+     *   <li>{@code context.schemaContext} — full URL; fragment after {@code #} is used as type
+     *       (e.g. {@code "https://…/context.jsonld#ChargingService"} → {@code "ChargingService"}).
+     *       Used for v2.0 publishes that carry only a context-level schema pointer.</li>
+     *   <li>{@code resourceAttributes.@type} from first item — authoritative domain schema type.</li>
+     * </ol>
+     *
+     * @param catalogNode  normalized catalog JsonNode
+     * @param contextNode  the {@code context} JsonNode from the Kafka message root; may be null
+     */
+    public static String extractSchemaType(JsonNode catalogNode, JsonNode contextNode) {
+        // 1. context.schemaContext — extract fragment after '#' as schema type
+        if (contextNode != null && !contextNode.isMissingNode()) {
+            JsonNode scNode = contextNode.path(BecknFields.SCHEMA_CONTEXT);
+            if (scNode.isTextual()) {
+                String sc = scNode.asText().trim();
+                if (!sc.isBlank()) {
+                    int h = sc.lastIndexOf('#');
+                    // Fragment present → use as schema type; otherwise use full URL
+                    return h >= 0 && h < sc.length() - 1 ? sc.substring(h + 1) : sc;
+                }
+            }
+        }
+        // 2. resourceAttributes @type from first item
+        if (catalogNode != null && !catalogNode.isMissingNode()) {
+            for (JsonNode itemNode : iterableItems(catalogNode)) {
+                JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+                if (attrs.isMissingNode() || !attrs.isObject())
+                    continue;
+                JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
+                if (typeNode.isTextual()) {
+                    String val = typeNode.asText();
+                    if (!val.isBlank()) return val;
+                }
             }
         }
         return "unknown";
     }
 
     /**
-     * @deprecated Use {@link #extractSchemaTypeFromItems(JsonNode)} for catalog
-     *             nodes.
-     *             This method is retained for item-level use inside
-     *             {@link #extractItemType(JsonNode)}.
+     * @deprecated Use {@link #extractSchemaTypeFromItems(JsonNode)} for catalog nodes.
+     *             This method is retained for item-level use inside {@link #extractItemType(JsonNode)}.
      */
     @Deprecated
     public static String extractSchemaType(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return "unknown";
-        JsonNode n = itemNode.path("schema_type");
-        if (n.isMissingNode())
-            n = itemNode.path("beckn:schemaType");
+        JsonNode n = itemNode.path("schemaType"); // legacy field, not a BecknFields constant
         return (n.isMissingNode() || !n.isTextual()) ? "unknown" : n.asText("unknown");
     }
 
     public static Iterable<JsonNode> iterableItems(JsonNode catalogNode) {
-        return iterableField(catalogNode, "beckn:items", "items");
-    }
-
-    private static Iterable<JsonNode> iterableField(JsonNode node, String becknKey, String plainKey) {
-        if (node == null)
+        if (catalogNode == null)
             return List.of();
-        JsonNode field = node.path(becknKey);
-        if (field.isMissingNode())
-            field = node.path(plainKey);
+        JsonNode field = catalogNode.path(BecknFields.RESOURCES);
         if (field.isMissingNode() || !field.isArray())
             return List.of();
         final JsonNode arr = field;
@@ -157,45 +168,41 @@ public final class FieldExtractor {
     }
 
     /**
-     * Item display name from descriptor (schema:name, name, or beckn:shortDesc).
+     * Item display name from descriptor (name or shortDesc) — v2.0 format.
      */
     public static String extractItemName(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode desc = resolveNode(itemNode, "descriptor");
+        JsonNode desc = itemNode.path(BecknFields.DESCRIPTOR);
         if (desc.isMissingNode() || !desc.isObject())
             return null;
-        return extractString(desc, "schema:name")
-                .or(() -> extractString(desc, "name"))
-                .or(() -> extractString(desc, "beckn:shortDesc"))
+        return extractString(desc, BecknFields.NAME)
+                .or(() -> extractString(desc, BecknFields.SHORT_DESC))
                 .filter(s -> !s.isBlank())
                 .orElse(null);
     }
 
     /**
-     * Item type/category from category (schema:codeValue or schema:name) or
-     * schemaType.
+     * Item schema type from {@code resourceAttributes.type}.
+     * Returns null when absent; callers fall back to {@link #extractSchemaTypeFromItems}.
      */
     public static String extractItemType(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode cat = resolveNode(itemNode, "category");
-        if (!cat.isMissingNode() && cat.isObject()) {
-            String v = extractString(cat, "schema:codeValue")
-                    .or(() -> extractString(cat, "schema:name"))
-                    .or(() -> extractString(cat, "codeValue"))
-                    .filter(s -> !s.isBlank())
-                    .orElse(null);
-            if (v != null)
-                return v;
+        JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+        if (!attrs.isMissingNode() && attrs.isObject()) {
+            JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
+            if (typeNode.isTextual()) {
+                String v = typeNode.asText();
+                if (!v.isBlank()) return v;
+            }
         }
-        return extractSchemaType(itemNode);
+        return null;
     }
 
     /**
-     * Item attributes @context from beckn:itemAttributes (string or first element
-     * of array).
-     * Falls back to null when itemAttributes is missing or malformed.
+     * Item attributes @context from resourceAttributes (string or first element of array).
+     * Falls back to null when resourceAttributes is missing or malformed.
      */
     public static String extractItemAttributesContextUrl(JsonNode itemNode) {
         JsonNode attrs = itemAttributesNode(itemNode);
@@ -203,37 +210,39 @@ public final class FieldExtractor {
     }
 
     /**
-     * Item attributes @type from beckn:itemAttributes (e.g. "ChargingService").
+     * Item attributes @type from resourceAttributes (e.g. "ChargingService").
      * Returns null when missing or blank; callers should apply their own fallback.
      */
     public static String extractItemAttributesType(JsonNode itemNode) {
         JsonNode attrs = itemAttributesNode(itemNode);
         if (attrs == null)
             return null;
-        JsonNode typeNode = attrs.path("@type");
+        JsonNode typeNode = attrs.path(BecknFields.JSON_LD_TYPE);
         if (!typeNode.isTextual())
             return null;
         String v = typeNode.asText();
         return v.isBlank() ? null : v;
     }
 
-    /** Provider ID from item's beckn:provider (object with id, or plain string). */
+    /** Provider ID from item's provider field (object with id, or plain string) — v2.0 format. */
     public static String extractItemProviderId(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode prov = resolveNode(itemNode, "provider");
+        JsonNode prov = itemNode.path(BecknFields.PROVIDER);
         if (prov.isMissingNode() || prov.isNull())
             return null;
         if (prov.isTextual())
             return prov.asText(null);
-        return extractString(prov, "beckn:id").or(() -> extractString(prov, "id")).orElse(null);
+        return extractString(prov, BecknFields.ID).orElse(null);
     }
 
-    /** @context URL from catalog or item (string or first element of array). */
+    /** Context URL from a node — checks {@code @context} (JSON-LD root) or plain {@code context} (itemAttributes). */
     public static String extractContextUrl(JsonNode node) {
         if (node == null || node.isMissingNode())
             return null;
-        JsonNode ctx = node.get("@context");
+        JsonNode ctx = node.get(BecknFields.JSON_LD_CONTEXT);
+        if (ctx == null || ctx.isMissingNode() || ctx.isNull())
+            ctx = node.get("context");
         if (ctx == null || ctx.isMissingNode() || ctx.isNull())
             return null;
         if (ctx.isTextual())
@@ -244,37 +253,16 @@ public final class FieldExtractor {
     }
 
     /**
-     * Tries fieldName directly, then "beckn:fieldName", then any
-     * "prefix:fieldName".
+     * Tries fieldName directly — v2.0 only, no beckn: prefix fallback.
      */
     private static String resolveKey(JsonNode node, String fieldName) {
-        if (node.has(fieldName))
-            return fieldName;
-        if (node.has("beckn:" + fieldName))
-            return "beckn:" + fieldName;
-        var it = node.fieldNames();
-        while (it.hasNext()) {
-            String k = it.next();
-            if (k.endsWith(":" + fieldName))
-                return k;
-        }
-        return null;
-    }
-
-    /**
-     * Resolves a child node by checking "beckn:plainKey" first, then "plainKey".
-     * Returns MissingNode (never null) when neither key is present — safe for
-     * chaining.
-     */
-    private static JsonNode resolveNode(JsonNode parent, String plainKey) {
-        JsonNode n = parent.path("beckn:" + plainKey);
-        return n.isMissingNode() ? parent.path(plainKey) : n;
+        return node.has(fieldName) ? fieldName : null;
     }
 
     private static JsonNode itemAttributesNode(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
             return null;
-        JsonNode attrs = resolveNode(itemNode, "itemAttributes");
+        JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         return (attrs.isMissingNode() || !attrs.isObject()) ? null : attrs;
     }
 }

@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.http.HttpServletRequest;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.config.AppProperties;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -52,19 +54,19 @@ public class CatalogPushController {
             HttpServletRequest request) {
 
         if (rawBytes.length > maxPayloadSize) {
-            log.warn("catalog.push.rejected.oversized sizeBytes={} limit={}", rawBytes.length, maxPayloadSize);
+            log.warn("event={} sizeBytes={} limit={}", LogEvent.PUSH_REJECTED, rawBytes.length, maxPayloadSize);
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Payload too large");
         }
 
         if (signatureVerificationEnabled) {
             // TODO: integrate Beckn HTTP signature verification (Ed25519 + registry lookup)
-            log.warn("catalog.push.signature-verification-enabled-but-not-implemented — skipping");
+            log.warn("event={} reason=signature-verification-not-implemented", LogEvent.PUSH_REJECTED);
         }
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         String enrichedBody = enrichContextIfNeeded(rawBody);
 
-        log.info("catalog.push.received sizeBytes={}", rawBytes.length);
+        log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
         pushService.processAsync(enrichedBody);
 
         return ResponseEntity.accepted().body(ACK_RESPONSE);
@@ -82,7 +84,7 @@ public class CatalogPushController {
                 return rawBody;
             }
 
-            JsonNode ctxNode = root.get("context");
+            JsonNode ctxNode = root.get(BecknFields.CONTEXT);
             if (!(ctxNode instanceof ObjectNode)) {
                 // Only enrich when a context object is already present.
                 return rawBody;
@@ -90,42 +92,42 @@ public class CatalogPushController {
             ObjectNode context = (ObjectNode) ctxNode;
 
             // Core Beckn context defaults (do not overwrite existing non-blank values)
-            if (isBlank(textOrNull(context.get("version")))) {
-                context.put("version", "2.0.0");
+            if (isBlank(textOrNull(context.get(BecknFields.VERSION)))) {
+                context.put(BecknFields.VERSION, "2.0.0");
             }
-            if (isBlank(textOrNull(context.get("action")))) {
-                context.put("action", "on_discover");
+            if (isBlank(textOrNull(context.get(BecknFields.ACTION)))) {
+                context.put(BecknFields.ACTION, "on_discover");
             }
-            if (isBlank(textOrNull(context.get("timestamp")))) {
-                context.put("timestamp", Instant.now().toString());
+            if (isBlank(textOrNull(context.get(BecknFields.TIMESTAMP)))) {
+                context.put(BecknFields.TIMESTAMP, Instant.now().toString());
             }
-            if (isBlank(textOrNull(context.get("message_id")))) {
-                context.put("message_id", UUID.randomUUID().toString());
+            if (isBlank(textOrNull(context.get(BecknFields.MESSAGE_ID)))) {
+                context.put(BecknFields.MESSAGE_ID, UUID.randomUUID().toString());
             }
-            if (isBlank(textOrNull(context.get("transaction_id")))) {
-                context.put("transaction_id", UUID.randomUUID().toString());
+            if (isBlank(textOrNull(context.get(BecknFields.TRANSACTION_ID)))) {
+                context.put(BecknFields.TRANSACTION_ID, UUID.randomUUID().toString());
             }
-            if (isBlank(textOrNull(context.get("bap_id")))) {
-                context.put("bap_id", "dummy-bap-id");
+            if (isBlank(textOrNull(context.get(BecknFields.BAP_ID)))) {
+                context.put(BecknFields.BAP_ID, "dummy-bap-id");
             }
-            if (isBlank(textOrNull(context.get("ttl")))) {
-                context.put("ttl", "PT30S");
+            if (isBlank(textOrNull(context.get(BecknFields.TTL)))) {
+                context.put(BecknFields.TTL, "PT30S");
             }
 
             // BPP context defaults (used by downstream persistence)
-            String updatedBppId = textOrNull(context.get("bpp_id"));
-            String updatedBppUri = textOrNull(context.get("bpp_uri"));
+            String updatedBppId = textOrNull(context.get(BecknFields.BPP_ID));
+            String updatedBppUri = textOrNull(context.get(BecknFields.BPP_URI));
 
             if (isBlank(updatedBppId)) {
-                context.put("bpp_id", "dummy-bpp-id");
+                context.put(BecknFields.BPP_ID, "dummy-bpp-id");
             }
             if (isBlank(updatedBppUri)) {
-                context.put("bpp_uri", "http://dummy-bpp-uri.com");
+                context.put(BecknFields.BPP_URI, "http://dummy-bpp-uri.com");
             }
 
             return objectMapper.writeValueAsString(root);
         } catch (Exception e) {
-            log.warn("catalog.push.context-enrichment.failed falling back to raw body error={}", e.toString());
+            log.warn("event={} reason=context-enrichment-failed error={}", LogEvent.PUSH_REJECTED, e.toString());
             return rawBody;
         }
     }

@@ -1,408 +1,487 @@
 {
-    "context": {
-        "version": "2.0.0",
-        "action": "catalog_publish",
-        "domain": "beckn.one:deg:ev-charging:*",
-        "timestamp": "2024-01-15T10:30:05Z",
-        "transaction_id": "2b4d69aa-22e4-4c78-9f56-5a7b9e2b2002",
-        "message_id": "a1eabf26-29f5-4a01-9d4e-4c5c9d1a3d02",
-        "bpp_id": "bpp.example.com1",
-        "bpp_uri": "https://bpp.example.com1",
-        "ttl": "PT30S"
-    },
-    "message": {
-        "catalogs": [
-            {
-                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
-                "@type": "beckn:Catalog",
-                "beckn:id": "catalog-ev-charging-001",
-                "beckn:bppId": "bpp.example.com1",
-                "beckn:bppUri": "https://bpp.example.com1",
-                "beckn:descriptor": {
-                    "@type": "beckn:Descriptor",
-                    "schema:name": "EV Charging Services Network1",
-                    "beckn:shortDesc": "Comprehensive network of fast charging stations across Bengaluru"
+  "context": {
+    "version": "2.0.0",
+    "action": "catalog/publish",
+    "domain": "beckn.one:deg:ev-charging:*",
+    "timestamp": "2024-01-15T10:30:05Z",
+    "transactionId": "2b4d69aa-22e4-4c78-9f56-5a7b9e2b2002",
+    "messageId": "a1eabf26-29f5-4a01-9d4e-4c5c9d1a3d02",
+    "bppId": "bpp.example.com1",
+    "bppUri": "https://bpp.example.com1",
+    "ttl": "PT30S"
+  },
+  "message": {
+    "catalogs": [
+      {
+        "@context": "https://schema.beckn.io/",
+        "@type": "Catalog",
+        "id": "catalog-ev-charging-001",
+        "bppId": "bpp.example.com1",
+        "bppUri": "https://bpp.example.com1",
+        "descriptor": {
+          "@type": "Descriptor",
+          "name": "EV Charging Services Network1",
+          "shortDesc": "Comprehensive network of fast charging stations across Bengaluru"
+        },
+        "validity": {
+          "@type": "TimePeriod",
+          "startDate": "2024-10-01T00:00:00Z",
+          "endDate": "2025-01-15T23:59:59Z"
+        },
+        "resources": [
+          {
+            "@context": "https://schema.beckn.io/",
+            "@type": "beckn:Resource",
+            "id": "ev-charger-ccs2-001",
+            "descriptor": {
+              "@type": "Descriptor",
+              "name": "DC Fast Charger - CCS2 (60kW)",
+              "shortDesc": "High-speed DC charging station with CCS2 connector",
+              "longDesc": "Ultra-fast DC charging station supporting CCS2 connector type with 60kW maximum power output. Features advanced thermal management and smart charging capabilities."
+            },
+            "category": {
+              "@type": "CategoryCode",
+              "codeValue": "ev-charging",
+              "name": "EV Charging"
+            },
+            "availableAt": [
+              {
+                "@type": "Location",
+                "geo": {
+                  "type": "Point",
+                  "coordinates": [
+                    77.5946,
+                    12.9716
+                  ]
                 },
-                "beckn:validity": {
-                    "@type": "beckn:TimePeriod",
-                    "schema:startDate": "2024-10-01T00:00:00Z",
-                    "schema:endDate": "2025-01-15T23:59:59Z"
+                "address": {
+                  "streetAddress": "EcoPower BTM Hub, 100 Ft Rd",
+                  "addressLocality": "Bengaluru",
+                  "addressRegion": "Karnataka",
+                  "postalCode": "560076",
+                  "addressCountry": "IN"
+                }
+              },
+              {
+                "@type": "Location",
+                "geo": {
+                  "type": "Point",
+                  "coordinates": [
+                    77.6405,
+                    12.9718
+                  ]
                 },
-                "beckn:items": [
-                    {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
-                        "@type": "beckn:Item",
-                        "beckn:id": "ev-charger-ccs2-001",
-                        "beckn:descriptor": {
-                            "@type": "beckn:Descriptor",
-                            "schema:name": "DC Fast Charger - CCS2 (60kW)",
-                            "beckn:shortDesc": "High-speed DC charging station with CCS2 connector",
-                            "beckn:longDesc": "Ultra-fast DC charging station supporting CCS2 connector type with 60kW maximum power output. Features advanced thermal management and smart charging capabilities."
-                        },
-                        "beckn:category": {
-                            "@type": "schema:CategoryCode",
-                            "schema:codeValue": "ev-charging",
-                            "schema:name": "EV Charging"
-                        },
-                        "beckn:availableAt": [
-                            {
-                                "@type": "beckn:Location",
-                                "geo": {
-                                    "type": "Point",
-                                    "coordinates": [77.5946, 12.9716]
-                                },
-                                "address": {
-                                    "streetAddress": "EcoPower BTM Hub, 100 Ft Rd",
-                                    "addressLocality": "Bengaluru",
-                                    "addressRegion": "Karnataka",
-                                    "postalCode": "560076",
-                                    "addressCountry": "IN"
-                                }
-                            },
-                            {
-                                "@type": "beckn:Location",
-                                "geo": {
-                                    "type": "Point",
-                                    "coordinates": [77.6405, 12.9718]
-                                },
-                                "address": {
-                                    "streetAddress": "100 Feet Road",
-                                    "addressLocality": "Indiranagar",
-                                    "addressRegion": "Karnataka",
-                                    "postalCode": "560038",
-                                    "addressCountry": "IN"
-                                }
-                            },
-                            {
-                                "@type": "beckn:Location",
-                                "geo": {
-                                    "type": "Point",
-                                    "coordinates": [76.6551, 12.3052]
-                                },
-                                "address": {
-                                    "streetAddress": "Devaraja Market Road",
-                                    "addressLocality": "Mysuru",
-                                    "addressRegion": "Karnataka",
-                                    "postalCode": "570001",
-                                    "addressCountry": "IN"
-                                }
-                            }
-                        ],
-                        "beckn:availabilityWindow": [
-                            {
-                                "@type": "beckn:TimePeriod",
-                                "schema:startTime": "06:00:00Z",
-                                "schema:endTime": "22:00:00Z"
-                            }
-                        ],
-                        "beckn:rateable": true,
-                        "beckn:rating": {
-                            "@type": "beckn:Rating",
-                            "beckn:ratingValue": 4.5,
-                            "beckn:ratingCount": 128
-                        },
-                        "beckn:isActive": false,
-                        "beckn:networkId": ["bap.net/ev-charging1"],
-                        "beckn:provider": {
-                            "beckn:id": "ecopower-charging",
-                            "beckn:descriptor": {
-                                "@type": "beckn:Descriptor",
-                                "schema:name": "EcoPower Charging Pvt Ltd-1"
-                            }
-                        },
-                        "beckn:itemAttributes": {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
-                            "@type": "ChargingService",
-                            "connectorType": "CCS2",
-                            "maxPowerKW": 60,
-                            "minPowerKW": 5,
-                            "socketCount": 2,
-                            "reservationSupported": true,
-                            "serviceLocation": {
-                                "@type": "beckn:Location",
-                                "geo": { "type": "Point", "coordinates": [77.5946, 12.9716] },
-                                "address": {
-                                    "streetAddress": "EcoPower BTM Hub, 100 Ft Rd",
-                                    "addressLocality": "Bengaluru",
-                                    "addressRegion": "Karnataka",
-                                    "postalCode": "560076",
-                                    "addressCountry": "IN"
-                                }
-                            },
-                            "amenityFeature": ["RESTAURANT", "RESTROOM", "WI-FI"],
-                            "ocppId": "IN-ECO-BTM-01",
-                            "evseId": "IN*ECO*BTM*01*CCS2*A",
-                            "roamingNetwork": "GreenRoam",
-                            "parkingType": "Mall",
-                            "connectorId": "CCS2-A",
-                            "powerType": "DC",
-                            "connectorFormat": "CABLE",
-                            "chargingSpeed": "FAST",
-                            "stationStatus": "Available"
-                        }
-                    },
-                    {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
-                        "@type": "beckn:Item",
-                        "beckn:id": "ev-charger-ccs2-002",
-                        "beckn:descriptor": {
-                            "@type": "beckn:Descriptor",
-                            "schema:name": "DC Fast Charger - CCS2 (120kW)",
-                            "beckn:shortDesc": "Ultra-fast DC charging station with CCS2 connector",
-                            "beckn:longDesc": "Ultra-fast DC charging station supporting CCS2 connector type with 120kW maximum power output. Features liquid cooling and advanced power management."
-                        },
-                        "beckn:category": {
-                            "@type": "schema:CategoryCode",
-                            "schema:codeValue": "ev-charging",
-                            "schema:name": "EV Charging"
-                        },
-                        "beckn:availableAt": [
-                            {
-                                "@type": "beckn:Location",
-                                "geo": { "type": "Point", "coordinates": [77.6104, 12.9153] },
-                                "address": {
-                                    "streetAddress": "GreenCharge Koramangala, 80 Ft Rd",
-                                    "addressLocality": "Bengaluru",
-                                    "addressRegion": "Karnataka",
-                                    "postalCode": "560034",
-                                    "addressCountry": "IN"
-                                }
-                            }
-                        ],
-                        "beckn:availabilityWindow": [
-                            {
-                                "@type": "beckn:TimePeriod",
-                                "schema:startTime": "00:00:00Z",
-                                "schema:endTime": "23:59:59Z"
-                            }
-                        ],
-                        "beckn:rateable": true,
-                        "beckn:rating": {
-                            "@type": "beckn:Rating",
-                            "beckn:ratingValue": 4.7,
-                            "beckn:ratingCount": 89
-                        },
-                        "beckn:isActive": true,
-                        "beckn:networkId": ["bap.net/ev-charging"],
-                        "beckn:provider": {
-                            "beckn:id": "greencharge-koramangala",
-                            "beckn:descriptor": {
-                                "@type": "beckn:Descriptor",
-                                "schema:name": "GreenCharge Energy Solutions"
-                            }
-                        },
-                        "beckn:itemAttributes": {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
-                            "@type": "ChargingService",
-                            "connectorType": "CCS2",
-                            "maxPowerKW": 120,
-                            "minPowerKW": 10,
-                            "socketCount": 1,
-                            "reservationSupported": true,
-                            "serviceLocation": {
-                                "@type": "beckn:Location",
-                                "geo": { "type": "Point", "coordinates": [77.6104, 12.9153] },
-                                "address": {
-                                    "streetAddress": "GreenCharge Koramangala, 80 Ft Rd",
-                                    "addressLocality": "Bengaluru",
-                                    "addressRegion": "Karnataka",
-                                    "postalCode": "560034",
-                                    "addressCountry": "IN"
-                                }
-                            },
-                            "amenityFeature": ["RESTAURANT", "RESTROOM", "WI-FI", "PARKING"],
-                            "ocppId": "IN-GC-KOR-01",
-                            "evseId": "IN*GC*KOR*01*CCS2*A",
-                            "roamingNetwork": "GreenRoam",
-                            "parkingType": "OffStreet",
-                            "connectorId": "CCS2-B",
-                            "powerType": "DC",
-                            "connectorFormat": "CABLE",
-                            "chargingSpeed": "ULTRAFAST",
-                            "stationStatus": "Available"
-                        }
-                    },
-                    {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
-                        "@type": "beckn:Item",
-                        "beckn:id": "ev-charger-type2-001",
-                        "beckn:descriptor": {
-                            "@type": "beckn:Descriptor",
-                            "schema:name": "AC Fast Charger - Type 2 (22kW)",
-                            "beckn:shortDesc": "AC fast charging station with Type 2 connector",
-                            "beckn:longDesc": "AC fast charging station supporting Type 2 connector type with 22kW maximum power output. Ideal for overnight charging and workplace charging."
-                        },
-                        "beckn:category": {
-                            "@type": "schema:CategoryCode",
-                            "schema:codeValue": "ev-charging",
-                            "schema:name": "EV Charging"
-                        },
-                        "beckn:availableAt": [
-                            {
-                                "@type": "beckn:Location",
-                                "geo": { "type": "Point", "coordinates": [77.6254, 12.9716] },
-                                "address": {
-                                    "streetAddress": "PowerGrid Indiranagar, 100 Ft Rd",
-                                    "addressLocality": "Bengaluru",
-                                    "addressRegion": "Karnataka",
-                                    "postalCode": "560008",
-                                    "addressCountry": "IN"
-                                }
-                            }
-                        ],
-                        "beckn:availabilityWindow": [
-                            {
-                                "@type": "beckn:TimePeriod",
-                                "schema:startTime": "08:00:00Z",
-                                "schema:endTime": "20:00:00Z"
-                            }
-                        ],
-                        "beckn:rateable": true,
-                        "beckn:rating": {
-                            "@type": "beckn:Rating",
-                            "beckn:ratingValue": 4.3,
-                            "beckn:ratingCount": 156
-                        },
-                        "beckn:isActive": true,
-                        "beckn:networkId": ["bap.net/ev-charging"],
-                        "beckn:provider": {
-                            "beckn:id": "powergrid-indiranagar",
-                            "beckn:descriptor": {
-                                "@type": "beckn:Descriptor",
-                                "schema:name": "PowerGrid Charging Solutions"
-                            }
-                        },
-                        "beckn:itemAttributes": {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
-                            "@type": "ChargingService",
-                            "connectorType": "Type2",
-                            "maxPowerKW": 22,
-                            "minPowerKW": 3,
-                            "socketCount": 4,
-                            "reservationSupported": true,
-                            "serviceLocation": {
-                                "@type": "beckn:Location",
-                                "geo": { "type": "Point", "coordinates": [77.6254, 12.9716] },
-                                "address": {
-                                    "streetAddress": "PowerGrid Indiranagar, 100 Ft Rd",
-                                    "addressLocality": "Bengaluru",
-                                    "addressRegion": "Karnataka",
-                                    "postalCode": "560008",
-                                    "addressCountry": "IN"
-                                }
-                            },
-                            "amenityFeature": ["RESTROOM", "WI-FI", "PARKING"],
-                            "ocppId": "IN-PG-IND-01",
-                            "evseId": "IN*PG*IND*01*TYPE2*A",
-                            "roamingNetwork": "GreenRoam",
-                            "parkingType": "Office",
-                            "connectorId": "TYPE2-A",
-                            "powerType": "AC_3_PHASE",
-                            "connectorFormat": "SOCKET",
-                            "chargingSpeed": "NORMAL",
-                            "stationStatus": "Available"
-                        }
-                    }
-                ],
-                "beckn:offers": [
-                    {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
-                        "@type": "beckn:Offer",
-                        "beckn:id": "offer-ccs2-60kw-kwh",
-                        "beckn:descriptor": {
-                            "@type": "beckn:Descriptor",
-                            "schema:name": "Per-kWh Tariff - CCS2 60kW"
-                        },
-                        "beckn:items": ["ev-charger-ccs2-001"],
-                        "beckn:price": {
-                            "currency": "INR",
-                            "value": 18.0,
-                            "applicableQuantity": {
-                                "unitText": "Kilowatt Hour",
-                                "unitCode": "KWH",
-                                "unitQuantity": 1
-                            }
-                        },
-                        "beckn:validity": {
-                            "@type": "beckn:TimePeriod",
-                            "schema:startDate": "2025-10-01T00:00:00Z",
-                            "schema:endDate": "2026-03-31T23:59:59Z"
-                        },
-                        "beckn:acceptedPaymentMethod": ["UPI", "CREDIT_CARD", "WALLET"],
-                        "beckn:offerAttributes": {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingOffer/v1/context.jsonld",
-                            "@type": "ChargingOffer",
-                            "buyerFinderFee": { "feeType": "PERCENTAGE", "feeValue": 2.5 },
-                            "idleFeePolicy": "₹2/min after 10 min post-charge"
-                        },
-                        "beckn:provider": "ecopower-charging"
-                    },
-                    {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
-                        "@type": "beckn:Offer",
-                        "beckn:id": "offer-ccs2-120kw-kwh",
-                        "beckn:descriptor": {
-                            "@type": "beckn:Descriptor",
-                            "schema:name": "Per-kWh Tariff - CCS2 120kW"
-                        },
-                        "beckn:items": ["ev-charger-ccs2-002", "ev-charger-ccs2-001"],
-                        "beckn:price": {
-                            "currency": "INR",
-                            "value": 22.0,
-                            "applicableQuantity": {
-                                "unitText": "Kilowatt Hour",
-                                "unitCode": "KWH",
-                                "unitQuantity": 1
-                            }
-                        },
-                        "beckn:validity": {
-                            "@type": "beckn:TimePeriod",
-                            "schema:startDate": "2025-10-15T00:00:00Z",
-                            "schema:endDate": "2026-04-15T23:59:59Z"
-                        },
-                        "beckn:acceptedPaymentMethod": ["UPI", "CREDIT_CARD", "WALLET", "BANK_TRANSFER"],
-                        "beckn:offerAttributes": {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingOffer/v1/context.jsonld",
-                            "@type": "ChargingOffer",
-                            "buyerFinderFee": { "feeType": "PERCENTAGE", "feeValue": 2.0 },
-                            "idleFeePolicy": "₹3/min after 15 min post-charge"
-                        },
-                        "beckn:provider": "greencharge-koramangala"
-                    },
-                    {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
-                        "@type": "beckn:Offer",
-                        "beckn:id": "offer-type2-22kw-kwh",
-                        "beckn:descriptor": {
-                            "@type": "beckn:Descriptor",
-                            "schema:name": "Per-kWh Tariff - Type 2 22kW"
-                        },
-                        "beckn:items": ["ev-charger-type2-001"],
-                        "beckn:price": {
-                            "currency": "INR",
-                            "value": 15.0,
-                            "applicableQuantity": {
-                                "unitText": "Kilowatt Hour",
-                                "unitCode": "KWH",
-                                "unitQuantity": 1
-                            }
-                        },
-                        "beckn:validity": {
-                            "@type": "beckn:TimePeriod",
-                            "schema:startDate": "2025-10-20T00:00:00Z",
-                            "schema:endDate": "2026-04-20T23:59:59Z"
-                        },
-                        "beckn:acceptedPaymentMethod": ["UPI", "CREDIT_CARD", "WALLET", "BANK_TRANSFER"],
-                        "beckn:offerAttributes": {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingOffer/v1/context.jsonld",
-                            "@type": "ChargingOffer",
-                            "buyerFinderFee": { "feeType": "PERCENTAGE", "feeValue": 1.5 },
-                            "idleFeePolicy": "₹1/min after 30 min post-charge"
-                        },
-                        "beckn:provider": "powergrid-indiranagar"
-                    }
-                ]
+                "address": {
+                  "streetAddress": "100 Feet Road",
+                  "addressLocality": "Indiranagar",
+                  "addressRegion": "Karnataka",
+                  "postalCode": "560038",
+                  "addressCountry": "IN"
+                }
+              },
+              {
+                "@type": "Location",
+                "geo": {
+                  "type": "Point",
+                  "coordinates": [
+                    76.6551,
+                    12.3052
+                  ]
+                },
+                "address": {
+                  "streetAddress": "Devaraja Market Road",
+                  "addressLocality": "Mysuru",
+                  "addressRegion": "Karnataka",
+                  "postalCode": "570001",
+                  "addressCountry": "IN"
+                }
+              }
+            ],
+            "availabilityWindow": [
+              {
+                "@type": "TimePeriod",
+                "startTime": "06:00:00Z",
+                "endTime": "22:00:00Z"
+              }
+            ],
+            "rateable": true,
+            "rating": {
+              "@type": "Rating",
+              "ratingValue": 4.5,
+              "ratingCount": 128
+            },
+            "isActive": false,
+            "provider": {
+              "id": "ecopower-charging",
+              "descriptor": {
+                "@type": "Descriptor",
+                "name": "EcoPower Charging Pvt Ltd-1"
+              }
+            },
+            "resourceAttributes": {
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
+              "@type": "ChargingService",
+              "connectorType": "CCS2",
+              "maxPowerKW": 60,
+              "minPowerKW": 5,
+              "socketCount": 2,
+              "reservationSupported": true,
+              "serviceLocation": {
+                "@type": "Location",
+                "geo": {
+                  "type": "Point",
+                  "coordinates": [
+                    77.5946,
+                    12.9716
+                  ]
+                },
+                "address": {
+                  "streetAddress": "EcoPower BTM Hub, 100 Ft Rd",
+                  "addressLocality": "Bengaluru",
+                  "addressRegion": "Karnataka",
+                  "postalCode": "560076",
+                  "addressCountry": "IN"
+                }
+              },
+              "amenityFeature": [
+                "RESTAURANT",
+                "RESTROOM",
+                "WI-FI"
+              ],
+              "ocppId": "IN-ECO-BTM-01",
+              "evseId": "IN*ECO*BTM*01*CCS2*A",
+              "roamingNetwork": "GreenRoam",
+              "parkingType": "Mall",
+              "connectorId": "CCS2-A",
+              "powerType": "DC",
+              "connectorFormat": "CABLE",
+              "chargingSpeed": "FAST",
+              "stationStatus": "Available"
             }
+          },
+          {
+            "@context": "https://schema.beckn.io/",
+            "@type": "beckn:Resource",
+            "id": "ev-charger-ccs2-002",
+            "descriptor": {
+              "@type": "Descriptor",
+              "name": "DC Fast Charger - CCS2 (120kW)",
+              "shortDesc": "Ultra-fast DC charging station with CCS2 connector",
+              "longDesc": "Ultra-fast DC charging station supporting CCS2 connector type with 120kW maximum power output. Features liquid cooling and advanced power management."
+            },
+            "category": {
+              "@type": "CategoryCode",
+              "codeValue": "ev-charging",
+              "name": "EV Charging"
+            },
+            "availableAt": [
+              {
+                "@type": "Location",
+                "geo": {
+                  "type": "Point",
+                  "coordinates": [
+                    77.6104,
+                    12.9153
+                  ]
+                },
+                "address": {
+                  "streetAddress": "GreenCharge Koramangala, 80 Ft Rd",
+                  "addressLocality": "Bengaluru",
+                  "addressRegion": "Karnataka",
+                  "postalCode": "560034",
+                  "addressCountry": "IN"
+                }
+              }
+            ],
+            "availabilityWindow": [
+              {
+                "@type": "TimePeriod",
+                "startTime": "00:00:00Z",
+                "endTime": "23:59:59Z"
+              }
+            ],
+            "rateable": true,
+            "rating": {
+              "@type": "Rating",
+              "ratingValue": 4.7,
+              "ratingCount": 89
+            },
+            "isActive": true,
+            "provider": {
+              "id": "greencharge-koramangala",
+              "descriptor": {
+                "@type": "Descriptor",
+                "name": "GreenCharge Energy Solutions"
+              }
+            },
+            "resourceAttributes": {
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
+              "@type": "ChargingService",
+              "connectorType": "CCS2",
+              "maxPowerKW": 120,
+              "minPowerKW": 10,
+              "socketCount": 1,
+              "reservationSupported": true,
+              "serviceLocation": {
+                "@type": "Location",
+                "geo": {
+                  "type": "Point",
+                  "coordinates": [
+                    77.6104,
+                    12.9153
+                  ]
+                },
+                "address": {
+                  "streetAddress": "GreenCharge Koramangala, 80 Ft Rd",
+                  "addressLocality": "Bengaluru",
+                  "addressRegion": "Karnataka",
+                  "postalCode": "560034",
+                  "addressCountry": "IN"
+                }
+              },
+              "amenityFeature": [
+                "RESTAURANT",
+                "RESTROOM",
+                "WI-FI",
+                "PARKING"
+              ],
+              "ocppId": "IN-GC-KOR-01",
+              "evseId": "IN*GC*KOR*01*CCS2*A",
+              "roamingNetwork": "GreenRoam",
+              "parkingType": "OffStreet",
+              "connectorId": "CCS2-B",
+              "powerType": "DC",
+              "connectorFormat": "CABLE",
+              "chargingSpeed": "ULTRAFAST",
+              "stationStatus": "Available"
+            }
+          },
+          {
+            "@context": "https://schema.beckn.io/",
+            "@type": "beckn:Resource",
+            "id": "ev-charger-type2-001",
+            "descriptor": {
+              "@type": "Descriptor",
+              "name": "AC Fast Charger - Type 2 (22kW)",
+              "shortDesc": "AC fast charging station with Type 2 connector",
+              "longDesc": "AC fast charging station supporting Type 2 connector type with 22kW maximum power output. Ideal for overnight charging and workplace charging."
+            },
+            "category": {
+              "@type": "CategoryCode",
+              "codeValue": "ev-charging",
+              "name": "EV Charging"
+            },
+            "availableAt": [
+              {
+                "@type": "Location",
+                "geo": {
+                  "type": "Point",
+                  "coordinates": [
+                    77.6254,
+                    12.9716
+                  ]
+                },
+                "address": {
+                  "streetAddress": "PowerGrid Indiranagar, 100 Ft Rd",
+                  "addressLocality": "Bengaluru",
+                  "addressRegion": "Karnataka",
+                  "postalCode": "560008",
+                  "addressCountry": "IN"
+                }
+              }
+            ],
+            "availabilityWindow": [
+              {
+                "@type": "TimePeriod",
+                "startTime": "08:00:00Z",
+                "endTime": "20:00:00Z"
+              }
+            ],
+            "rateable": true,
+            "rating": {
+              "@type": "Rating",
+              "ratingValue": 4.3,
+              "ratingCount": 156
+            },
+            "isActive": true,
+            "provider": {
+              "id": "powergrid-indiranagar",
+              "descriptor": {
+                "@type": "Descriptor",
+                "name": "PowerGrid Charging Solutions"
+              }
+            },
+            "resourceAttributes": {
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld",
+              "@type": "ChargingService",
+              "connectorType": "Type2",
+              "maxPowerKW": 22,
+              "minPowerKW": 3,
+              "socketCount": 4,
+              "reservationSupported": true,
+              "serviceLocation": {
+                "@type": "Location",
+                "geo": {
+                  "type": "Point",
+                  "coordinates": [
+                    77.6254,
+                    12.9716
+                  ]
+                },
+                "address": {
+                  "streetAddress": "PowerGrid Indiranagar, 100 Ft Rd",
+                  "addressLocality": "Bengaluru",
+                  "addressRegion": "Karnataka",
+                  "postalCode": "560008",
+                  "addressCountry": "IN"
+                }
+              },
+              "amenityFeature": [
+                "RESTROOM",
+                "WI-FI",
+                "PARKING"
+              ],
+              "ocppId": "IN-PG-IND-01",
+              "evseId": "IN*PG*IND*01*TYPE2*A",
+              "roamingNetwork": "GreenRoam",
+              "parkingType": "Office",
+              "connectorId": "TYPE2-A",
+              "powerType": "AC_3_PHASE",
+              "connectorFormat": "SOCKET",
+              "chargingSpeed": "NORMAL",
+              "stationStatus": "Available"
+            }
+          }
+        ],
+        "offers": [
+          {
+            "@context": "https://schema.beckn.io/",
+            "@type": "Offer",
+            "id": "offer-ccs2-60kw-kwh",
+            "descriptor": {
+              "@type": "Descriptor",
+              "name": "Per-kWh Tariff - CCS2 60kW"
+            },
+            "resourceIds": [
+              "ev-charger-ccs2-001"
+            ],
+            "price": {
+              "currency": "INR",
+              "value": 18.0,
+              "applicableQuantity": {
+                "unitText": "Kilowatt Hour",
+                "unitCode": "KWH",
+                "unitQuantity": 1
+              }
+            },
+            "validity": {
+              "@type": "TimePeriod",
+              "startDate": "2025-10-01T00:00:00Z",
+              "endDate": "2026-03-31T23:59:59Z"
+            },
+            "acceptedPaymentMethod": [
+              "UPI",
+              "CREDIT_CARD",
+              "WALLET"
+            ],
+            "offerAttributes": {
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingOffer/v1/context.jsonld",
+              "@type": "ChargingOffer",
+              "buyerFinderFee": {
+                "feeType": "PERCENTAGE",
+                "feeValue": 2.5
+              },
+              "idleFeePolicy": "₹2/min after 10 min post-charge"
+            },
+            "provider": "ecopower-charging"
+          },
+          {
+            "@context": "https://schema.beckn.io/",
+            "@type": "Offer",
+            "id": "offer-ccs2-120kw-kwh",
+            "descriptor": {
+              "@type": "Descriptor",
+              "name": "Per-kWh Tariff - CCS2 120kW"
+            },
+            "resourceIds": [
+              "ev-charger-ccs2-002",
+              "ev-charger-ccs2-001"
+            ],
+            "price": {
+              "currency": "INR",
+              "value": 22.0,
+              "applicableQuantity": {
+                "unitText": "Kilowatt Hour",
+                "unitCode": "KWH",
+                "unitQuantity": 1
+              }
+            },
+            "validity": {
+              "@type": "TimePeriod",
+              "startDate": "2025-10-15T00:00:00Z",
+              "endDate": "2026-04-15T23:59:59Z"
+            },
+            "acceptedPaymentMethod": [
+              "UPI",
+              "CREDIT_CARD",
+              "WALLET",
+              "BANK_TRANSFER"
+            ],
+            "offerAttributes": {
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingOffer/v1/context.jsonld",
+              "@type": "ChargingOffer",
+              "buyerFinderFee": {
+                "feeType": "PERCENTAGE",
+                "feeValue": 2.0
+              },
+              "idleFeePolicy": "₹3/min after 15 min post-charge"
+            },
+            "provider": "greencharge-koramangala"
+          },
+          {
+            "@context": "https://schema.beckn.io/",
+            "@type": "Offer",
+            "id": "offer-type2-22kw-kwh",
+            "descriptor": {
+              "@type": "Descriptor",
+              "name": "Per-kWh Tariff - Type 2 22kW"
+            },
+            "resourceIds": [
+              "ev-charger-type2-001"
+            ],
+            "price": {
+              "currency": "INR",
+              "value": 15.0,
+              "applicableQuantity": {
+                "unitText": "Kilowatt Hour",
+                "unitCode": "KWH",
+                "unitQuantity": 1
+              }
+            },
+            "validity": {
+              "@type": "TimePeriod",
+              "startDate": "2025-10-20T00:00:00Z",
+              "endDate": "2026-04-20T23:59:59Z"
+            },
+            "acceptedPaymentMethod": [
+              "UPI",
+              "CREDIT_CARD",
+              "WALLET",
+              "BANK_TRANSFER"
+            ],
+            "offerAttributes": {
+              "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingOffer/v1/context.jsonld",
+              "@type": "ChargingOffer",
+              "buyerFinderFee": {
+                "feeType": "PERCENTAGE",
+                "feeValue": 1.5
+              },
+              "idleFeePolicy": "₹1/min after 30 min post-charge"
+            },
+            "provider": "powergrid-indiranagar"
+          }
         ]
-    }
+      }
+    ]
+  }
 }

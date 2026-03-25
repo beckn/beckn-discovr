@@ -3,12 +3,15 @@ package org.beckn.discover.service.nlweb;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.config.DiscoveryProperties;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.NLWebResponse;
 import org.beckn.discover.service.response.CatalogProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -69,18 +72,21 @@ public class NLWebAssembler {
      */
     public List<Catalog> assemble(String nlWebResponse, String transactionId) throws Exception {
         if (nlWebResponse == null || nlWebResponse.isBlank()) {
-            log.warn("nlweb.assembler.empty transactionId={}", transactionId);
+            log.warn(LogEvent.NLWEB_SEARCH_COMPLETED + ".assembler-empty",
+                    value("transactionId", transactionId));
             return List.of();
         }
 
-        log.debug("nlweb.assembler.start transactionId={}", transactionId);
+        log.debug(LogEvent.NLWEB_SEARCH_STARTED + ".assembler",
+                value("transactionId", transactionId));
         long t0 = System.nanoTime();
 
         int scoreThreshold = scoreThreshold();
         List<NLWebResponse.ContentItem> contentItems = extractContentItems(nlWebResponse, scoreThreshold, transactionId);
 
         if (contentItems.isEmpty()) {
-            log.warn("nlweb.assembler.no-items transactionId={}", transactionId);
+            log.warn(LogEvent.NLWEB_SEARCH_COMPLETED + ".assembler-no-items",
+                    value("transactionId", transactionId));
             return List.of();
         }
 
@@ -88,8 +94,12 @@ public class NLWebAssembler {
         List<Catalog> merged = catalogProcessor.mergeCatalogsByProvider(rawCatalogs);
 
         long ms = (System.nanoTime() - t0) / 1_000_000;
-        log.info("nlweb.assembler.done contentItems={} rawCatalogs={} mergedCatalogs={} durationMs={} transactionId={}",
-                contentItems.size(), rawCatalogs.size(), merged.size(), ms, transactionId);
+        log.info(LogEvent.NLWEB_SEARCH_COMPLETED + ".assembled",
+                value("contentItems", contentItems.size()),
+                value("rawCatalogs", rawCatalogs.size()),
+                value("mergedCatalogs", merged.size()),
+                value("durationMs", ms),
+                value("transactionId", transactionId));
 
         return merged;
     }
@@ -128,7 +138,10 @@ public class NLWebAssembler {
             }
         }
 
-        log.debug("nlweb.extract.done accepted={} skipped={} transactionId={}", collected.size(), skipped.size(), txId);
+        log.debug(LogEvent.NLWEB_SEARCH_COMPLETED + ".extract",
+                value("accepted", collected.size()),
+                value("skipped", skipped.size()),
+                value("transactionId", txId));
         if (!skipped.isEmpty()) {
             skipped.forEach(s -> log.debug("nlweb.item.skipped reason={} transactionId={}", s, txId));
         }
@@ -142,12 +155,21 @@ public class NLWebAssembler {
             int threshold) {
         for (JsonNode itemNode : contentArray) {
             try {
-                NLWebResponse.ContentItem item = objectMapper.treeToValue(itemNode, NLWebResponse.ContentItem.class);
+                JsonNode normalizedNode = normalizeCatalogNodes(itemNode);
+                NLWebResponse.ContentItem item = objectMapper.treeToValue(normalizedNode, NLWebResponse.ContentItem.class);
                 addOrSkip(item, collected, skipped, threshold);
             } catch (Exception e) {
                 skipped.add("parse-failed:" + e.getMessage());
             }
         }
+    }
+
+    /**
+     * All NLWeb catalog nodes are v2.1 (upstream rejects v2.0 payloads).
+     * Returns the node unchanged.
+     */
+    private static JsonNode normalizeCatalogNodes(JsonNode contentItemNode) {
+        return contentItemNode;
     }
 
     private void addOrSkip(
@@ -185,8 +207,10 @@ public class NLWebAssembler {
                     if (processed != null) all.add(processed);
                 }
             } catch (Exception e) {
-                log.warn("nlweb.catalog.transform.failed name={} transactionId={} error={}",
-                        item.getName(), txId, e.getMessage());
+                log.warn(LogEvent.NLWEB_SEARCH_FAILED + ".catalog-transform",
+                        value("name", item.getName()),
+                        value("transactionId", txId),
+                        value("error", e.getMessage()));
             }
         }
         return all;

@@ -3,7 +3,9 @@ package org.beckn.catalogpublish.integration;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.beckn.catalogpublish.config.AppProperties;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.concurrent.TimeUnit;
 
@@ -12,11 +14,14 @@ import static org.awaitility.Awaitility.await;
 
 class KafkaRoundTripIntegrationTest extends BaseIntegrationTest {
 
+    @Autowired
+    private AppProperties props;
+
     @Test
     void publishMessage_throughKafka_persistsItemAndPublishesResponse() {
         String fixture = readFixture("fixtures/ev_charging_station_data.json");
-        String ingestionTopic = "catalog.v2.upload.requests";
-        String responseTopic = "catalog.responses";
+        String ingestionTopic = props.messaging().topics().ingestionRequests();
+        String responseTopic = props.messaging().topics().responses();
 
         try (KafkaProducer<String, String> producer = createProducer()) {
             producer.send(new ProducerRecord<>(ingestionTopic, fixture));

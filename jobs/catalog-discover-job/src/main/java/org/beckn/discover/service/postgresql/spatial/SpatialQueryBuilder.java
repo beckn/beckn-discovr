@@ -184,7 +184,7 @@ public class SpatialQueryBuilder {
      * Relative conditions (starting with {@code @}) are wrapped in
      * {@code exists($ ? (...))} to apply them to the root document.</p>
      *
-     * <p>Colon-field names (e.g. {@code beckn:id}) are quoted via
+     * <p>Colon-field names are quoted via
      * {@link JsonPathConverter} so PostgreSQL parses them correctly.</p>
      */
     private String toPostgresFilter(String filterExpression) {

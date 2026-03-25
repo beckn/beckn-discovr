@@ -143,17 +143,17 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void push_missingBppId_returns202ButDoesNotPersist() throws Exception {
-        // context present but bpp_id missing → controller should enrich context and pipeline should run
+        // context present but bppId missing → controller should enrich context and pipeline should run
         String payload = """
                 {
                   "context": {
-                    "bpp_uri": "https://example.com",
-                    "network_id": "test-net"
+                    "bppUri": "https://example.com",
+                    "networkId": "test-net"
                   },
                   "message": {
                     "catalogs": [{
                       "id": "cat-x",
-                      "beckn:items": []
+                      "resources": []
                     }]
                   }
                 }
@@ -174,14 +174,14 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         String payload = """
                 {
                   "context": {
-                    "network_id": "test-net"
+                    "networkId": "test-net"
                   },
                   "message": {
                     "catalogs": [{
                       "id": "cat-1",
-                      "beckn:bppId": "bpp.test",
-                      "beckn:bppUri": "https://bpp.example.com",
-                      "beckn:items": [{
+                      "bppId": "bpp.test",
+                      "bppUri": "https://bpp.example.com",
+                      "resources": [{
                         "id": "item-1"
                       }]
                     }]
@@ -205,9 +205,9 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         String payload = """
                 {
                   "context": {
-                    "bpp_id": "bpp.test",
-                    "bpp_uri": "https://example.com",
-                    "network_id": "test-net"
+                    "bppId": "bpp.test",
+                    "bppUri": "https://example.com",
+                    "networkId": "test-net"
                   },
                   "message": {
                     "catalogs": []

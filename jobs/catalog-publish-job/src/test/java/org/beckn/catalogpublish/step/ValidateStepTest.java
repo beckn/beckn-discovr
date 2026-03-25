@@ -15,7 +15,7 @@ class ValidateStepTest {
         CatalogMessageValidator noOp = new org.beckn.catalogpublish.validation.NoOpCatalogValidator();
         ValidateStep step = new ValidateStep(noOp);
         ObjectNode root = new ObjectMapper().createObjectNode();
-        root.putObject("context").put("bpp_id", "b1");
+        root.putObject("context").put("bppId", "b1");
         var parsed = new ParsedCatalogMessage(root, null, java.util.List.of());
         assertThatCode(() -> step.validate(parsed)).doesNotThrowAnyException();
     }

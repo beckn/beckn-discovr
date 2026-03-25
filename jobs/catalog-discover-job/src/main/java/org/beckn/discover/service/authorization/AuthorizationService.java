@@ -4,6 +4,7 @@ import java.security.PublicKey;
 
 import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.config.DiscoveryProperties;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.service.CacheService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.ErrorResponseException;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -99,8 +102,10 @@ public class AuthorizationService {
         // Uses the PublicKey object to verify the signed payload (Ed25519).
         verifySignature(rawBody, parsedHeader, publicKey, transactionId, messageId);
 
-        logger.info("Beckn authorization successful [txnId: {}, msgId: {}, subId: {}]",
-                transactionId, messageId, parsedHeader.subscriberId());
+        logger.info(LogEvent.AUTH_PASSED,
+                value("transactionId", transactionId),
+                value("messageId", messageId),
+                value("subscriberId", parsedHeader.subscriberId()));
     }
 
     private void verifySignature(String rawBody, AuthUtils.ParsedAuthHeader auth, PublicKey publicKey,
@@ -120,8 +125,11 @@ public class AuthorizationService {
         } catch (ErrorResponseException e) {
             throw e;
         } catch (Exception e) {
-            logger.error("Crypto error during signature verification [txnId: {}, msgId: {}]: {}",
-                    transactionId, messageId, e.getMessage(), e);
+            logger.error(LogEvent.AUTH_FAILED,
+                    value("transactionId", transactionId),
+                    value("messageId", messageId),
+                    value("error", e.getMessage()),
+                    e);
             throw authUtils.authError("Internal crypto error: " + e.getMessage(), ErrorCodes.INTERNAL_ERROR, "server",
                     transactionId, HttpStatus.INTERNAL_SERVER_ERROR);
         }

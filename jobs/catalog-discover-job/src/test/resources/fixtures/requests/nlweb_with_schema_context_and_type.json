@@ -1,17 +1,20 @@
 {
   "context": {
     "action": "discover",
-    "bap_id": "test.bap.com",
-    "bap_uri": "https://test.bap.com",
-    "transaction_id": "550e8400-e29b-41d4-a716-446655440002",
-    "message_id": "660e8400-e29b-41d4-a716-446655440002",
+    "version": "2.0.0",
+    "bapId": "test.bap.com",
+    "bapUri": "https://test.bap.com",
+    "transactionId": "550e8400-e29b-41d4-a716-446655440002",
+    "messageId": "660e8400-e29b-41d4-a716-446655440002",
     "timestamp": "2024-01-15T10:00:00Z",
-    "ttl": "PT30S",
-    "schema_context": [
-      "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"
-    ]
+    "ttl": "PT30S"
   },
   "message": {
-    "text_search": "ev charging stations"
+    "intent": {
+      "textSearch": "ev charging stations",
+      "schemaContext": [
+        "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"
+      ]
+    }
   }
 }

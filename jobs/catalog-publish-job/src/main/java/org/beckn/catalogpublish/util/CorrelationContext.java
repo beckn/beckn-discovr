@@ -1,6 +1,7 @@
 package org.beckn.catalogpublish.util;
 
 import org.beckn.catalogpublish.dto.CatalogContext;
+import org.beckn.catalogpublish.logging.MdcField;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
@@ -8,16 +9,11 @@ import java.util.UUID;
 
 /**
  * MDC population and clear for trace context (messageId, bppId, transactionId,
- * correlationId).
+ * correlationId, networkId).
  * MDC is populated once from the parsed context so no double-parse occurs.
  */
 @Component
 public class CorrelationContext {
-
-    private static final String MDC_MESSAGE_ID = "messageId";
-    private static final String MDC_BPP_ID = "bppId";
-    private static final String MDC_TRANSACTION_ID = "transactionId";
-    private static final String MDC_CORRELATION_ID = "correlationId";
 
     public CorrelationContext() {
     }
@@ -31,12 +27,17 @@ public class CorrelationContext {
     public void populate(CatalogContext ctx, String messageId) {
         String mid = (messageId != null && !messageId.isBlank()) ? messageId : null;
         String txnId = ctx.contextNode() != null
-                ? ctx.contextNode().path("transaction_id").asText("unknown")
+                ? ctx.contextNode().path("transactionId").asText(
+                        ctx.contextNode().path("transaction_id").asText("unknown"))
                 : "unknown";
-        MDC.put(MDC_MESSAGE_ID, mid != null ? mid : "unknown");
-        MDC.put(MDC_BPP_ID, ctx.bppId() != null ? ctx.bppId() : "unknown");
-        MDC.put(MDC_TRANSACTION_ID, txnId);
-        MDC.put(MDC_CORRELATION_ID, mid != null ? mid : UUID.randomUUID().toString());
+        MDC.put(MdcField.MESSAGE_ID, mid != null ? mid : "unknown");
+        MDC.put(MdcField.BPP_ID, ctx.bppId() != null ? ctx.bppId() : "unknown");
+        MDC.put(MdcField.BPP_URI, ctx.bppUri() != null ? ctx.bppUri() : "unknown");
+        MDC.put(MdcField.TRANSACTION_ID, txnId);
+        MDC.put(MdcField.CORRELATION_ID, mid != null ? mid : UUID.randomUUID().toString());
+        if (ctx.networkIds() != null && ctx.networkIds().length > 0) {
+            MDC.put(MdcField.NETWORK_ID, ctx.networkIds()[0]);
+        }
     }
 
     /**
@@ -45,10 +46,11 @@ public class CorrelationContext {
      * parse.
      */
     public void populateFallback() {
-        MDC.put(MDC_MESSAGE_ID, "unknown");
-        MDC.put(MDC_BPP_ID, "unknown");
-        MDC.put(MDC_TRANSACTION_ID, "unknown");
-        MDC.put(MDC_CORRELATION_ID, UUID.randomUUID().toString());
+        MDC.put(MdcField.MESSAGE_ID, "unknown");
+        MDC.put(MdcField.BPP_ID, "unknown");
+        MDC.put(MdcField.BPP_URI, "unknown");
+        MDC.put(MdcField.TRANSACTION_ID, "unknown");
+        MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
     }
 
     public void clear() {

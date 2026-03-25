@@ -14,14 +14,14 @@ public class CategoryCode {
     @JsonProperty("@type")
     private String type;
 
-    @NotBlank(message = "schema:codeValue is required")
-    @JsonProperty("schema:codeValue")
+    @NotBlank(message = "codeValue is required")
+    @JsonProperty("codeValue")
     private String codeValue;
 
-    @JsonProperty("schema:name")
+    @JsonProperty("name")
     private String name;
 
-    @JsonProperty("schema:description")
+    @JsonProperty("description")
     private String description;
 
     // Default constructor

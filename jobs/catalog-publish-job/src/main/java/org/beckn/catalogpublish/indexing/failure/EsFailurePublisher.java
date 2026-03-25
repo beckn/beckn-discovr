@@ -3,6 +3,7 @@ package org.beckn.catalogpublish.indexing.failure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.indexing.bulk.BulkIndexResult;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,12 +52,12 @@ public class EsFailurePublisher {
             kafka.send(failureTopic, msg.bppId(), json)
                  .whenComplete((r, ex) -> {
                      if (ex != null)
-                         log.error("es.failure.publish.failed itemId={} error={}",
-                                 msg.itemId(), ErrorSanitizer.sanitize(ex));
+                         log.error("event={} itemId={} error={}",
+                                 LogEvent.KAFKA_FAILED, msg.itemId(), ErrorSanitizer.sanitize(ex));
                  });
         } catch (Exception e) {
-            log.error("es.failure.serialize.failed itemId={} error={}",
-                    msg.itemId(), ErrorSanitizer.sanitize(e));
+            log.error("event={} reason=serialize-failed itemId={} error={}",
+                    LogEvent.KAFKA_FAILED, msg.itemId(), ErrorSanitizer.sanitize(e));
         }
     }
 }

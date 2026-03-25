@@ -35,11 +35,6 @@ spring:
 # Discovery Service Configuration
 discovery:
   latency-tracking-enabled: ${DISCOVERY_LATENCY_TRACKING_ENABLED:true}
-  # Synchronous API Configuration
-  api:
-    base-path: /beckn
-    timeout-seconds: ${DISCOVERY_API_TIMEOUT:60}
-    
   # Registry Authorization Configuration (Aligned with Node.js Env Vars)
   registry-auth:
     enabled: ${SIGNATURE_AUTH_ENABLED:false}
@@ -53,8 +48,8 @@ discovery:
     timeout-seconds: ${REGISTRY_TIMEOUT_SEC:10}
     
   kafka:
-    request-topic: ${KAFKA_REQUEST_TOPIC:catalog.v2.discovery.requests}
-    response-topic: ${KAFKA_RESPONSE_TOPIC:catalog.discovery.response}
+    request-topic: ${KAFKA_REQUEST_TOPIC:discovr.discover.in.requests}
+    response-topic: ${KAFKA_RESPONSE_TOPIC:discovr.discover.out.responses}
   
   nlweb:
     base-url: ${NLWEB_BASE_URL:http://localhost:8000}
@@ -132,7 +127,6 @@ discovery:
 
   # PostgreSQL Configuration for filter-based queries
   postgresql:
-    enabled: ${POSTGRES_ENABLED:true}
     host: ${POSTGRES_HOST:localhost}
     port: ${POSTGRES_PORT:5432}
     database: ${POSTGRES_DATABASE:beckn_catalog}
@@ -145,7 +139,7 @@ discovery:
     # Catalog-level attributes to extract from catalog.payload
     # These attributes will be merged into catalog objects in the response
     catalog-attributes-to-extract:
-      - "beckn:offers"
+      - "offers"
 
 # Management and Monitoring
 management:

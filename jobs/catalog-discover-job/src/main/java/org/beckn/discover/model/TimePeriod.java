@@ -16,16 +16,16 @@ public class TimePeriod {
     @JsonProperty("@type")
     private String type;
 
-    @JsonProperty("schema:startDate")
+    @JsonProperty("startDate")
     private OffsetDateTime startDate;
 
-    @JsonProperty("schema:endDate")
+    @JsonProperty("endDate")
     private OffsetDateTime endDate;
 
-    @JsonProperty("schema:startTime")
+    @JsonProperty("startTime")
     private String startTime;
 
-    @JsonProperty("schema:endTime")
+    @JsonProperty("endTime")
     private String endTime;
 
     public String getStartTime() {

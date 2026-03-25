@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS item (
     provider_id TEXT REFERENCES provider(id),
     catalog_id TEXT REFERENCES catalog(id),
     payload JSONB,
+    schema_version VARCHAR(4) NOT NULL DEFAULT '2.0',
     created_by TEXT,
     updated_by TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -75,7 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_item_context_url ON item(context_url);
 CREATE INDEX IF NOT EXISTS idx_item_payload_gin ON item USING GIN (payload jsonb_path_ops);
 
 -- Pre-parsed geometry rows written by catalog-publish-job / GeometryExtractor.
--- path format: $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo (absolute path from request targets).
+-- path format: $.catalogs[*].resources[*].availableAt[*].geo (absolute path from request targets).
 CREATE TABLE IF NOT EXISTS item_location_collection (
     item_id TEXT NOT NULL REFERENCES item(id) ON DELETE CASCADE,
     path    TEXT NOT NULL,

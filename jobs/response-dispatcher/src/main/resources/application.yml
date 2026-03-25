@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: seeker-notifier
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: seeker-notifier-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      enable-auto-commit: false
+      properties:
+        max.poll.interval.ms: 300000
+        session.timeout.ms: 45000
+        heartbeat.interval.ms: 10000
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      retries: 3
+      properties:
+        retry.backoff.ms: 1000
+        delivery.timeout.ms: 120000
+    listener:
+      ack-mode: MANUAL_IMMEDIATE
+      concurrency: 1
+      type: SINGLE
+      missing-topics-fatal: false
+
+topics:
+  input: discovr.discover.out.responses
+  dlt: discovr.dispatcher.dlt.responses
+
+kafka:
+  topics:
+    partitions: 3
+    replication-factor: 1
+
+# HTTP client configuration for BAP notifications
+http:
+  client:
+    timeout: 30000
+    connection-timeout: 10000
+  retry:
+    max-attempts: 3
+    initial-delay: 1000
+    max-delay: 10000
+    multiplier: 2.0
+
+# HTTP Signature Configuration (Ed25519 + BLAKE-512)
+# Supports both raw 32-byte seed and PKCS#8 48-byte format
+signing:
+  enabled: false
+  key-id-suffix: ""
+  # Option 1: Raw 32-byte seed (beckn-onix compatible)
+  private-key: ""
+  # Option 2: PKCS#8 format (standard)
+  # private-key: -----BEGIN PRIVATE KEY-----***REMOVED-PRIVATE-KEY***-----END PRIVATE KEY-----
+  expiry-seconds: 4000
+  subscriber-id: ""
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+
+logging:
+  level:
+    org.beckn.seeker: INFO
+    org.springframework.kafka: INFO

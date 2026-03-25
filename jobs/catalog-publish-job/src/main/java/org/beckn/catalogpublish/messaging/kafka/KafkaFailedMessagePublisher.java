@@ -3,6 +3,7 @@ package org.beckn.catalogpublish.messaging.kafka;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.beckn.catalogpublish.config.AppProperties;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.messaging.FailedMessagePublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +41,7 @@ public class KafkaFailedMessagePublisher implements FailedMessagePublisher {
             }
             kafkaTemplate.send(topic, objectMapper.writeValueAsString(envelope));
         } catch (Exception e) {
-            log.error("failed.message.publish.error reason={}", reason, e);
+            log.error("event={} reason={}", LogEvent.KAFKA_FAILED, reason, e);
         }
     }
 }

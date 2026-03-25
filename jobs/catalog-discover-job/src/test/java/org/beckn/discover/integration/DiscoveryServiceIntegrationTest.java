@@ -9,7 +9,7 @@ import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
-import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Resource;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
 import org.beckn.discover.service.postgresql.PostgreSQLAssembler;
@@ -76,12 +76,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 "https://example.com/images/charging-station-banner.png");
 
         // Validate items
-        List<String> itemIds = catalog.getItems().stream()
-                .map(Item::getId)
+        List<String> itemIds = catalog.getResources().stream()
+                .map(Resource::getId)
                 .collect(Collectors.toList());
         Assertions.assertThat(itemIds).containsExactly("ev-charger-ccs2-001");
 
-        var firstItem = catalog.getItems().get(0);
+        var firstItem = catalog.getResources().get(0);
         Assertions.assertThat(firstItem.getDescriptor().getName())
                 .isEqualTo("DC Fast Charger - CCS2 (60kW)");
         Assertions.assertThat(firstItem.getDescriptor().getImage()).hasSize(2);
@@ -95,13 +95,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .isEqualTo("EcoPower Charging Pvt Ltd");
         
         // Validate item attributes
-        Assertions.assertThat(firstItem.getItemAttributes().getAttribute("connectorType"))
+        Assertions.assertThat(firstItem.getResourceAttributes().getAttribute("connectorType"))
                 .isEqualTo("CCS2");
-        Object maxPower = firstItem.getItemAttributes().getAttribute("maxPowerKW");
+        Object maxPower = firstItem.getResourceAttributes().getAttribute("maxPowerKW");
         Assertions.assertThat(maxPower).isInstanceOf(Number.class);
         Assertions.assertThat(((Number) maxPower).intValue()).isEqualTo(60);
         @SuppressWarnings("unchecked")
-        List<String> amenities = (List<String>) firstItem.getItemAttributes()
+        List<String> amenities = (List<String>) firstItem.getResourceAttributes()
                 .getAttribute("amenityFeature");
         Assertions.assertThat(amenities).contains("WI-FI");
 
@@ -141,7 +141,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
     void spatialQueryUsesPostgisTargets() {
         DiscoverRequest request = loadRequestFixture("fixtures/requests/ev_charging_spatial_query.json");
         assertRequestValid(request);
-        Assertions.assertThat(request.getMessage().getSpatial())
+        Assertions.assertThat(request.getMessage().getIntent().getSpatial())
                 .as("Request must have spatial constraint with targets")
                 .isNotEmpty()
                 .first()
@@ -165,16 +165,16 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertCatalogValid(catalog);
 
         // Validate items — strong assertion: only the item whose geometry at the targeted path matches
-        Assertions.assertThat(catalog.getItems())
+        Assertions.assertThat(catalog.getResources())
                 .as("Must return exactly ev-charger-ccs2-001 (within 1000m at availableAt path)")
                 .hasSize(1)
-                .extracting(Item::getId)
+                .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
-        Assertions.assertThat(catalog.getItems().get(0).getContext())
+        Assertions.assertThat(catalog.getResources().get(0).getContext())
                 .contains("schema/core/v2/context.jsonld");
 
         // Validate geolocation data — coordinates must match item_location_collection for the targeted path
-        var firstItem = catalog.getItems().get(0);
+        var firstItem = catalog.getResources().get(0);
         Assertions.assertThat(firstItem.getProvider().getId()).isEqualTo("ecopower-charging");
         Assertions.assertThat(firstItem.getAvailableAt())
                 .as("Item must have location data from availableAt path")
@@ -186,7 +186,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .as("Geo must not be null")
                 .isNotNull();
         Assertions.assertThat(geo.getCoordinates())
-                .as("Coordinates must match item_location_collection [longitude, latitude] for $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo")
+                .as("Coordinates must match item_location_collection [longitude, latitude] for $.catalogs[*].items[*].availableAt[*].geo")
                 .containsExactly(77.5946, 12.9716);
     }
 
@@ -220,9 +220,9 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(responseAvailableAt.getCatalogs())
                 .as("targets=availableAt: geometry within radius — must return catalog")
                 .hasSize(1);
-        Assertions.assertThat(responseAvailableAt.getCatalogs().get(0).getItems())
+        Assertions.assertThat(responseAvailableAt.getCatalogs().get(0).getResources())
                 .as("targets=availableAt: must return ev-charger-ccs2-001")
-                .extracting(Item::getId)
+                .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
 
         // Query with targets=serviceArea — geometry at (70.0, 10.0) is outside 1000m of center
@@ -252,8 +252,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         Assertions.assertThat(response.getCatalogs()).hasSize(1);
         var catalog = response.getCatalogs().get(0);
-        Assertions.assertThat(catalog.getItems())
-                .extracting(Item::getId)
+        Assertions.assertThat(catalog.getResources())
+                .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
         Assertions.assertThat(catalog.getDescriptor().getName()).contains("EV Charging");
         Assertions.assertThat(catalog.getDescriptor().getImage()).isNotNull();
@@ -302,12 +302,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         Assertions.assertThat(response.getCatalogs()).hasSize(1);
         var catalog = response.getCatalogs().get(0);
-        Assertions.assertThat(catalog.getItems())
-                .extracting(Item::getId)
+        Assertions.assertThat(catalog.getResources())
+                .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
-        var firstItem = catalog.getItems().get(0);
+        var firstItem = catalog.getResources().get(0);
         Assertions.assertThat(firstItem.getProvider().getId()).isEqualTo("ecopower-charging");
-        Assertions.assertThat(firstItem.getItemAttributes().getAttribute("connectorType")).isEqualTo("CCS2");
+        Assertions.assertThat(firstItem.getResourceAttributes().getAttribute("connectorType")).isEqualTo("CCS2");
     }
 
     @Test
@@ -326,14 +326,14 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers())
                 .as("Combined spatial+offer filter should return only matching offer")
                 .hasSize(1);
-        Assertions.assertThat(objectMapper.valueToTree(catalog.getOffers().get(0)).path("beckn:id").asText())
+        Assertions.assertThat(objectMapper.valueToTree(catalog.getOffers().get(0)).path("id").asText())
                 .isEqualTo("offer-ccs2-60kw-kwh");
 
         // Items filtered to only those referenced by the offer
-        Assertions.assertThat(catalog.getItems())
+        Assertions.assertThat(catalog.getResources())
                 .as("Items should be filtered by offer references")
                 .hasSize(1)
-                .extracting(Item::getId)
+                .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
     }
 
@@ -352,10 +352,10 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertCatalogValid(catalog);
 
         // CCS2 filter (no maxPowerKW) returns both CCS2 items
-        Assertions.assertThat(catalog.getItems())
+        Assertions.assertThat(catalog.getResources())
                 .as("Should return both CCS2 items: 60kW and 120kW")
                 .hasSize(2)
-                .extracting(Item::getId)
+                .extracting(Resource::getId)
                 .containsExactlyInAnyOrder("ev-charger-ccs2-001", "ev-charger-ccs2-002");
 
         // Offers that reference these items (from full catalog, filtered by item refs)
@@ -363,7 +363,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .as("Should return offers referencing the CCS2 items")
                 .hasSize(2);
         Set<String> offerIds = catalog.getOffers().stream()
-                .map(o -> objectMapper.valueToTree(o).path("beckn:id").asText())
+                .map(o -> objectMapper.valueToTree(o).path("id").asText())
                 .collect(Collectors.toSet());
         Assertions.assertThat(offerIds).containsExactlyInAnyOrder("offer-ccs2-60kw-kwh", "offer-ccs2-120kw-kwh");
     }
@@ -383,7 +383,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getDescriptor()).isNotNull();
         Assertions.assertThat(catalog.getDescriptor().getName()).isEqualTo("EV Charging Services Network");
         Assertions.assertThat(catalog.getDescriptor().getImage()).hasSize(2);
-        Assertions.assertThat(catalog.getItems()).isNotEmpty();
+        Assertions.assertThat(catalog.getResources()).isNotEmpty();
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         Assertions.assertThat(catalog.getProviderId()).isNotNull();
     }
@@ -416,14 +416,16 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertDiscoverResponseValid(response, request.getContext());
         var catalog = response.getCatalogs().get(0);
         // Single item (CCS2 + 60kW) - offers referencing this item only
-        Assertions.assertThat(catalog.getItems()).hasSize(1);
-        Assertions.assertThat(catalog.getItems().get(0).getId()).isEqualTo("ev-charger-ccs2-001");
+        Assertions.assertThat(catalog.getResources()).hasSize(1);
+        Assertions.assertThat(catalog.getResources().get(0).getId()).isEqualTo("ev-charger-ccs2-001");
         Assertions.assertThat(catalog.getOffers())
                 .as("Offers must reference the returned item")
                 .isNotEmpty();
         catalog.getOffers().forEach(offer -> {
             @SuppressWarnings("unchecked")
-            List<String> refs = (List<String>) ((Map<?, ?>) offer).get("beckn:items");
+            Map<?, ?> offerMap = (Map<?, ?>) offer;
+            @SuppressWarnings("unchecked")
+            List<String> refs = (List<String>) offerMap.get("resourceIds");
             Assertions.assertThat(refs).contains("ev-charger-ccs2-001");
         });
     }
@@ -440,11 +442,11 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         for (Object o : catalog.getOffers()) {
             JsonNode offer = objectMapper.valueToTree(o);
-            Assertions.assertThat(offer.has("beckn:id")).isTrue();
-            Assertions.assertThat(offer.has("beckn:price")).isTrue();
-            Assertions.assertThat(offer.path("beckn:price").path("value").asDouble()).isLessThan(20.0);
-            Assertions.assertThat(offer.path("beckn:price").path("currency").asText()).isEqualTo("INR");
-            Assertions.assertThat(offer.has("beckn:items")).isTrue();
+            Assertions.assertThat(offer.has("id")).isTrue();
+            Assertions.assertThat(offer.has("price")).isTrue();
+            Assertions.assertThat(offer.path("price").path("value").asDouble()).isLessThan(20.0);
+            Assertions.assertThat(offer.path("price").path("currency").asText()).isEqualTo("INR");
+            Assertions.assertThat(offer.has("resourceIds")).isTrue();
         }
     }
 
@@ -463,7 +465,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void emptyFiltersFailsSchemaValidation() {
-        // Empty message {} fails schema validation - requires at least one of text_search, filters, or spatial
+        // Empty message {} fails schema validation - requires intent with at least one of textSearch, filters, or spatial
         ObjectNode root = loadRequestNode("fixtures/requests/empty_filters.json");
 
         var result = discoveryValidationService.validateDiscoverRequest(root);
@@ -473,7 +475,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         // Verify error mentions message or one of the required fields
         String errorsString = String.join(" ", result.getErrors());
         Assertions.assertThat(
-                errorsString.contains("text_search") ||
+                errorsString.contains("textSearch") ||
+                errorsString.contains("intent") ||
                 errorsString.contains("filters") ||
                 errorsString.contains("spatial") ||
                 errorsString.contains("message")
@@ -504,14 +507,14 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void schemaValidationPassesWithMissingTransactionId() {
-        // Note: transaction_id appears to be optional in the schema
+    void schemaValidationFailsWithMissingTransactionId() {
+        // Context V2.0 schema requires transactionId — validation must reject requests without it.
         ObjectNode root = loadRequestNode("fixtures/requests/invalid_missing_transaction_id.json");
 
         var result = discoveryValidationService.validateDiscoverRequest(root);
 
-        // Schema validation passes because transaction_id is optional
-        Assertions.assertThat(result.isValid()).isTrue();
+        Assertions.assertThat(result.isValid()).isFalse();
+        Assertions.assertThat(result.getErrors()).isNotEmpty();
     }
 
     @Test
@@ -541,8 +544,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         var result = discoveryValidationService.validateDiscoverRequest(root);
 
         Assertions.assertThat(result.isValid()).isFalse();
-        Assertions.assertThat(result.getErrors()).contains("$.message.filters.expression: filters expression cannot be blank");
-        Assertions.assertThat(result.getPaths()).contains("$.message.filters.expression");
+        Assertions.assertThat(result.getErrors()).contains("$.message.intent.filters.expression: filters expression cannot be blank");
+        Assertions.assertThat(result.getPaths()).contains("$.message.intent.filters.expression");
     }
 
     @Test
@@ -552,8 +555,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         var result = discoveryValidationService.validateDiscoverRequest(root);
 
         Assertions.assertThat(result.isValid()).isFalse();
-        Assertions.assertThat(result.getErrors()).contains("$.message.filters.expression: filters expression cannot be blank");
-        Assertions.assertThat(result.getPaths()).contains("$.message.filters.expression");
+        Assertions.assertThat(result.getErrors()).contains("$.message.intent.filters.expression: filters expression cannot be blank");
+        Assertions.assertThat(result.getPaths()).contains("$.message.intent.filters.expression");
     }
 
     @Test
@@ -564,8 +567,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         Assertions.assertThat(result.isValid()).isFalse();
         Assertions.assertThat(result.getErrors()).contains(
-                "$.message.filters.expression: filters expression must be an absolute JSONPath (e.g. $.catalogs[*]...)");
-        Assertions.assertThat(result.getPaths()).contains("$.message.filters.expression");
+                "$.message.intent.filters.expression: filters expression must be an absolute JSONPath (e.g. $.catalogs[*]...)");
+        Assertions.assertThat(result.getPaths()).contains("$.message.intent.filters.expression");
     }
 
     private DiscoverRequest loadRequestFixture(String relativePath) {
@@ -608,8 +611,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         Assertions.assertThat(response.getCatalogs()).hasSize(1);
         var catalog = response.getCatalogs().get(0);
-        Assertions.assertThat(catalog.getItems())
-                .extracting(Item::getId)
+        Assertions.assertThat(catalog.getResources())
+                .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
     }
 
@@ -626,8 +629,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         Assertions.assertThat(response.getCatalogs()).hasSize(1);
         var catalog = response.getCatalogs().get(0);
-        Assertions.assertThat(catalog.getItems())
-                .extracting(Item::getId)
+        Assertions.assertThat(catalog.getResources())
+                .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
     }
 
@@ -659,9 +662,9 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         Assertions.assertThat(response.getCatalogs()).hasSize(1);
         var catalog = response.getCatalogs().get(0);
-        Assertions.assertThat(catalog.getItems()).hasSize(1);
-        Assertions.assertThat(catalog.getItems())
-                .extracting(Item::getId)
+        Assertions.assertThat(catalog.getResources()).hasSize(1);
+        Assertions.assertThat(catalog.getResources())
+                .extracting(Resource::getId)
                 .containsExactly("item-ev-charging");
     }
 
@@ -678,8 +681,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         Assertions.assertThat(response.getCatalogs()).hasSize(1);
         var catalog = response.getCatalogs().get(0);
-        Assertions.assertThat(catalog.getItems())
-                .extracting(Item::getId)
+        Assertions.assertThat(catalog.getResources())
+                .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
     }
 
@@ -696,7 +699,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         var catalog = response.getCatalogs().get(0);
         Assertions.assertThat(catalog.getId()).isEqualTo("catalog-ev-charging-001");
         Assertions.assertThat(catalog.getDescriptor().getName()).isEqualTo("EV Charging Services Network");
-        Assertions.assertThat(catalog.getItems()).isNotEmpty();
+        Assertions.assertThat(catalog.getResources()).isNotEmpty();
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
     }
 
@@ -711,8 +714,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         var catalog = response.getCatalogs().get(0);
         Assertions.assertThat(catalog.getOffers()).hasSize(1);
         JsonNode offer = objectMapper.valueToTree(catalog.getOffers().get(0));
-        Assertions.assertThat(offer.path("beckn:id").asText()).isEqualTo("offer-ccs2-60kw-kwh");
-        Assertions.assertThat(catalog.getItems()).extracting("id").contains("ev-charger-ccs2-001");
+        Assertions.assertThat(offer.path("id").asText()).isEqualTo("offer-ccs2-60kw-kwh");
+        Assertions.assertThat(catalog.getResources()).extracting("id").contains("ev-charger-ccs2-001");
     }
 
     @Test
@@ -727,7 +730,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         for (Object o : catalog.getOffers()) {
             JsonNode offer = objectMapper.valueToTree(o);
-            double value = offer.path("beckn:price").path("value").asDouble();
+            double value = offer.path("price").path("value").asDouble();
             Assertions.assertThat(value).isLessThan(20.0);
         }
     }
@@ -742,7 +745,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(response.getCatalogs()).hasSize(1);
         var catalog = response.getCatalogs().get(0);
         Assertions.assertThat(catalog.getDescriptor().getName()).isEqualTo("EV Charging Services Network");
-        var item = catalog.getItems().stream()
+        var item = catalog.getResources().stream()
                 .filter(i -> "ev-charger-ccs2-001".equals(i.getId()))
                 .findFirst()
                 .orElseThrow();
@@ -750,7 +753,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         boolean hasCheapOffer = catalog.getOffers().stream().anyMatch(o -> {
             JsonNode node = objectMapper.valueToTree(o);
-            return node.path("beckn:price").path("value").asDouble() < 20;
+            return node.path("price").path("value").asDouble() < 20;
         });
         Assertions.assertThat(hasCheapOffer).isTrue();
     }
@@ -765,15 +768,15 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(response.getCatalogs()).hasSize(1);
         var catalog = response.getCatalogs().get(0);
         Assertions.assertThat(catalog.getId()).isEqualTo("catalog-ev-charging-001");
-        Assertions.assertThat(catalog.getItems()).extracting("id").contains("ev-charger-ccs2-001");
+        Assertions.assertThat(catalog.getResources()).extracting("id").contains("ev-charger-ccs2-001");
         Assertions.assertThat(catalog.getOffers()).hasSize(1);
-        Assertions.assertThat(objectMapper.valueToTree(catalog.getOffers().get(0)).path("beckn:id").asText())
+        Assertions.assertThat(objectMapper.valueToTree(catalog.getOffers().get(0)).path("id").asText())
                 .isEqualTo("offer-ccs2-60kw-kwh");
     }
 
     @Test
     void userReportedFilterRegression() {
-        String filterExpression = "$.catalogs[*] ? (exists(@.\"beckn:offers\"[*] ? (@.\"beckn:id\" == \"offer-ccs2-60kw-kwh\")))";
+        String filterExpression = "$.catalogs[*] ? (exists(@.offers[*] ? (@.id == \"offer-ccs2-60kw-kwh\")))";
         DiscoverRequest request = new DiscoverRequest();
         request.setContext(buildContext("txn-regression", "msg-regression"));
         request.setFilters(filterExpression);
@@ -785,7 +788,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         boolean hasTargetOffer = catalog.getOffers().stream().anyMatch(o -> {
             var node = objectMapper.valueToTree(o);
-            return "offer-ccs2-60kw-kwh".equals(node.path("beckn:id").asText(null));
+            return "offer-ccs2-60kw-kwh".equals(node.path("id").asText(null));
         });
         Assertions.assertThat(hasTargetOffer).as("Response should contain the offer that matched the filter").isTrue();
     }
@@ -796,22 +799,22 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
     void offersAreMergedFromMultipleItemsInSameCatalog() throws Exception {
         String catalogId = "catalog-1";
         String item1Json = "{" +
-                "\"@type\": \"beckn:Catalog\"," +
-                "\"beckn:id\": \"" + catalogId + "\"," +
-                "\"beckn:items\": [{\"beckn:id\": \"item-1\", \"descriptor\": {\"name\": \"Item 1\"}}]," +
-                "\"beckn:offers\": [{" +
-                "  \"beckn:id\": \"offer-1\"," +
-                "  \"beckn:items\": [\"item-1\"]," +
+                "\"@type\": \"Catalog\"," +
+                "\"id\": \"" + catalogId + "\"," +
+                "\"resources\": [{\"id\": \"item-1\", \"descriptor\": {\"name\": \"Item 1\"}}]," +
+                "\"offers\": [{" +
+                "  \"id\": \"offer-1\"," +
+                "  \"resourceIds\": [\"item-1\"]," +
                 "  \"descriptor\": { \"name\": \"Offer 1\" }" +
                 "}]" +
                 "}";
         String item2Json = "{" +
-                "\"@type\": \"beckn:Catalog\"," +
-                "\"beckn:id\": \"" + catalogId + "\"," +
-                "\"beckn:items\": [{\"beckn:id\": \"item-2\", \"descriptor\": {\"name\": \"Item 2\"}}]," +
-                "\"beckn:offers\": [{" +
-                "  \"beckn:id\": \"offer-2\"," +
-                "  \"beckn:items\": [\"item-2\"]," +
+                "\"@type\": \"Catalog\"," +
+                "\"id\": \"" + catalogId + "\"," +
+                "\"resources\": [{\"id\": \"item-2\", \"descriptor\": {\"name\": \"Item 2\"}}]," +
+                "\"offers\": [{" +
+                "  \"id\": \"offer-2\"," +
+                "  \"resourceIds\": [\"item-2\"]," +
                 "  \"descriptor\": { \"name\": \"Offer 2\" }" +
                 "}]" +
                 "}";
@@ -857,7 +860,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
     private DiscoverRequest createRequestWithOfferQuery(String offerId) {
         DiscoverRequest request = new DiscoverRequest();
         request.setContext(buildContext("txn-precise-filter", "msg-precise-filter"));
-        request.setFilters("$.catalogs[*].\"beckn:offers\"[*] ? (@.\"beckn:id\" == \"" + offerId + "\")");
+        request.setFilters("$.catalogs[*].offers[*] ? (@.id == \"" + offerId + "\")");
         return request;
     }
 
@@ -880,7 +883,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
      * PURPOSE: Verify that querying for a specific offer by ID returns ONLY that offer,
      * with no extra offers, and the catalog contains ONLY items referenced by that offer.
      * 
-     * QUERY: $.catalogs[*]["beckn:offers"][*] ? (@["beckn:id"] == "offer-ccs2-60kw-kwh")
+     * QUERY: $.catalogs[*]["offers"][*] ? (@["id"] == "offer-ccs2-60kw-kwh")
      * 
      * EXPECTED RESULTS:
      * - Exactly 1 catalog returned
@@ -922,13 +925,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> offer = (Map<String, Object>) catalog.getOffers().get(0);
-        Assertions.assertThat(offer.get("beckn:id"))
+        Assertions.assertThat(offer.get("id"))
                 .as("Offer ID must match the queried offer")
                 .isEqualTo("offer-ccs2-60kw-kwh");
 
         // Assert: Verify offer price
         @SuppressWarnings("unchecked")
-        Map<String, Object> price = (Map<String, Object>) offer.get("beckn:price");
+        Map<String, Object> price = (Map<String, Object>) offer.get("price");
         Assertions.assertThat(price.get("value"))
                 .as("Offer price should be 18")
                 .isEqualTo(18);
@@ -937,17 +940,17 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .isEqualTo("INR");
 
         // Assert: Catalog contains ONLY items referenced by this offer
-        Assertions.assertThat(catalog.getItems())
+        Assertions.assertThat(catalog.getResources())
                 .as("Catalog should contain only items referenced by the offer")
                 .hasSize(1)
-                .extracting(Item::getId)
+                .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
 
-        // Assert: Offer references match returned items
+        // Assert: Offer references match returned resources
         @SuppressWarnings("unchecked")
-        List<String> offerItems = (List<String>) offer.get("beckn:items");
-        List<String> returnedItemIds = catalog.getItems().stream()
-                .map(Item::getId)
+        List<String> offerItems = (List<String>) offer.get("resourceIds");
+        List<String> returnedItemIds = catalog.getResources().stream()
+                .map(Resource::getId)
                 .collect(Collectors.toList());
         Assertions.assertThat(offerItems)
                 .as("Offer item references must match returned items")
@@ -960,7 +963,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
      * PURPOSE: Verify that querying for offers within a price range returns ALL matching offers
      * across multiple catalogs, with no extras and no missing offers.
      * 
-     * QUERY: $.catalogs[*]["beckn:offers"][*] ? (@["beckn:price"]["value"] < 20)
+     * QUERY: $.catalogs[*]["offers"][*] ? (@["price"]["value"] < 20)
      * 
      * EXPECTED RESULTS:
      * - Multiple catalogs returned (those with matching offers)
@@ -998,12 +1001,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
                 allOffers.add(offer);
                 
-                String offerId = (String) offer.get("beckn:id");
+                String offerId = (String) offer.get("id");
                 offerIds.add(offerId);
                 
                 // Assert: Each offer has price < 20
                 @SuppressWarnings("unchecked")
-                Map<String, Object> price = (Map<String, Object>) offer.get("beckn:price");
+                Map<String, Object> price = (Map<String, Object>) offer.get("price");
                 Number priceValue = (Number) price.get("value");
                 Assertions.assertThat(priceValue.doubleValue())
                         .as("Offer %s price must be less than 20", offerId)
@@ -1038,7 +1041,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
      * PURPOSE: Verify that querying items by a single attribute (connectorType) returns
      * ALL matching items across multiple catalogs, with no extras.
      * 
-     * QUERY: $["beckn:itemAttributes"].connectorType == "CCS2"
+     * QUERY: $["resourceAttributes"].connectorType == "CCS2"
      * 
      * EXPECTED RESULTS:
      * - Multiple catalogs with CCS2 items
@@ -1064,10 +1067,10 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertDiscoverResponseValid(response, request.getContext());
 
         // Collect all items
-        List<Item> allItems = new ArrayList<>();
+        List<Resource> allItems = new ArrayList<>();
         for (Catalog catalog : response.getCatalogs()) {
             assertCatalogValid(catalog);
-            allItems.addAll(catalog.getItems());
+            allItems.addAll(catalog.getResources());
         }
 
         // Assert: At least one item returned
@@ -1077,14 +1080,14 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         // Assert: ALL items have connectorType = "CCS2"
         allItems.forEach(item -> {
-            Object connectorType = item.getItemAttributes().getAttribute("connectorType");
+            Object connectorType = item.getResourceAttributes().getAttribute("connectorType");
             Assertions.assertThat(connectorType)
                     .as("Item %s must have connectorType = CCS2", item.getId())
                     .isEqualTo("CCS2");
         });
 
         // Assert: No duplicate item IDs
-        Set<String> itemIds = allItems.stream().map(Item::getId).collect(Collectors.toSet());
+        Set<String> itemIds = allItems.stream().map(Resource::getId).collect(Collectors.toSet());
         Assertions.assertThat(allItems.size())
                 .as("No duplicate items")
                 .isEqualTo(itemIds.size());
@@ -1096,8 +1099,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
      * PURPOSE: Verify that items matching MULTIPLE conditions (AND logic) are returned,
      * and items failing ANY condition are excluded.
      * 
-     * QUERY: $["beckn:itemAttributes"].connectorType == "CCS2" && 
-     *        $["beckn:itemAttributes"].maxPowerKW >= 50
+     * QUERY: $["resourceAttributes"].connectorType == "CCS2" && 
+     *        $["resourceAttributes"].maxPowerKW >= 50
      * 
      * EXPECTED RESULTS:
      * - Only items that are BOTH CCS2 AND power >= 50
@@ -1122,21 +1125,21 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertDiscoverResponseValid(response, request.getContext());
 
         // Collect all items
-        List<Item> allItems = new ArrayList<>();
+        List<Resource> allItems = new ArrayList<>();
         for (Catalog catalog : response.getCatalogs()) {
-            allItems.addAll(catalog.getItems());
+            allItems.addAll(catalog.getResources());
         }
 
         // The fixture queries for connectorType == "CCS2"
         // Assert: ALL items match the filter
         allItems.forEach(item -> {
-            Object connectorType = item.getItemAttributes().getAttribute("connectorType");
+            Object connectorType = item.getResourceAttributes().getAttribute("connectorType");
             Assertions.assertThat(connectorType)
                     .as("Item %s must have connectorType = CCS2", item.getId())
                     .isEqualTo("CCS2");
 
             // Also verify power attribute if present
-            Object maxPower = item.getItemAttributes().getAttribute("maxPowerKW");
+            Object maxPower = item.getResourceAttributes().getAttribute("maxPowerKW");
             if (maxPower != null) {
                 Assertions.assertThat(maxPower)
                         .as("Item %s maxPowerKW should be a number", item.getId())
@@ -1185,7 +1188,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         for (Catalog catalog : response.getCatalogs()) {
             assertCatalogValid(catalog);
             
-            for (Item item : catalog.getItems()) {
+            for (Resource item : catalog.getResources()) {
                 Assertions.assertThat(item.getAvailableAt())
                         .as("Item %s must have location data for spatial query", item.getId())
                         .isNotNull()
@@ -1246,7 +1249,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .isNotNull();
         
         Assertions.assertThat(response.getContext().getAction())
-                .as("Response action should be on_discover")
+                .as("Response action should be beckn/on_discover")
                 .isEqualTo("on_discover");
 
         // Assert: Response is valid (catalogs might be empty if intersection yields no results)
@@ -1258,14 +1261,14 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         if (!response.getCatalogs().isEmpty()) {
             for (Catalog catalog : response.getCatalogs()) {
                 Assertions.assertThat(catalog.getId()).isNotBlank();
-                Assertions.assertThat(catalog.getItems()).isNotNull();
+                Assertions.assertThat(catalog.getResources()).isNotNull();
                 
                 // Items should have attributes (since filter query was used)
-                catalog.getItems().forEach(item -> {
+                catalog.getResources().forEach(item -> {
                     Assertions.assertThat(item.getId())
                             .as("Item should have ID")
                             .isNotBlank();
-                    Assertions.assertThat(item.getItemAttributes())
+                    Assertions.assertThat(item.getResourceAttributes())
                             .as("Item %s should have attributes when filter query is used", item.getId())
                             .isNotNull();
                 });
@@ -1307,7 +1310,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
 
         // Validate items have context information
         for (Catalog catalog : response.getCatalogs()) {
-            for (Item item : catalog.getItems()) {
+            for (Resource item : catalog.getResources()) {
                 Assertions.assertThat(item.getContext())
                         .as("Item %s should have context URL", item.getId())
                         .isNotNull()
@@ -1354,21 +1357,21 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
             assertCatalogValid(catalog);
 
             // Collect all item IDs in this catalog
-            Set<String> returnedItemIds = catalog.getItems().stream()
-                    .map(Item::getId)
+            Set<String> returnedItemIds = catalog.getResources().stream()
+                    .map(Resource::getId)
                     .collect(Collectors.toSet());
 
             // Validate each offer
             for (Object offerObj : catalog.getOffers()) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
-                String offerId = (String) offer.get("beckn:id");
+                String offerId = (String) offer.get("id");
 
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("beckn:items");
+                List<String> offerItemIds = (List<String>) offer.get("resourceIds");
 
                 Assertions.assertThat(offerItemIds)
-                        .as("Offer %s must have items array", offerId)
+                        .as("Offer %s must have resourceIds array", offerId)
                         .isNotNull()
                         .isNotEmpty();
 
@@ -1418,7 +1421,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
             for (Object offerObj : catalog.getOffers()) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
-                String offerId = (String) offer.get("beckn:id");
+                String offerId = (String) offer.get("id");
 
                 offerIds.add(offerId);
                 offerCount++;
@@ -1511,8 +1514,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
             catalogIds.add(catalog.getId());
 
             // Validate catalog-item-offer relationships within each catalog
-            Set<String> catalogItemIds = catalog.getItems().stream()
-                    .map(Item::getId)
+            Set<String> catalogItemIds = catalog.getResources().stream()
+                    .map(Resource::getId)
                     .collect(Collectors.toSet());
 
             // Each offer should only reference items from its own catalog
@@ -1521,8 +1524,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
                 
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("beckn:items");
-                
+                List<String> offerItemIds = (List<String>) offer.get("resourceIds");
+
                 // Assert: Offer items belong to this catalog
                 for (String offerItemId : offerItemIds) {
                     Assertions.assertThat(catalogItemIds)

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.model.Item;
 import org.beckn.catalogpublish.model.ItemId;
 import org.beckn.catalogpublish.store.jpa.ItemJpaRepository;
@@ -27,8 +28,8 @@ import static org.awaitility.Awaitility.await;
  */
 class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
 
-    private static final String INGESTION_TOPIC = "catalog.v2.upload.requests";
-    private static final String RESPONSE_TOPIC = "catalog.responses";
+    @Autowired
+    private AppProperties props;
 
     @Autowired
     private ItemJpaRepository itemRepository;
@@ -43,7 +44,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         String payload = readFixture("fixtures/ev_charging_catalog_example.json");
 
         try (KafkaProducer<String, String> producer = createProducer()) {
-            producer.send(new ProducerRecord<>(INGESTION_TOPIC, payload));
+            producer.send(new ProducerRecord<>(props.messaging().topics().ingestionRequests(), payload));
             producer.flush();
         }
 
@@ -88,7 +89,8 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         assertThat(ccs2_002.getPayload()).contains("Per-kWh Tariff - CCS2 120kW");
         assertThat(type2_001.getPayload()).contains("Per-kWh Tariff - Type 2 22kW");
 
-        ConsumerRecord<String, String> responseRecord = consumeOneRecord(RESPONSE_TOPIC,
+        String responseTopic = props.messaging().topics().responses();
+        ConsumerRecord<String, String> responseRecord = consumeOneRecord(responseTopic,
                 "publish-example-response-group", 8_000, v -> {
                     if (!v.contains("on_catalog_publish")) return false;
                     try {
@@ -99,7 +101,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                                 && res.get(0).path("itemCount").asInt() == 3;
                     } catch (Exception e) { return false; }
                 });
-        assertThat(responseRecord).as("Expected on_catalog_publish response on %s", RESPONSE_TOPIC).isNotNull();
+        assertThat(responseRecord).as("Expected on_catalog_publish response on %s", responseTopic).isNotNull();
 
         JsonNode response = objectMapper.readTree(responseRecord.value());
         assertThat(response.path("context").path("action").asText()).isEqualTo("on_catalog_publish");
@@ -116,7 +118,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         String upsertPayload = readFixture("fixtures/ev_charging_patch_example.json");
 
         try (KafkaProducer<String, String> producer = createProducer()) {
-            producer.send(new ProducerRecord<>(INGESTION_TOPIC, publishPayload));
+            producer.send(new ProducerRecord<>(props.messaging().topics().ingestionRequests(), publishPayload));
             producer.flush();
         }
 
@@ -125,12 +127,12 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                 .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(3));
 
         Item ccs2_001Before = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
-        assertThat(ccs2_001Before.getPayload()).contains("beckn:isActive");
+        assertThat(ccs2_001Before.getPayload()).contains("isActive");
         assertThat(ccs2_001Before.getPayload()).contains("77.5946");
         assertThat(ccs2_001Before.getPayload()).contains("value").contains("18.0");
 
         try (KafkaProducer<String, String> producer = createProducer()) {
-            producer.send(new ProducerRecord<>(INGESTION_TOPIC, upsertPayload));
+            producer.send(new ProducerRecord<>(props.messaging().topics().ingestionRequests(), upsertPayload));
             producer.flush();
         }
 
@@ -138,24 +140,25 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
                     Item item = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
-                    assertThat(item.getPayload()).contains("beckn:isActive");
+                    assertThat(item.getPayload()).contains("isActive");
                     assertThat(item.getPayload()).contains("99.5946");
                     assertThat(item.getPayload()).contains("value").contains("22.1");
                 });
 
         Item ccs2_001After = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
-        assertThat(ccs2_001After.getPayload()).contains("beckn:isActive").contains("true");
+        assertThat(ccs2_001After.getPayload()).contains("isActive").contains("true");
         assertThat(ccs2_001After.getPayload()).contains("99.5946");
         assertThat(ccs2_001After.getPayload()).contains("value").contains("22.1");
         assertThat(ccs2_001After.getPayload()).contains("unitQuantity").contains("1.1");
-        assertThat(ccs2_001After.getPayload()).contains("EcoPower Charging Pvt Ltd\"");
+        assertThat(ccs2_001After.getPayload()).contains("EcoPower Charging Pvt Ltd");
         // On upsert, all columns remain/update from merged payload
         assertThat(ccs2_001After.getName()).isEqualTo("DC Fast Charger - CCS2 (60kW)");
         assertThat(ccs2_001After.getType()).isEqualTo("ChargingService");
         assertThat(ccs2_001After.getProviderId()).isEqualTo("ecopower-charging");
         assertThat(ccs2_001After.getCatalogId()).isEqualTo("catalog-ev-charging-001");
 
-        ConsumerRecord<String, String> responseRecord = consumeOneRecord(RESPONSE_TOPIC,
+        String responseTopic = props.messaging().topics().responses();
+        ConsumerRecord<String, String> responseRecord = consumeOneRecord(responseTopic,
                 "upsert-example-item-offer-group", 8_000, v -> {
                     if (!v.contains("on_catalog_publish")) return false;
                     try {
@@ -165,7 +168,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                                 && "catalog-ev-charging-001".equals(res.get(0).path("catalogId").asText());
                     } catch (Exception e) { return false; }
                 });
-        assertThat(responseRecord).as("Expected on_catalog_publish response on %s", RESPONSE_TOPIC).isNotNull();
+        assertThat(responseRecord).as("Expected on_catalog_publish response on %s", responseTopic).isNotNull();
         JsonNode response = objectMapper.readTree(responseRecord.value());
         JsonNode results = response.path("message").path("results");
         assertThat(results.size()).isEqualTo(1);
@@ -180,7 +183,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         String payload = readFixture("fixtures/multi_catalog_publish.json");
 
         try (KafkaProducer<String, String> producer = createProducer()) {
-            producer.send(new ProducerRecord<>(INGESTION_TOPIC, payload));
+            producer.send(new ProducerRecord<>(props.messaging().topics().ingestionRequests(), payload));
             producer.flush();
         }
 
@@ -212,7 +215,8 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         assertThat(item4.getPayload()).contains("Offer C");
         assertThat(item5.getPayload()).contains("Offer C");
 
-        ConsumerRecord<String, String> responseRecord = consumeOneRecord(RESPONSE_TOPIC,
+        String responseTopic = props.messaging().topics().responses();
+        ConsumerRecord<String, String> responseRecord = consumeOneRecord(responseTopic,
                 "publish-response-group", 8_000, v -> {
                     if (!v.contains("on_catalog_publish")) return false;
                     try {
@@ -225,7 +229,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                         return catalogIds.contains("cat-1") && catalogIds.contains("cat-2");
                     } catch (Exception e) { return false; }
                 });
-        assertThat(responseRecord).as("Expected on_catalog_publish response on %s", RESPONSE_TOPIC).isNotNull();
+        assertThat(responseRecord).as("Expected on_catalog_publish response on %s", responseTopic).isNotNull();
 
         JsonNode response = objectMapper.readTree(responseRecord.value());
         assertThat(response.path("context").path("action").asText()).isEqualTo("on_catalog_publish");
@@ -252,7 +256,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         String upsertPayload = readFixture("fixtures/ev_charging_patch_update.json");
 
         try (KafkaProducer<String, String> producer = createProducer()) {
-            producer.send(new ProducerRecord<>(INGESTION_TOPIC, publishPayload));
+            producer.send(new ProducerRecord<>(props.messaging().topics().ingestionRequests(), publishPayload));
             producer.flush();
         }
 
@@ -264,7 +268,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         assertThat(before.getPayload()).contains("EV Station").doesNotContain("EV Station Updated");
 
         try (KafkaProducer<String, String> producer = createProducer()) {
-            producer.send(new ProducerRecord<>(INGESTION_TOPIC, upsertPayload));
+            producer.send(new ProducerRecord<>(props.messaging().topics().ingestionRequests(), upsertPayload));
             producer.flush();
         }
 
@@ -278,7 +282,8 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         Item after = itemRepository.findAll().get(0);
         assertThat(after.getPayload()).contains("EV Station Updated");
 
-        ConsumerRecord<String, String> responseRecord = consumeOneRecord(RESPONSE_TOPIC,
+        String responseTopic = props.messaging().topics().responses();
+        ConsumerRecord<String, String> responseRecord = consumeOneRecord(responseTopic,
                 "upsert-single-response-group", 8_000, v -> {
                     if (!v.contains("on_catalog_publish")) return false;
                     try {
@@ -288,7 +293,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                                 && res.get(0).path("itemCount").asInt() == 1;
                     } catch (Exception e) { return false; }
                 });
-        assertThat(responseRecord).as("Expected on_catalog_publish response on %s", RESPONSE_TOPIC).isNotNull();
+        assertThat(responseRecord).as("Expected on_catalog_publish response on %s", responseTopic).isNotNull();
         JsonNode response = objectMapper.readTree(responseRecord.value());
         JsonNode results = response.path("message").path("results");
         assertThat(results.size()).isEqualTo(1);

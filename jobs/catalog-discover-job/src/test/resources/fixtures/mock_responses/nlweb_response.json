@@ -8,50 +8,50 @@
                     {
                         "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
                         "@type": "beckn:Catalog",
-                        "beckn:id": "catalog-ev-charging-001",
-                        "beckn:descriptor": {
+                        "id": "catalog-ev-charging-001",
+                        "descriptor": {
                             "@type": "beckn:Descriptor",
-                            "schema:name": "EV Charging Services Network",
-                            "beckn:shortDesc": "Fast charging stations across Bengaluru",
-                            "schema:image": [
+                            "name": "EV Charging Services Network",
+                            "shortDesc": "Fast charging stations across Bengaluru",
+                            "images": [
                                 "https://example.com/images/ev-charging-network.jpg",
                                 "https://example.com/images/charging-station-banner.png"
                             ]
                         },
-                        "beckn:providerId": "ecopower-charging",
-                        "beckn:validity": {
+                        "providerId": "ecopower-charging",
+                        "validity": {
                             "@type": "beckn:TimePeriod",
-                            "schema:startDate": "2024-10-01T00:00:00Z",
-                            "schema:endDate": "2025-01-15T23:59:59Z"
+                            "startDate": "2024-10-01T00:00:00Z",
+                            "endDate": "2025-01-15T23:59:59Z"
                         },
-                        "beckn:items": [
+                        "resources": [
                             {
                                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
-                                "@type": "beckn:Item",
-                                "beckn:id": "ev-charger-ccs2-001",
-                                "beckn:descriptor": {
+                                "@type": "beckn:Resource",
+                                "id": "ev-charger-ccs2-001",
+                                "descriptor": {
                                     "@type": "beckn:Descriptor",
-                                    "schema:name": "DC Fast Charger - CCS2 (60kW)",
-                                    "beckn:shortDesc": "High-speed DC charging station",
-                                    "beckn:longDesc": "Ultra-fast DC charging station supporting CCS2 connector with 60kW maximum power output.",
-                                    "schema:image": [
+                                    "name": "DC Fast Charger - CCS2 (60kW)",
+                                    "shortDesc": "High-speed DC charging station",
+                                    "longDesc": "Ultra-fast DC charging station supporting CCS2 connector with 60kW maximum power output.",
+                                    "images": [
                                         "https://example.com/images/ev-charger-ccs2-60kw.jpg",
                                         "https://example.com/images/charging-station-ccs2.png"
                                     ]
                                 },
-                                "beckn:category": {
+                                "category": {
                                     "@type": "schema:CategoryCode",
-                                    "schema:codeValue": "ev-charging",
-                                    "schema:name": "EV Charging"
+                                    "codeValue": "ev-charging",
+                                    "name": "EV Charging"
                                 },
-                                "beckn:provider": {
-                                    "beckn:id": "ecopower-charging",
-                                    "beckn:descriptor": {
+                                "provider": {
+                                    "id": "ecopower-charging",
+                                    "descriptor": {
                                         "@type": "beckn:Descriptor",
-                                        "schema:name": "EcoPower Charging Pvt Ltd"
+                                        "name": "EcoPower Charging Pvt Ltd"
                                     }
                                 },
-                                "beckn:itemAttributes": {
+                                "resourceAttributes": {
                                     "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
                                     "@type": "ChargingService",
                                     "connectorType": "CCS2",
@@ -62,20 +62,20 @@
                                 }
                             }
                         ],
-                        "beckn:offers": [
+                        "offers": [
                             {
                                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
                                 "@type": "beckn:Offer",
-                                "beckn:id": "offer-ccs2-60kw-kwh",
-                                "beckn:provider": "ecopower-charging",
-                                "beckn:descriptor": {
+                                "id": "offer-ccs2-60kw-kwh",
+                                "provider": "ecopower-charging",
+                                "descriptor": {
                                     "@type": "beckn:Descriptor",
-                                    "schema:name": "Per-kWh Tariff - CCS2 60kW"
+                                    "name": "Per-kWh Tariff - CCS2 60kW"
                                 },
-                                "beckn:items": [
+                                "resourceIds": [
                                     "ev-charger-ccs2-001"
                                 ],
-                                "beckn:price": {
+                                "price": {
                                     "currency": "INR",
                                     "value": 18.0
                                 }

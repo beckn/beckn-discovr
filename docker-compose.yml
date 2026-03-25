@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database for Discovered Catalogs
   postgres-discovery:
@@ -99,13 +97,11 @@ services:
       - APP_DATASOURCE_PASSWORD=catalog123
       - DB_PASSWORD=catalog123
       - APP_MESSAGING_BROKER_SERVERS=kafka:29092
-      - APP_MESSAGING_TOPICS_INGESTION_REQUESTS=catalog.discovery.response
-      - APP_MESSAGING_TOPICS_CATALOG_EVENTS=catalog.v2.events
-      - APP_MESSAGING_TOPICS_RESPONSES=catalog.responses
-      - APP_MESSAGING_TOPICS_FAILED=catalog.v2.failed
-      - APP_MESSAGING_TOPICS_DISTRIBUTION_TOPIC_PREFIX=catalog.distribution
-      - APP_CATALOG_VALIDATION_ENABLED=false
-      - APP_CATALOG_NETWORK_DISTRIBUTION_ENABLED=false
+      - APP_MESSAGING_TOPICS_INGESTION_REQUESTS=discovr.publish.in.requests
+      - APP_MESSAGING_TOPICS_CATALOG_EVENTS=discovr.publish.out.events
+      - APP_MESSAGING_TOPICS_RESPONSES=discovr.publish.out.responses
+      - APP_MESSAGING_TOPICS_FAILED=discovr.publish.dlt.requests
+      - APP_CATALOG_VALIDATION_ENABLED=true
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - JAVA_TOOL_OPTIONS=
       - OTEL_TRACES_EXPORTER=none
@@ -116,8 +112,8 @@ services:
       - ES_HOSTS=http://elasticsearch:9200
       - APP_CATALOG_ELASTICSEARCH_INDEX_PREFIX=beckn-catalog
       - APP_CATALOG_ELASTICSEARCH_ALIAS_NAME=beckn-catalog
-      - APP_CATALOG_ELASTICSEARCH_FAILURE_TOPIC=catalog.es.failures
-      - APP_CATALOG_ELASTICSEARCH_FINAL_DLQ_TOPIC=catalog.es.failures.dlq
+      - APP_CATALOG_ELASTICSEARCH_FAILURE_TOPIC=discovr.publish.es.failures
+      - APP_CATALOG_ELASTICSEARCH_FINAL_DLQ_TOPIC=discovr.publish.es.dlt
       - APP_CATALOG_ELASTICSEARCH_BULK_BATCH_SIZE=100
       - APP_CATALOG_ELASTICSEARCH_RETRY_ATTEMPTS=3
       - APP_CATALOG_ELASTICSEARCH_RETRY_INITIAL_DELAY_MS=1000
@@ -172,8 +168,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - KAFKA_REQUEST_TOPIC=catalog.v2.discovery.requests
-      - KAFKA_RESPONSE_TOPIC=catalog.responses
+      - KAFKA_REQUEST_TOPIC=discovr.discover.in.requests
+      - KAFKA_RESPONSE_TOPIC=discovr.discover.out.responses
       - POSTGRES_HOST=postgres-discovery
       - POSTGRES_PORT=5432
       - POSTGRES_DATABASE=catalog_db
@@ -181,7 +177,7 @@ services:
       - POSTGRES_PASSWORD=catalog123
       - POSTGRES_MAX_POOL_SIZE=10
       - MAX_ITEMS_PER_CATALOG=100
-      - SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/api/beckn.yaml
+      - SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/draft/api/v2.0.0/beckn.yaml
       - SCHEMA_CACHE_TTL_HOURS=24
       - LOGGING_LEVEL_ORG_BECKN_DISCOVER=INFO
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA=ERROR
@@ -204,7 +200,7 @@ services:
       # els-semantic-search — vector knn via Elasticsearch + optional LLM enrichment
       #                       requires embedding-model and llm-model config below
       # nlweb             — delegates to an external NLWeb service
-      - DISCOVERY_TEXT_SEARCH_ENGINE=els-semantic-search
+      - DISCOVERY_TEXT_SEARCH_ENGINE=native-els
       # ── Embedding model (required when engine=els-semantic-search) ───────────
       # Supports any OpenAI-compatible /v1/embeddings provider.
       # MUST match CATALOG_TEXT_SEARCH_EMBEDDING_NAME — same model both sides.
@@ -221,7 +217,7 @@ services:
       # Set LLM_ENABLED=false to skip enrichment and embed the raw query directly.
       # Supports any OpenAI-compatible /v1/chat/completions provider (OpenAI, Groq, Azure, etc.).
       # If engine != els-semantic-search, these values are ignored.
-      - DISCOVERY_TEXT_SEARCH_LLM_ENABLED=true
+      - DISCOVERY_TEXT_SEARCH_LLM_ENABLED=false
       - DISCOVERY_TEXT_SEARCH_LLM_NAME=gpt-4o-mini
       - DISCOVERY_TEXT_SEARCH_LLM_BASE_URL=https://api.openai.com
       - DISCOVERY_TEXT_SEARCH_LLM_API_KEY=
@@ -241,6 +237,40 @@ services:
       - beckn-network
     restart: unless-stopped
     healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Response Dispatcher Job (seeker-notifier)
+  # Consumes discovery responses and notifies the BAP; failures go to a DLT topic.
+  response-dispatcher:
+    build:
+      context: ./jobs/response-dispatcher
+      dockerfile: Dockerfile
+    image: beckn/response-dispatcher:1.0
+    container_name: response-dispatcher
+    ports:
+      - "8086:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - TOPICS_INPUT=discovr.discover.out.responses
+      - TOPICS_DLT=discovr.dispatcher.dlt.responses
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=seeker-notifier-group
+      - SPRING_KAFKA_LISTENER_CONCURRENCY=1
+      - SIGNING_ENABLED=false
+      - OTEL_TRACES_EXPORTER=none
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+    depends_on:
+      catalog-discover-job:
+        condition: service_healthy
+    networks:
+      - beckn-network
+    restart: unless-stopped
+    healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
       interval: 30s
       timeout: 10s
@@ -248,20 +278,20 @@ services:
       start_period: 60s
 
   # Beckn Demo UI
-  beckn-demo-ui:
-    build:
-      context: ./reference-apps/beckn-demo-ui
-      dockerfile: Dockerfile
-      args:
-        VITE_CATALOG_API_URL: http://localhost:8085
-        VITE_DISCOVER_API_URL: http://localhost:8082
-    image: beckn/beckn-demo-ui:1.0
-    container_name: beckn-demo-ui
-    ports:
-      - "5173:80"
-    networks:
-      - beckn-network
-    restart: unless-stopped
+  # beckn-demo-ui:
+  #   build:
+  #     context: ./reference-apps/beckn-demo-ui
+  #     dockerfile: Dockerfile
+  #     args:
+  #       VITE_CATALOG_API_URL: http://localhost:8085
+  #       VITE_DISCOVER_API_URL: http://localhost:8082
+  #   image: beckn/beckn-demo-ui:1.0
+  #   container_name: beckn-demo-ui
+  #   ports:
+  #     - "5173:80"
+  #   networks:
+  #     - beckn-network
+  #   restart: unless-stopped
 
 volumes:
   postgres_discovery_data:

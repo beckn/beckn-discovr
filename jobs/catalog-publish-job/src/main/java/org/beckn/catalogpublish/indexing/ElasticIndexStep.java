@@ -10,6 +10,7 @@ import org.beckn.catalogpublish.indexing.bulk.BulkIndexService;
 import org.beckn.catalogpublish.indexing.document.CatalogDocumentAssembler;
 import org.beckn.catalogpublish.indexing.failure.EsFailurePublisher;
 import org.beckn.catalogpublish.model.Item;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.service.embedding.EmbeddingClient;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.MdcSupport;
@@ -24,6 +25,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import io.micrometer.core.instrument.Timer;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +34,7 @@ import java.util.Optional;
 /**
  * Post-commit ES indexing step.
  *
- * Groups items by schema type (@type from beckn:itemAttributes) and
+ * Groups items by schema type (@type from resourceAttributes) and
  * bulk-indexes
  * each group into its per-type ES index. Failed items are published to
  * the Kafka failure topic for async retry instead of being lost.
@@ -84,24 +86,24 @@ public class ElasticIndexStep {
         for (Item item : batch.savedItems()) {
             JsonNode payloadNode = batch.payloadNodes().get(item.getId());
             if (payloadNode == null) {
-                log.warn("es.index.payload.missing itemId={}", item.getId());
+                log.warn("event={} reason=payload-missing itemId={}", LogEvent.ES_FAILED, item.getId());
                 continue;
             }
             String schemaType = item.getType();
             if (schemaType == null || schemaType.isBlank()) {
-                log.warn("es.index.schema.type.missing itemId={}", item.getId());
+                log.warn("event={} reason=schema-type-missing itemId={}", LogEvent.ES_FAILED, item.getId());
                 continue;
             }
-            String[] networkIds = item.getNetworkIds();
-            String networkId = networkIds.length > 0 ? networkIds[0] : null;
-            Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkId);
+            String[] networkIdsArr = item.getNetworkIds();
+            List<String> networkIds = networkIdsArr.length > 0 ? Arrays.asList(networkIdsArr) : List.of();
+            Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkIds);
             embeddingClient.ifPresent(client -> {
                 try {
                     JsonNode catalogNode = payloadNode.path("catalogs").path(0);
                     String itemJson = mapper.writeValueAsString(catalogNode);
                     client.embed(itemJson).ifPresent(vec -> doc.put("item_vector", vec));
                 } catch (Exception e) {
-                    log.warn("es.index.embedding.serialize.failed itemId={} error={}", item.getId(), e.getMessage());
+                    log.warn("event={} reason=embedding-serialize-failed itemId={} error={}", LogEvent.ES_FAILED, item.getId(), e.getMessage());
                 }
             });
             bySchemaType.computeIfAbsent(schemaType, k -> new ArrayList<>()).add(doc);
@@ -121,12 +123,12 @@ public class ElasticIndexStep {
                 if (result.hasFailures()) {
                     publishFailures(schemaType, result, batch);
                 }
-                log.debug("es.batch.indexed network={} succeeded={} failed={}",
-                        schemaType, result.succeeded().size(), result.failed().size());
+                log.debug("event={} schemaType={} succeeded={} failed={}",
+                        LogEvent.ES_INDEXED, schemaType, result.succeeded().size(), result.failed().size());
             }
         } catch (Exception e) {
-            log.error("es.index.step.error schemaType={} catalogId={} error={}",
-                    schemaType, batch.catalogId(), ErrorSanitizer.sanitize(e));
+            log.error("event={} schemaType={} catalogId={} error={}",
+                    LogEvent.ES_FAILED, schemaType, batch.catalogId(), ErrorSanitizer.sanitize(e));
         } finally {
             metrics.stopBulkTimer(timer);
         }

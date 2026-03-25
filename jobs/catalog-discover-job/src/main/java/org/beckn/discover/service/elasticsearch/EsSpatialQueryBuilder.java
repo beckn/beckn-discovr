@@ -16,7 +16,7 @@ import java.util.*;
  * Builds Elasticsearch geo_shape queries from Beckn SpatialConstraint objects.
  *
  * Each constraint targets a specific location field in the ES document via the
- * path normalization: $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo → loc_beckn_availableAt.geo
+ * path normalization: $.catalogs[*].resources[*].availableAt[*].geo → loc_catalogs_resources_availableAt.geo
  */
 @Component
 @ConditionalOnProperty(name = "discovery.spatial.engine", havingValue = "elasticsearch")
@@ -245,11 +245,11 @@ public class EsSpatialQueryBuilder {
      * Normalizes a full JSONPath to an ES field name.
      * Works for location fields anywhere in the payload — items, offers, or any custom field.
      *
-     * Input:  $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo
-     * Output: loc_catalogs_beckn_items_beckn_availableAt
+     * Input:  $.catalogs[*].items[*].availableAt[*].geo
+     * Output: loc_catalogs_items_availableAt
      *
-     * Input:  $.catalogs[*].beckn:offers[*].beckn:location.geo
-     * Output: loc_catalogs_beckn_offers_beckn_location
+     * Input:  $.catalogs[*].offers[*].location.geo
+     * Output: loc_catalogs_offers_location
      */
     static String toFieldName(String path) {
         if (path == null) return null;
@@ -259,8 +259,8 @@ public class EsSpatialQueryBuilder {
         if (rel.endsWith(".geo")) rel = rel.substring(0, rel.length() - 4);
         // Remove array wildcards
         rel = rel.replace("[*]", "");
-        // Replace : and . with _
-        rel = rel.replace(":", "_").replace(".", "_");
+        // Replace . with _
+        rel = rel.replace(".", "_");
         if (rel.isBlank()) return null;
         return "loc_" + rel;
     }

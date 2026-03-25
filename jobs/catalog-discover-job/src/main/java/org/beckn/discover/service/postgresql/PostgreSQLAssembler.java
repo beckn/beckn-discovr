@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
-import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Resource;
 import org.beckn.discover.model.TimePeriod;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.util.DiscoveryConstants;
@@ -103,9 +103,9 @@ public class PostgreSQLAssembler {
         List<Catalog> catalogs = new ArrayList<>(catalogMap.values());
         long elapsedMs = (System.nanoTime() - t0) / 1_000_000;
 
-        log.info("assembler.done catalogs={} items={} skippedRows={} durationMs={} transactionId={}",
+        log.info("assembler.done catalogs={} resources={} skippedRows={} durationMs={} transactionId={}",
                 catalogs.size(),
-                catalogs.stream().mapToInt(c -> c.getItems() != null ? c.getItems().size() : 0).sum(),
+                catalogs.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
                 skipped, elapsedMs, request.transactionId());
 
         return catalogs;
@@ -139,9 +139,9 @@ public class PostgreSQLAssembler {
             return false;
         }
 
-        Item item = objectMapper.treeToValue(itemNode, Item.class);
-        if (item == null) {
-            log.warn("assembler.row.skip reason=item-deserialise-failed itemId={}", itemId);
+        Resource resource = objectMapper.treeToValue(itemNode, Resource.class);
+        if (resource == null) {
+            log.warn("assembler.row.skip reason=resource-deserialise-failed itemId={}", itemId);
             return false;
         }
 
@@ -149,14 +149,14 @@ public class PostgreSQLAssembler {
 
         // computeIfAbsent: catalog metadata is extracted only on the first row
         Catalog catalog = catalogMap.computeIfAbsent(catalogId, id -> buildCatalog(id, catalogPayload));
-        catalog.getItems().add(item);
+        catalog.getResources().add(resource);
 
-        // Back-fill providerId from item when catalog payload lacks beckn:providerId
+        // Back-fill providerId from resource when catalog payload lacks providerId
         if (catalog.getProviderId() == null
-                && item.getProvider() != null
-                && item.getProvider().getId() != null
-                && !item.getProvider().getId().isBlank()) {
-            catalog.setProviderId(item.getProvider().getId());
+                && resource.getProvider() != null
+                && resource.getProvider().getId() != null
+                && !resource.getProvider().getId().isBlank()) {
+            catalog.setProviderId(resource.getProvider().getId());
         }
 
         // Offer extraction — uses matching_offers when present, falls back to catalog payload
@@ -170,14 +170,14 @@ public class PostgreSQLAssembler {
     private Catalog buildCatalog(String catalogId, JsonNode catalogPayload) {
         Catalog catalog = new Catalog();
         catalog.setId(catalogId);
-        catalog.setItems(new ArrayList<>(16));
+        catalog.setResources(new ArrayList<>(16));
         catalog.setOffers(new ArrayList<>(8));
 
         if (catalogPayload != null) {
             extractCatalogAttributes(catalog, catalogPayload);
         } else {
             catalog.setContext(DiscoveryConstants.DEFAULT_CATALOG_CONTEXT);
-            catalog.setType(DiscoveryConstants.BECKN_CATALOG_TYPE);
+            catalog.setType(DiscoveryConstants.CATALOG_TYPE);
         }
         return catalog;
     }
@@ -207,7 +207,7 @@ public class PostgreSQLAssembler {
      * <ol>
      *   <li>{@code matching_offers} column — present only for selection-path
      *       (offer-scoped) queries; accumulated across all matching rows.</li>
-     *   <li>{@code beckn:offers} from the catalog payload — static offers.
+     *   <li>{@code offers} from the catalog payload — static offers.
      *       Merged <b>only on the first row</b> (when the offers list is still
      *       empty) to avoid N-row duplication when a catalog has multiple items.</li>
      * </ol>
@@ -224,7 +224,7 @@ public class PostgreSQLAssembler {
         }
         // Fallback: static offers from the catalog payload — always merge across all rows.
         // Duplicates (same offer in every item row) are removed by
-        // CatalogPipeline.step2DeduplicateOffers which deduplicates by beckn:id.
+        // CatalogPipeline.step2DeduplicateOffers which deduplicates by id.
         if (catalogPayload != null
                 && catalogPayload.has(DiscoveryConstants.DEFAULT_OFFER_ATTRIBUTE)) {
             mergeOffers(catalog, catalogPayload.get(DiscoveryConstants.DEFAULT_OFFER_ATTRIBUTE));
@@ -263,9 +263,9 @@ public class PostgreSQLAssembler {
      * Extracts the item {@link JsonNode} from the payload.
      * Two payload shapes are supported:
      * <ol>
-     *   <li>Direct item payload — root node has {@code @type = beckn:Item}</li>
+     *   <li>Direct item payload — root node has {@code @type = Item}</li>
      *   <li>Catalog-wrapped payload — item lives inside
-     *       {@code payload.catalogs[0].beckn:items[*]}</li>
+     *       {@code payload.catalogs[0].items[*]}</li>
      * </ol>
      */
     private JsonNode extractItemNode(String itemId, JsonNode itemPayload) {
@@ -273,8 +273,7 @@ public class PostgreSQLAssembler {
 
         // Shape 1: direct item
         if (itemPayload.has(DiscoveryConstants.JsonFields.TYPE)
-                && DiscoveryConstants.BECKN_ITEM_TYPE.equals(
-                        itemPayload.get(DiscoveryConstants.JsonFields.TYPE).asText())
+                && isItemType(itemPayload.get(DiscoveryConstants.JsonFields.TYPE).asText())
                 && (itemId == null || itemId.equals(
                         itemPayload.path(DiscoveryConstants.JsonFields.BECKN_ID).asText()))) {
             return itemPayload;
@@ -285,13 +284,20 @@ public class PostgreSQLAssembler {
         if (catalogsNode == null || !catalogsNode.isArray()) return null;
 
         return StreamSupport.stream(catalogsNode.spliterator(), false)
-                .map(cat -> cat.get(DiscoveryConstants.JsonFields.BECKN_ITEMS))
+                .map(cat -> {
+                    return cat.get(DiscoveryConstants.JsonFields.BECKN_RESOURCES);
+                })
                 .filter(items -> items != null && items.isArray())
                 .flatMap(items -> StreamSupport.stream(items.spliterator(), false))
                 .filter(node -> itemId != null
                         && itemId.equals(node.path(DiscoveryConstants.JsonFields.BECKN_ID).asText()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /** Returns {@code true} for the v2.1 resource type ({@code "beckn:Resource"}). */
+    private static boolean isItemType(String type) {
+        return DiscoveryConstants.ITEM_TYPE.equals(type);
     }
 
     /** Returns the first element of {@code payload.catalogs}, or {@code null}. */

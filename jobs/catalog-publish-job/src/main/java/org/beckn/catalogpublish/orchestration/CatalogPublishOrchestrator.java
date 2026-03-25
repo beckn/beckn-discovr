@@ -12,6 +12,8 @@ import org.beckn.catalogpublish.step.ParseStep;
 import org.beckn.catalogpublish.step.PersistenceStep;
 import org.beckn.catalogpublish.step.ResultStep;
 import org.beckn.catalogpublish.step.ValidateStep;
+import org.beckn.catalogpublish.common.BecknFields;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.util.CorrelationContext;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.MdcSupport;
@@ -72,7 +74,7 @@ public class CatalogPublishOrchestrator {
 
     public PublishOutcome processPublish(String rawMessage) {
         ParsedCatalogMessage parsed = parseStep.parse(rawMessage);
-        String messageId = parsed.context().contextNode().path("message_id").asText(null);
+        String messageId = parsed.context().contextNode().path(BecknFields.MESSAGE_ID).asText(null);
         correlationContext.populate(parsed.context(), messageId);
         validateStep.validate(parsed);
         List<ProcessingResult> results = processInParallel(parsed.catalogs(), parsed.context(),
@@ -110,8 +112,8 @@ public class CatalogPublishOrchestrator {
                                 Throwable cause = e instanceof CompletionException ce && ce.getCause() != null
                                         ? ce.getCause()
                                         : e;
-                                log.error("catalog.parallel.task.failed catalogId={} error={}",
-                                        catalogId, ErrorSanitizer.sanitize(cause));
+                                log.error("event={} catalogId={} error={}",
+                                        LogEvent.PERSIST_FAILED, catalogId, ErrorSanitizer.sanitize(cause));
                                 return ProcessingResult.internalError(catalogId, cause);
                             });
                 })
@@ -133,13 +135,13 @@ public class CatalogPublishOrchestrator {
                 return resultStep.buildResult(batch);
             });
             if (result == null) {
-                log.error("{}.null-result catalogId={}", opLabel, catalogId);
+                log.error("event={} opLabel={} catalogId={}", LogEvent.PERSIST_FAILED, opLabel, catalogId);
                 return ProcessingResult.internalError(catalogId,
                         new IllegalStateException("TransactionTemplate returned null"));
             }
             return result;
         } catch (Exception e) {
-            log.error("{}.failed catalogId={} error={}", opLabel, catalogId, ErrorSanitizer.sanitize(e));
+            log.error("event={} opLabel={} catalogId={} error={}", LogEvent.PERSIST_FAILED, opLabel, catalogId, ErrorSanitizer.sanitize(e));
             return ProcessingResult.internalError(catalogId, e);
         }
     }

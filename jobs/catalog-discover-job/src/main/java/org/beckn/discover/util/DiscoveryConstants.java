@@ -14,17 +14,17 @@ public class DiscoveryConstants {
     /**
      * Default catalog attribute to extract from catalog.payload
      */
-    public static final String DEFAULT_OFFER_ATTRIBUTE = "beckn:offers";
+    public static final String DEFAULT_OFFER_ATTRIBUTE = "offers";
 
     /**
-     * Beckn Item type identifier
+     * Resource type identifier (v2.0/v2.1 — {@code "beckn:Resource"}).
      */
-    public static final String BECKN_ITEM_TYPE = "beckn:Item";
+    public static final String ITEM_TYPE = "beckn:Resource";
 
     /**
-     * Beckn Catalog type identifier
+     * Catalog type identifier (v2.1 unprefixed form)
      */
-    public static final String BECKN_CATALOG_TYPE = "beckn:Catalog";
+    public static final String CATALOG_TYPE = "Catalog";
 
     /**
      * Beckn Offer type identifier (from schema)
@@ -48,19 +48,21 @@ public class DiscoveryConstants {
     }
 
     /**
-     * JSON field names
+     * JSON field names — Beckn Protocol v2.0 (no beckn: prefix)
      */
     public static class JsonFields {
         public static final String TYPE = "@type";
         public static final String CONTEXT = "@context";
         public static final String CATALOGS = "catalogs";
-        public static final String BECKN_ITEMS = "beckn:items";
-        public static final String BECKN_ID = "beckn:id";
-        public static final String BECKN_DESCRIPTOR = "beckn:descriptor";
-        public static final String BECKN_PROVIDER_ID = "beckn:providerId";
-        public static final String BECKN_BPP_ID = "beckn:bppId";
-        public static final String BECKN_BPP_URI = "beckn:bppUri";
-        public static final String BECKN_VALIDITY = "beckn:validity";
+        public static final String BECKN_RESOURCES = "resources";
+        public static final String BECKN_ID = "id";
+        public static final String BECKN_DESCRIPTOR = "descriptor";
+        public static final String BECKN_PROVIDER_ID = "providerId";
+        public static final String BECKN_BPP_ID = "bppId";
+        public static final String BECKN_BPP_URI = "bppUri";
+        public static final String BECKN_VALIDITY = "validity";
+        /** v2.1 catalog-level addOns field. */
+        public static final String ADD_ONS = "addOns";
     }
 
     private DiscoveryConstants() {

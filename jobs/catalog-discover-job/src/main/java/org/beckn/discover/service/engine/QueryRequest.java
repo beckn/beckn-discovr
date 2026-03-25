@@ -59,8 +59,11 @@ public record QueryRequest(
         Objects.requireNonNull(request, "DiscoverRequest must not be null");
         Objects.requireNonNull(request.getContext(), "DiscoverRequest.context must not be null");
 
+        // V2.0: schemaContext belongs in message.intent, not context.
+        // Read from intent first; fall back to context for backward compatibility.
+        List<String> schemaContextUrls = resolveSchemaContext(request);
         DiscoveryServiceUtil.SchemaContextParts parts =
-                DiscoveryServiceUtil.extractSchemaContextParts(request.getContext());
+                DiscoveryServiceUtil.extractSchemaContextParts(schemaContextUrls);
 
         return new QueryRequest(
                 request.getContext().getTransactionId(),
@@ -71,6 +74,20 @@ public record QueryRequest(
                 parts.types(),
                 parts.urls()
         );
+    }
+
+    private static List<String> resolveSchemaContext(DiscoverRequest request) {
+        if (request.getMessage() != null
+                && request.getMessage().getIntent() != null
+                && request.getMessage().getIntent().getSchemaContext() != null
+                && !request.getMessage().getIntent().getSchemaContext().isEmpty()) {
+            return request.getMessage().getIntent().getSchemaContext();
+        }
+        // Fallback: legacy location on context (will be empty for pure V2.0 requests)
+        if (request.getContext().getSchemaContext() != null) {
+            return request.getContext().getSchemaContext();
+        }
+        return List.of();
     }
 
     // ── Convenience predicates ───────────────────────────────────────────────

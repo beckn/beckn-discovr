@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.dto.CatalogBatch;
 import org.beckn.catalogpublish.exception.CatalogPublishException;
 import org.beckn.catalogpublish.model.Item;
@@ -31,14 +32,14 @@ import java.util.stream.Collectors;
  * process it with the same schema:
  * <pre>{@code
  * {
- * "context": { "bpp_id": "...", "bpp_uri": "..." },
+ * "context": { "bppId": "...", "bppUri": "..." },
  * "message": {
  * "catalogs": [
  * {
  * "id": "cat-1",
- * "beckn:bppId": "...",
- * "beckn:items": [ ...all merged item nodes... ],
- * "beckn:offers": [ ...all unique offers across items... ]
+ * "bppId": "...",
+ * "resources": [ ...all merged item nodes... ],
+ * "offers": [ ...all unique offers across items... ]
  * }
  * ]
  * }
@@ -62,7 +63,7 @@ public class CatalogPublishPayloadAssembler {
      * {@link LinkedHashMap}). Within each group, item nodes and offers are
      * extracted
      * directly from the pre-parsed {@link CatalogBatch#payloadNodes()} — no JSON
-     * re-parsing occurs. Offers are deduplicated by {@code beckn:id}; first-seen
+     * re-parsing occurs. Offers are deduplicated by {@code id}; first-seen
      * wins,
      * which correctly handles the case where the same offer appears in multiple
      * items'
@@ -115,13 +116,13 @@ public class CatalogPublishPayloadAssembler {
             byCatalog.values().forEach(group -> catalogsArray.add(buildCatalogNode(group, payloadNodes)));
 
             ObjectNode message = objectMapper.createObjectNode();
-            message.set("catalogs", catalogsArray);
+            message.set(BecknFields.CATALOGS, catalogsArray);
 
             // Forward the original inbound context node unchanged — all fields
             // (message_id, transaction_id, network_id, etc.) are preserved.
             ObjectNode root = objectMapper.createObjectNode();
-            root.set("context", batch.context().contextNode());
-            root.set("message", message);
+            root.set(BecknFields.CONTEXT, batch.context().contextNode());
+            root.set(BecknFields.MESSAGE, message);
 
             return objectMapper.writeValueAsString(root);
         } catch (Exception e) {
@@ -143,12 +144,13 @@ public class CatalogPublishPayloadAssembler {
         if (firstPayload == null || firstPayload.isMissingNode()) {
             firstPayload = objectMapper.createObjectNode();
         }
-        JsonNode catalogTemplate = firstPayload.path("catalogs").path(0);
+        JsonNode catalogTemplate = firstPayload.path(BecknFields.CATALOGS).path(0);
 
-        // Copy catalog-level fields; beckn:items and beckn:offers are assembled below.
+        // Copy catalog-level fields; items and offers are assembled below.
         ObjectNode catalogNode = objectMapper.createObjectNode();
         catalogTemplate.fields().forEachRemaining(entry -> {
-            if (!"beckn:items".equals(entry.getKey()) && !"beckn:offers".equals(entry.getKey())) {
+            if (!BecknFields.ITEMS.equals(entry.getKey()) && !BecknFields.RESOURCES.equals(entry.getKey())
+                    && !BecknFields.OFFERS.equals(entry.getKey())) {
                 catalogNode.set(entry.getKey(), entry.getValue());
             }
         });
@@ -160,15 +162,16 @@ public class CatalogPublishPayloadAssembler {
             JsonNode node = payloadNodes.get(item.getId());
             if (node == null)
                 continue;
-            JsonNode payloadCatalog = node.path("catalogs").path(0);
-            JsonNode itemNode = payloadCatalog.path("beckn:items").path(0);
+            JsonNode payloadCatalog = node.path(BecknFields.CATALOGS).path(0);
+            JsonNode resourcesNode = payloadCatalog.path(BecknFields.RESOURCES);
+            JsonNode itemNode = resourcesNode.path(0);
             if (!itemNode.isMissingNode()) {
                 itemsArray.add(itemNode);
             }
-            JsonNode offers = payloadCatalog.path("beckn:offers");
+            JsonNode offers = payloadCatalog.path(BecknFields.OFFERS);
             if (offers.isArray()) {
                 for (JsonNode offer : offers) {
-                    String offerId = offer.path("beckn:id").asText(null);
+                    String offerId = offer.path(BecknFields.ID).asText(null);
                     if (offerId != null) {
                         offerById.putIfAbsent(offerId, offer);
                     }
@@ -179,8 +182,8 @@ public class CatalogPublishPayloadAssembler {
         ArrayNode offersArray = objectMapper.createArrayNode();
         offerById.values().forEach(offersArray::add);
 
-        catalogNode.set("beckn:items", itemsArray);
-        catalogNode.set("beckn:offers", offersArray);
+        catalogNode.set(BecknFields.RESOURCES, itemsArray);
+        catalogNode.set(BecknFields.OFFERS, offersArray);
         return catalogNode;
     }
 }

@@ -158,11 +158,11 @@ public class GeoShapeExtractor {
      * Normalizes a full JSON path to an ES field name.
      * Works for location fields anywhere in the payload — items, offers, or any custom field.
      *
-     * Input:  $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo
-     * Output: loc_catalogs_beckn_items_beckn_availableAt
+     * Input:  $.catalogs[*].resources[*].availableAt[*].geo
+     * Output: loc_catalogs_resources_availableAt
      *
-     * Input:  $.catalogs[*].beckn:offers[*].beckn:location.geo
-     * Output: loc_catalogs_beckn_offers_beckn_location
+     * Input:  $.catalogs[*].offers[*].location.geo
+     * Output: loc_catalogs_offers_location
      */
     static String toFieldName(String path) {
         if (path == null) return null;

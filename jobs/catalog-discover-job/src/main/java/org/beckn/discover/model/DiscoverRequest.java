@@ -3,6 +3,7 @@ package org.beckn.discover.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.beckn.discover.common.BecknFields;
 import java.util.List;
 
 /**
@@ -18,23 +19,12 @@ public class DiscoverRequest {
 
     @NotNull(message = "Context is required")
     @Valid
-    @JsonProperty("context")
+    @JsonProperty(BecknFields.CONTEXT)
     private Context context;
 
-    // New schema: wrap search parameters under "message"
-    @JsonProperty("message")
+    // Beckn v2.0: search parameters nested under "message.intent"
+    @JsonProperty(BecknFields.MESSAGE)
     private Message message;
-
-    // Back-compat fields (root-level), will be populated when no message object is
-    // present
-    @JsonProperty("text_search")
-    private String textSearch;
-
-    @JsonProperty("filters")
-    private String filters;
-
-    @JsonProperty("spatial")
-    private List<SpatialConstraint> spatial;
 
     // Default constructor
     public DiscoverRequest() {
@@ -63,49 +53,51 @@ public class DiscoverRequest {
     }
 
     public String getTextSearch() {
-        if (message != null && message.getTextSearch() != null) {
-            return message.getTextSearch();
+        if (message != null && message.getIntent() != null) {
+            return message.getIntent().getTextSearch();
         }
-        return textSearch;
+        return null;
     }
 
     public void setTextSearch(String textSearch) {
-        // Populate both for symmetry; serializer can choose message-first via getter
         if (this.message == null)
             this.message = new Message();
-        this.message.setTextSearch(textSearch);
-        this.textSearch = textSearch;
+        if (this.message.getIntent() == null)
+            this.message.setIntent(new Intent());
+        this.message.getIntent().setTextSearch(textSearch);
     }
 
     public String getFilters() {
-        if (message != null && message.getFilters() != null) {
-            return message.getFilters().getExpression();
+        if (message != null && message.getIntent() != null && message.getIntent().getFilters() != null) {
+            return message.getIntent().getFilters().getExpression();
         }
-        return filters;
+        return null;
     }
 
     public void setFilters(String filters) {
         if (this.message == null)
             this.message = new Message();
+        if (this.message.getIntent() == null)
+            this.message.setIntent(new Intent());
         Filter filterObj = new Filter();
         filterObj.setType("jsonpath");
         filterObj.setExpression(filters);
-        this.message.setFilters(filterObj);
-        this.filters = filters;
+        this.message.getIntent().setFilters(filterObj);
     }
 
     public List<SpatialConstraint> getSpatial() {
-        if (message != null && message.getSpatial() != null) {
-            return message.getSpatial();
+        if (message != null && message.getIntent() != null) {
+            return message.getIntent().getSpatial();
         }
-        return spatial;
+        return null;
     }
 
     public void setSpatial(List<SpatialConstraint> spatial) {
         if (this.message == null)
             this.message = new Message();
-        this.message.setSpatial(spatial);
-        this.spatial = spatial;
+        if (this.message.getIntent() == null)
+            this.message.setIntent(new Intent());
+        this.message.getIntent().setSpatial(spatial);
     }
 
     @Override
@@ -113,23 +105,41 @@ public class DiscoverRequest {
         return "DiscoverRequest{" +
                 "context=" + context +
                 ", message=" + message +
-                ", textSearch='" + textSearch + '\'' +
-                ", filters='" + filters + '\'' +
                 '}';
     }
 
-    // New schema message container
+    // Beckn v2.0: message wraps a single intent object
     public static class Message {
-        @JsonProperty("text_search")
-        private String textSearch;
-
-        @JsonProperty("filters")
-        private Filter filters;
-
-        @JsonProperty("spatial")
-        private List<SpatialConstraint> spatial;
+        @JsonProperty(BecknFields.INTENT)
+        private Intent intent;
 
         public Message() {
+        }
+
+        public Intent getIntent() {
+            return intent;
+        }
+
+        public void setIntent(Intent intent) {
+            this.intent = intent;
+        }
+    }
+
+    // Intent holds the search parameters (textSearch, filters, spatial, schemaContext)
+    public static class Intent {
+        @JsonProperty(BecknFields.TEXT_SEARCH)
+        private String textSearch;
+
+        @JsonProperty(BecknFields.FILTERS)
+        private Filter filters;
+
+        @JsonProperty(BecknFields.SPATIAL)
+        private List<SpatialConstraint> spatial;
+
+        @JsonProperty(value = BecknFields.SCHEMA_CONTEXT, access = JsonProperty.Access.WRITE_ONLY)
+        private List<String> schemaContext;
+
+        public Intent() {
         }
 
         public String getTextSearch() {
@@ -154,6 +164,14 @@ public class DiscoverRequest {
 
         public void setSpatial(List<SpatialConstraint> spatial) {
             this.spatial = spatial;
+        }
+
+        public List<String> getSchemaContext() {
+            return schemaContext;
+        }
+
+        public void setSchemaContext(List<String> schemaContext) {
+            this.schemaContext = schemaContext;
         }
     }
 

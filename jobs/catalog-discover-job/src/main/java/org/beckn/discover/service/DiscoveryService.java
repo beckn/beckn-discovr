@@ -2,6 +2,8 @@ package org.beckn.discover.service;
 
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.exception.SemanticSearchException;
+import org.beckn.discover.logging.BecknMdcContext;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverRequest;
@@ -17,6 +19,8 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -111,17 +115,21 @@ public class DiscoveryService {
         LatencyTracker tracker = properties.isLatencyTrackingEnabled() ? new LatencyTracker() : null;
 
         try {
-            log.info("discovery.request.start transactionId={} messageId={}",
-                    request.getContext().getTransactionId(),
-                    request.getContext().getMessageId());
+            log.info(LogEvent.QUERY_STARTED,
+                    value("transactionId", request.getContext().getTransactionId()),
+                    value("messageId", request.getContext().getMessageId()));
 
             QueryRequest qr = QueryRequest.from(request);
             DiscoverResponse response = route(qr, request.getContext(), tracker);
 
             long ms = Duration.between(start, Instant.now()).toMillis();
             metrics.recordSuccess(start);
-            log.info("discovery.request.success durationMs={} transactionId={}", ms, qr.transactionId());
-            perfLog.info("discovery.request durationMs={} transactionId={}", ms, qr.transactionId());
+            log.info(LogEvent.QUERY_COMPLETED,
+                    value("durationMs", ms),
+                    value("transactionId", qr.transactionId()));
+            perfLog.info(LogEvent.QUERY_COMPLETED,
+                    value("durationMs", ms),
+                    value("transactionId", qr.transactionId()));
 
             return response;
 
@@ -131,8 +139,10 @@ public class DiscoveryService {
             throw e;
         } catch (Exception e) {
             metrics.recordFailure(start, e, request.getContext().getTransactionId());
-            log.error("discovery.request.failed transactionId={} error={}",
-                    request.getContext().getTransactionId(), e.getMessage(), e);
+            log.error(LogEvent.QUERY_FAILED,
+                    value("transactionId", request.getContext().getTransactionId()),
+                    value("error", e.getMessage()),
+                    e);
             throw new RuntimeException("Failed to process discovery request", e);
         } finally {
             if (tracker != null) tracker.logSummary(request.getContext().getTransactionId(),
@@ -163,18 +173,18 @@ public class DiscoveryService {
             throws Exception {
 
         if (qr.hasFilters() && qr.hasSpatial()) {
-            log.info("discovery.path=A transactionId={}", qr.transactionId());
+            log.info(LogEvent.QUERY_STARTED + ".path-A", value("transactionId", qr.transactionId()));
             return pathA(qr, context, tracker);
         }
         if (qr.hasFilters()) {
-            log.info("discovery.path=B transactionId={}", qr.transactionId());
+            log.info(LogEvent.QUERY_STARTED + ".path-B", value("transactionId", qr.transactionId()));
             return pathB(qr, context, tracker);
         }
         if (qr.hasSpatial()) {
-            log.info("discovery.path=C transactionId={}", qr.transactionId());
+            log.info(LogEvent.QUERY_STARTED + ".path-C", value("transactionId", qr.transactionId()));
             return pathC(qr, context, tracker);
         }
-        log.info("discovery.path=D transactionId={}", qr.transactionId());
+        log.info(LogEvent.QUERY_STARTED + ".path-D", value("transactionId", qr.transactionId()));
         return pathD(qr, context, tracker);
     }
 
@@ -198,8 +208,9 @@ public class DiscoveryService {
 
         if (combined.isEmpty()) {
             // Engine could not build spatial conditions → fall back to parallel
-            log.info("discovery.path=A.fallback reason=no-spatial-conditions transactionId={}",
-                    qr.transactionId());
+            log.info(LogEvent.QUERY_STARTED + ".path-A-fallback",
+                    value("reason", "no-spatial-conditions"),
+                    value("transactionId", qr.transactionId()));
             return pathAParallel(qr, context, tracker);
         }
 
@@ -224,8 +235,11 @@ public class DiscoveryService {
         try {
             CompletableFuture.allOf(filterFuture, spatialFuture).get(timeoutSec, TimeUnit.SECONDS);
         } catch (Exception e) {
-            log.error("discovery.path=A.parallel.timeout transactionId={} timeoutSec={}",
-                    qr.transactionId(), timeoutSec, e);
+            log.error(LogEvent.QUERY_TIMEOUT,
+                    value("path", "A-parallel"),
+                    value("transactionId", qr.transactionId()),
+                    value("timeoutSec", timeoutSec),
+                    e);
             filterFuture.cancel(true);
             spatialFuture.cancel(true);
             throw new Exception("Parallel queries timed out after " + timeoutSec + "s", e);
@@ -235,8 +249,10 @@ public class DiscoveryService {
         List<Catalog> spatialResult = spatialFuture.join();
         recordStep(tracker, "path-a.parallel.queries");
 
-        log.info("discovery.path=A.parallel filterCatalogs={} spatialCatalogs={} transactionId={}",
-                filterResult.size(), spatialResult.size(), qr.transactionId());
+        log.info(LogEvent.QUERY_COMPLETED + ".path-A-parallel",
+                value("filterCatalogs", filterResult.size()),
+                value("spatialCatalogs", spatialResult.size()),
+                value("transactionId", qr.transactionId()));
 
         List<Catalog> intersected = intersectByItemId(filterResult, spatialResult, qr.transactionId());
         recordStep(tracker, "path-a.parallel.intersect");
@@ -294,7 +310,11 @@ public class DiscoveryService {
             catalogs = searchFuture.get(timeoutSec, TimeUnit.SECONDS);
         } catch (java.util.concurrent.TimeoutException e) {
             searchFuture.cancel(true);
-            log.error("discovery.path=D.timeout transactionId={} timeoutSec={}", qr.transactionId(), timeoutSec);
+            log.error(LogEvent.QUERY_TIMEOUT,
+                    value("path", "D"),
+                    value("transactionId", qr.transactionId()),
+                    value("timeoutSec", timeoutSec),
+                    e);
             throw new Exception("Text search timed out after " + timeoutSec + "s", e);
         } catch (java.util.concurrent.ExecutionException e) {
             // Unwrap CompletionException → original cause (e.g. SemanticSearchException)
@@ -328,36 +348,40 @@ public class DiscoveryService {
             String transactionId) {
 
         if (filterResult.isEmpty() || spatialResult.isEmpty()) {
-            log.info("discovery.intersect.empty transactionId={}", transactionId);
+            log.info(LogEvent.QUERY_COMPLETED + ".intersect-empty",
+                    value("transactionId", transactionId));
             return List.of();
         }
 
-        Set<String> spatialItemIds = spatialResult.stream()
-                .filter(c -> c.getItems() != null)
-                .flatMap(c -> c.getItems().stream())
-                .map(item -> item.getId())
+        Set<String> spatialResourceIds = spatialResult.stream()
+                .filter(c -> c.getResources() != null)
+                .flatMap(c -> c.getResources().stream())
+                .map(r -> r.getId())
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
         List<Catalog> intersected = filterResult.stream()
-                .filter(catalog -> catalog.getItems() != null)
+                .filter(catalog -> catalog.getResources() != null)
                 .map(catalog -> {
-                    List<org.beckn.discover.model.Item> matchingItems = catalog.getItems().stream()
-                            .filter(item -> item.getId() != null && spatialItemIds.contains(item.getId()))
+                    List<org.beckn.discover.model.Resource> matchingResources = catalog.getResources().stream()
+                            .filter(r -> r.getId() != null && spatialResourceIds.contains(r.getId()))
                             .collect(Collectors.toList());
 
-                    if (matchingItems.isEmpty()) return null;
+                    if (matchingResources.isEmpty()) return null;
 
-                    // Clone the catalog with only the intersecting items
+                    // Clone the catalog with only the intersecting resources
                     Catalog narrowed = shallowCopyCatalog(catalog);
-                    narrowed.setItems(matchingItems);
+                    narrowed.setResources(matchingResources);
                     return narrowed;
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        log.info("discovery.intersect.done filterCatalogs={} spatialItemIds={} intersectedCatalogs={} transactionId={}",
-                filterResult.size(), spatialItemIds.size(), intersected.size(), transactionId);
+        log.info(LogEvent.QUERY_COMPLETED + ".intersect-done",
+                value("filterCatalogs", filterResult.size()),
+                value("spatialResourceIds", spatialResourceIds.size()),
+                value("intersectedCatalogs", intersected.size()),
+                value("transactionId", transactionId));
         return intersected;
     }
 
@@ -376,7 +400,7 @@ public class DiscoveryService {
         copy.setBppUri(src.getBppUri());
         copy.setValidity(src.getValidity());
         copy.setOffers(src.getOffers() != null ? new java.util.ArrayList<>(src.getOffers()) : new java.util.ArrayList<>());
-        copy.setItems(new java.util.ArrayList<>());
+        copy.setResources(new java.util.ArrayList<>());
         return copy;
     }
 
@@ -414,9 +438,7 @@ public class DiscoveryService {
     // ── MDC management ────────────────────────────────────────────────────────
 
     private static void setupMDC(Context context) {
-        if (context.getTransactionId() != null) MDC.put("transactionId", context.getTransactionId());
-        if (context.getMessageId()    != null) MDC.put("messageId",     context.getMessageId());
-        if (context.getBapId()        != null) MDC.put("bapId",         context.getBapId());
+        BecknMdcContext.populate(context);
     }
 
     private static void restoreMDC(Map<String, String> snapshot) {
@@ -424,7 +446,7 @@ public class DiscoveryService {
     }
 
     private static void clearMDC() {
-        MDC.clear();
+        BecknMdcContext.clear();
     }
 
     // ── Latency tracking ──────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 package org.beckn.discover.service.elasticsearch;
 
 import org.beckn.discover.model.Catalog;
-import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Resource;
 import org.beckn.discover.service.response.CatalogProcessor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,12 +35,12 @@ class EsSearchAssemblerTest {
         Catalog catalog = catalogs.get(0);
         assertThat(catalog.getId()).isEqualTo("cat-1");
         assertThat(catalog.getBppId()).isEqualTo("bpp-1");
-        assertThat(catalog.getItems()).hasSize(1);
+        assertThat(catalog.getResources()).hasSize(1);
 
-        Item item = catalog.getItems().get(0);
-        assertThat(item.getId()).isEqualTo("item-1");
-        assertThat(item.getDescriptor().getName()).isEqualTo("DC Fast Charger");
-        assertThat(item.getDescriptor().getShortDesc()).isEqualTo("60kW CCS2 charger");
+        Resource resource = catalog.getResources().get(0);
+        assertThat(resource.getId()).isEqualTo("item-1");
+        assertThat(resource.getDescriptor().getName()).isEqualTo("DC Fast Charger");
+        assertThat(resource.getDescriptor().getShortDesc()).isEqualTo("60kW CCS2 charger");
     }
 
     @Test
@@ -52,9 +52,9 @@ class EsSearchAssemblerTest {
         List<Catalog> catalogs = assembler.assemble(docs, "tx-2");
 
         assertThat(catalogs).hasSize(1);
-        assertThat(catalogs.get(0).getItems()).hasSize(2);
-        assertThat(catalogs.get(0).getItems())
-                .extracting(Item::getId)
+        assertThat(catalogs.get(0).getResources()).hasSize(2);
+        assertThat(catalogs.get(0).getResources())
+                .extracting(Resource::getId)
                 .containsExactlyInAnyOrder("item-1", "item-2");
     }
 
@@ -77,10 +77,10 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-4");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getCategory()).isNotNull();
-        assertThat(item.getCategory().getCodeValue()).isEqualTo("EV_CHARGING");
-        assertThat(item.getCategory().getName()).isEqualTo("EV Charging");
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getCategory()).isNotNull();
+        assertThat(resource.getCategory().getCodeValue()).isEqualTo("EV_CHARGING");
+        assertThat(resource.getCategory().getName()).isEqualTo("EV Charging");
     }
 
     @Test
@@ -89,10 +89,10 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-5");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getRating()).isNotNull();
-        assertThat(item.getRating().getRatingValue()).isEqualTo(4.5);
-        assertThat(item.getRating().getRatingCount()).isEqualTo(120);
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getRating()).isNotNull();
+        assertThat(resource.getRating().getRatingValue()).isEqualTo(4.5);
+        assertThat(resource.getRating().getRatingCount()).isEqualTo(120);
     }
 
     @Test
@@ -101,10 +101,10 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-6");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getProvider()).isNotNull();
-        assertThat(item.getProvider().getId()).isEqualTo("ecopower-charging");
-        assertThat(item.getProvider().getDescriptor().getName()).isEqualTo("EcoPower Charging");
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getProvider()).isNotNull();
+        assertThat(resource.getProvider().getId()).isEqualTo("ecopower-charging");
+        assertThat(resource.getProvider().getDescriptor().getName()).isEqualTo("EcoPower Charging");
     }
 
     @Test
@@ -113,13 +113,13 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-7");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getContext()).isEqualTo("https://custom.item.context");
-        assertThat(item.getType()).isEqualTo("CustomItemType");
-        assertThat(item.getItemAttributes()).isNotNull();
-        assertThat(item.getItemAttributes().getContext()).isEqualTo("https://custom.attr.context");
-        assertThat(item.getItemAttributes().getType()).isEqualTo("EVCharger");
-        assertThat(item.getItemAttributes().getAttribute("connectorType")).isEqualTo("CCS2");
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getContext()).isEqualTo("https://custom.item.context");
+        assertThat(resource.getType()).isEqualTo("CustomItemType");
+        assertThat(resource.getResourceAttributes()).isNotNull();
+        assertThat(resource.getResourceAttributes().getContext()).isEqualTo("https://custom.attr.context");
+        assertThat(resource.getResourceAttributes().getType()).isEqualTo("EVCharger");
+        assertThat(resource.getResourceAttributes().getAttribute("connectorType")).isEqualTo("CCS2");
     }
 
     @Test
@@ -133,7 +133,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithOffers_offersSetOnCatalog() {
-        Map<String, Object> offer = Map.of("beckn:id", "offer-1", "beckn:price", Map.of("value", 150.0));
+        Map<String, Object> offer = Map.of("id", "offer-1", "price", Map.of("value", 150.0));
         Map<String, Object> doc = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "Charger", List.of(offer));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-9");
@@ -146,7 +146,7 @@ class EsSearchAssemblerTest {
         // item-2 (no offers) arrives first in ES relevance order;
         // item-1 (has the offer) arrives second.
         // Offers must still appear in the assembled catalog.
-        Map<String, Object> offer = Map.of("beckn:id", "offer-1", "beckn:items", List.of("item-1"), "beckn:price",
+        Map<String, Object> offer = Map.of("id", "offer-1", "resourceIds", List.of("item-1"), "price",
                 Map.of("value", 99.0));
 
         Map<String, Object> noOfferDoc = evChargerDoc("cat-1", "bpp-1", "item-2", "AC Charger");
@@ -156,11 +156,11 @@ class EsSearchAssemblerTest {
         List<Catalog> catalogs = assembler.assemble(List.of(noOfferDoc, offerDoc), "tx-10");
 
         assertThat(catalogs).hasSize(1);
-        assertThat(catalogs.get(0).getItems()).hasSize(2);
+        assertThat(catalogs.get(0).getResources()).hasSize(2);
         assertThat(catalogs.get(0).getOffers()).isNotNull().hasSize(1);
         assertThat(catalogs.get(0).getOffers().get(0))
                 .isInstanceOfSatisfying(java.util.Map.class,
-                        m -> assertThat(m.get("beckn:id")).isEqualTo("offer-1"));
+                        m -> assertThat(m.get("id")).isEqualTo("offer-1"));
     }
 
     @Test
@@ -169,7 +169,7 @@ class EsSearchAssemblerTest {
         // items).
         // After assembly the offer list must not contain duplicates once the pipeline
         // runs.
-        Map<String, Object> offer = Map.of("beckn:id", "offer-shared", "beckn:items", List.of("item-1", "item-2"));
+        Map<String, Object> offer = Map.of("id", "offer-shared", "resourceIds", List.of("item-1", "item-2"));
 
         Map<String, Object> doc1 = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "CCS2 Charger", List.of(offer));
         Map<String, Object> doc2 = evChargerDocWithOffers("cat-1", "bpp-1", "item-2", "AC Charger", List.of(offer));
@@ -181,7 +181,7 @@ class EsSearchAssemblerTest {
         // so we verify the offer is present at least once; pipeline dedup is tested
         // separately.
         assertThat(raw.get(0).getOffers()).isNotNull().isNotEmpty();
-        assertThat(raw.get(0).getItems()).hasSize(2);
+        assertThat(raw.get(0).getResources()).hasSize(2);
     }
 
     @Test
@@ -194,11 +194,11 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-1");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getAvailableAt()).isNotNull().hasSize(1);
-        assertThat(item.getAvailableAt().get(0).getGeo().getType()).isEqualTo("Point");
-        assertThat(item.getAvailableAt().get(0).getAddress().getStreetAddress()).isEqualTo("MG Road");
-        assertThat(item.getAvailableAt().get(0).getAddress().getExtendedAddress()).isEqualTo("Apt 4B");
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getAvailableAt()).isNotNull().hasSize(1);
+        assertThat(resource.getAvailableAt().get(0).getGeo().getType()).isEqualTo("Point");
+        assertThat(resource.getAvailableAt().get(0).getAddress().getStreetAddress()).isEqualTo("MG Road");
+        assertThat(resource.getAvailableAt().get(0).getAddress().getExtendedAddress()).isEqualTo("Apt 4B");
     }
 
     @Test
@@ -213,8 +213,8 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-2");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getAvailableAt()).isNotNull().hasSize(2);
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getAvailableAt()).isNotNull().hasSize(2);
     }
 
     @Test
@@ -223,8 +223,8 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-3");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getAvailableAt()).isNull();
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getAvailableAt()).isNull();
     }
 
     @Test
@@ -236,21 +236,21 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-4");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getAvailableAt()).isNull();
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getAvailableAt()).isNull();
     }
 
     @Test
-    void itemAttributesLocFields_notIncludedInAvailableAt() {
+    void resourceAttributesLocFields_notIncludedInAvailableAt() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        // itemAttributes-level location — should NOT appear in item.availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_itemAttributes_serviceArea", Map.of(
+        // resourceAttributes-level location — should NOT appear in item.availableAt
+        doc.put("loc_catalogs_beckn_items_beckn_resourceAttributes_serviceArea", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(78.0, 13.0))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-5");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getAvailableAt()).isNull();
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getAvailableAt()).isNull();
     }
 
     @Test
@@ -262,8 +262,8 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-6");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getAvailableAt()).isNull();
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getAvailableAt()).isNull();
     }
 
     @Test
@@ -275,10 +275,10 @@ class EsSearchAssemblerTest {
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-7");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getProvider().getLocations()).isNotNull().hasSize(1);
-        assertThat(item.getProvider().getLocations().get(0).getGeo().getType()).isEqualTo("Point");
-        assertThat(item.getProvider().getLocations().get(0).getAddress().getAddressLocality()).isEqualTo("Bengaluru");
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getProvider().getLocations()).isNotNull().hasSize(1);
+        assertThat(resource.getProvider().getLocations().get(0).getGeo().getType()).isEqualTo("Point");
+        assertThat(resource.getProvider().getLocations().get(0).getAddress().getAddressLocality()).isEqualTo("Bengaluru");
     }
 
     @Test
@@ -293,19 +293,168 @@ class EsSearchAssemblerTest {
         // offer-level — should NOT be in either
         doc.put("loc_catalogs_beckn_offers_beckn_location", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(80.0, 15.0))));
-        // itemAttributes-level — should NOT be in either
-        doc.put("loc_catalogs_beckn_items_beckn_itemAttributes_depot", Map.of(
+        // resourceAttributes-level — should NOT be in either
+        doc.put("loc_catalogs_beckn_items_beckn_resourceAttributes_depot", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(79.0, 14.0))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-8");
 
-        Item item = catalogs.get(0).getItems().get(0);
-        assertThat(item.getAvailableAt()).isNotNull().hasSize(1);
-        assertThat(item.getAvailableAt().get(0).getGeo().getCoordinates())
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getAvailableAt()).isNotNull().hasSize(1);
+        assertThat(resource.getAvailableAt().get(0).getGeo().getCoordinates())
                 .containsExactly(77.5, 12.9);
-        assertThat(item.getProvider().getLocations()).isNotNull().hasSize(1);
-        assertThat(item.getProvider().getLocations().get(0).getGeo().getCoordinates())
+        assertThat(resource.getProvider().getLocations()).isNotNull().hasSize(1);
+        assertThat(resource.getProvider().getLocations().get(0).getGeo().getCoordinates())
                 .containsExactly(78.0, 13.0);
+    }
+
+    // ── New field tests ───────────────────────────────────────────────────────
+
+    @Test
+    void hitWithThumbnailImage_populatesThumbnailImageOnDescriptor() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_descriptor_thumbnail_image", "https://example.org/thumb.jpg");
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-1");
+
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getDescriptor().getThumbnailImage()).isEqualTo("https://example.org/thumb.jpg");
+    }
+
+    @Test
+    void hitWithDescriptorDocs_populatesDocsOnDescriptor() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_descriptor_docs", List.of(
+                Map.of("url", "https://example.org/doc.pdf", "label", "Manual")));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-2");
+
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getDescriptor().getDocs()).isNotNull().hasSize(1);
+        assertThat(resource.getDescriptor().getDocs().get(0).get("label")).isEqualTo("Manual");
+    }
+
+    @Test
+    void hitWithDescriptorMediaFile_populatesMediaFileOnDescriptor() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_descriptor_media_file", List.of(
+                Map.of("url", "https://example.org/video.mp4", "mimetype", "video/mp4")));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-3");
+
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getDescriptor().getMediaFile()).isNotNull().hasSize(1);
+        assertThat(resource.getDescriptor().getMediaFile().get(0).get("mimetype")).isEqualTo("video/mp4");
+    }
+
+    @Test
+    void hitWithProviderAlerts_populatesAlertsOnProvider() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_provider_alerts", List.of(
+                Map.of("type", "maintenance", "message", "Scheduled downtime tonight")));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4");
+
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getProvider().getAlerts()).isNotNull().hasSize(1);
+        assertThat(resource.getProvider().getAlerts().get(0).get("type")).isEqualTo("maintenance");
+    }
+
+    @Test
+    void hitWithProviderPolicies_populatesPoliciesOnProvider() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_provider_policies", List.of(
+                Map.of("@type", "CancellationPolicy", "name", "No cancellations"),
+                Map.of("@type", "ReturnPolicy", "name", "30-day returns")));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-5");
+
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getProvider().getPolicies()).isNotNull().hasSize(2);
+        assertThat(resource.getProvider().getPolicies().get(0).getType()).isEqualTo("CancellationPolicy");
+        assertThat(resource.getProvider().getPolicies().get(1).getName()).isEqualTo("30-day returns");
+    }
+
+    @Test
+    void hitWithRatingReviewText_populatesReviewTextOnRating() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("item_rating_review_text", "Excellent service and fast charging");
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-6");
+
+        Resource resource = catalogs.get(0).getResources().get(0);
+        assertThat(resource.getRating()).isNotNull();
+        assertThat(resource.getRating().getReviewText()).isEqualTo("Excellent service and fast charging");
+    }
+
+    // ── Validity tests ────────────────────────────────────────────────────────
+
+    @Test
+    void hitWithCatalogValidity_populatesValidityOnCatalog() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("catalog_validity", Map.of(
+                "@type", "TimePeriod",
+                "startDate", "2024-10-01T00:00:00Z",
+                "endDate", "2025-01-15T23:59:59Z"));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-val-1");
+
+        assertThat(catalogs).hasSize(1);
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getValidity()).isNotNull();
+        assertThat(catalog.getValidity().getType()).isEqualTo("TimePeriod");
+        assertThat(catalog.getValidity().getStartDate()).isNotNull();
+        assertThat(catalog.getValidity().getStartDate().toString()).startsWith("2024-10-01");
+        assertThat(catalog.getValidity().getEndDate()).isNotNull();
+        assertThat(catalog.getValidity().getEndDate().toString()).startsWith("2025-01-15");
+    }
+
+    @Test
+    void hitWithCatalogValidityWithTimes_populatesStartEndTime() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        doc.put("catalog_validity", Map.of(
+                "@type", "TimePeriod",
+                "startTime", "09:00",
+                "endTime", "18:00"));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-val-2");
+
+        assertThat(catalogs).hasSize(1);
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getValidity()).isNotNull();
+        assertThat(catalog.getValidity().getStartTime()).isEqualTo("09:00");
+        assertThat(catalog.getValidity().getEndTime()).isEqualTo("18:00");
+    }
+
+    @Test
+    void hitWithoutCatalogValidity_validityIsNull() {
+        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-val-3");
+
+        assertThat(catalogs).hasSize(1);
+        assertThat(catalogs.get(0).getValidity()).isNull();
+    }
+
+    @Test
+    void multipleCatalogHits_eachCatalogRetainsItsOwnValidity() {
+        Map<String, Object> doc1 = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger A"));
+        doc1.put("catalog_validity", Map.of(
+                "@type", "TimePeriod",
+                "startDate", "2024-01-01T00:00:00Z",
+                "endDate", "2024-06-30T23:59:59Z"));
+
+        Map<String, Object> doc2 = new java.util.HashMap<>(evChargerDoc("cat-2", "bpp-2", "item-2", "Charger B"));
+        // cat-2 has no validity
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc1, doc2), "tx-val-4");
+
+        assertThat(catalogs).hasSize(2);
+        Catalog cat1 = catalogs.stream().filter(c -> "cat-1".equals(c.getId())).findFirst().orElseThrow();
+        Catalog cat2 = catalogs.stream().filter(c -> "cat-2".equals(c.getId())).findFirst().orElseThrow();
+        assertThat(cat1.getValidity()).isNotNull();
+        assertThat(cat1.getValidity().getType()).isEqualTo("TimePeriod");
+        assertThat(cat2.getValidity()).isNull();
     }
 
     // ── Fixtures ─────────────────────────────────────────────────────────────
@@ -315,7 +464,7 @@ class EsSearchAssemblerTest {
         return Map.ofEntries(
                 Map.entry("catalog_id", catalogId != null ? catalogId : ""),
                 Map.entry("catalog_context", "https://custom.catalog.context"),
-                Map.entry("catalog_type", "beckn:Catalog"),
+                Map.entry("catalog_type", "Catalog"),
                 Map.entry("bpp_id", bppId),
                 Map.entry("bpp_uri", "https://bpp.example.com"),
                 Map.entry("network_id", "ondc-ev"),

@@ -6,7 +6,7 @@ import org.assertj.core.api.Assertions;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverResponse;
-import org.beckn.discover.model.Item;
+import org.beckn.discover.model.Resource;
 import okhttp3.mockwebserver.MockWebServer;
 import org.beckn.discover.model.Context;
 import org.postgresql.util.PGobject;
@@ -133,18 +133,11 @@ public abstract class BaseIntegrationTest {
         context.setMessageId(messageId);
         context.setBapId("https://evcharging-bap.example.com");
         context.setBapUri("https://evcharging-bap.example.com/callback");
-        context.setDomain("beckn.one:mobility:ev-charging:*");
         context.setAction("discover");
         context.setVersion("2.0.0");
-        context.setCoreVersion("2.0.0");
-        context.setCountry("IND");
-        context.setCity("std:BLR");
         context.setTtl("PT10M");
         context.setTimestamp(OffsetDateTime.of(2025, 8, 14, 10, 30, 0, 0, ZoneOffset.UTC));
-        context.setNetworkId(java.util.List.of(
-                "bap.net/ev-charging"));
-        context.setSchemaContext(java.util.List.of(
-                "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld#ChargingService"));
+        context.setNetworkId("bap.net/ev-charging");
         return context;
     }
 
@@ -229,7 +222,7 @@ public abstract class BaseIntegrationTest {
             // Fallback: seed geometry for the EV charging test fixture.
             // Path format matches catalog-publish-job and request targets.
             // Used by spatialQueryUsesPostgisTargets — s_dwithin with radius 1000m.
-            String path = "$.catalogs[*].\"beckn:items\"[*].\"beckn:availableAt\"[*].\"geo\"";
+            String path = "$.catalogs[*].resources[*].availableAt[*].geo";
             insertItemLocationGeom("ev-charger-ccs2-001", path, 77.5946, 12.9716);
             insertItemLocationGeom("ev-charger-ccs2-002", path, 77.5700, 12.9800);
         }
@@ -255,7 +248,7 @@ public abstract class BaseIntegrationTest {
      * </p>
      *
      * @param itemId the FK into {@code item.id}
-     * @param path   the path token (e.g. {@code $.catalogs[*].beckn:items[*].beckn:availableAt[*].geo})
+     * @param path   the path token (e.g. {@code $.catalogs[*].resources[*].availableAt[*].geo})
      * @param lon    longitude (x), in degrees
      * @param lat    latitude (y), in degrees
      */
@@ -387,21 +380,21 @@ public abstract class BaseIntegrationTest {
         Assertions.assertThat(catalog.getId())
                 .as("Catalog must have ID")
                 .isNotBlank();
-        Assertions.assertThat(catalog.getItems())
-                .as("Catalog must have items")
+        Assertions.assertThat(catalog.getResources())
+                .as("Catalog must have resources")
                 .isNotNull()
                 .isNotEmpty();
 
-        // Validate each item has required fields
-        for (Item item : catalog.getItems()) {
-            Assertions.assertThat(item.getId())
-                    .as("Item must have ID")
+        // Validate each resource has required fields
+        for (Resource resource : catalog.getResources()) {
+            Assertions.assertThat(resource.getId())
+                    .as("Resource must have ID")
                     .isNotBlank();
-            Assertions.assertThat(item.getDescriptor())
-                    .as("Item must have descriptor")
+            Assertions.assertThat(resource.getDescriptor())
+                    .as("Resource must have descriptor")
                     .isNotNull();
-            Assertions.assertThat(item.getItemAttributes())
-                    .as("Item must have itemAttributes")
+            Assertions.assertThat(resource.getResourceAttributes())
+                    .as("Resource must have resourceAttributes")
                     .isNotNull();
         }
     }
@@ -415,13 +408,13 @@ public abstract class BaseIntegrationTest {
         Assertions.assertThat(offerObj).isInstanceOf(Map.class);
 
         Map<String, Object> offer = (Map<String, Object>) offerObj;
-        Assertions.assertThat(offer.get("beckn:id"))
-                .as("Offer must have beckn:id")
+        Assertions.assertThat(offer.get("id"))
+                .as("Offer must have id")
                 .isNotNull();
 
-        Object itemsObj = offer.get("beckn:items");
+        Object itemsObj = offer.get("resourceIds");
         Assertions.assertThat(itemsObj)
-                .as("Offer must have beckn:items array")
+                .as("Offer must have resourceIds array")
                 .isNotNull();
         Assertions.assertThat(itemsObj).isInstanceOf(List.class);
 

@@ -58,7 +58,7 @@ public record AppProperties(
         public record Catalog(
                         @Positive long maxPayloadSize,
                         boolean validationEnabled,
-                        @NotBlank String schemaFile,
+                        @NotBlank String schemaUrl,
                         @Min(1) int parallelCatalogThreshold,
                         @Min(1) int processingPoolSize,
                         @Valid Elasticsearch elasticsearch,

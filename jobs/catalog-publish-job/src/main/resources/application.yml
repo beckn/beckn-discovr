@@ -20,15 +20,15 @@ app:
       session-timeout-ms: 30000
       max-poll-interval-ms: 300000
     topics:
-      ingestion-requests: catalog.v2.upload.requests
-      catalog-events: catalog.v2.catalog.events
-      responses: catalog.responses
-      failed: catalog.v2.failed
+      ingestion-requests: discovr.publish.in.requests
+      catalog-events: discovr.publish.out.events
+      responses: discovr.publish.out.responses
+      failed: discovr.publish.dlt.requests
 
   catalog:
     max-payload-size: 5242880
     validation-enabled: true
-    schema-file: catalog-upload-request-schema-v7.json
+    schema-url: ${BECKN_PROTOCOL_API_SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/draft/api/v2.0.0/beckn.yaml}
     parallel-catalog-threshold: 3
     # Thread pool size for parallel catalog processing within a single message.
     processing-pool-size: 8
@@ -59,8 +59,8 @@ app:
       hosts: ${ES_HOSTS:http://localhost:9200}
       index-prefix: beckn-catalog
       alias-name: beckn-catalog
-      failure-topic: catalog.es.failures
-      final-dlq-topic: catalog.es.failures.dlq
+      failure-topic: discovr.publish.es.failures
+      final-dlq-topic: discovr.publish.es.dlt
       bulk-batch-size: 100
       retry-attempts: 3
       retry-initial-delay-ms: 1000

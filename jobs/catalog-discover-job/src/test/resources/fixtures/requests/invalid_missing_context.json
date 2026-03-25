@@ -1,8 +1,10 @@
 {
   "message": {
-    "filters": {
-      "type": "jsonpath",
-      "expression": "$.catalogs[*].\"beckn:items\"[*] ? (@.\"beckn:itemAttributes\".connectorType == \"CCS2\")"
+    "intent": {
+      "filters": {
+        "type": "jsonpath",
+        "expression": "$.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"CCS2\")"
+      }
     }
   }
 }

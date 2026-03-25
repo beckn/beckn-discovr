@@ -51,6 +51,15 @@ public class KafkaConfig {
         return factory;
     }
 
+    @Value("${spring.kafka.producer.properties.max.block.ms:60000}")
+    private long maxBlockMs;
+
+    @Value("${spring.kafka.producer.properties.request.timeout.ms:30000}")
+    private int requestTimeoutMs;
+
+    @Value("${spring.kafka.producer.properties.delivery.timeout.ms:120000}")
+    private int deliveryTimeoutMs;
+
     @Bean
     public ProducerFactory<String, String> producerFactory() {
         Map<String, Object> props = new HashMap<>();
@@ -58,6 +67,16 @@ public class KafkaConfig {
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         props.put("spring.json.add.type.headers", false);
+        // Durability: wait for all in-sync replicas to confirm, enable idempotent delivery
+        props.put(ProducerConfig.ACKS_CONFIG, "all");
+        props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        props.put(ProducerConfig.RETRIES_CONFIG, 3);
+        props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 1);
+        // Configurable timeouts — override via spring.kafka.producer.properties.* in test profiles
+        // to avoid blocking the request thread when the broker is unavailable (e.g. in integration tests).
+        props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, maxBlockMs);
+        props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, requestTimeoutMs);
+        props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, deliveryTimeoutMs);
         return new DefaultKafkaProducerFactory<>(props);
     }
 
