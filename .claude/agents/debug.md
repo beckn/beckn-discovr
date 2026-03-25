@@ -36,13 +36,17 @@ You are a **debugging specialist** for Beckn Discovr (Java 17 / Spring Boot 3.x)
 ### Step 3 — Fix (Minimal)
 - Change only what is wrong.
 - Common patterns for this project:
-  - Test assertion uses `$.ack_status` → change to `$.status` (v2.0).
-  - Test checks `$.error.code` → change to `$.error.errorCode`.
-  - Test checks `$.transaction_id` in ACK response → remove (not in v2.0 ACK).
-  - Fixture JSON has `transaction_id`, `bap_id`, `beckn:id` → update to v2.0 names.
-  - Model field type mismatch (e.g. `networkId` changed from `List<String>` to `String`) → update test usage.
+  - Fixture uses `"items"` → change to `"resources"` (v2.1).
+  - Fixture uses `"itemAttributes"` → change to `"resourceAttributes"`.
+  - Fixture uses `"@type": "Item"` → change to `"@type": "beckn:Resource"`.
+  - Offer uses `"items"` for refs → change to `"resourceIds"`.
+  - Context has `domain`, `schemaContext` → remove (not v2.1 Context fields).
+  - Fixture uses `"action": "beckn/discover"` → check spec for correct const (`"discover"`).
+  - Validity uses `"start"`/`"end"` → change to `"startDate"`/`"endDate"`.
+  - `networkId` on resources → remove (only on context).
+  - Rating/rateable defaults to false/0 → check nullable wrapper types.
   - Spring bean not found → check `@Component`/`@Service`/`@Bean` annotation.
-  - `setCoreVersion()` called → remove (field removed in v2.0 Context).
+  - Log string hardcoded → use `LogEvent` constant from `logging/LogEvent.java`.
 
 ### Step 4 — Verify
 1. `./gradlew compileJava` — clean.
