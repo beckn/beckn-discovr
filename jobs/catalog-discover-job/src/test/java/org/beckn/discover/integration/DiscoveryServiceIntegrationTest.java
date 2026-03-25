@@ -507,14 +507,14 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void schemaValidationPassesWithMissingTransactionId() {
-        // Note: transaction_id appears to be optional in the schema
+    void schemaValidationFailsWithMissingTransactionId() {
+        // Context V2.0 schema requires transactionId — validation must reject requests without it.
         ObjectNode root = loadRequestNode("fixtures/requests/invalid_missing_transaction_id.json");
 
         var result = discoveryValidationService.validateDiscoverRequest(root);
 
-        // Schema validation passes because transaction_id is optional
-        Assertions.assertThat(result.isValid()).isTrue();
+        Assertions.assertThat(result.isValid()).isFalse();
+        Assertions.assertThat(result.getErrors()).isNotEmpty();
     }
 
     @Test

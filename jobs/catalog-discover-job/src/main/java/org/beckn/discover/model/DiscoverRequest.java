@@ -125,7 +125,7 @@ public class DiscoverRequest {
         }
     }
 
-    // Intent holds the search parameters (textSearch, filters, spatial)
+    // Intent holds the search parameters (textSearch, filters, spatial, schemaContext)
     public static class Intent {
         @JsonProperty(BecknFields.TEXT_SEARCH)
         private String textSearch;
@@ -135,6 +135,9 @@ public class DiscoverRequest {
 
         @JsonProperty(BecknFields.SPATIAL)
         private List<SpatialConstraint> spatial;
+
+        @JsonProperty(value = BecknFields.SCHEMA_CONTEXT, access = JsonProperty.Access.WRITE_ONLY)
+        private List<String> schemaContext;
 
         public Intent() {
         }
@@ -161,6 +164,14 @@ public class DiscoverRequest {
 
         public void setSpatial(List<SpatialConstraint> spatial) {
             this.spatial = spatial;
+        }
+
+        public List<String> getSchemaContext() {
+            return schemaContext;
+        }
+
+        public void setSchemaContext(List<String> schemaContext) {
+            this.schemaContext = schemaContext;
         }
     }
 

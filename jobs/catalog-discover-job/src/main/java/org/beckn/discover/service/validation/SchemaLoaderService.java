@@ -84,6 +84,10 @@ public class SchemaLoaderService {
             try (InputStream is = resource.getInputStream()) {
                 content = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             }
+        } else if (schemaUrl.startsWith("file://") || schemaUrl.startsWith("file:")) {
+            java.net.URI fileUri = new java.net.URI(schemaUrl);
+            java.nio.file.Path filePath = java.nio.file.Paths.get(fileUri);
+            content = java.nio.file.Files.readString(filePath, java.nio.charset.StandardCharsets.UTF_8);
         } else {
             content = restClient.get()
                     .uri(schemaUrl)
