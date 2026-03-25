@@ -46,7 +46,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.message.ack.status").value("ACK"));
+                .andExpect(jsonPath("$.status").value("ACK"));
     }
 
     // ── Async persistence ─────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{this is not valid json}"))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.message.ack.status").value("ACK"));
+                .andExpect(jsonPath("$.status").value("ACK"));
 
         // Async pipeline will fail at ParseStep; DB must stay empty
         Thread.sleep(500);
@@ -163,7 +163,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.message.ack.status").value("ACK"));
+                .andExpect(jsonPath("$.status").value("ACK"));
 
         Thread.sleep(500);
         assertThat(itemRepository.count()).isEqualTo(0);
@@ -193,7 +193,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.message.ack.status").value("ACK"));
+                .andExpect(jsonPath("$.status").value("ACK"));
 
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
