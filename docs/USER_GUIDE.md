@@ -6,7 +6,7 @@ How to discover resources across published catalogs using the Beckn Protocol v2.
 
 ## How It Works
 
-The Discovery Service searches across all catalogs published to the Catalog Service. It supports text search, location-based search, and attribute filtering.
+The Discovery Service searches across all catalogs published to the Catalog Service. It supports natural language search, keyword search, location-based search, and attribute filtering.
 
 ```
 Consumer (BAP)                              Discovery Service
@@ -47,9 +47,11 @@ Discovery searches the **full indexed catalog** — it returns results regardles
 
 ## 1. Text Search
 
-Find resources by keyword across names, descriptions, and attributes.
+Search using keywords or natural language queries. The discovery service supports both simple keyword matching and natural language understanding — you can search the way your users would ask.
 
 **`GET /beckn/discover`**
+
+### Keyword Search
 
 ```json
 {
@@ -60,7 +62,9 @@ Find resources by keyword across names, descriptions, and attributes.
     "transactionId": "66666666-6666-6666-6666-666666666666",
     "timestamp": "2026-03-26T11:00:00Z",
     "bapId": "bap.myapp.in",
-    "bapUri": "https://bap.myapp.in"
+    "bapUri": "https://bap.myapp.in",
+    "networkId": "retail-grocery",
+    "schemaContext": []
   },
   "message": {
     "intent": {
@@ -70,7 +74,31 @@ Find resources by keyword across names, descriptions, and attributes.
 }
 ```
 
-Returns all catalogs containing resources that match "Coffee" in their name, description, or attributes.
+### Natural Language Search
+
+You can also use natural language queries — the service understands conversational phrasing and extracts the relevant search intent:
+
+```json
+{
+  "message": {
+    "intent": {
+      "textSearch": "strong Assam Darjeeling tea for morning chai"
+    }
+  }
+}
+```
+
+```json
+{
+  "message": {
+    "intent": {
+      "textSearch": "premium instant coffee under 500 rupees"
+    }
+  }
+}
+```
+
+The service matches against resource names, descriptions, and domain-specific attributes to find the most relevant results.
 
 ---
 
@@ -248,16 +276,3 @@ The response includes only catalogs, resources, and offers that match your query
 |-----------|--------|----------|--------|
 | **Discover resources** | GET | `/beckn/discover` | `discover` |
 
----
-
-## Discover vs Subscribe vs Pull
-
-| | Discover | Subscribe | Pull |
-|---|---------|-----------|------|
-| **Purpose** | Ad-hoc search | Automatic delivery of new data | Bulk retrieval of existing data |
-| **Data scope** | All indexed catalogs | Only new publishes after subscription | Historical + existing catalogs |
-| **Requires subscription** | No | Yes | No |
-| **Response** | Immediate results | Async callback on each publish | Async (requestId + fetch) |
-| **Use case** | User searching for products | Continuous feed of catalog updates | Initial sync, periodic backup |
-
-For subscriptions and pull, see the [Catalog Service API Guide](../../beckn-catalg/docs/USER_GUIDE.md).
