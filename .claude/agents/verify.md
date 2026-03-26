@@ -85,13 +85,13 @@ Use `uuidgen | tr '[:upper:]' '[:lower:]'` for all messageId/transactionId value
 
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
-| SC-05 | Create subscription | POST `/beckn/catalog/subscribe` | `context.action = "catalog/on_subscribe"`, `message.subscriptions` = array, `status = "ACTIVE"`, request bapId/transactionId echoed in context |
+| SC-05 | Create subscription | POST `/beckn/catalog/subscription` | `context.action = "catalog/on_subscription"`, `message.subscriptions` = array, `status = "ACTIVE"`, request bapId/transactionId echoed in context |
 | SC-06 | Wrong action | POST with `"action":"wrong"` | `error.code = "SUB_VALIDATION_FAILED"` |
 | SC-07 | Missing networkIds | POST with only `schemaTypes` | `error.code = "SUB_VALIDATION_FAILED"` |
-| SC-08 | GET by ID | GET `/beckn/catalog/subscribe/:id` | `context.action = "catalog/on_subscribe"`, `message.subscriptions` = array(1), `message.pagination.count = 1` |
-| SC-09 | LIST subscriptions | GET `/beckn/catalog/subscriptions?subscriberId=` | `context.action = "catalog/on_subscribe"`, `message.subscriptions` = array, `message.pagination.count` >= 1 |
-| SC-10 | DELETE | DELETE `/beckn/catalog/subscribe/:id` | `context.action = "catalog/on_subscribe"`, `message.subscriptions[0].status = "DELETED"` |
-| SC-11 | GET deleted → 404 | GET `/beckn/catalog/subscribe/:id` | HTTP 404 |
+| SC-08 | GET by ID | GET `/beckn/catalog/subscription/:id` | `context.action = "catalog/on_subscription"`, `message.subscriptions` = array(1), `message.pagination.count = 1` |
+| SC-09 | LIST subscriptions | GET `/beckn/catalog/subscriptions?subscriberId=` | `context.action = "catalog/on_subscription"`, `message.subscriptions` = array, `message.pagination.count` >= 1 |
+| SC-10 | DELETE | DELETE `/beckn/catalog/subscription/:id` | `context.action = "catalog/on_subscription"`, `message.subscriptions[0].status = "DELETED"` |
+| SC-11 | GET deleted → 404 | GET `/beckn/catalog/subscription/:id` | HTTP 404 |
 
 ### 3. Discover API
 
@@ -139,8 +139,8 @@ Use `uuidgen | tr '[:upper:]' '[:lower:]'` for all messageId/transactionId value
 |---|-------|-------------|
 | 7a | All subscription responses use `subscriptions: [...]` array | SC-05, SC-08, SC-09, SC-10 |
 | 7b | All responses have correct `on_*` action value | All scenarios |
-| 7c | POST subscribe echoes request bapId + transactionId | SC-05 |
-| 7d | GET/DELETE subscribe builds context from stored data | SC-08, SC-10 |
+| 7c | POST subscription echoes request bapId + transactionId | SC-05 |
+| 7d | GET/DELETE subscription builds context from stored data | SC-08, SC-10 |
 | 7e | Pull result uses `resources` not `items` | SC-17 |
 | 7f | No false `rateable: false` or `ratingValue: 0` in discover | SC-12 |
 
