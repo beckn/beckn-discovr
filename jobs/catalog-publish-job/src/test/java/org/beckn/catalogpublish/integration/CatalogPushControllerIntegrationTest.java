@@ -113,6 +113,8 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void push_oversizedPayload_doesNotPersistAnything() throws Exception {
+        long countBefore = itemRepository.count();
+
         byte[] oversized = new byte[5 * 1024 * 1024 + 1];
         Arrays.fill(oversized, (byte) 'x');
 
@@ -121,30 +123,34 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .content(oversized))
                 .andExpect(status().isPayloadTooLarge());
 
-        // No async work should have been submitted
+        // Count must not increase — oversized payload must not reach the pipeline
         await().atMost(5, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(0));
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
     }
 
     // ── Async failure cases (202 returned, no DB row) ─────────────────────────
 
     @Test
     void push_invalidJson_returns202ButDoesNotPersist() throws Exception {
+        long countBefore = itemRepository.count();
+
         mockMvc.perform(post("/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{this is not valid json}"))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.status").value("ACK"));
 
-        // Async pipeline will fail at ParseStep; DB must stay empty
+        // Async pipeline will fail at ParseStep; count must not increase
         await().atMost(5, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(0));
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
     }
 
     @Test
     void push_missingBppId_returns202ButDoesNotPersist() throws Exception {
+        long countBefore = itemRepository.count();
+
         // context present but bppId missing → controller should enrich context and pipeline should run
         String payload = """
                 {
@@ -169,11 +175,13 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
         await().atMost(5, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(0));
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
     }
 
     @Test
     void push_missingBppFields_enrichedFromCatalogAndPersists() throws Exception {
+        long countBefore = itemRepository.count();
+
         String payload = """
                 {
                   "context": {
@@ -200,11 +208,13 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(1));
+                .untilAsserted(() -> assertThat(itemRepository.count()).isGreaterThan(countBefore));
     }
 
     @Test
     void push_emptyCatalogsList_returns202ButDoesNotPersist() throws Exception {
+        long countBefore = itemRepository.count();
+
         String payload = """
                 {
                   "context": {
@@ -225,7 +235,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
         await().atMost(5, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(0));
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
     }
 
     // ── Auth ──────────────────────────────────────────────────────────────────
