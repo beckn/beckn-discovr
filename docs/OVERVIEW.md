@@ -42,8 +42,7 @@ Beckn DISCOVR solves this by offering:
 ### For Discovery Service Builders
 
 - **Subscription-driven indexing** — DISCOVR subscribes to CATALG and receives catalogue updates automatically via `on_discover` callbacks
-- **Elasticsearch-powered** — full-text search, spatial queries, and structured attribute filtering
-- **PostgreSQL + PostGIS** — spatial queries backed by geospatial database for precise location-based discovery
+- **Full-text and spatial search** — supports keyword matching, natural language understanding, and geospatial proximity queries
 - **Pipeline processing** — incoming catalogues pass through schema filtering, deduplication, and pruning before being served to consumers
 
 ### For Network Facilitators
@@ -63,8 +62,8 @@ Beckn CATALG                           Beckn DISCOVR
       |  (catalogue updates delivered        |
       |   to subscribed DISCOVR instances)   |
       |------------------------------------->|
-      |                                      |  Index in Elasticsearch
-      |                                      |  Store in PostgreSQL + PostGIS
+      |                                      |  Index for search
+      |                                      |  Store for spatial queries
       |                                      |
       |                                      |
 Consumer (BAP)                               |
@@ -82,7 +81,7 @@ Consumer (BAP)                               |
 
 A consumer opens a grocery shopping app and searches for "instant coffee near me". The BAP sends a discover request to Beckn DISCOVR combining natural language text search with a spatial constraint (5 km radius around the consumer's location).
 
-DISCOVR queries its Elasticsearch index for resources matching "instant coffee" and its PostGIS database for resources with availability locations within 5 km. The response includes Bru Gold Coffee, Nescafe Classic, and Continental Xtra — each with offers from multiple retailers (Amazon, Flipkart, local stores) showing different prices, discounts, and delivery estimates.
+DISCOVR queries its search index for resources matching "instant coffee" and its spatial index for resources with availability locations within 5 km. The response includes Bru Gold Coffee, Nescafe Classic, and Continental Xtra — each with offers from multiple retailers (Amazon, Flipkart, local stores) showing different prices, discounts, and delivery estimates.
 
 The consumer compares offers and proceeds to order from the retailer with the best price and fastest delivery.
 
@@ -188,7 +187,7 @@ DISCOVR does not poll CATALG for changes. Instead, it uses Beckn's subscription 
 1. DISCOVR subscribes to CATALG using `POST /beckn/catalog/subscription` with network and schema type filters
 2. When a provider publishes or updates a catalogue in CATALG, the evaluator matches active subscriptions
 3. Matching catalogue data is delivered to DISCOVR via `POST {discovrUri}/on_discover` callback
-4. DISCOVR indexes the received catalogue in Elasticsearch and PostgreSQL
+4. DISCOVR indexes the received catalogue for search and spatial queries
 5. The updated data is immediately searchable via `GET /beckn/discover`
 
 For historical data or initial sync, DISCOVR uses the CATALG Pull API (`POST /catalog/pull`) to fetch all existing catalogues.
