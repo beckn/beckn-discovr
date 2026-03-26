@@ -86,6 +86,8 @@ All three jobs are fully migrated to Beckn Protocol v2.1. **No legacy v2.0/v1.0 
 - on_discover callback: `"action": "on_discover"`
 - Publish request: `"action": "catalog/publish"`
 - on_publish callback: `"action": "catalog/on_publish"`
+- Subscription request: `"action": "catalog/subscription"`
+- on_subscription callback: `"action": "catalog/on_subscription"`
 
 ### on_discover response structure
 ```json
