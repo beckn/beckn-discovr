@@ -43,7 +43,7 @@ Beckn DISCOVR solves this by offering:
 
 - **Subscription-driven indexing** — DISCOVR subscribes to CATALG and receives catalogue updates automatically via `on_discover` callbacks
 - **Full-text and spatial search** — supports keyword matching, natural language understanding, and geospatial proximity queries
-- **Pipeline processing** — incoming catalogues pass through schema filtering, deduplication, and pruning before being served to consumers
+- **Quality-assured results** — incoming catalogues are validated, deduplicated, and pruned before being served to consumers
 
 ### For Network Facilitators
 
@@ -71,7 +71,7 @@ Consumer (BAP)                               |
       |  GET /beckn/discover                 |
       |  (text / spatial / JSONPath)         |
       |------------------------------------->|
-      |                                      |  Query Elasticsearch + PostgreSQL
+      |                                      |  Query search + spatial indexes
       |  on_discover response                |
       |  (matching resources + offers)       |
       |<-------------------------------------|
@@ -99,86 +99,21 @@ DISCOVR exposes a single, powerful discovery endpoint that supports multiple sea
 
 ### Discovery APIs (Consumer-facing)
 
-**`GET /beckn/discover`** — Synchronous discovery. BAP sends a discover request with intent (text, spatial, or filter), DISCOVR returns matching catalogues with resources and offers immediately.
-
-**`POST /beckn/discover`** — Asynchronous discovery. DISCOVR acknowledges with `ACK` and delivers results via callback to `{bapUri}/on_discover`.
+| API | Method | Description |
+|-----|--------|-------------|
+| `/beckn/discover` | GET | Synchronous — returns matching catalogues immediately |
+| `/beckn/discover` | POST | Asynchronous — acknowledges with `ACK`, delivers results via `on_discover` callback |
 
 ### Search Modes
 
-| Mode | Intent Field | Description | Example |
-|------|-------------|-------------|---------|
-| **Text / Natural Language** | `textSearch` | Keyword or conversational query | `"strong Assam tea for chai"` |
-| **Spatial** | `spatial` | Find resources near a location | `s_dwithin` with coordinates + radius |
-| **JSONPath Filter** | `filters` | Attribute-based filtering | `$.offers[*] ? (@.price < 100)` |
-| **Combined** | Multiple fields | Mix text + spatial + filters | Text search within 5 km radius |
+| Mode | Description | Example |
+|------|-------------|---------|
+| **Text / Natural Language** | Keyword or conversational query | "strong Assam tea for morning chai" |
+| **Spatial** | Find resources near a location | Within 5 km of a GPS coordinate |
+| **Attribute Filter** | Fine-grained filtering on resource or offer attributes | Flat discount offers under 100 |
+| **Combined** | Mix any of the above in a single request | Coffee search within 5 km radius |
 
-### Request Format
-
-```json
-{
-  "context": {
-    "version": "2.0.0",
-    "action": "discover",
-    "messageId": "<uuid>",
-    "transactionId": "<uuid>",
-    "timestamp": "<ISO 8601>",
-    "bapId": "<your-identifier>",
-    "bapUri": "<your-callback-url>",
-    "networkId": "<network-id>",
-    "schemaContext": []
-  },
-  "message": {
-    "intent": {
-      "textSearch": "instant coffee",
-      "spatial": [
-        {
-          "op": "s_dwithin",
-          "targets": "$.catalogs[*].resources[*].availableAt[*].geo",
-          "geometry": { "type": "Point", "coordinates": [77.6401, 12.9116] },
-          "distanceMeters": 5000
-        }
-      ]
-    }
-  }
-}
-```
-
-### Response Format
-
-```json
-{
-  "context": {
-    "action": "on_discover",
-    "messageId": "...",
-    "transactionId": "..."
-  },
-  "message": {
-    "catalogs": [
-      {
-        "id": "CAT-GROCERY-001",
-        "descriptor": { "name": "FreshMart Grocery Catalog" },
-        "resources": [
-          {
-            "id": "ITEM-BRU-COFFEE",
-            "descriptor": { "name": "Bru Gold Instant Coffee" },
-            "rating": { "ratingValue": 4.1, "ratingCount": 18200 },
-            "resourceAttributes": { "@type": "GroceryItem", "brand": "Bru" }
-          }
-        ],
-        "offers": [
-          {
-            "id": "OFFER-AMAZON-BRU",
-            "resourceIds": ["ITEM-BRU-COFFEE"],
-            "offerAttributes": {
-              "priceSpecification": { "price": 170, "discount": "15%" }
-            }
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+For detailed request/response formats and examples, see the [Discovery API Guide](USER_GUIDE.md).
 
 ### How DISCOVR Stays Updated
 
