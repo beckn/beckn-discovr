@@ -34,7 +34,7 @@ public class CatalogPushController {
     private static final Logger log = LoggerFactory.getLogger(CatalogPushController.class);
 
     private static final Map<String, Object> ACK_RESPONSE =
-            Map.of("message", Map.of("ack", Map.of("status", "ACK")));
+            Map.of("status", "ACK");
 
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
