@@ -214,8 +214,6 @@ public class CatalogProcessor {
     private void applyPostMergeDefaults(Catalog catalog) {
         if (DiscoveryServiceUtil.isBlank(catalog.getContext()))
             catalog.setContext(DiscoveryConstants.DEFAULT_CATALOG_CONTEXT);
-        if (DiscoveryServiceUtil.isBlank(catalog.getType()))
-            catalog.setType(DiscoveryConstants.CATALOG_TYPE);
     }
 
     // ── Offer operations ─────────────────────────────────────────────────────

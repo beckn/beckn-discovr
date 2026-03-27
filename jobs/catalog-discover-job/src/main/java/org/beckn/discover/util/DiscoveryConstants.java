@@ -17,19 +17,9 @@ public class DiscoveryConstants {
     public static final String DEFAULT_OFFER_ATTRIBUTE = "offers";
 
     /**
-     * Resource type identifier (v2.0/v2.1 — {@code "beckn:Resource"}).
-     */
-    public static final String ITEM_TYPE = "beckn:Resource";
-
-    /**
      * Catalog type identifier (v2.1 unprefixed form)
      */
     public static final String CATALOG_TYPE = "Catalog";
-
-    /**
-     * Beckn Offer type identifier (from schema)
-     */
-    public static final String BECKN_OFFER_TYPE = "beckn:Offer";
 
     /**
      * Default catalog context URL

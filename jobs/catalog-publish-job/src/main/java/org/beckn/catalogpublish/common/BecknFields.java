@@ -98,5 +98,4 @@ public final class BecknFields {
     public static final String CONSIDERATION_IDS = "considerationIds";
     public static final String FULFILLMENT_IDS   = "fulfillmentIds";
     public static final String AVAILABLE_TO      = "availableTo";
-    public static final String VISIBLE_TO        = "visibleTo";
 }

@@ -74,15 +74,15 @@ public class DiscoverResponse {
     }
 
     /**
-     * Response Message DTO containing catalogs and inReplyTo.
+     * Response Message DTO containing catalogs and requestDigest.
      */
     public static class ResponseMessage {
         @JsonProperty(BecknFields.CATALOGS)
         private List<Catalog> catalogs;
 
         @JsonInclude(JsonInclude.Include.NON_NULL)
-        @JsonProperty("inReplyTo")
-        private InReplyTo inReplyTo;
+        @JsonProperty("requestDigest")
+        private RequestDigest requestDigest;
 
         public ResponseMessage() {}
 
@@ -90,9 +90,9 @@ public class DiscoverResponse {
             this.catalogs = catalogs;
         }
 
-        public ResponseMessage(List<Catalog> catalogs, InReplyTo inReplyTo) {
+        public ResponseMessage(List<Catalog> catalogs, RequestDigest requestDigest) {
             this.catalogs = catalogs;
-            this.inReplyTo = inReplyTo;
+            this.requestDigest = requestDigest;
         }
 
         public List<Catalog> getCatalogs() {
@@ -103,38 +103,38 @@ public class DiscoverResponse {
             this.catalogs = catalogs;
         }
 
-        public InReplyTo getInReplyTo() {
-            return inReplyTo;
+        public RequestDigest getRequestDigest() {
+            return requestDigest;
         }
 
-        public void setInReplyTo(InReplyTo inReplyTo) {
-            this.inReplyTo = inReplyTo;
+        public void setRequestDigest(RequestDigest requestDigest) {
+            this.requestDigest = requestDigest;
         }
 
         @Override
         public String toString() {
             return "ResponseMessage{" +
                     "catalogs=" + catalogs +
-                    ", inReplyTo=" + inReplyTo +
+                    ", requestDigest=" + requestDigest +
                     '}';
         }
     }
 
     /**
      * Identifies the discover request this response is replying to.
-     * Placed inside {@code message} per Beckn Protocol v2.0/v2.1 spec.
+     * Placed inside {@code message} per Beckn Protocol v2.1 spec.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public static class InReplyTo {
+    public static class RequestDigest {
         @JsonProperty("messageId")
         private String messageId;
 
         @JsonProperty("digest")
         private String digest;
 
-        public InReplyTo() {}
+        public RequestDigest() {}
 
-        public InReplyTo(String messageId, String digest) {
+        public RequestDigest(String messageId, String digest) {
             this.messageId = messageId;
             this.digest = digest;
         }
@@ -157,7 +157,7 @@ public class DiscoverResponse {
 
         @Override
         public String toString() {
-            return "InReplyTo{messageId='" + messageId + "', digest='" + digest + "'}";
+            return "RequestDigest{messageId='" + messageId + "', digest='" + digest + "'}";
         }
     }
 }

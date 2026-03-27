@@ -44,7 +44,7 @@ public final class BecknFields {
     public static final String RESOURCE_ATTRIBUTES = "resourceAttributes";
 
     // ── on_discover specific ─────────────────────────────────────────────────
-    public static final String IN_REPLY_TO     = "inReplyTo";
+    public static final String REQUEST_DIGEST  = "requestDigest";
 
     // ── Action values (v2.0 slash notation) ─────────────────────────────────
     public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";

@@ -177,7 +177,6 @@ public class PostgreSQLAssembler {
             extractCatalogAttributes(catalog, catalogPayload);
         } else {
             catalog.setContext(DiscoveryConstants.DEFAULT_CATALOG_CONTEXT);
-            catalog.setType(DiscoveryConstants.CATALOG_TYPE);
         }
         return catalog;
     }
@@ -253,8 +252,7 @@ public class PostgreSQLAssembler {
         if (node == null || !node.isObject()) return false;
         JsonNode typeNode = node.get(DiscoveryConstants.JsonFields.TYPE);
         if (typeNode == null || !typeNode.isTextual()) return false;
-        String type = typeNode.asText();
-        return DiscoveryConstants.BECKN_OFFER_TYPE.equals(type) || type.endsWith("Offer");
+        return typeNode.asText().endsWith("Offer");
     }
 
     // ── JSON extraction helpers ──────────────────────────────────────────────
@@ -295,9 +293,9 @@ public class PostgreSQLAssembler {
                 .orElse(null);
     }
 
-    /** Returns {@code true} for the v2.1 resource type ({@code "beckn:Resource"}). */
+    /** Returns {@code true} for known resource type values. Currently no prefixed types are in use. */
     private static boolean isItemType(String type) {
-        return DiscoveryConstants.ITEM_TYPE.equals(type);
+        return false;
     }
 
     /** Returns the first element of {@code payload.catalogs}, or {@code null}. */
