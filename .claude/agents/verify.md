@@ -74,12 +74,15 @@ Use `uuidgen | tr '[:upper:]' '[:lower:]'` for all messageId/transactionId value
 | SC-03 | Publish missing context | POST with `{"message":{"catalogs":[]}}` | `{"status":"NACK",...}` |
 | SC-04 | Push ACK format | POST `http://localhost:8085/catalog/push` | `{"status":"ACK"}` — flat, no nested fields |
 
-**SC-01 payload template** (use 3 resources + 2 offers with Offer `@context` = `v2.1`):
-- Resources: `R1-${TS}`, `R2-${TS}`, `R3-${TS}` with `resourceAttributes` containing `@context` and `@type`
-- Offers: `O1-${TS}` (bundle of R1+R2, discount 15%), `O2-${TS}` (single R3, discount 5%)
-- `@context` on offers MUST be `https://schema.beckn.io/Offer/v2.1/context.jsonld`
+**SC-01 payload template** (use 3 resources + 2 offers):
+- NO `@context`/`@type` on core objects (Resource, Offer, Descriptor, Location, TimePeriod)
+- `@context`/`@type` ONLY on `resourceAttributes` and `offerAttributes` (Attributes schema)
+- Resources: `R1-${TS}`, `R2-${TS}`, `R3-${TS}` each with `resourceAttributes: { "@context": "...", "@type": "GroceryItem", ... }`
+- Offers: `O1-${TS}` (bundle of R1+R2, discount 15%), `O2-${TS}` (single R3, discount 5%) each with `offerAttributes: { "@context": "...", "@type": "GroceryOffer", ... }`
+- Provider on offers MUST include both `id` and `descriptor: { "name": "..." }` (schema requires `descriptor`)
 - `publishDirectives: {"catalogType": "regular"}`
 - Context: `action: "catalog/publish"`, `version: "2.0.0"`, `networkId: "verify-net"`
+- Discover context MUST include `networkId` and `schemaContext: []`
 
 ### 2. Subscription API
 
