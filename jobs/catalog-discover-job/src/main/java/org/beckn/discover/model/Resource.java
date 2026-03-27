@@ -16,12 +16,6 @@ import java.util.List;
  */
 public class Resource {
 
-    @JsonProperty("@context")
-    private String context;
-
-    @JsonProperty("@type")
-    private String type;
-
     @NotBlank(message = "id is required")
     @JsonProperty(BecknFields.ID)
     private String id;
@@ -69,10 +63,7 @@ public class Resource {
     public Resource() {}
 
     // Constructor with required fields
-    public Resource(String context, String type, String id, Descriptor descriptor, Provider provider,
-            Attributes resourceAttributes) {
-        this.context = context;
-        this.type = type;
+    public Resource(String id, Descriptor descriptor, Provider provider, Attributes resourceAttributes) {
         this.id = id;
         this.descriptor = descriptor;
         this.provider = provider;
@@ -80,12 +71,6 @@ public class Resource {
     }
 
     // Getters and Setters
-    public String getContext() { return context; }
-    public void setContext(String context) { this.context = context; }
-
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
-
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 

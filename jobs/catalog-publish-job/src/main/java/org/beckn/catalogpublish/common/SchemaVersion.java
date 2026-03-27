@@ -28,8 +28,6 @@ public enum SchemaVersion {
      * </ul>
      */
     public static SchemaVersion fromTypeValue(String typeValue) {
-        // Legacy: retained for backward-compatible reads of persisted v2.0 data
-        if ("beckn:Item".equals(typeValue)) return V2_0;
         if ("Item".equals(typeValue)) return V2_1;
         return V2_1;
     }

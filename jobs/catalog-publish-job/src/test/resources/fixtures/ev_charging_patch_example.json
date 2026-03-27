@@ -19,22 +19,17 @@
         "bppId": "bpp.example.com1",
         "bppUri": "https://bpp.example.com1",
         "descriptor": {
-          "@type": "Descriptor",
           "name": "EV Charging Services Network",
           "shortDesc": "Comprehensive network of fast charging stations across Bengaluru"
         },
         "validity": {
-          "@type": "TimePeriod",
           "startDate": "2024-10-01T00:00:00Z",
           "endDate": "2025-01-15T23:59:59Z"
         },
         "resources": [
           {
-            "@context": "https://schema.beckn.io/",
-            "@type": "beckn:Resource",
             "id": "ev-charger-ccs2-001",
             "descriptor": {
-              "@type": "Descriptor",
               "name": "DC Fast Charger - CCS2 (60kW)",
               "shortDesc": "High-speed DC charging station with CCS2 connector",
               "longDesc": "Ultra-fast DC charging station supporting CCS2 connector type with 60kW maximum power output. Features advanced thermal management and smart charging capabilities."
@@ -61,7 +56,6 @@
             "provider": {
               "id": "ecopower-charging",
               "descriptor": {
-                "@type": "Descriptor",
                 "name": "EcoPower Charging Pvt Ltd"
               }
             },
@@ -108,11 +102,8 @@
         ],
         "offers": [
           {
-            "@context": "https://schema.beckn.io/",
-            "@type": "Offer",
             "id": "offer-ccs2-60kw-kwh",
             "descriptor": {
-              "@type": "Descriptor",
               "name": "Per-kWh Tariff - CCS2 60kW"
             },
             "resourceIds": [
@@ -128,7 +119,6 @@
               }
             },
             "validity": {
-              "@type": "TimePeriod",
               "startDate": "2025-10-01T00:00:00Z",
               "endDate": "2026-03-31T23:59:59Z"
             },

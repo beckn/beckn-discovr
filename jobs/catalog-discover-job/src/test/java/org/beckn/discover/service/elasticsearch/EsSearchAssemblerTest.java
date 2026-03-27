@@ -114,8 +114,6 @@ class EsSearchAssemblerTest {
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-7");
 
         Resource resource = catalogs.get(0).getResources().get(0);
-        assertThat(resource.getContext()).isEqualTo("https://custom.item.context");
-        assertThat(resource.getType()).isEqualTo("CustomItemType");
         assertThat(resource.getResourceAttributes()).isNotNull();
         assertThat(resource.getResourceAttributes().getContext()).isEqualTo("https://custom.attr.context");
         assertThat(resource.getResourceAttributes().getType()).isEqualTo("EVCharger");
@@ -371,7 +369,7 @@ class EsSearchAssemblerTest {
 
         Resource resource = catalogs.get(0).getResources().get(0);
         assertThat(resource.getProvider().getPolicies()).isNotNull().hasSize(2);
-        assertThat(resource.getProvider().getPolicies().get(0).getType()).isEqualTo("CancellationPolicy");
+        assertThat(resource.getProvider().getPolicies().get(0).getName()).isEqualTo("No cancellations");
         assertThat(resource.getProvider().getPolicies().get(1).getName()).isEqualTo("30-day returns");
     }
 
@@ -402,7 +400,6 @@ class EsSearchAssemblerTest {
         assertThat(catalogs).hasSize(1);
         Catalog catalog = catalogs.get(0);
         assertThat(catalog.getValidity()).isNotNull();
-        assertThat(catalog.getValidity().getType()).isEqualTo("TimePeriod");
         assertThat(catalog.getValidity().getStartDate()).isNotNull();
         assertThat(catalog.getValidity().getStartDate().toString()).startsWith("2024-10-01");
         assertThat(catalog.getValidity().getEndDate()).isNotNull();
@@ -453,7 +450,7 @@ class EsSearchAssemblerTest {
         Catalog cat1 = catalogs.stream().filter(c -> "cat-1".equals(c.getId())).findFirst().orElseThrow();
         Catalog cat2 = catalogs.stream().filter(c -> "cat-2".equals(c.getId())).findFirst().orElseThrow();
         assertThat(cat1.getValidity()).isNotNull();
-        assertThat(cat1.getValidity().getType()).isEqualTo("TimePeriod");
+        assertThat(cat1.getValidity().getStartDate()).isNotNull();
         assertThat(cat2.getValidity()).isNull();
     }
 

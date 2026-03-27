@@ -7,7 +7,6 @@
                 "catalogs": [
                     {
                         "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
-                        "@type": "beckn:Catalog",
                         "id": "catalog-ev-charging-001",
                         "descriptor": {
                             "@type": "beckn:Descriptor",
@@ -27,7 +26,6 @@
                         "resources": [
                             {
                                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
-                                "@type": "beckn:Resource",
                                 "id": "ev-charger-ccs2-001",
                                 "descriptor": {
                                     "@type": "beckn:Descriptor",
@@ -65,7 +63,6 @@
                         "offers": [
                             {
                                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
-                                "@type": "beckn:Offer",
                                 "id": "offer-ccs2-60kw-kwh",
                                 "provider": "ecopower-charging",
                                 "descriptor": {

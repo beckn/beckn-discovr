@@ -139,7 +139,6 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                       "resources": [
                         {
                           "@context": "%s",
-                          "@type": "beckn:Resource",
                           "id": "%s",
                           "descriptor": {
                             "name": "%s",

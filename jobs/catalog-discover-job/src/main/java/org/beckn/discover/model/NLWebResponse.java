@@ -202,9 +202,6 @@ public class NLWebResponse {
 
     // Nested ContentItem class
     public static class ContentItem {
-        @JsonProperty("@type")
-        private String type;
-
         @JsonProperty("url")
         private String url;
 
@@ -229,14 +226,6 @@ public class NLWebResponse {
         public ContentItem() {}
 
         // Getters and Setters
-        public String getType() {
-            return type;
-        }
-
-        public void setType(String type) {
-            this.type = type;
-        }
-
         public String getUrl() {
             return url;
         }
@@ -296,8 +285,7 @@ public class NLWebResponse {
         @Override
         public String toString() {
             return "ContentItem{" +
-                    "type='" + type + '\'' +
-                    ", url='" + url + '\'' +
+                    "url='" + url + '\'' +
                     ", name='" + name + '\'' +
                     ", site='" + site + '\'' +
                     ", siteUrl='" + siteUrl + '\'' +

@@ -1,7 +1,6 @@
 package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -12,13 +11,6 @@ import jakarta.validation.constraints.Min;
  * Represents a rating for items or providers.
  */
 public class Rating {
-
-    @JsonProperty("@context")
-    private String context;
-
-    @NotBlank(message = "@type is required")
-    @JsonProperty("@type")
-    private String type;
 
     @JsonProperty("reviewText")
     private String reviewText;
@@ -35,30 +27,13 @@ public class Rating {
     // Default constructor
     public Rating() {}
 
-    // Constructor with required fields
-    public Rating(String type) {
-        this.type = type;
-    }
-
     // Constructor with all fields
-    public Rating(String type, Double ratingValue, Integer ratingCount) {
-        this.type = type;
+    public Rating(Double ratingValue, Integer ratingCount) {
         this.ratingValue = ratingValue;
         this.ratingCount = ratingCount;
     }
 
     // Getters and Setters
-    public String getContext() { return context; }
-    public void setContext(String context) { this.context = context; }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
     public String getReviewText() { return reviewText; }
     public void setReviewText(String reviewText) { this.reviewText = reviewText; }
 
@@ -81,8 +56,7 @@ public class Rating {
     @Override
     public String toString() {
         return "Rating{" +
-                "type='" + type + '\'' +
-                ", ratingValue=" + ratingValue +
+                "ratingValue=" + ratingValue +
                 ", ratingCount=" + ratingCount +
                 '}';
     }
