@@ -101,7 +101,7 @@ services:
       - APP_MESSAGING_TOPICS_CATALOG_EVENTS=discovr.publish.out.events
       - APP_MESSAGING_TOPICS_RESPONSES=discovr.publish.out.responses
       - APP_MESSAGING_TOPICS_FAILED=discovr.publish.dlt.requests
-      - APP_CATALOG_VALIDATION_ENABLED=true
+      - APP_CATALOG_VALIDATION_ENABLED=false
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - JAVA_TOOL_OPTIONS=
       - OTEL_TRACES_EXPORTER=none

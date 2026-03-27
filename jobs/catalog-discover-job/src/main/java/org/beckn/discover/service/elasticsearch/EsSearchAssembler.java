@@ -102,12 +102,10 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Catalog buildCatalog(String catalogId, Map<String, Object> doc) {
         Catalog catalog = new Catalog();
-        catalog.setContext(str(doc, "catalog_context"));
-        catalog.setType(str(doc, "catalog_type"));
         catalog.setId(catalogId);
         catalog.setBppId(str(doc, "bpp_id"));
         catalog.setBppUri(str(doc, "bpp_uri"));
-        catalog.setDescriptor(new Descriptor("Descriptor"));
+        catalog.setDescriptor(new Descriptor());
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         Object validityRaw = doc.get("catalog_validity");
@@ -119,7 +117,6 @@ public class EsSearchAssembler {
 
     private static TimePeriod timePeriodFromMap(Map<String, Object> map) {
         TimePeriod tp = new TimePeriod();
-        if (map.get("@type") instanceof String s) tp.setType(s);
         if (map.get("startDate") instanceof String s) {
             try { tp.setStartDate(java.time.OffsetDateTime.parse(s)); } catch (Exception ignored) {}
         }
@@ -155,8 +152,6 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Resource buildResource(Map<String, Object> doc) {
         Resource resource = new Resource();
-        resource.setContext(str(doc, "item_context"));
-        resource.setType(str(doc, "item_type"));
         resource.setId(str(doc, "item_id"));
         resource.setDescriptor(buildDescriptor(doc));
         resource.setCategory(buildCategory(doc));
@@ -272,12 +267,12 @@ public class EsSearchAssembler {
             address.setAddressCountry((String) addrMap.get("addressCountry"));
         }
 
-        return new Location("Location", geo, address);
+        return new Location(geo, address);
     }
 
     @SuppressWarnings("unchecked")
     private static Descriptor buildDescriptor(Map<String, Object> doc) {
-        Descriptor d = new Descriptor("Descriptor");
+        Descriptor d = new Descriptor();
         d.setName(str(doc, "item_name"));
         d.setShortDesc(str(doc, "item_short_desc"));
         d.setLongDesc(str(doc, "item_long_desc"));
@@ -298,7 +293,7 @@ public class EsSearchAssembler {
         String code = str(doc, "item_category_code");
         if (code == null)
             return null;
-        CategoryCode cat = new CategoryCode("CategoryCode", code);
+        CategoryCode cat = new CategoryCode(code);
         cat.setName(str(doc, "item_category_name"));
         return cat;
     }
@@ -309,7 +304,7 @@ public class EsSearchAssembler {
         String reviewText = str(doc, "item_rating_review_text");
         if (ratingValue == null && ratingCount == null && reviewText == null)
             return null;
-        Rating r = new Rating("Rating");
+        Rating r = new Rating();
         if (ratingValue instanceof Number n)
             r.setRatingValue(n.doubleValue());
         if (ratingCount instanceof Number n)
@@ -323,7 +318,7 @@ public class EsSearchAssembler {
         String providerId = str(doc, "item_provider_id");
         if (providerId == null)
             return null;
-        Descriptor desc = new Descriptor("Descriptor");
+        Descriptor desc = new Descriptor();
         desc.setName(str(doc, "item_provider_name"));
         Provider provider = new Provider(providerId, desc);
         Object alertsRaw = doc.get("item_provider_alerts");
@@ -365,7 +360,6 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Constraint constraintFromMap(Map<String, Object> map) {
         Constraint c = new Constraint();
-        c.setType(map.get("@type") instanceof String s ? s : null);
         c.setName(map.get("name") instanceof String s ? s : null);
         c.setValue(map.get("value"));
         map.forEach((k, v) -> {
@@ -378,7 +372,6 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Policy policyFromMap(Map<String, Object> map) {
         Policy p = new Policy();
-        p.setType(map.get("@type") instanceof String s ? s : null);
         p.setName(map.get("name") instanceof String s ? s : null);
         map.forEach((k, v) -> {
             if (!"@type".equals(k) && !"name".equals(k) && !"descriptor".equals(k) && !"validity".equals(k))

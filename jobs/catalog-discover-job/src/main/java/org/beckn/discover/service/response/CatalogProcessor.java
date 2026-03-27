@@ -6,7 +6,6 @@ import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
 import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Resource;
-import org.beckn.discover.util.DiscoveryConstants;
 import org.beckn.discover.util.DiscoveryServiceUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,8 +47,6 @@ import java.util.stream.Collectors;
 public class CatalogProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogProcessor.class);
-
-    private static final String DEFAULT_DESCRIPTOR_TYPE = "Descriptor";
 
     // ── Catalog normalization ────────────────────────────────────────────────
 
@@ -130,8 +127,7 @@ public class CatalogProcessor {
     }
 
     private void normalizeDescriptor(Descriptor descriptor) {
-        if (DiscoveryServiceUtil.isBlank(descriptor.getType()))
-            descriptor.setType(DEFAULT_DESCRIPTOR_TYPE);
+        // No-op: Descriptor no longer has @type.
     }
 
     // ── Provider-based catalog merging (NLWeb only) ──────────────────────────
@@ -212,10 +208,7 @@ public class CatalogProcessor {
     }
 
     private void applyPostMergeDefaults(Catalog catalog) {
-        if (DiscoveryServiceUtil.isBlank(catalog.getContext()))
-            catalog.setContext(DiscoveryConstants.DEFAULT_CATALOG_CONTEXT);
-        if (DiscoveryServiceUtil.isBlank(catalog.getType()))
-            catalog.setType(DiscoveryConstants.CATALOG_TYPE);
+        // No defaults to apply — all catalog metadata comes from publisher data.
     }
 
     // ── Offer operations ─────────────────────────────────────────────────────

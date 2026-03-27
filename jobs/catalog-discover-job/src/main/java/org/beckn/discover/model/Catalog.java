@@ -17,12 +17,6 @@ import java.util.List;
 @JsonIgnoreProperties("items")
 public class Catalog {
 
-    @JsonProperty("@context")
-    private String context;
-
-    @JsonProperty("@type")
-    private String type;
-
     @NotBlank(message = "id is required")
     @JsonProperty(BecknFields.ID)
     private String id;
@@ -55,12 +49,6 @@ public class Catalog {
     public Catalog() {}
 
     // Getters and Setters
-    public String getContext() { return context; }
-    public void setContext(String context) { this.context = context; }
-
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
-
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 

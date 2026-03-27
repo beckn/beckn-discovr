@@ -73,10 +73,10 @@ public class ResponseProcessor {
 
         DiscoverResponse response = new DiscoverResponse();
         response.setContext(createResponseContext(ctx));
-        DiscoverResponse.InReplyTo inReplyTo = ctx.getMessageId() != null
-                ? new DiscoverResponse.InReplyTo(ctx.getMessageId(), null)
+        DiscoverResponse.RequestDigest requestDigest = ctx.getMessageId() != null
+                ? new DiscoverResponse.RequestDigest(ctx.getMessageId(), null)
                 : null;
-        response.setMessage(new DiscoverResponse.ResponseMessage(catalogs, inReplyTo));
+        response.setMessage(new DiscoverResponse.ResponseMessage(catalogs, requestDigest));
 
         if (!validateResponse(response)) {
             log.warn("response.build.validationFailed transactionId={}", ctx.getTransactionId());
