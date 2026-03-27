@@ -19,7 +19,6 @@
           {
             "id": "offer-ccs2-120kw-kwh",
             "descriptor": {
-              "@type": "Descriptor",
               "name": "Per-kWh Tariff - CCS2 120kW Updated"
             }
           }
