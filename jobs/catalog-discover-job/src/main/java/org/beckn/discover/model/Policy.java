@@ -14,9 +14,6 @@ import java.util.Map;
  */
 public class Policy {
 
-    @JsonProperty("@type")
-    private String type;
-
     @JsonProperty("name")
     private String name;
 
@@ -29,9 +26,6 @@ public class Policy {
     private Map<String, Object> additionalProperties = new HashMap<>();
 
     public Policy() {}
-
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -52,6 +46,6 @@ public class Policy {
 
     @Override
     public String toString() {
-        return "Policy{type='" + type + "', name='" + name + "'}";
+        return "Policy{name='" + name + "'}";
     }
 }

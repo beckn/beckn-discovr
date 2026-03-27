@@ -175,8 +175,6 @@ public class PostgreSQLAssembler {
 
         if (catalogPayload != null) {
             extractCatalogAttributes(catalog, catalogPayload);
-        } else {
-            catalog.setContext(DiscoveryConstants.DEFAULT_CATALOG_CONTEXT);
         }
         return catalog;
     }
@@ -184,8 +182,6 @@ public class PostgreSQLAssembler {
     private void extractCatalogAttributes(Catalog catalog, JsonNode cp) {
         try {
             setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_ID,          catalog::setId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.CONTEXT,            catalog::setContext);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.TYPE,               catalog::setType);
             setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_PROVIDER_ID,  catalog::setProviderId);
             setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_ID,       catalog::setBppId);
             setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_URI,      catalog::setBppUri);
@@ -259,25 +255,12 @@ public class PostgreSQLAssembler {
 
     /**
      * Extracts the item {@link JsonNode} from the payload.
-     * Two payload shapes are supported:
-     * <ol>
-     *   <li>Direct item payload — root node has {@code @type = Item}</li>
-     *   <li>Catalog-wrapped payload — item lives inside
-     *       {@code payload.catalogs[0].items[*]}</li>
-     * </ol>
+     * Item lives inside {@code payload.catalogs[0].resources[*]}.
      */
     private JsonNode extractItemNode(String itemId, JsonNode itemPayload) {
         if (itemPayload == null) return null;
 
-        // Shape 1: direct item
-        if (itemPayload.has(DiscoveryConstants.JsonFields.TYPE)
-                && isItemType(itemPayload.get(DiscoveryConstants.JsonFields.TYPE).asText())
-                && (itemId == null || itemId.equals(
-                        itemPayload.path(DiscoveryConstants.JsonFields.BECKN_ID).asText()))) {
-            return itemPayload;
-        }
-
-        // Shape 2: nested inside catalogs array
+        // Item lives inside catalogs array
         JsonNode catalogsNode = itemPayload.get(DiscoveryConstants.JsonFields.CATALOGS);
         if (catalogsNode == null || !catalogsNode.isArray()) return null;
 
@@ -291,11 +274,6 @@ public class PostgreSQLAssembler {
                         && itemId.equals(node.path(DiscoveryConstants.JsonFields.BECKN_ID).asText()))
                 .findFirst()
                 .orElse(null);
-    }
-
-    /** Returns {@code true} for known resource type values. Currently no prefixed types are in use. */
-    private static boolean isItemType(String type) {
-        return false;
     }
 
     /** Returns the first element of {@code payload.catalogs}, or {@code null}. */
