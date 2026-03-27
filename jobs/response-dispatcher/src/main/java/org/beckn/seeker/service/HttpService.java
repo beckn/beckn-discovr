@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.beckn.auth.BecknAuth;
 import org.beckn.seeker.common.BecknFields;
 import org.beckn.seeker.config.HttpClientProperties;
+import org.beckn.seeker.config.SigningProperties;
 import org.beckn.seeker.logging.LogEvent;
 import org.beckn.seeker.metrics.DispatcherMetrics;
 import org.springframework.http.HttpEntity;
@@ -38,7 +40,8 @@ public class HttpService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-    private final SignatureService signatureService;
+    private final BecknAuth becknAuth;
+    private final SigningProperties signingProperties;
     private final DispatcherMetrics dispatcherMetrics;
     private final HttpClientProperties httpClientProperties;
 
@@ -116,9 +119,13 @@ public class HttpService {
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             // Add signature if enabled
-            if (signatureService.isEnabled()) {
-                String authHeader = signatureService.generateAuthHeader(requestBody);
-                headers.set("Authorization", authHeader);
+            if (signingProperties.enabled()) {
+                log.info("{}", value("event", LogEvent.SIGNATURE_INIT),
+                        value("targetUrl", targetUrl),
+                        value("action", action));
+                headers.set("Authorization", becknAuth.generateAuthHeader(requestBody));
+                log.info("{}", value("event", LogEvent.SIGNATURE_GENERATED),
+                        value("targetUrl", targetUrl));
             }
 
             HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
@@ -155,8 +162,6 @@ public class HttpService {
         } catch (RestClientException e) {
             log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
                     value("errorMessage", e.getMessage()), e);
-            // Do NOT increment failure counter here — retries would inflate it.
-            // incrementFailure() is called only in the @Recover method after all attempts exhaust.
             throw e;
         } catch (Exception e) {
             log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
@@ -168,7 +173,6 @@ public class HttpService {
 
     /**
      * Called by Spring Retry after all retry attempts for {@link RestClientException} are exhausted.
-     * This is the single place where the failure counter is incremented for network errors.
      */
     @Recover
     public boolean recoverSendCallback(RestClientException e, String eventJson) {
@@ -181,7 +185,6 @@ public class HttpService {
 
     /**
      * Validates the callback URL against SSRF attack vectors.
-     * Rejects non-HTTP(S) schemes and private/loopback/link-local addresses.
      */
     private void validateCallbackUrl(String url) {
         URI uri;
@@ -208,9 +211,6 @@ public class HttpService {
                         "Callback URL points to private/loopback address: " + host);
             }
         } catch (java.net.UnknownHostException e) {
-            // Host cannot be resolved now — allow the request through; the HTTP call will fail
-            // with a connection error, which is the correct observable behavior. Blocking on
-            // DNS failure would reject legitimate external hosts in environments without DNS.
             log.warn("{}", value("event", LogEvent.CALLBACK_ERROR),
                     value("reason", "callback URL host unresolvable during SSRF check — proceeding"),
                     value("host", host));
@@ -219,7 +219,6 @@ public class HttpService {
 
     /**
      * Parses the Beckn v2.1 ACK/NACK response body.
-     * Format: {@code {"status":"ACK"}} or {@code {"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}}
      */
     private void parseAckResponse(ResponseEntity<String> response, String targetUrl) {
         var statusCode = response.getStatusCode();
