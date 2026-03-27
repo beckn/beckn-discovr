@@ -14,9 +14,6 @@ import java.util.Map;
  */
 public class Constraint {
 
-    @JsonProperty("@type")
-    private String type;
-
     @JsonProperty("name")
     private String name;
 
@@ -26,9 +23,6 @@ public class Constraint {
     private Map<String, Object> additionalProperties = new HashMap<>();
 
     public Constraint() {}
-
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -46,6 +40,6 @@ public class Constraint {
 
     @Override
     public String toString() {
-        return "Constraint{type='" + type + "', name='" + name + "', value=" + value + '}';
+        return "Constraint{name='" + name + "', value=" + value + '}';
     }
 }

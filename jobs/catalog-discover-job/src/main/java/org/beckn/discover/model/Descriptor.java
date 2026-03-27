@@ -11,9 +11,6 @@ import java.util.Map;
  */
 public class Descriptor {
 
-    @JsonProperty("@type")
-    private String type;
-
     @JsonProperty(BecknFields.NAME)
     private String name;
 
@@ -38,19 +35,11 @@ public class Descriptor {
     // Default constructor
     public Descriptor() {}
 
-    public Descriptor(String type) {
-        this.type = type;
-    }
-
-    public Descriptor(String type, String name) {
-        this.type = type;
+    public Descriptor(String name) {
         this.name = name;
     }
 
     // Getters and Setters
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
-
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 
@@ -74,6 +63,6 @@ public class Descriptor {
 
     @Override
     public String toString() {
-        return "Descriptor{type='" + type + "', name='" + name + "'}";
+        return "Descriptor{name='" + name + "'}";
     }
 }

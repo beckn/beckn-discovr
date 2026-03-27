@@ -170,8 +170,9 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .hasSize(1)
                 .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
-        Assertions.assertThat(catalog.getResources().get(0).getContext())
-                .contains("schema/core/v2/context.jsonld");
+        Assertions.assertThat(catalog.getResources().get(0).getResourceAttributes())
+                .as("ev-charger-ccs2-001 must have resourceAttributes")
+                .isNotNull();
 
         // Validate geolocation data — coordinates must match item_location_collection for the targeted path
         var firstItem = catalog.getResources().get(0);
@@ -1308,18 +1309,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(response).isNotNull();
         assertDiscoverResponseValid(response, request.getContext());
 
-        // Validate items have context information
+        // Validate items have resourceAttributes with context information
         for (Catalog catalog : response.getCatalogs()) {
             for (Resource item : catalog.getResources()) {
-                Assertions.assertThat(item.getContext())
-                        .as("Item %s should have context URL", item.getId())
-                        .isNotNull()
-                        .isNotBlank();
-                
-                // Context URLs should be valid URLs
-                Assertions.assertThat(item.getContext())
-                        .as("Item %s context should be a URL", item.getId())
-                        .contains("://");
+                Assertions.assertThat(item.getResourceAttributes())
+                        .as("Item %s should have resourceAttributes", item.getId())
+                        .isNotNull();
             }
         }
     }

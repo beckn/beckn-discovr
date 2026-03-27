@@ -1,7 +1,6 @@
 package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotBlank;
 
 import java.time.OffsetDateTime;
 
@@ -11,10 +10,6 @@ import java.time.OffsetDateTime;
  * Represents a time window with date-time precision for availability/validity.
  */
 public class TimePeriod {
-
-    @NotBlank(message = "@type is required")
-    @JsonProperty("@type")
-    private String type;
 
     @JsonProperty("startDate")
     private OffsetDateTime startDate;
@@ -48,27 +43,13 @@ public class TimePeriod {
     public TimePeriod() {
     }
 
-    // Constructor with required fields
-    public TimePeriod(String type) {
-        this.type = type;
-    }
-
     // Constructor with all fields
-    public TimePeriod(String type, OffsetDateTime startDate, OffsetDateTime endDate) {
-        this.type = type;
+    public TimePeriod(OffsetDateTime startDate, OffsetDateTime endDate) {
         this.startDate = startDate;
         this.endDate = endDate;
     }
 
     // Getters and Setters
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
     public OffsetDateTime getStartDate() {
         return startDate;
     }
@@ -88,8 +69,7 @@ public class TimePeriod {
     @Override
     public String toString() {
         return "TimePeriod{" +
-                "type='" + type + '\'' +
-                ", startDate=" + startDate +
+                "startDate=" + startDate +
                 ", endDate=" + endDate +
                 ", startTime='" + startTime + '\'' +
                 ", endTime='" + endTime + '\'' +

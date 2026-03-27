@@ -1,7 +1,6 @@
 package org.beckn.discover.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 /**
@@ -11,10 +10,6 @@ import jakarta.validation.constraints.NotNull;
  * Uses GeoJSON geometry (geo) and optional human-readable address.
  */
 public class Location {
-
-    @NotBlank(message = "@type is required")
-    @JsonProperty("@type")
-    private String type; // Required: JSON-LD type, e.g., "beckn:Location"
 
     @NotNull(message = "geo is required")
     @JsonProperty("geo")
@@ -27,27 +22,13 @@ public class Location {
     public Location() {
     }
 
-    // Constructor with required fields
-    public Location(String type) {
-        this.type = type;
-    }
-
     // Constructor with all fields
-    public Location(String type, Geo geo, Address address) {
-        this.type = type;
+    public Location(Geo geo, Address address) {
         this.geo = geo;
         this.address = address;
     }
 
     // Getters and Setters
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
     public Geo getGeo() {
         return geo;
     }
@@ -67,8 +48,7 @@ public class Location {
     @Override
     public String toString() {
         return "Location{" +
-                "type='" + type + '\'' +
-                ", geo=" + geo +
+                "geo=" + geo +
                 ", address=" + address +
                 '}';
     }

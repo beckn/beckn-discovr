@@ -392,8 +392,6 @@ public class DiscoveryService {
     private static Catalog shallowCopyCatalog(Catalog src) {
         Catalog copy = new Catalog();
         copy.setId(src.getId());
-        copy.setContext(src.getContext());
-        copy.setType(src.getType());
         copy.setDescriptor(src.getDescriptor());
         copy.setProviderId(src.getProviderId());
         copy.setBppId(src.getBppId());

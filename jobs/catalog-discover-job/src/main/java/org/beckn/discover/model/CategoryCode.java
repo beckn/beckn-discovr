@@ -10,10 +10,6 @@ import jakarta.validation.constraints.NotBlank;
  */
 public class CategoryCode {
 
-    @NotBlank(message = "@type is required")
-    @JsonProperty("@type")
-    private String type;
-
     @NotBlank(message = "codeValue is required")
     @JsonProperty("codeValue")
     private String codeValue;
@@ -28,28 +24,18 @@ public class CategoryCode {
     public CategoryCode() {}
 
     // Constructor with required fields
-    public CategoryCode(String type, String codeValue) {
-        this.type = type;
+    public CategoryCode(String codeValue) {
         this.codeValue = codeValue;
     }
 
     // Constructor with all fields
-    public CategoryCode(String type, String codeValue, String name, String description) {
-        this.type = type;
+    public CategoryCode(String codeValue, String name, String description) {
         this.codeValue = codeValue;
         this.name = name;
         this.description = description;
     }
 
     // Getters and Setters
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
     public String getCodeValue() {
         return codeValue;
     }
@@ -77,8 +63,7 @@ public class CategoryCode {
     @Override
     public String toString() {
         return "CategoryCode{" +
-                "type='" + type + '\'' +
-                ", codeValue='" + codeValue + '\'' +
+                "codeValue='" + codeValue + '\'' +
                 ", name='" + name + '\'' +
                 ", description='" + description + '\'' +
                 '}';

@@ -17,16 +17,6 @@ public class DiscoveryConstants {
     public static final String DEFAULT_OFFER_ATTRIBUTE = "offers";
 
     /**
-     * Catalog type identifier (v2.1 unprefixed form)
-     */
-    public static final String CATALOG_TYPE = "Catalog";
-
-    /**
-     * Default catalog context URL
-     */
-    public static final String DEFAULT_CATALOG_CONTEXT = "https://becknprotocol.io/schemas/core/v1/Catalog/schema-context.jsonld";
-
-    /**
      * Database column names
      */
     public static class ColumnNames {
@@ -42,7 +32,6 @@ public class DiscoveryConstants {
      */
     public static class JsonFields {
         public static final String TYPE = "@type";
-        public static final String CONTEXT = "@context";
         public static final String CATALOGS = "catalogs";
         public static final String BECKN_RESOURCES = "resources";
         public static final String BECKN_ID = "id";
