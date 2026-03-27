@@ -212,7 +212,7 @@ public class PostgreSQLAssembler {
         if (filterResult != null) {
             JsonNode filterNode = toJsonNode(filterResult);
             if (filterNode != null && filterNode.isArray() && !filterNode.isEmpty()
-                    && isOfferType(filterNode.get(0))) {
+                    && isOfferLike(filterNode.get(0))) {
                 mergeOffers(catalog, filterNode);
                 return;
             }
@@ -243,12 +243,26 @@ public class PostgreSQLAssembler {
         }
     }
 
-    /** Returns {@code true} when the node looks like a Beckn Offer (has {@code @type} ending in "Offer"). */
-    private static boolean isOfferType(JsonNode node) {
+    /**
+     * Returns {@code true} when the node looks like a Beckn Offer.
+     *
+     * <p>Offers carry {@code resourceIds} or {@code price}; resources carry
+     * {@code resourceAttributes}.  We check for offer-specific fields rather than
+     * relying on {@code @type} because v2.1 fixture data may omit {@code @type} on
+     * offer objects while always present on resource attributes.</p>
+     */
+    private static boolean isOfferLike(JsonNode node) {
         if (node == null || !node.isObject()) return false;
+        // Offer-specific fields
+        if (node.has("resourceIds") || node.has("price")) return true;
+        // Resource-specific field — not an offer
+        if (node.has("resourceAttributes")) return false;
+        // Fall back to @type check for explicit typing
         JsonNode typeNode = node.get(DiscoveryConstants.JsonFields.TYPE);
-        if (typeNode == null || !typeNode.isTextual()) return false;
-        return typeNode.asText().endsWith("Offer");
+        if (typeNode != null && typeNode.isTextual()) {
+            return typeNode.asText().endsWith("Offer");
+        }
+        return false;
     }
 
     // ── JSON extraction helpers ──────────────────────────────────────────────
