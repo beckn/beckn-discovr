@@ -172,7 +172,7 @@ Run at: <ISO timestamp>
 | Schema | Source | Status |
 |--------|--------|--------|
 | CatalogPublishEnvelope | beckn.yaml | ready |
-| CatalogSubscribeEnvelope | beckn-catalg-ext.yaml | ready |
+| CatalogSubscribeEnvelope | beckn.yaml | ready |
 | DiscoverAction | beckn.yaml | ready |
 
 ### Scenario Results
