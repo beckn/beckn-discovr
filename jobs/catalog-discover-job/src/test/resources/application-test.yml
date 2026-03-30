@@ -46,7 +46,7 @@ discovery:
 
   # Schema Validation Configuration
   schema:
-    url: ${SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/draft/api/v2.0.0/beckn.yaml}
+    url: ${SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml}
     cache-ttl-hours: ${SCHEMA_CACHE_TTL_HOURS:1}
     fetch-timeout-seconds: ${SCHEMA_FETCH_TIMEOUT_SECONDS:30}
     max-retries: ${SCHEMA_FETCH_MAX_RETRIES:3}
