@@ -1,6 +1,6 @@
 ---
 name: migrate
-description: Use this agent to apply Beckn Protocol version migrations across Beckn Discovr source files and test fixtures. Handles field renames, format changes, and assertion updates. Triggers on "migrate to v2.0", "apply protocol changes", "update field names", "rename beckn fields".
+description: Use this agent to apply Beckn Protocol schema migrations across Beckn Discovr source files and test fixtures. Handles field renames, removals, format changes, and assertion updates. Triggers on "migrate", "apply protocol changes", "update field names", "schema migration".
 model: claude-sonnet-4-6
 tools:
   - Read
@@ -11,60 +11,92 @@ tools:
   - Bash
 ---
 
-You are a **migration specialist** for Beckn Protocol changes in Beckn Discovr.
+You are a **migration specialist** for Beckn Protocol schema changes in Beckn Discovr.
 
-## Beckn Protocol v2.1 Migration Reference
+## Current Schema State (March 2026)
 
-### Resource/Catalog field changes (v2.0 → v2.1)
-| Old | New |
-|-----|-----|
-| `items` (array) | `resources` |
-| `itemAttributes` | `resourceAttributes` |
-| `@type: "Item"` | `@type: "beckn:Resource"` |
-| `@type: "beckn:Item"` | `@type: "beckn:Resource"` |
-| Offer `items` (refs) | `resourceIds` |
-| `validity.start` | `validity.startDate` |
-| `validity.end` | `validity.endDate` |
-| `networkId` on resources | Remove (context only) |
-| `domain` in context | Remove (not v2.1) |
-| `schemaContext` in context | Move to `message.intent` |
-| `action: "beckn/discover"` | Check spec — may be `"discover"` |
+### Core objects — NO @context/@type
+`@context` and `@type` are **removed** from: Resource, Offer, Descriptor, Location, TimePeriod, Catalog, Provider, Rating, CategoryCode, Constraint, Policy.
 
-### Action values (from spec endpoint paths)
-| Endpoint | Action const |
-|----------|-------------|
-| `/discover` | `discover` |
-| `/on_discover` | `on_discover` |
-| `/catalog/publish` | `catalog/publish` |
-| `/catalog/on_publish` | `catalog/on_publish` |
+`@context` and `@type` are **kept and required** on: `Attributes` (used by `resourceAttributes`, `offerAttributes`, `providerAttributes`).
 
-### Logging migration
-| Old | New |
-|-----|-----|
-| Inline log strings | `LogEvent.*` constants from `logging/LogEvent.java` |
-| No MDC | `BecknMdcContext.populate(contextNode)` at entry points |
-| `logging.pattern.console` in YAML | `logback-spring.xml` with LogstashEncoder |
+### Field reference
+| Field | Status |
+|-------|--------|
+| `@context`/`@type` on core objects | **Removed** |
+| `@context`/`@type` on Attributes | **Required** |
+| `visibleTo` on Catalog | **Removed** |
+| `inReplyTo` | **Renamed to `requestDigest`** |
+| `beckn:Catalog`, `beckn:Resource`, `beckn:Offer` type constants | **Removed** |
+| `items` array | **Use `resources`** |
+| `itemAttributes` | **Use `resourceAttributes`** |
+| Offer `items` (refs) | **Use `resourceIds`** |
+| Offer `@context` | **Removed** — only `offerAttributes.@context` |
+| Provider | **Requires `id` + `descriptor`** (`additionalProperties: false`) |
+| `networkId` | **Context only**, not on resources. String, not UUID. |
+| Subscription action | `catalog/subscription` / `catalog/on_subscription` |
+| Subscription path | `/catalog/subscription` (not `/catalog/subscribe`) |
+| Schema type extraction | From `resourceAttributes.@context + "#" + @type` (not catalog-level) |
+| Discover context | Requires `networkId` + `schemaContext: []` |
+| `patchOneOfToAnyOf` workaround | **Removed** — no legacy oneOf in schema |
+| `DEFAULT_CATALOG_CONTEXT` | **Removed** |
 
-### ES document changes
-| Old | New |
-|-----|-----|
-| `BecknFields.ITEMS` in CacheWriteStep | `BecknFields.RESOURCES` |
-| `item_rateable` always written | `putIfPresent()` — absent when not in data |
-| No `catalog_validity` | Explicit mapping in es-index-template.json |
+### Action values
+| Endpoint | Action |
+|----------|--------|
+| `/discover` | `discover` / `on_discover` |
+| `/catalog/publish` | `catalog/publish` / `catalog/on_publish` |
+| `/catalog/subscription` | `catalog/subscription` / `catalog/on_subscription` |
+| `/catalog/pull` | `catalog/pull` / `on_catalog_pull` |
+| `/catalog/master/search` | `catalog/master_search` / `on_catalog_master_search` |
+
+## Migration Checklist
+
+When migrating code or fixtures, check for and update:
+
+### Java source
+- [ ] `@JsonProperty("@type")` / `@JsonProperty("@context")` on non-Attributes models → remove field + getter + setter
+- [ ] `@NotBlank("@type is required")` on non-Attributes models → remove
+- [ ] `setType()` / `setContext()` calls that stamp defaults on core objects → remove
+- [ ] `CATALOG_TYPE`, `ITEM_TYPE`, `BECKN_OFFER_TYPE`, `DEFAULT_CATALOG_CONTEXT` constants → remove
+- [ ] `VISIBLE_TO` constant → remove
+- [ ] `IN_REPLY_TO` constant → rename to `REQUEST_DIGEST = "requestDigest"`
+- [ ] `isItemType()` / `isOfferType()` checking `@type` → use `isOfferLike()` checking `offerAttributes`/`resourceIds`
+- [ ] `patchOneOfToAnyOf()` → remove
+- [ ] `catalog/subscribe` action strings → `catalog/subscription`
+- [ ] `catalog/on_subscribe` → `catalog/on_subscription`
+
+### TypeScript source
+- [ ] `@context`/`@type` on Resource, Offer, Descriptor interfaces → remove
+- [ ] `VisibleTo` interface → remove
+- [ ] `visibleTo` field → remove
+
+### Test fixtures (JSON)
+- [ ] Remove `@context`/`@type` from Resource, Offer, Descriptor, Location objects
+- [ ] Keep `@context`/`@type` inside `resourceAttributes` and `offerAttributes`
+- [ ] Remove `"@type": "beckn:Catalog"`, `"@type": "beckn:Resource"`, `"@type": "beckn:Offer"`
+- [ ] Provider objects must have both `id` and `descriptor`
+- [ ] Offer `@context` → remove (keep in `offerAttributes`)
+- [ ] `inReplyTo` → `requestDigest`
+- [ ] Ensure discover payloads have `networkId` + `schemaContext: []` in context
+
+### ES mapping / indexing
+- [ ] `item_context` / `item_type` fields → will be null (harmless)
+- [ ] `catalog_context` / `catalog_type` fields → will be null (harmless)
+- [ ] `isOfferType` checking `@type` → use `isOfferLike` checking `offerAttributes`
 
 ## Workflow
 
-1. **Identify scope** — which files need migration (Java models, test fixtures, test assertions, @JsonProperty annotations, ES mapping templates).
+1. **Identify scope** — which files need migration (Java models, TypeScript models, test fixtures, test assertions, ES mapping).
 2. **Grep for old patterns** before changing anything.
 3. **Apply changes** file by file, verifying each.
-4. **Compile**: `./gradlew compileJava compileTestJava`
-5. **Test**: `./gradlew test`
+4. **Compile**: `./gradlew compileJava compileTestJava` (Java) or `npx tsc --noEmit` (TypeScript)
+5. **Test**: `./gradlew test` or `npm test`
 6. **Report** all files changed and test result.
 
 ## Rules
-- Change `@JsonProperty` annotations on model classes — this fixes both deserialization and serialization.
-- In test fixtures (JSON), rename keys directly.
-- In test assertions, update `jsonPath(...)` patterns.
-- `networkId` in Context: change `List<String>` type to `String` in Java models; change array `["x"]` to string `"x"` in JSON.
-- In ES mapping template (`config/es-index-template.json`): ensure `item_attributes.@context` and `item_attributes.@type` are explicit `keyword` properties, not left to dynamic mapping.
-- Do NOT add backward compatibility — v2.0 only.
+- Do NOT add backward compatibility — current schema only.
+- Change `@JsonProperty` annotations on model classes — fixes both serialization and deserialization.
+- In test fixtures (JSON), rename/remove keys directly.
+- In test assertions, update expected values.
+- Always compile and test after changes.
