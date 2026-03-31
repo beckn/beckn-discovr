@@ -199,3 +199,18 @@ Total: 23 | Passed: N | Failed: N | Skipped: N
 - Use unique IDs per run — never hardcode IDs that may conflict.
 - After publish, always wait for indexing (20s for initial, 15s for MERGE) before discover/pull.
 - For async checks, use poll loops (max 15s) — never bare `sleep`.
+
+## After Verification — Ship Prompt
+
+If ALL scenarios pass, ask the user:
+
+> All scenarios passed. Would you like me to:
+> 1. Commit changes with a proper message
+> 2. Push to the current branch
+> 3. Raise a PR (I'll ask which target branch)
+> 4. Comment on linked issues with the PR link
+> 5. Close completed task issues
+>
+> Reply **ship** to proceed, or **skip** to end here.
+
+Only proceed after explicit user confirmation. Follow the `/ship` skill workflow for PR creation and ticket updates.
