@@ -218,10 +218,11 @@ Critical rules:
 
 ## Agents
 
-Eight agents in `.claude/agents/` — use in sequence for any non-trivial change:
+Nine agents in `.claude/agents/` — use in sequence for any non-trivial change:
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
+| `github-epics` | Sonnet | Requirement/bullets → proposed Epics + tasks for [Project 52](https://github.com/orgs/beckn/projects/52); **user approves before** `gh` creates issues and sets Release/Sprint. Skill: `.claude/skills/github-epics.md`. |
 | `requirements` | Sonnet | Asks clarifying questions → produces structured REQ doc in `docs/requirements/`. **Always invoke before design for new features.** |
 | `design` | Opus | Asks clarifying questions → two proposals → scoring → Design Spec. **User approves before proceeding.** |
 | `implement` | Sonnet | Implements from Design Spec with tests. Runs autonomously. |
