@@ -36,15 +36,21 @@ Read first. Read every file you will touch or depend on. Find how similar things
 - `var` where type is obvious.
 - Text blocks for multiline SQL/JSON.
 
-### 3. Beckn Protocol v2.1
-- Context fields: `action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId`, `networkId` (String — **context only, not on resources**), `timestamp`, `transactionId`, `version` (const `"2.0.0"`), `ttl`, `try`, `lineage`. No `domain`, `schemaContext` in context.
-- Resource fields: `@type: "beckn:Resource"`, `id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`. **No `items` array — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.**
-- Offer fields: `@type: "beckn:Offer"`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`).
+### 3. Beckn Protocol v2.0
+- **Schema reference**: https://github.com/beckn/protocol-specifications-v2/blob/main/api/v2.0.0/beckn.yaml — read this for the authoritative field definitions of Catalog, Resource, Offer, Provider, Descriptor, Location, TimePeriod, Attributes, Context.
+- **NO `@context`/`@type` on core objects** (Resource, Offer, Descriptor, Location, TimePeriod, Catalog, Provider). Only on `resourceAttributes`, `offerAttributes`, `providerAttributes` (Attributes schema — `@context` + `@type` required there).
+- Context fields: `action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId`, `networkId` (String), `timestamp`, `transactionId`, `version` (const `"2.0.0"`), `ttl`, `try`, `lineage`.
+- Discover context also requires: `networkId`, `schemaContext: []`.
+- Resource fields: `id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`. **No `items` — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.**
+- Offer fields: `id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`. Provider on offers MUST include both `id` and `descriptor`.
+- Provider: requires `id` + `descriptor`. `additionalProperties: false`.
+- Subscription: action `catalog/subscription` / `catalog/on_subscription`. Path `/catalog/subscription`.
+- `requestDigest` (not `inReplyTo`) for callback binding.
 - ACK: `{"status":"ACK"}`.
 - NACK: `{"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}`.
 - HTTP 409 = AckNoCallback — log and skip, not an error.
-- Action values: `discover`, `on_discover`, `catalog/publish`, `catalog/on_publish`.
-- on_discover: `{"context":{...,"action":"on_discover"},"message":{"catalogs":[{..."resources":[...],"offers":[...]}]}}`.
+- Action values: `discover`, `on_discover`, `catalog/publish`, `catalog/on_publish`, `catalog/subscription`, `catalog/on_subscription`.
+- Schema type derived from `resourceAttributes.@context + "#" + @type` — not from Resource or Catalog level.
 
 ### 3a. Logging
 - Use `LogEvent` constants from `logging/LogEvent.java` — no hardcoded log strings.
@@ -72,12 +78,14 @@ Read first. Read every file you will touch or depend on. Find how similar things
 - Validate callback URLs before any HTTP POST.
 
 ## Workflow
-1. Read spec + all files to touch.
-2. Implement in dependency order: models → exceptions → config → repositories → services → consumers → Spring beans → Flyway migrations.
-3. `./gradlew compileJava` — fix any errors.
-4. Write unit tests, then integration tests.
-5. `./gradlew test` — report results.
-6. Output completion summary.
+1. **Read the Beckn schema first** — fetch and read `https://raw.githubusercontent.com/beckn/protocol-specifications-v2/draft/api/v2.0.0/beckn.yaml` to understand the exact field definitions, required fields, and constraints for every object you will implement. Do NOT rely on memory or assumptions — the schema is the source of truth.
+2. **Read the ext schema if working on subscription/pull/master APIs** — fetch `https://raw.githubusercontent.com/beckn/protocol-specifications-v2/draft/api/v2.0.0/beckn-catalg-ext.yaml`.
+3. Read all existing source files you will touch or depend on.
+4. Implement in dependency order: models → exceptions → config → repositories → services → consumers → Spring beans → Flyway migrations.
+5. `./gradlew compileJava` — fix any errors.
+6. Write unit tests, then integration tests.
+7. `./gradlew test` — report results.
+8. Output completion summary.
 
 ## What Not to Do
 - Don't add features beyond the spec.
