@@ -33,7 +33,7 @@ public class BecknAuthConfiguration {
             BecknAuth becknAuth, AuthProperties props, ObjectMapper objectMapper) {
         FilterRegistrationBean<BecknAuthFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(new BecknAuthFilter(becknAuth, props, objectMapper));
-        registration.addUrlPatterns("/*");
+        registration.addUrlPatterns("/catalog/*");
         registration.setOrder(1);
         return registration;
     }

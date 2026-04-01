@@ -3,6 +3,7 @@ package org.beckn.discover.service.authorization;
 import org.beckn.auth.BecknAuth;
 import org.beckn.auth.exception.BecknAuthException;
 import org.beckn.discover.config.AuthProperties;
+import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -59,25 +60,26 @@ public class AuthorizationService {
      */
     public void authorizeRequest(String rawBody, HttpHeaders headers) {
         var attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attrs != null && isWhitelisted(attrs.getRequest().getMethod(), attrs.getRequest().getRequestURI())) {
-            logger.info("beckn.auth.skipped reason=whitelisted method={} path={}",
-                    attrs.getRequest().getMethod(), attrs.getRequest().getRequestURI());
+        if (attrs != null && isWhitelisted(attrs.getRequest().getMethod(), attrs.getRequest().getServletPath())) {
+            logger.info("{} reason=whitelisted method={} path={}",
+                    LogEvent.AUTH_SKIPPED,
+                    attrs.getRequest().getMethod(), attrs.getRequest().getServletPath());
             return;
         }
 
         if (!authProperties.enabled()) {
-            logger.debug("auth.disabled — skipping signature verification");
+            logger.debug("{}", LogEvent.AUTH_DISABLED);
             return;
         }
 
         String authHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
-        logger.info("auth.verify.start");
+        logger.info("{}", LogEvent.AUTH_VERIFY_START);
         try {
             var parsed = becknAuth.verifySignature(authHeader, rawBody);
-            logger.info("auth.verify.done subscriberId={}", parsed.subscriberId());
+            logger.info("{} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, parsed.subscriberId());
         } catch (BecknAuthException e) {
-            logger.error("auth.verify.failed code={} message={} authHeader={}",
-                    e.getCode(), e.getMessage(), authHeader);
+            logger.error("{} code={} message={} authHeader={}",
+                    LogEvent.AUTH_FAILED, e.getCode(), e.getMessage(), authHeader);
             ProblemDetail pd = ProblemDetail.forStatus(e.getHttpStatus());
             pd.setDetail(e.getMessage());
             pd.setProperty("code", e.getCode());

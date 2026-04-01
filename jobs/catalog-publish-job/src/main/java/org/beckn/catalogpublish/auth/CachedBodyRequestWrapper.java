@@ -5,8 +5,10 @@ import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 
 public class CachedBodyRequestWrapper extends HttpServletRequestWrapper {
 
@@ -26,5 +28,10 @@ public class CachedBodyRequestWrapper extends HttpServletRequestWrapper {
             @Override public void setReadListener(ReadListener listener) {}
             @Override public int read() throws IOException { return byteArrayInputStream.read(); }
         };
+    }
+
+    @Override
+    public BufferedReader getReader() throws IOException {
+        return new BufferedReader(new InputStreamReader(getInputStream(), getCharacterEncoding()));
     }
 }
