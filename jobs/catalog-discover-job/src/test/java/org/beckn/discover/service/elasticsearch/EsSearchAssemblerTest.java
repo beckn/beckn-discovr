@@ -346,31 +346,25 @@ class EsSearchAssemblerTest {
     }
 
     @Test
-    void hitWithProviderAlerts_populatesAlertsOnProvider() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("resource_provider_alerts", List.of(
-                Map.of("type", "maintenance", "message", "Scheduled downtime tonight")));
+    void hitWithCatalogProvider_populatesProviderIdOnCatalog() {
+        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4");
 
-        Resource resource = catalogs.get(0).getResources().get(0);
-        assertThat(resource.getProvider().getAlerts()).isNotNull().hasSize(1);
-        assertThat(resource.getProvider().getAlerts().get(0).get("type")).isEqualTo("maintenance");
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getProviderId()).isEqualTo("ecopower-network");
     }
 
     @Test
-    void hitWithProviderPolicies_populatesPoliciesOnProvider() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("resource_provider_policies", List.of(
-                Map.of("@type", "CancellationPolicy", "name", "No cancellations"),
-                Map.of("@type", "ReturnPolicy", "name", "30-day returns")));
+    void hitWithCatalogDescriptor_populatesDescriptorOnCatalog() {
+        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-5");
 
-        Resource resource = catalogs.get(0).getResources().get(0);
-        assertThat(resource.getProvider().getPolicies()).isNotNull().hasSize(2);
-        assertThat(resource.getProvider().getPolicies().get(0).getName()).isEqualTo("No cancellations");
-        assertThat(resource.getProvider().getPolicies().get(1).getName()).isEqualTo("30-day returns");
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getDescriptor()).isNotNull();
+        assertThat(catalog.getDescriptor().getName()).isEqualTo("EV Charging Catalog");
+        assertThat(catalog.getDescriptor().getShortDesc()).isEqualTo("Catalog of EV chargers");
     }
 
     @Test
@@ -462,6 +456,10 @@ class EsSearchAssemblerTest {
                 Map.entry("catalog_id", catalogId != null ? catalogId : ""),
                 Map.entry("catalog_context", "https://custom.catalog.context"),
                 Map.entry("catalog_type", "Catalog"),
+                Map.entry("catalog_name", "EV Charging Catalog"),
+                Map.entry("catalog_short_desc", "Catalog of EV chargers"),
+                Map.entry("catalog_provider_id", "ecopower-network"),
+                Map.entry("catalog_provider_name", "EcoPower Network"),
                 Map.entry("bpp_id", bppId),
                 Map.entry("bpp_uri", "https://bpp.example.com"),
                 Map.entry("network_id", "ondc-ev"),

@@ -105,7 +105,8 @@ public class EsSearchAssembler {
         catalog.setId(catalogId);
         catalog.setBppId(str(doc, "bpp_id"));
         catalog.setBppUri(str(doc, "bpp_uri"));
-        catalog.setDescriptor(new Descriptor());
+        catalog.setDescriptor(buildCatalogDescriptor(doc));
+        catalog.setProviderId(str(doc, "catalog_provider_id"));
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         Object validityRaw = doc.get("catalog_validity");
@@ -113,6 +114,22 @@ public class EsSearchAssembler {
             catalog.setValidity(timePeriodFromMap((Map<String, Object>) validityMap));
         }
         return catalog;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Descriptor buildCatalogDescriptor(Map<String, Object> doc) {
+        Descriptor d = new Descriptor();
+        d.setName(str(doc, "catalog_name"));
+        d.setShortDesc(str(doc, "catalog_short_desc"));
+        d.setLongDesc(str(doc, "catalog_long_desc"));
+        d.setThumbnailImage(str(doc, "catalog_descriptor_thumbnail_image"));
+        Object docsRaw = doc.get("catalog_descriptor_docs");
+        if (docsRaw instanceof List<?> list && !list.isEmpty())
+            d.setDocs((List<Map<String, Object>>) list);
+        Object mediaRaw = doc.get("catalog_descriptor_media_file");
+        if (mediaRaw instanceof List<?> list && !list.isEmpty())
+            d.setMediaFile((List<Map<String, Object>>) list);
+        return d;
     }
 
     private static TimePeriod timePeriodFromMap(Map<String, Object> map) {
@@ -313,26 +330,13 @@ public class EsSearchAssembler {
         return r;
     }
 
-    @SuppressWarnings("unchecked")
     private static Provider buildProvider(Map<String, Object> doc) {
         String providerId = str(doc, "resource_provider_id");
         if (providerId == null)
             return null;
         Descriptor desc = new Descriptor();
         desc.setName(str(doc, "resource_provider_name"));
-        Provider provider = new Provider(providerId, desc);
-        Object alertsRaw = doc.get("resource_provider_alerts");
-        if (alertsRaw instanceof List<?> list && !list.isEmpty())
-            provider.setAlerts((List<Map<String, Object>>) list);
-        Object provPoliciesRaw = doc.get("resource_provider_policies");
-        if (provPoliciesRaw instanceof List<?> list && !list.isEmpty()) {
-            List<Policy> policies = list.stream()
-                    .filter(e -> e instanceof Map<?, ?>)
-                    .map(e -> policyFromMap((Map<String, Object>) e))
-                    .toList();
-            if (!policies.isEmpty()) provider.setPolicies(policies);
-        }
-        return provider;
+        return new Provider(providerId, desc);
     }
 
     @SuppressWarnings("unchecked")
