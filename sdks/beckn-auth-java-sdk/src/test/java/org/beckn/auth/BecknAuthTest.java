@@ -270,23 +270,21 @@ class BecknAuthTest {
         void ackResponse_FromException() {
             BecknAuthException ex = BecknAuthException.invalidHeader("Bad header", "SEC_SIGNATURE_INVALID");
 
-            AckResponse nack = AckResponse.fromException(ex, "txn-abc");
+            AckResponse nack = AckResponse.fromException(ex);
 
-            assertThat(nack.getAckStatus()).isEqualTo("NACK");
-            assertThat(nack.getTransactionId()).isEqualTo("txn-abc");
-            assertThat(nack.getError()).isNotNull();
-            assertThat(nack.getError().getCode()).isEqualTo("SEC_SIGNATURE_INVALID");
-            assertThat(nack.getError().getMessage()).isEqualTo("Bad header");
+            assertThat(nack.status()).isEqualTo("NACK");
+            assertThat(nack.error()).isNotNull();
+            assertThat(nack.error().errorCode()).isEqualTo("SEC_SIGNATURE_INVALID");
+            assertThat(nack.error().errorMessage()).isEqualTo("Bad header");
         }
 
         @Test
         @DisplayName("ack() builds correct ACK response")
         void ackResponse_Ack() {
-            AckResponse ack = AckResponse.ack("txn-xyz", "2024-01-01T00:00:00Z");
+            AckResponse ack = AckResponse.ack();
 
-            assertThat(ack.getAckStatus()).isEqualTo("ACK");
-            assertThat(ack.getError()).isNull();
-            assertThat(ack.getTransactionId()).isEqualTo("txn-xyz");
+            assertThat(ack.status()).isEqualTo("ACK");
+            assertThat(ack.error()).isNull();
         }
     }
 }

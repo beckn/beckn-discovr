@@ -8,6 +8,10 @@ import org.junit.jupiter.api.Test;
 
 import java.security.PublicKey;
 
+import org.awaitility.Awaitility;
+
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
@@ -162,14 +166,14 @@ class CaffeineCacheTest {
 
         @Test
         @DisplayName("Entry expires after TTL elapses")
-        void get_Expired_ReturnsNull() throws InterruptedException {
+        void get_Expired_ReturnsNull() {
             // Cache is configured with 1 second TTL
             cache.set("key1", mockKey);
             assertThat(cache.get("key1", PublicKey.class)).isNotNull();
 
-            Thread.sleep(1100); // wait past the 1s TTL
-
-            assertThat(cache.get("key1", PublicKey.class)).isNull();
+            Awaitility.await()
+                    .atMost(3, TimeUnit.SECONDS)
+                    .until(() -> cache.get("key1", PublicKey.class) == null);
         }
     }
 

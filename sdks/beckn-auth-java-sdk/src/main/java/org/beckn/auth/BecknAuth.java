@@ -64,7 +64,7 @@ import java.time.Instant;
  * try {
  *     ParsedAuthHeader parsed = auth.verifySignature(authHeader, rawJsonBody);
  * } catch (BecknAuthException e) {
- *     AckResponse nack = AckResponse.fromException(e, transactionId);
+ *     AckResponse nack = AckResponse.fromException(e);
  * }
  * }</pre>
  *
@@ -136,7 +136,7 @@ public final class BecknAuth {
      * hashing here and transmission will cause verification to fail.
      * </p>
      * <p>
-     * {@code transactionId} and {@code messageId} are extracted automatically
+     * {@code transaction_id} and {@code message_id} are extracted automatically
      * from the {@code context} object in the request body for log correlation.
      * </p>
      *
@@ -373,7 +373,7 @@ public final class BecknAuth {
     }
 
     /**
-     * Extracts {@code transactionId} and {@code messageId} from the
+     * Extracts {@code transaction_id} and {@code message_id} from the
      * {@code context} object in the request body JSON for log correlation.
      * Returns {@code "unknown"} for both fields if parsing fails or the fields
      * are absent.
@@ -381,8 +381,11 @@ public final class BecknAuth {
     private BecknContext extractContext(String rawBody) {
         try {
             JsonNode root = OBJECT_MAPPER.readTree(rawBody);
-            String txnId = root.path("context").path("transactionId").asText("unknown");
-            String msgId = root.path("context").path("messageId").asText("unknown");
+            JsonNode ctx = root.path("context");
+            String txnId = ctx.hasNonNull("transactionId") ? ctx.path("transactionId").asText("unknown")
+                    : ctx.path("transaction_id").asText("unknown");
+            String msgId = ctx.hasNonNull("messageId") ? ctx.path("messageId").asText("unknown")
+                    : ctx.path("message_id").asText("unknown");
             return new BecknContext(txnId, msgId);
         } catch (Exception e) {
             return new BecknContext("unknown", "unknown");
