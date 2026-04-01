@@ -203,7 +203,13 @@ public class DiscoveryService {
     private DiscoverResponse pathA(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
 
+        Instant engineStart = Instant.now();
         Optional<List<Catalog>> combined = queryEngine.executeCombinedQuery(qr);
+        Duration engineDuration = Duration.between(engineStart, Instant.now());
+        combined.ifPresent(catalogs -> {
+            metrics.recordSearchDuration("postgres", engineDuration);
+            metrics.recordResultCount("postgres", catalogs.size());
+        });
         recordStep(tracker, "path-a.combined.query");
 
         if (combined.isEmpty()) {
@@ -229,8 +235,20 @@ public class DiscoveryService {
             throws Exception {
 
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
-        CompletableFuture<List<Catalog>> filterFuture = runAsyncWithMdc(() -> queryEngine.executeFilterQuery(qr));
-        CompletableFuture<List<Catalog>> spatialFuture = runAsyncWithMdc(() -> queryEngine.executeSpatialQuery(qr));
+        Instant filterStart = Instant.now();
+        CompletableFuture<List<Catalog>> filterFuture = runAsyncWithMdc(() -> {
+            List<Catalog> r = queryEngine.executeFilterQuery(qr);
+            metrics.recordSearchDuration("postgres", Duration.between(filterStart, Instant.now()));
+            metrics.recordResultCount("postgres", r.size());
+            return r;
+        });
+        Instant spatialStart = Instant.now();
+        CompletableFuture<List<Catalog>> spatialFuture = runAsyncWithMdc(() -> {
+            List<Catalog> r = queryEngine.executeSpatialQuery(qr);
+            metrics.recordSearchDuration("postgres", Duration.between(spatialStart, Instant.now()));
+            metrics.recordResultCount("postgres", r.size());
+            return r;
+        });
 
         try {
             CompletableFuture.allOf(filterFuture, spatialFuture).get(timeoutSec, TimeUnit.SECONDS);
@@ -271,7 +289,10 @@ public class DiscoveryService {
 
     private DiscoverResponse pathB(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
+        Instant engineStart = Instant.now();
         List<Catalog> catalogs = queryEngine.executeFilterQuery(qr);
+        metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
+        metrics.recordResultCount("postgres", catalogs.size());
         recordStep(tracker, "path-b.query");
 
         List<Catalog> processed = catalogPipeline.process(catalogs, qr);
@@ -284,7 +305,10 @@ public class DiscoveryService {
 
     private DiscoverResponse pathC(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
+        Instant engineStart = Instant.now();
         List<Catalog> catalogs = queryEngine.executeSpatialQuery(qr);
+        metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
+        metrics.recordResultCount("postgres", catalogs.size());
         recordStep(tracker, "path-c.query");
 
         List<Catalog> processed = catalogPipeline.process(catalogs, qr);
@@ -303,6 +327,8 @@ public class DiscoveryService {
     private DiscoverResponse pathD(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
+        String engine = properties.getTextSearch().getEngine();
+        Instant engineStart = Instant.now();
         CompletableFuture<List<Catalog>> searchFuture = runAsyncWithMdc(() -> textSearchEngine.search(qr.textSearch(), qr));
 
         List<Catalog> catalogs;
@@ -326,6 +352,8 @@ public class DiscoveryService {
             throw new Exception("Text search failed: " + cause.getMessage(), cause);
         }
 
+        metrics.recordSearchDuration(engine, Duration.between(engineStart, Instant.now()));
+        metrics.recordResultCount(engine, catalogs.size());
         recordStep(tracker, "path-d.search");
 
         List<Catalog> processed = catalogPipeline.process(catalogs, qr);

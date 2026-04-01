@@ -1,6 +1,7 @@
 package org.beckn.discover.service;
 
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
@@ -9,7 +10,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
  * Thread-safe request metrics: Micrometer meters for Prometheus observability
@@ -29,6 +33,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>{@code discovery_requests_success} — successful requests</li>
  *   <li>{@code discovery_requests_failure} — failed requests</li>
  *   <li>{@code discovery_processing_duration_seconds} — {@link Timer} histogram (successful requests)</li>
+ *   <li>{@code discovery_search_duration_seconds} — per-engine search latency</li>
+ *   <li>{@code discovery_results_count} — per-engine result count distribution</li>
  * </ul>
  */
 @Component
@@ -37,12 +43,20 @@ public class DiscoveryMetrics {
     private static final Logger log     = LoggerFactory.getLogger(DiscoveryMetrics.class);
     private static final Logger perfLog = LoggerFactory.getLogger("org.beckn.discover.performance");
 
+    private static final String ENGINE_POSTGRES      = "postgres";
+    private static final String ENGINE_ELASTICSEARCH = "elasticsearch";
+    private static final String ENGINE_NLWEB         = "nlweb";
+
     // ── Micrometer meters (auto-exported to /actuator/prometheus) ─────────────
 
     private final Counter totalRequestsCounter;
     private final Counter successCounter;
     private final Counter failureCounter;
     private final Timer   processingTimer;
+
+    // Pre-registered per-engine meters (avoids per-call registration overhead)
+    private final Map<String, Timer>               searchTimers;
+    private final Map<String, DistributionSummary> resultSummaries;
 
     // ── AtomicLong counters (support admin resetStats()) ─────────────────────
 
@@ -64,6 +78,17 @@ public class DiscoveryMetrics {
         this.processingTimer = Timer.builder("discovery.processing.duration")
                 .description("Discovery request processing duration")
                 .register(meterRegistry);
+
+        this.searchTimers = Map.of(
+                ENGINE_POSTGRES,      Timer.builder("discovery.search.duration").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
+                ENGINE_ELASTICSEARCH, Timer.builder("discovery.search.duration").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
+                ENGINE_NLWEB,         Timer.builder("discovery.search.duration").tag("engine", ENGINE_NLWEB).register(meterRegistry)
+        );
+        this.resultSummaries = Map.of(
+                ENGINE_POSTGRES,      DistributionSummary.builder("discovery.results.count").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
+                ENGINE_ELASTICSEARCH, DistributionSummary.builder("discovery.results.count").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
+                ENGINE_NLWEB,         DistributionSummary.builder("discovery.results.count").tag("engine", ENGINE_NLWEB).register(meterRegistry)
+        );
     }
 
     // ── Recording ────────────────────────────────────────────────────────────
@@ -84,8 +109,10 @@ public class DiscoveryMetrics {
         successfulRequests.incrementAndGet();
         successCounter.increment();
         processingTimer.record(Duration.ofMillis(ms));
-        perfLog.info("discovery.metrics.success durationMs={} successTotal={} failTotal={}",
-                ms, successfulRequests.get(), failedRequests.get());
+        perfLog.info("{}", value("event", "discovery.metrics.success"),
+                value("durationMs", ms),
+                value("successTotal", successfulRequests.get()),
+                value("failTotal", failedRequests.get()));
     }
 
     /**
@@ -99,6 +126,36 @@ public class DiscoveryMetrics {
         failureCounter.increment();
         log.error("discovery.metrics.failure durationMs={} transactionId={} error={}",
                 ms, transactionId, e.getMessage(), e);
+    }
+
+    /**
+     * Records the duration of a single engine search call.
+     *
+     * @param engine one of {@code "postgres"}, {@code "elasticsearch"}, {@code "nlweb"}
+     * @param duration elapsed time for the search call
+     */
+    public void recordSearchDuration(String engine, Duration duration) {
+        Timer timer = searchTimers.get(engine);
+        if (timer != null) {
+            timer.record(duration);
+        } else {
+            log.warn("discovery.metrics.unknown_engine engine={}", engine);
+        }
+    }
+
+    /**
+     * Records the number of catalog results returned by a search call.
+     *
+     * @param engine      one of {@code "postgres"}, {@code "elasticsearch"}, {@code "nlweb"}
+     * @param resultCount number of catalogs returned
+     */
+    public void recordResultCount(String engine, int resultCount) {
+        DistributionSummary summary = resultSummaries.get(engine);
+        if (summary != null) {
+            summary.record(resultCount);
+        } else {
+            log.warn("discovery.metrics.unknown_engine engine={}", engine);
+        }
     }
 
     // ── Stats retrieval ───────────────────────────────────────────────────────
