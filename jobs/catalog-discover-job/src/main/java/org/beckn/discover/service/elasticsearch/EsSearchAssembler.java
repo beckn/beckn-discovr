@@ -152,12 +152,12 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Resource buildResource(Map<String, Object> doc) {
         Resource resource = new Resource();
-        resource.setId(str(doc, "item_id"));
+        resource.setId(str(doc, "resource_id"));
         resource.setDescriptor(buildDescriptor(doc));
         resource.setCategory(buildCategory(doc));
         resource.setRating(buildRating(doc));
-        resource.setRateable(bool(doc, "item_rateable"));
-        resource.setIsActive(bool(doc, "item_is_active"));
+        resource.setRateable(bool(doc, "resource_rateable"));
+        resource.setIsActive(bool(doc, "resource_is_active"));
         Provider provider = buildProvider(doc);
         if (provider != null) {
             provider.setLocations(collectProviderLocations(doc));
@@ -273,35 +273,35 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Descriptor buildDescriptor(Map<String, Object> doc) {
         Descriptor d = new Descriptor();
-        d.setName(str(doc, "item_name"));
-        d.setShortDesc(str(doc, "item_short_desc"));
-        d.setLongDesc(str(doc, "item_long_desc"));
-        Object imgRaw = doc.get("item_image");
+        d.setName(str(doc, "resource_name"));
+        d.setShortDesc(str(doc, "resource_short_desc"));
+        d.setLongDesc(str(doc, "resource_long_desc"));
+        Object imgRaw = doc.get("resource_image");
         if (imgRaw instanceof List<?> list && !list.isEmpty())
             d.setImage((List<String>) list);
-        d.setThumbnailImage(str(doc, "item_descriptor_thumbnail_image"));
-        Object docsRaw = doc.get("item_descriptor_docs");
+        d.setThumbnailImage(str(doc, "resource_descriptor_thumbnail_image"));
+        Object docsRaw = doc.get("resource_descriptor_docs");
         if (docsRaw instanceof List<?> list && !list.isEmpty())
             d.setDocs((List<Map<String, Object>>) list);
-        Object mediaRaw = doc.get("item_descriptor_media_file");
+        Object mediaRaw = doc.get("resource_descriptor_media_file");
         if (mediaRaw instanceof List<?> list && !list.isEmpty())
             d.setMediaFile((List<Map<String, Object>>) list);
         return d;
     }
 
     private static CategoryCode buildCategory(Map<String, Object> doc) {
-        String code = str(doc, "item_category_code");
+        String code = str(doc, "resource_category_code");
         if (code == null)
             return null;
         CategoryCode cat = new CategoryCode(code);
-        cat.setName(str(doc, "item_category_name"));
+        cat.setName(str(doc, "resource_category_name"));
         return cat;
     }
 
     private static Rating buildRating(Map<String, Object> doc) {
-        Object ratingValue = doc.get("item_rating_value");
-        Object ratingCount = doc.get("item_rating_count");
-        String reviewText = str(doc, "item_rating_review_text");
+        Object ratingValue = doc.get("resource_rating_value");
+        Object ratingCount = doc.get("resource_rating_count");
+        String reviewText = str(doc, "resource_rating_review_text");
         if (ratingValue == null && ratingCount == null && reviewText == null)
             return null;
         Rating r = new Rating();
@@ -315,16 +315,16 @@ public class EsSearchAssembler {
 
     @SuppressWarnings("unchecked")
     private static Provider buildProvider(Map<String, Object> doc) {
-        String providerId = str(doc, "item_provider_id");
+        String providerId = str(doc, "resource_provider_id");
         if (providerId == null)
             return null;
         Descriptor desc = new Descriptor();
-        desc.setName(str(doc, "item_provider_name"));
+        desc.setName(str(doc, "resource_provider_name"));
         Provider provider = new Provider(providerId, desc);
-        Object alertsRaw = doc.get("item_provider_alerts");
+        Object alertsRaw = doc.get("resource_provider_alerts");
         if (alertsRaw instanceof List<?> list && !list.isEmpty())
             provider.setAlerts((List<Map<String, Object>>) list);
-        Object provPoliciesRaw = doc.get("item_provider_policies");
+        Object provPoliciesRaw = doc.get("resource_provider_policies");
         if (provPoliciesRaw instanceof List<?> list && !list.isEmpty()) {
             List<Policy> policies = list.stream()
                     .filter(e -> e instanceof Map<?, ?>)
@@ -337,15 +337,15 @@ public class EsSearchAssembler {
 
     @SuppressWarnings("unchecked")
     private static Attributes buildAttributes(Map<String, Object> doc) {
-        Object attrsRaw = doc.get("item_attributes");
+        Object attrsRaw = doc.get("resource_attributes");
         if (attrsRaw instanceof Map<?, ?> map) {
             // Prefer the dedicated top-level ES fields for @type and @context when present,
-            // so that keyword filtering against item_attributes_type works correctly.
-            String atType = doc.containsKey("item_attributes_type")
-                    ? (String) doc.get("item_attributes_type")
+            // so that keyword filtering against resource_attributes_type works correctly.
+            String atType = doc.containsKey("resource_attributes_type")
+                    ? (String) doc.get("resource_attributes_type")
                     : (String) map.get(BecknFields.AT_TYPE);
-            String atContext = doc.containsKey("item_attributes_context")
-                    ? (String) doc.get("item_attributes_context")
+            String atContext = doc.containsKey("resource_attributes_context")
+                    ? (String) doc.get("resource_attributes_context")
                     : (String) map.get(BecknFields.AT_CONTEXT);
             Attributes attrs = new Attributes(atContext, atType);
             ((Map<String, Object>) map).forEach((k, v) -> {

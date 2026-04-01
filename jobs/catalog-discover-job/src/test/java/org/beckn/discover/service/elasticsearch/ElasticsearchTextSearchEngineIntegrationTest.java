@@ -98,8 +98,8 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     // ── Tests ─────────────────────────────────────────────────────────────────
 
     /**
-     * "CCS2" is unique to ev-charger-001 (item_name + full_text_blob).
-     * Verifies end-to-end assembly: catalog fields, item fields, provider,
+     * "CCS2" is unique to ev-charger-001 (resource_name + full_text_blob).
+     * Verifies end-to-end assembly: catalog fields, resource fields, provider,
      * attributes.
      */
     @Test
@@ -214,11 +214,11 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                   "mappings": {
                     "properties": {
                       "full_text_blob": { "type": "text", "analyzer": "standard" },
-                      "item_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                      "item_short_desc":{ "type": "text" },
+                      "resource_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "resource_short_desc":{ "type": "text" },
                       "catalog_id":     { "type": "keyword" },
                       "bpp_id":         { "type": "keyword" },
-                      "item_id":        { "type": "keyword" }
+                      "resource_id":        { "type": "keyword" }
                     }
                   }
                 }
@@ -232,7 +232,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     private static void seedTestDocs() throws Exception {
         BulkRequest.Builder bulk = new BulkRequest.Builder();
         for (Map<String, Object> doc : testDocs()) {
-            String id = doc.get("bpp_id") + ":" + doc.get("item_id");
+            String id = doc.get("bpp_id") + ":" + doc.get("resource_id");
             bulk.operations(op -> op.index(i -> i.index(INDEX).id(id).document(doc)));
         }
         BulkResponse response = esClient.bulk(bulk.build());
@@ -291,19 +291,19 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         m.put("bpp_id", bppId);
         m.put("bpp_uri", bppUri);
         m.put("network_id", "ondc-ev");
-        m.put("item_id", itemId);
-        m.put("item_name", itemName);
-        m.put("item_short_desc", shortDesc);
-        m.put("item_long_desc", longDesc);
-        m.put("item_category_code", categoryCode);
-        m.put("item_category_name", categoryName);
-        m.put("item_rateable", true);
-        m.put("item_is_active", true);
-        m.put("item_rating_value", ratingValue);
-        m.put("item_rating_count", ratingCount);
-        m.put("item_provider_id", providerId);
-        m.put("item_provider_name", providerName);
-        m.put("item_attributes", itemAttributes);
+        m.put("resource_id", itemId);
+        m.put("resource_name", itemName);
+        m.put("resource_short_desc", shortDesc);
+        m.put("resource_long_desc", longDesc);
+        m.put("resource_category_code", categoryCode);
+        m.put("resource_category_name", categoryName);
+        m.put("resource_rateable", true);
+        m.put("resource_is_active", true);
+        m.put("resource_rating_value", ratingValue);
+        m.put("resource_rating_count", ratingCount);
+        m.put("resource_provider_id", providerId);
+        m.put("resource_provider_name", providerName);
+        m.put("resource_attributes", itemAttributes);
         m.put("full_text_blob", fullTextBlob);
         return m;
     }
