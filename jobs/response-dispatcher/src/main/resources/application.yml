@@ -41,6 +41,7 @@ http:
   client:
     timeout: 30000
     connection-timeout: 10000
+    url-validation-enabled: ${CALLBACK_URL_VALIDATION_ENABLED:true}
   retry:
     max-attempts: 3
     initial-delay: 1000
@@ -63,7 +64,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,info
+        include: health,prometheus,metrics,info
   endpoint:
     health:
       show-details: always
@@ -74,6 +75,9 @@ management:
       enabled: true
     readinessState:
       enabled: true
+  metrics:
+    tags:
+      application: response-dispatcher
 
 logging:
   level:

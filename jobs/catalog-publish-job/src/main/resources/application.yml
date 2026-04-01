@@ -92,8 +92,16 @@ spring:
     locations: classpath:db/migration
 
 management:
-  endpoints.web.exposure.include: health,info,metrics
-  endpoint.health.show-details: when-authorized
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: catalog-publish-job
 
 logging:
   level:

@@ -2,11 +2,13 @@ package org.beckn.seeker.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.beckn.seeker.common.BecknFields;
+import org.beckn.seeker.config.HttpClientProperties;
 import org.beckn.seeker.logging.LogEvent;
-import org.springframework.beans.factory.annotation.Value;
+import org.beckn.seeker.metrics.DispatcherMetrics;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -14,16 +16,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.InetAddress;
+import java.net.URI;
+
 import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
- * Service for sending HTTP requests to BAP endpoints
+ * Service for sending HTTP requests to BAP endpoints.
  */
 @Slf4j
 @Service
@@ -33,9 +39,8 @@ public class HttpService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final SignatureService signatureService;
-
-    @Value("${http.client.timeout}")
-    private int timeoutMs;
+    private final DispatcherMetrics dispatcherMetrics;
+    private final HttpClientProperties httpClientProperties;
 
     private static final String ON_DISCOVER_ENDPOINT = "/on_discover";
     private static final String ON_PUBLISH_ENDPOINT = "/catalog/on_publish";
@@ -50,8 +55,15 @@ public class HttpService {
      * @param eventJson The full response event as a JSON string.
      * @return true if the callback was successful, false otherwise.
      */
-    @Retryable(value = {
-            RestClientException.class }, maxAttemptsExpression = "${http.retry.max-attempts}", backoff = @Backoff(delayExpression = "${http.retry.initial-delay}", maxDelayExpression = "${http.retry.max-delay}", multiplierExpression = "${http.retry.multiplier}"))
+    @Retryable(
+            value = { RestClientException.class },
+            maxAttemptsExpression = "${http.retry.max-attempts}",
+            backoff = @Backoff(
+                    delayExpression = "${http.retry.initial-delay}",
+                    maxDelayExpression = "${http.retry.max-delay}",
+                    multiplierExpression = "${http.retry.multiplier}"
+            )
+    )
     public boolean sendCallback(String eventJson) {
         try {
             JsonNode rootNode = objectMapper.readTree(eventJson);
@@ -87,6 +99,11 @@ public class HttpService {
                 throw new IllegalArgumentException("Unknown or unsupported action: " + action);
             }
 
+            // SSRF guard — validate before any outbound HTTP call
+            if (httpClientProperties.urlValidationEnabled()) {
+                validateCallbackUrl(targetUrl);
+            }
+
             log.info("{}", value("event", LogEvent.CALLBACK_RESOLVED),
                     value("action", action),
                     value("targetUrl", targetUrl));
@@ -106,44 +123,103 @@ public class HttpService {
 
             HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
 
-            // Make the HTTP POST request — handle 409 as AckNoCallback (not an error)
+            final String resolvedUrl = targetUrl;
+            Timer.Sample sample = Timer.start();
+
             try {
                 log.info("{}", value("event", LogEvent.CALLBACK_SENT),
-                        value("targetUrl", targetUrl));
+                        value("targetUrl", resolvedUrl));
 
                 ResponseEntity<String> response = restTemplate.exchange(
-                        targetUrl,
-                        HttpMethod.POST,
-                        entity,
-                        String.class);
+                        resolvedUrl, HttpMethod.POST, entity, String.class);
 
+                sample.stop(dispatcherMetrics.callbackTimerSuccess());
                 parseAckResponse(response, targetUrl);
+                dispatcherMetrics.incrementSuccess();
                 return true;
 
             } catch (HttpClientErrorException e) {
                 if (e.getStatusCode() == HttpStatus.CONFLICT) {
+                    sample.stop(dispatcherMetrics.callbackTimerSuccess());
                     log.info("{}", value("event", LogEvent.CALLBACK_ACK_NO_CALLBACK),
                             value("targetUrl", targetUrl),
                             value("httpStatus", 409));
+                    // 409 = AckNoCallback — counts as a successful delivery
+                    dispatcherMetrics.incrementSuccess();
                     return true;
                 }
+                sample.stop(dispatcherMetrics.callbackTimerClientError());
                 throw e;
             }
 
         } catch (RestClientException e) {
             log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
                     value("errorMessage", e.getMessage()), e);
+            // Do NOT increment failure counter here — retries would inflate it.
+            // incrementFailure() is called only in the @Recover method after all attempts exhaust.
             throw e;
         } catch (Exception e) {
             log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
                     value("errorMessage", e.getMessage()), e);
-            throw new RuntimeException("Failed to send callback", e);
+            dispatcherMetrics.incrementFailure();
+            throw new CallbackDeliveryException("Failed to send callback", e);
         }
     }
 
     /**
-     * Parses the Beckn v2.0 ACK/NACK response body.
-     * v2.0 format: {@code {"status":"ACK"}} or {@code {"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}}
+     * Called by Spring Retry after all retry attempts for {@link RestClientException} are exhausted.
+     * This is the single place where the failure counter is incremented for network errors.
+     */
+    @Recover
+    public boolean recoverSendCallback(RestClientException e, String eventJson) {
+        log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                value("reason", "all retry attempts exhausted"),
+                value("errorMessage", e.getMessage()), e);
+        dispatcherMetrics.incrementFailure();
+        throw new CallbackDeliveryException("Callback delivery failed after all retries", e);
+    }
+
+    /**
+     * Validates the callback URL against SSRF attack vectors.
+     * Rejects non-HTTP(S) schemes and private/loopback/link-local addresses.
+     */
+    private void validateCallbackUrl(String url) {
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Malformed callback URL: " + url, e);
+        }
+
+        String scheme = uri.getScheme();
+        if (scheme == null || (!scheme.equals("https") && !scheme.equals("http"))) {
+            throw new IllegalArgumentException("Invalid callback URL scheme: " + scheme);
+        }
+
+        String host = uri.getHost();
+        if (host == null) {
+            throw new IllegalArgumentException("Invalid callback URL: no host");
+        }
+
+        try {
+            InetAddress addr = InetAddress.getByName(host);
+            if (addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress()) {
+                throw new IllegalArgumentException(
+                        "Callback URL points to private/loopback address: " + host);
+            }
+        } catch (java.net.UnknownHostException e) {
+            // Host cannot be resolved now — allow the request through; the HTTP call will fail
+            // with a connection error, which is the correct observable behavior. Blocking on
+            // DNS failure would reject legitimate external hosts in environments without DNS.
+            log.warn("{}", value("event", LogEvent.CALLBACK_ERROR),
+                    value("reason", "callback URL host unresolvable during SSRF check — proceeding"),
+                    value("host", host));
+        }
+    }
+
+    /**
+     * Parses the Beckn v2.1 ACK/NACK response body.
+     * Format: {@code {"status":"ACK"}} or {@code {"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}}
      */
     private void parseAckResponse(ResponseEntity<String> response, String targetUrl) {
         var statusCode = response.getStatusCode();

@@ -43,6 +43,9 @@ dependencies {
     // Cryptography - BouncyCastle for BLAKE2b-512
     implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
 
+    // Metrics
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
     // Structured logging
     implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
 
