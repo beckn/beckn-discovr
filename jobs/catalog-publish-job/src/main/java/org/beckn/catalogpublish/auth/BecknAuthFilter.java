@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.beckn.auth.BecknAuth;
 import org.beckn.auth.exception.BecknAuthException;
 import org.beckn.catalogpublish.config.AuthProperties;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -59,17 +60,17 @@ public class BecknAuthFilter extends OncePerRequestFilter {
             FilterChain chain) throws ServletException, IOException {
 
         if (!authProperties.enabled()) {
-            log.debug("beckn.auth.skipped reason=disabled method={} path={}", request.getMethod(), request.getRequestURI());
+            log.debug("{} reason=disabled method={} path={}", LogEvent.AUTH_SKIPPED, request.getMethod(), request.getServletPath());
             chain.doFilter(request, response);
             return;
         }
         if (!MUTATING_METHODS.contains(request.getMethod())) {
-            log.info("beckn.auth.skipped reason=non-mutating method={} path={}", request.getMethod(), request.getRequestURI());
+            log.info("{} reason=non-mutating method={} path={}", LogEvent.AUTH_SKIPPED, request.getMethod(), request.getServletPath());
             chain.doFilter(request, response);
             return;
         }
-        if (isWhitelisted(request.getMethod(), request.getRequestURI())) {
-            log.info("beckn.auth.skipped reason=whitelisted method={} path={}", request.getMethod(), request.getRequestURI());
+        if (isWhitelisted(request.getMethod(), request.getServletPath())) {
+            log.info("{} reason=whitelisted method={} path={}", LogEvent.AUTH_SKIPPED, request.getMethod(), request.getServletPath());
             chain.doFilter(request, response);
             return;
         }
@@ -78,13 +79,13 @@ public class BecknAuthFilter extends OncePerRequestFilter {
         String rawBody = new String(bodyBytes, StandardCharsets.UTF_8);
         String authHeader = request.getHeader("Authorization");
 
-        log.info("catalog.push.auth.verify.start path={}", request.getRequestURI());
+        log.info("{} path={}", LogEvent.AUTH_VERIFY_START, request.getServletPath());
         try {
             var parsed = becknAuth.verifySignature(authHeader, rawBody);
-            log.info("catalog.push.auth.verify.done path={} subscriberId={}", request.getRequestURI(), parsed.subscriberId());
+            log.info("{} path={} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, request.getServletPath(), parsed.subscriberId());
         } catch (BecknAuthException e) {
-            log.error("catalog.push.auth.verify.failed path={} code={} message={} authHeader={}",
-                    request.getRequestURI(), e.getCode(), e.getMessage(), authHeader);
+            log.error("{} path={} code={} message={} authHeader={}",
+                    LogEvent.AUTH_VERIFY_FAILED, request.getServletPath(), e.getCode(), e.getMessage(), authHeader);
             sendNack(response, e.getHttpStatus(), e.getCode(), e.getMessage());
             return;
         }

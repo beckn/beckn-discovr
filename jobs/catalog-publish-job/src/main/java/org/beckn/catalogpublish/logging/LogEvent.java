@@ -32,4 +32,10 @@ public final class LogEvent {
     // HTTP push endpoint
     public static final String PUSH_RECEIVED = "PUSH_RECEIVED";
     public static final String PUSH_REJECTED = "PUSH_REJECTED";
+
+    // Auth filter
+    public static final String AUTH_SKIPPED       = "catalog.push.auth.skipped";
+    public static final String AUTH_VERIFY_START  = "catalog.push.auth.verify.start";
+    public static final String AUTH_VERIFY_DONE   = "catalog.push.auth.verify.done";
+    public static final String AUTH_VERIFY_FAILED = "catalog.push.auth.verify.failed";
 }
