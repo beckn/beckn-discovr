@@ -71,8 +71,16 @@ public class CatalogDocumentAssembler {
         doc.put("catalog_id", text(catalog, BecknFields.ID));
         doc.put("catalog_context", text(catalog, BecknFields.JSON_LD_CONTEXT));
         doc.put("catalog_type", text(catalog, BecknFields.JSON_LD_TYPE));
-        doc.put("catalog_name", text(catalog.path(BecknFields.DESCRIPTOR), BecknFields.NAME));
-        doc.put("catalog_images", arrayToList(catalog.path(BecknFields.DESCRIPTOR).path(BecknFields.IMAGES)));
+        JsonNode catalogDesc = catalog.path(BecknFields.DESCRIPTOR);
+        doc.put("catalog_name", text(catalogDesc, BecknFields.NAME));
+        doc.put("catalog_short_desc", text(catalogDesc, BecknFields.SHORT_DESC));
+        doc.put("catalog_long_desc", text(catalogDesc, BecknFields.LONG_DESC));
+        doc.put("catalog_descriptor_thumbnail_image", text(catalogDesc, "thumbnailImage"));
+        doc.put("catalog_descriptor_docs", convertToList(catalogDesc.path("docs")));
+        doc.put("catalog_descriptor_media_file", convertToList(catalogDesc.path("mediaFile")));
+        doc.put("catalog_provider_id", text(catalog.path(BecknFields.PROVIDER), BecknFields.ID));
+        doc.put("catalog_provider_name",
+                text(catalog.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
         doc.put("bpp_id", bppId);
         doc.put("bpp_uri", bppUri);
         doc.put("network_id", networkIds);
@@ -87,7 +95,6 @@ public class CatalogDocumentAssembler {
         doc.put("resource_name", text(desc, BecknFields.NAME));
         doc.put("resource_short_desc", text(desc, BecknFields.SHORT_DESC));
         doc.put("resource_long_desc", text(desc, BecknFields.LONG_DESC));
-        doc.put("resource_image", arrayToList(desc.path(BecknFields.IMAGES)));
         doc.put("resource_category_code", text(itemNode.path("category"), "codeValue"));
         doc.put("resource_category_name", text(itemNode.path("category"), BecknFields.NAME));
         putIfPresent(doc, "resource_rateable", boolOrNull(itemNode, "rateable"));
@@ -101,8 +108,6 @@ public class CatalogDocumentAssembler {
         doc.put("resource_descriptor_thumbnail_image", text(desc, "thumbnailImage"));
         doc.put("resource_descriptor_docs", convertToList(desc.path("docs")));
         doc.put("resource_descriptor_media_file", convertToList(desc.path("mediaFile")));
-        doc.put("resource_provider_alerts", convertToList(itemNode.path(BecknFields.PROVIDER).path("alerts")));
-        doc.put("resource_provider_policies", convertToList(itemNode.path(BecknFields.PROVIDER).path("policies")));
         doc.put("resource_rating_review_text", text(itemNode.path("rating"), "reviewText"));
         // Internal metadata — never returned in API responses
         doc.put("schema_version", schemaVersion != null ? schemaVersion : "2.0");

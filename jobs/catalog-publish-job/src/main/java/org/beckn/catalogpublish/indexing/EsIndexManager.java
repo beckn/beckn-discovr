@@ -156,7 +156,13 @@ public class EsIndexManager {
                         "catalog_context":         { "type": "keyword" },
                         "catalog_type":            { "type": "keyword" },
                         "catalog_name":            { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                        "catalog_images":          { "type": "keyword" },
+                        "catalog_short_desc":      { "type": "text" },
+                        "catalog_long_desc":       { "type": "text" },
+                        "catalog_descriptor_thumbnail_image": { "type": "keyword" },
+                        "catalog_descriptor_docs":            { "type": "nested" },
+                        "catalog_descriptor_media_file":      { "type": "nested" },
+                        "catalog_provider_id":     { "type": "keyword" },
+                        "catalog_provider_name":   { "type": "text", "fields": { "raw": { "type": "keyword" } } },
                         "resource_id":                 { "type": "keyword" },
                         "resource_context":            { "type": "keyword" },
                         "resource_type":               { "type": "keyword" },
@@ -172,17 +178,8 @@ public class EsIndexManager {
                         "resource_descriptor_thumbnail_image": { "type": "keyword" },
                         "resource_descriptor_docs":            { "type": "nested" },
                         "resource_descriptor_media_file":      { "type": "nested" },
-                        "resource_provider_alerts":            { "type": "nested" },
-                        "resource_provider_policies": {
-                          "type": "nested",
-                          "properties": {
-                            "@type": { "type": "keyword" },
-                            "name":  { "type": "keyword" }
-                          }
-                        },
                         "resource_category_code":      { "type": "keyword" },
                         "resource_category_name":      { "type": "keyword" },
-                        "resource_image":              { "type": "keyword" },
                         "resource_rating_value":       { "type": "float" },
                         "resource_rating_count":       { "type": "integer" },
                         "resource_rating_review_text": { "type": "text" },
