@@ -95,8 +95,8 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "ChargingService");
 
-        assertThat(doc.get("item_attributes_type")).isEqualTo("ChargingService");
-        assertThat(doc.get("item_attributes_context")).isEqualTo("https://example.org/charging.jsonld");
+        assertThat(doc.get("resource_attributes_type")).isEqualTo("ChargingService");
+        assertThat(doc.get("resource_attributes_context")).isEqualTo("https://example.org/charging.jsonld");
     }
 
     @Test
@@ -118,8 +118,8 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "SmartMeter");
 
-        assertThat(doc.get("item_attributes_type")).isEqualTo("SmartMeter");
-        assertThat(doc.get("item_attributes_context")).isEqualTo("https://example.org/meter.jsonld");
+        assertThat(doc.get("resource_attributes_type")).isEqualTo("SmartMeter");
+        assertThat(doc.get("resource_attributes_context")).isEqualTo("https://example.org/meter.jsonld");
     }
 
     // ── schema_version ────────────────────────────────────────────────────────
@@ -255,7 +255,7 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.get("item_descriptor_thumbnail_image")).isEqualTo("https://example.org/thumb.jpg");
+        assertThat(doc.get("resource_descriptor_thumbnail_image")).isEqualTo("https://example.org/thumb.jpg");
     }
 
     // ── item_descriptor_docs ──────────────────────────────────────────────────
@@ -279,9 +279,9 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.containsKey("item_descriptor_docs")).isTrue();
+        assertThat(doc.containsKey("resource_descriptor_docs")).isTrue();
         @SuppressWarnings("unchecked")
-        List<Object> docs = (List<Object>) doc.get("item_descriptor_docs");
+        List<Object> docs = (List<Object>) doc.get("resource_descriptor_docs");
         assertThat(docs).hasSize(2);
     }
 
@@ -305,9 +305,9 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.containsKey("item_descriptor_media_file")).isTrue();
+        assertThat(doc.containsKey("resource_descriptor_media_file")).isTrue();
         @SuppressWarnings("unchecked")
-        List<Object> mediaFile = (List<Object>) doc.get("item_descriptor_media_file");
+        List<Object> mediaFile = (List<Object>) doc.get("resource_descriptor_media_file");
         assertThat(mediaFile).hasSize(1);
     }
 
@@ -332,9 +332,9 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.containsKey("item_provider_alerts")).isTrue();
+        assertThat(doc.containsKey("resource_provider_alerts")).isTrue();
         @SuppressWarnings("unchecked")
-        List<Object> alerts = (List<Object>) doc.get("item_provider_alerts");
+        List<Object> alerts = (List<Object>) doc.get("resource_provider_alerts");
         assertThat(alerts).hasSize(2);
     }
 
@@ -359,9 +359,9 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.containsKey("item_provider_policies")).isTrue();
+        assertThat(doc.containsKey("resource_provider_policies")).isTrue();
         @SuppressWarnings("unchecked")
-        List<Object> policies = (List<Object>) doc.get("item_provider_policies");
+        List<Object> policies = (List<Object>) doc.get("resource_provider_policies");
         assertThat(policies).hasSize(2);
     }
 
@@ -384,7 +384,7 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.get("item_rating_review_text")).isEqualTo("Excellent service and fast charging");
+        assertThat(doc.get("resource_rating_review_text")).isEqualTo("Excellent service and fast charging");
     }
 
     // ── network_id as List ────────────────────────────────────────────────────

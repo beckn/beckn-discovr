@@ -82,7 +82,7 @@ public class BulkIndexService {
     private BulkIndexResult executeBulk(String indexName, List<Map<String, Object>> docs) throws Exception {
         BulkRequest.Builder bulk = new BulkRequest.Builder();
         for (Map<String, Object> doc : docs) {
-            String id = doc.get("bpp_id") + ":" + doc.get("item_id");
+            String id = doc.get("bpp_id") + ":" + doc.get("resource_id");
             bulk.operations(op -> op.index(i -> i.index(indexName).id(id).document(doc)));
         }
 
@@ -107,7 +107,7 @@ public class BulkIndexService {
     private List<BulkIndexResult.FailedDoc> toFailedDocs(List<Map<String, Object>> docs, String reason) {
         return docs.stream()
                 .map(d -> new BulkIndexResult.FailedDoc(
-                        (String) d.get("item_id"), (String) d.get("bpp_id"), reason))
+                        (String) d.get("resource_id"), (String) d.get("bpp_id"), reason))
                 .peek(d -> metrics.incrementItemFailure())
                 .toList();
     }
