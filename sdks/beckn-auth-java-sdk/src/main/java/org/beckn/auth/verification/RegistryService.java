@@ -7,6 +7,7 @@ import org.beckn.auth.cache.Cache;
 import org.beckn.auth.crypto.CryptoService;
 import org.beckn.auth.exception.BecknAuthException;
 import org.beckn.auth.logging.Logger;
+import org.beckn.auth.util.ErrorCodes;
 import org.beckn.auth.util.ErrorMessages;
 
 import java.io.IOException;
@@ -16,6 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.security.PublicKey;
 import java.time.Duration;
+import java.util.regex.Pattern;
 
 /**
  * Fetches and caches Ed25519 public keys from the Beckn Registry.
@@ -46,6 +48,9 @@ public final class RegistryService {
     private static final int HTTP_STATUS_SERVER_ERROR_THRESHOLD = 500;
     private static final String PEM_HEADER = "-----BEGIN PUBLIC KEY-----";
     private static final String PEM_FOOTER = "-----END PUBLIC KEY-----";
+    /** Allowlist: alphanumeric, dots, hyphens, underscores, colons only. Rejects path traversal and redirects. */
+    private static final Pattern SAFE_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9._\\-:]+$");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final HttpClient httpClient;
     private final Cache cache;
@@ -54,7 +59,6 @@ public final class RegistryService {
     private final Logger logger;
     /** Pre-computed URL prefix to avoid repeated string manipulation on every request. */
     private final String registryBaseUrlPrefix;
-    private final ObjectMapper objectMapper;
 
     /**
      * Constructs a RegistryService. The JDK {@link HttpClient} is initialized
@@ -69,7 +73,6 @@ public final class RegistryService {
         this.cryptoService = cryptoService;
         this.cache = config.getCache();
         this.logger = config.getLogger();
-        this.objectMapper = new ObjectMapper();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(config.getTimeoutSeconds()))
                 .build();
@@ -156,6 +159,14 @@ public final class RegistryService {
      * @return the full registry URL string
      */
     private String buildRegistryUrl(String subscriberId, String uniqueKeyId) {
+        if (!SAFE_ID_PATTERN.matcher(subscriberId).matches()) {
+            throw BecknAuthException.invalidHeader(
+                    "Invalid subscriberId format in keyId: " + subscriberId, ErrorCodes.SEC_SIGNATURE_INVALID);
+        }
+        if (!SAFE_ID_PATTERN.matcher(uniqueKeyId).matches()) {
+            throw BecknAuthException.invalidHeader(
+                    "Invalid uniqueKeyId format in keyId: " + uniqueKeyId, ErrorCodes.SEC_SIGNATURE_INVALID);
+        }
         return registryBaseUrlPrefix + subscriberId + "/" + config.getRegistryName() + "/" + uniqueKeyId;
     }
 
@@ -307,7 +318,7 @@ public final class RegistryService {
      */
     private void validateKeyState(String responseJson, String subscriberId) {
         try {
-            JsonNode root = objectMapper.readTree(responseJson);
+            JsonNode root = OBJECT_MAPPER.readTree(responseJson);
             JsonNode details = root.path("data");
             if (!details.isMissingNode() && details.has("details")) {
                 details = details.path("details");
@@ -350,7 +361,7 @@ public final class RegistryService {
      */
     private String extractPublicKeyField(String responseJson, String subscriberId) {
         try {
-            JsonNode root = objectMapper.readTree(responseJson);
+            JsonNode root = OBJECT_MAPPER.readTree(responseJson);
 
             // Navigate explicit path: data → data.details (matches discovery-service-v2)
             JsonNode details = root.path("data");
