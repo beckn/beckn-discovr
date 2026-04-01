@@ -163,6 +163,7 @@ public class EsIndexManager {
                         "catalog_descriptor_media_file":      { "type": "nested" },
                         "catalog_provider_id":     { "type": "keyword" },
                         "catalog_provider_name":   { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "catalog_is_active":       { "type": "boolean" },
                         "resource_id":                 { "type": "keyword" },
                         "resource_context":            { "type": "keyword" },
                         "resource_type":               { "type": "keyword" },

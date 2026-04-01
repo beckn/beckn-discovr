@@ -81,6 +81,7 @@ public class CatalogDocumentAssembler {
         doc.put("catalog_provider_id", text(catalog.path(BecknFields.PROVIDER), BecknFields.ID));
         doc.put("catalog_provider_name",
                 text(catalog.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+        putIfPresent(doc, "catalog_is_active", boolOrNull(catalog, "isActive"));
         doc.put("bpp_id", bppId);
         doc.put("bpp_uri", bppUri);
         doc.put("network_id", networkIds);

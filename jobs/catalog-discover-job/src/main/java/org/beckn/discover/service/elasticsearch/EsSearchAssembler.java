@@ -293,9 +293,6 @@ public class EsSearchAssembler {
         d.setName(str(doc, "resource_name"));
         d.setShortDesc(str(doc, "resource_short_desc"));
         d.setLongDesc(str(doc, "resource_long_desc"));
-        Object imgRaw = doc.get("resource_image");
-        if (imgRaw instanceof List<?> list && !list.isEmpty())
-            d.setImage((List<String>) list);
         d.setThumbnailImage(str(doc, "resource_descriptor_thumbnail_image"));
         Object docsRaw = doc.get("resource_descriptor_docs");
         if (docsRaw instanceof List<?> list && !list.isEmpty())
