@@ -185,7 +185,7 @@ class EsSearchAssemblerTest {
     @Test
     void hitWithSingleLocField_populatesAvailableAt() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("loc_catalogs_beckn_items_beckn_availableAt", List.of(
+        doc.put("loc_catalogs_resources_availableAt", List.of(
                 Map.of("geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9)),
                         "address", Map.of("streetAddress", "MG Road", "extendedAddress", "Apt 4B",
                                 "addressLocality", "Bengaluru"))));
@@ -203,10 +203,10 @@ class EsSearchAssemblerTest {
     void hitWithMultipleLocFields_collectsAllLocations() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // item-level availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_availableAt", Map.of(
+        doc.put("loc_catalogs_resources_availableAt", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
         // item-level custom location field
-        doc.put("loc_catalogs_beckn_items_beckn_location", Map.of(
+        doc.put("loc_catalogs_resources_location", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(78.0, 13.0))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-2");
@@ -229,7 +229,7 @@ class EsSearchAssemblerTest {
     void offerLevelLocFields_notIncludedInAvailableAt() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // offer-level location — should NOT appear in item.availableAt
-        doc.put("loc_catalogs_beckn_offers_beckn_location", Map.of(
+        doc.put("loc_catalogs_offers_location", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-4");
@@ -242,7 +242,7 @@ class EsSearchAssemblerTest {
     void resourceAttributesLocFields_notIncludedInAvailableAt() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // resourceAttributes-level location — should NOT appear in item.availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_resourceAttributes_serviceArea", Map.of(
+        doc.put("loc_catalogs_resources_resourceAttributes_serviceArea", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(78.0, 13.0))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-5");
@@ -255,7 +255,7 @@ class EsSearchAssemblerTest {
     void providerLocFields_notIncludedInAvailableAt() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // provider-level location — should NOT appear in item.availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_provider_beckn_locations", Map.of(
+        doc.put("loc_catalogs_resources_provider_locations", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-6");
@@ -267,7 +267,7 @@ class EsSearchAssemblerTest {
     @Test
     void providerLocFields_setOnProvider() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("loc_catalogs_beckn_items_beckn_provider_beckn_locations", Map.of(
+        doc.put("loc_catalogs_resources_provider_locations", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9)),
                 "address", Map.of("addressLocality", "Bengaluru")));
 
@@ -283,16 +283,16 @@ class EsSearchAssemblerTest {
     void mixedLocFields_onlyItemLevelInAvailableAt_providerLevelOnProvider() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // item-level — SHOULD be in availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_availableAt", Map.of(
+        doc.put("loc_catalogs_resources_availableAt", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
         // provider-level — should be on provider.locations, NOT availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_provider_beckn_locations", Map.of(
+        doc.put("loc_catalogs_resources_provider_locations", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(78.0, 13.0))));
         // offer-level — should NOT be in either
-        doc.put("loc_catalogs_beckn_offers_beckn_location", Map.of(
+        doc.put("loc_catalogs_offers_location", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(80.0, 15.0))));
         // resourceAttributes-level — should NOT be in either
-        doc.put("loc_catalogs_beckn_items_beckn_resourceAttributes_depot", Map.of(
+        doc.put("loc_catalogs_resources_resourceAttributes_depot", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(79.0, 14.0))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-8");
