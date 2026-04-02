@@ -61,6 +61,7 @@ class CatalogDocumentAssemblerTest {
                       "bppId": "bpp.example.com",
                       "bppUri": "https://bpp.example.com",
                       "descriptor": {"name": "Test Catalog"},
+                      "provider": {"id": "prov-catalog", "descriptor": {"name": "Catalog Provider"}},
                       "resources": [%s],
                       "offers": []
                     }
@@ -95,8 +96,8 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "ChargingService");
 
-        assertThat(doc.get("item_attributes_type")).isEqualTo("ChargingService");
-        assertThat(doc.get("item_attributes_context")).isEqualTo("https://example.org/charging.jsonld");
+        assertThat(doc.get("resource_attributes_type")).isEqualTo("ChargingService");
+        assertThat(doc.get("resource_attributes_context")).isEqualTo("https://example.org/charging.jsonld");
     }
 
     @Test
@@ -118,8 +119,8 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "SmartMeter");
 
-        assertThat(doc.get("item_attributes_type")).isEqualTo("SmartMeter");
-        assertThat(doc.get("item_attributes_context")).isEqualTo("https://example.org/meter.jsonld");
+        assertThat(doc.get("resource_attributes_type")).isEqualTo("SmartMeter");
+        assertThat(doc.get("resource_attributes_context")).isEqualTo("https://example.org/meter.jsonld");
     }
 
     // ── schema_version ────────────────────────────────────────────────────────
@@ -255,7 +256,7 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.get("item_descriptor_thumbnail_image")).isEqualTo("https://example.org/thumb.jpg");
+        assertThat(doc.get("resource_descriptor_thumbnail_image")).isEqualTo("https://example.org/thumb.jpg");
     }
 
     // ── item_descriptor_docs ──────────────────────────────────────────────────
@@ -279,9 +280,9 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.containsKey("item_descriptor_docs")).isTrue();
+        assertThat(doc.containsKey("resource_descriptor_docs")).isTrue();
         @SuppressWarnings("unchecked")
-        List<Object> docs = (List<Object>) doc.get("item_descriptor_docs");
+        List<Object> docs = (List<Object>) doc.get("resource_descriptor_docs");
         assertThat(docs).hasSize(2);
     }
 
@@ -305,64 +306,29 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.containsKey("item_descriptor_media_file")).isTrue();
+        assertThat(doc.containsKey("resource_descriptor_media_file")).isTrue();
         @SuppressWarnings("unchecked")
-        List<Object> mediaFile = (List<Object>) doc.get("item_descriptor_media_file");
+        List<Object> mediaFile = (List<Object>) doc.get("resource_descriptor_media_file");
         assertThat(mediaFile).hasSize(1);
     }
 
-    // ── item_provider_alerts ──────────────────────────────────────────────────
+    // ── catalog_provider_id / catalog_provider_name ───────────────────────────
 
     @Test
-    void assemble_itemWithProviderAlerts_populatesProviderAlertsField() throws Exception {
+    void assemble_catalogWithProvider_populatesCatalogProviderFields() throws Exception {
+        // catalog-level provider is in buildPayload() default payload
         JsonNode payload = buildPayload("""
                 {
-                  "id": "item-alerts",
-                  "descriptor": {"name": "Alert Item"},
-                  "provider": {
-                    "id": "prov-1",
-                    "alerts": [
-                      {"type": "maintenance", "message": "Scheduled downtime tonight"},
-                      {"type": "closure", "message": "Public holiday closure"}
-                    ]
-                  },
+                  "id": "item-1",
+                  "descriptor": {"name": "Item"},
                   "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
                 }
                 """);
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.containsKey("item_provider_alerts")).isTrue();
-        @SuppressWarnings("unchecked")
-        List<Object> alerts = (List<Object>) doc.get("item_provider_alerts");
-        assertThat(alerts).hasSize(2);
-    }
-
-    // ── item_provider_policies ────────────────────────────────────────────────
-
-    @Test
-    void assemble_itemWithProviderPolicies_populatesProviderPoliciesField() throws Exception {
-        JsonNode payload = buildPayload("""
-                {
-                  "id": "item-provpol",
-                  "descriptor": {"name": "Policy Item"},
-                  "provider": {
-                    "id": "prov-1",
-                    "policies": [
-                      {"@type": "CancellationPolicy", "name": "No cancellations"},
-                      {"@type": "ReturnPolicy", "name": "30-day returns"}
-                    ]
-                  },
-                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
-                }
-                """);
-
-        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
-
-        assertThat(doc.containsKey("item_provider_policies")).isTrue();
-        @SuppressWarnings("unchecked")
-        List<Object> policies = (List<Object>) doc.get("item_provider_policies");
-        assertThat(policies).hasSize(2);
+        assertThat(doc.get("catalog_provider_id")).isEqualTo("prov-catalog");
+        assertThat(doc.get("catalog_provider_name")).isEqualTo("Catalog Provider");
     }
 
     // ── item_rating_review_text ───────────────────────────────────────────────
@@ -384,7 +350,7 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.get("item_rating_review_text")).isEqualTo("Excellent service and fast charging");
+        assertThat(doc.get("resource_rating_review_text")).isEqualTo("Excellent service and fast charging");
     }
 
     // ── network_id as List ────────────────────────────────────────────────────

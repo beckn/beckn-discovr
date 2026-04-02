@@ -43,13 +43,15 @@ public class CatalogDocumentAssembler {
             networkIds = new ArrayList<>();
             netNode.forEach(n -> {
                 String v = n.asText(null);
-                if (v != null && !v.isBlank()) networkIds.add(v);
+                if (v != null && !v.isBlank())
+                    networkIds.add(v);
             });
         } else {
             String single = netNode.asText(null);
             networkIds = (single != null && !single.isBlank()) ? List.of(single) : List.of();
         }
-        // schema_version not available from payload alone — default to "2.0" for retry path
+        // schema_version not available from payload alone — default to "2.0" for retry
+        // path
         return build(payloadNode, indexKey, networkIds,
                 text(itemNode, BecknFields.ID),
                 text(catalog, BecknFields.BPP_ID),
@@ -69,8 +71,17 @@ public class CatalogDocumentAssembler {
         doc.put("catalog_id", text(catalog, BecknFields.ID));
         doc.put("catalog_context", text(catalog, BecknFields.JSON_LD_CONTEXT));
         doc.put("catalog_type", text(catalog, BecknFields.JSON_LD_TYPE));
-        doc.put("catalog_name", text(catalog.path(BecknFields.DESCRIPTOR), BecknFields.NAME));
-        doc.put("catalog_images", arrayToList(catalog.path(BecknFields.DESCRIPTOR).path(BecknFields.IMAGES)));
+        JsonNode catalogDesc = catalog.path(BecknFields.DESCRIPTOR);
+        doc.put("catalog_name", text(catalogDesc, BecknFields.NAME));
+        doc.put("catalog_short_desc", text(catalogDesc, BecknFields.SHORT_DESC));
+        doc.put("catalog_long_desc", text(catalogDesc, BecknFields.LONG_DESC));
+        doc.put("catalog_descriptor_thumbnail_image", text(catalogDesc, "thumbnailImage"));
+        doc.put("catalog_descriptor_docs", convertToList(catalogDesc.path("docs")));
+        doc.put("catalog_descriptor_media_file", convertToList(catalogDesc.path("mediaFile")));
+        doc.put("catalog_provider_id", text(catalog.path(BecknFields.PROVIDER), BecknFields.ID));
+        doc.put("catalog_provider_name",
+                text(catalog.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+        putIfPresent(doc, "catalog_is_active", boolOrNull(catalog, "isActive"));
         doc.put("bpp_id", bppId);
         doc.put("bpp_uri", bppUri);
         doc.put("network_id", networkIds);
@@ -79,28 +90,26 @@ public class CatalogDocumentAssembler {
             doc.put("catalog_validity", objectMapper.convertValue(validityNode, Map.class));
         }
         doc.put("schema_type", schemaType);
-        doc.put("item_context", text(itemNode, BecknFields.JSON_LD_CONTEXT));
-        doc.put("item_type", text(itemNode, BecknFields.JSON_LD_TYPE));
-        doc.put("item_id", itemId);
-        doc.put("item_name", text(desc, BecknFields.NAME));
-        doc.put("item_short_desc", text(desc, BecknFields.SHORT_DESC));
-        doc.put("item_long_desc", text(desc, BecknFields.LONG_DESC));
-        doc.put("item_image", arrayToList(desc.path(BecknFields.IMAGES)));
-        doc.put("item_category_code", text(itemNode.path("category"), "codeValue"));
-        doc.put("item_category_name", text(itemNode.path("category"), BecknFields.NAME));
-        putIfPresent(doc, "item_rateable", boolOrNull(itemNode, "rateable"));
-        putIfPresent(doc, "item_is_active", boolOrNull(itemNode, "isActive"));
+        doc.put("resource_context", text(itemNode, BecknFields.JSON_LD_CONTEXT));
+        doc.put("resource_type", text(itemNode, BecknFields.JSON_LD_TYPE));
+        doc.put("resource_id", itemId);
+        doc.put("resource_name", text(desc, BecknFields.NAME));
+        doc.put("resource_short_desc", text(desc, BecknFields.SHORT_DESC));
+        doc.put("resource_long_desc", text(desc, BecknFields.LONG_DESC));
+        doc.put("resource_category_code", text(itemNode.path("category"), "codeValue"));
+        doc.put("resource_category_name", text(itemNode.path("category"), BecknFields.NAME));
+        putIfPresent(doc, "resource_rateable", boolOrNull(itemNode, "rateable"));
+        putIfPresent(doc, "resource_is_active", boolOrNull(itemNode, "isActive"));
         JsonNode ratingNode = itemNode.path("rating");
-        putIfPresent(doc, "item_rating_value", dblOrNull(ratingNode, "ratingValue"));
-        putIfPresent(doc, "item_rating_count", intOrNull(ratingNode, "ratingCount"));
-        doc.put("item_provider_id", text(itemNode.path(BecknFields.PROVIDER), BecknFields.ID));
-        doc.put("item_provider_name", text(itemNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
-        doc.put("item_descriptor_thumbnail_image", text(desc, "thumbnailImage"));
-        doc.put("item_descriptor_docs", convertToList(desc.path("docs")));
-        doc.put("item_descriptor_media_file", convertToList(desc.path("mediaFile")));
-        doc.put("item_provider_alerts", convertToList(itemNode.path(BecknFields.PROVIDER).path("alerts")));
-        doc.put("item_provider_policies", convertToList(itemNode.path(BecknFields.PROVIDER).path("policies")));
-        doc.put("item_rating_review_text", text(itemNode.path("rating"), "reviewText"));
+        putIfPresent(doc, "resource_rating_value", dblOrNull(ratingNode, "ratingValue"));
+        putIfPresent(doc, "resource_rating_count", intOrNull(ratingNode, "ratingCount"));
+        doc.put("resource_provider_id", text(itemNode.path(BecknFields.PROVIDER), BecknFields.ID));
+        doc.put("resource_provider_name",
+                text(itemNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+        doc.put("resource_descriptor_thumbnail_image", text(desc, "thumbnailImage"));
+        doc.put("resource_descriptor_docs", convertToList(desc.path("docs")));
+        doc.put("resource_descriptor_media_file", convertToList(desc.path("mediaFile")));
+        doc.put("resource_rating_review_text", text(itemNode.path("rating"), "reviewText"));
         // Internal metadata — never returned in API responses
         doc.put("schema_version", schemaVersion != null ? schemaVersion : "2.0");
         doc.put("indexed_at", Instant.now().toString());
@@ -109,11 +118,11 @@ public class CatalogDocumentAssembler {
 
         JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         if (!attrs.isMissingNode() && attrs.isObject()) {
-            doc.put("item_attributes", flattenJsonLd(attrs));
+            doc.put("resource_attributes", flattenJsonLd(attrs));
             // Dedicated top-level ES fields for @type and @context so they can be
             // filtered as keywords without navigating into the nested object.
-            doc.put("item_attributes_type", text(attrs, BecknFields.JSON_LD_TYPE));
-            doc.put("item_attributes_context", text(attrs, BecknFields.JSON_LD_CONTEXT));
+            doc.put("resource_attributes_type", text(attrs, BecknFields.JSON_LD_TYPE));
+            doc.put("resource_attributes_context", text(attrs, BecknFields.JSON_LD_CONTEXT));
         }
 
         // v2.1 fields: constraints and policies
@@ -146,7 +155,10 @@ public class CatalogDocumentAssembler {
         return result;
     }
 
-    /** Flattens a JSON-LD node into a plain Map, preserving all fields including @context and @type. */
+    /**
+     * Flattens a JSON-LD node into a plain Map, preserving all fields
+     * including @context and @type.
+     */
     private Map<String, Object> flattenJsonLd(JsonNode node) {
         Map<String, Object> result = new LinkedHashMap<>();
         node.fields().forEachRemaining(e -> {
@@ -159,8 +171,8 @@ public class CatalogDocumentAssembler {
         List<String> parts = new ArrayList<>();
 
         // Core item fields
-        for (String key : List.of("item_name", "item_short_desc", "item_long_desc",
-                "item_category_name", "item_provider_name")) {
+        for (String key : List.of("resource_name", "resource_short_desc", "resource_long_desc",
+                "resource_category_name", "resource_provider_name")) {
             if (doc.get(key) instanceof String s && !s.isBlank())
                 parts.add(s);
         }
@@ -192,7 +204,8 @@ public class CatalogDocumentAssembler {
      * collects all non-geo string values from it (address fields, etc.).
      */
     private static void collectLocationText(JsonNode node, List<String> parts) {
-        if (node == null || node.isMissingNode()) return;
+        if (node == null || node.isMissingNode())
+            return;
         if (node.isObject()) {
             if (node.has("geo") || node.has("gps") || node.has("polygon")) {
                 // This is a Location object — collect all non-geo text fields
@@ -214,7 +227,8 @@ public class CatalogDocumentAssembler {
      * Skips JSON-LD metadata keys (@context, @type) and URL strings.
      */
     private static void collectStrings(JsonNode node, List<String> parts) {
-        if (node == null || node.isMissingNode()) return;
+        if (node == null || node.isMissingNode())
+            return;
         if (node.isTextual()) {
             String val = node.asText();
             if (!val.isBlank() && !val.startsWith("http") && !val.startsWith("@"))
@@ -244,8 +258,10 @@ public class CatalogDocumentAssembler {
     }
 
     /**
-     * Returns the boolean value of a field only when it is explicitly present and boolean-typed.
-     * Returns null when the field is missing — prevents indexing a false default for absent fields.
+     * Returns the boolean value of a field only when it is explicitly present and
+     * boolean-typed.
+     * Returns null when the field is missing — prevents indexing a false default
+     * for absent fields.
      */
     private Boolean boolOrNull(JsonNode n, String f) {
         JsonNode field = n.path(f);
@@ -253,8 +269,10 @@ public class CatalogDocumentAssembler {
     }
 
     /**
-     * Returns the double value of a field only when it is explicitly present and numeric.
-     * Returns null when the field is missing — prevents indexing a 0.0 default for absent fields.
+     * Returns the double value of a field only when it is explicitly present and
+     * numeric.
+     * Returns null when the field is missing — prevents indexing a 0.0 default for
+     * absent fields.
      */
     private Double dblOrNull(JsonNode n, String f) {
         JsonNode field = n.path(f);
@@ -262,8 +280,10 @@ public class CatalogDocumentAssembler {
     }
 
     /**
-     * Returns the int value of a field only when it is explicitly present and numeric.
-     * Returns null when the field is missing — prevents indexing a 0 default for absent fields.
+     * Returns the int value of a field only when it is explicitly present and
+     * numeric.
+     * Returns null when the field is missing — prevents indexing a 0 default for
+     * absent fields.
      */
     private Integer intOrNull(JsonNode n, String f) {
         JsonNode field = n.path(f);
@@ -276,7 +296,8 @@ public class CatalogDocumentAssembler {
      * misread as real data during search result assembly.
      */
     private static void putIfPresent(Map<String, Object> doc, String key, Object value) {
-        if (value != null) doc.put(key, value);
+        if (value != null)
+            doc.put(key, value);
     }
 
     private List<String> arrayToList(JsonNode n) {
