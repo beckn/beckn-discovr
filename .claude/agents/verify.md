@@ -174,7 +174,7 @@ Adjust text search expectations accordingly — `native-els` does keyword matchi
 |---|----------|--------|----------|
 | SC-06 | Text search (matching) | GET `http://localhost:8082/beckn/discover` with `textSearch: "Verify Coffee"` | `context.action = "on_discover"`, `message.catalogs` array with >=1 catalog, resources use `resources` field |
 | SC-07 | Text search — response field validation | Same response as SC-06 | Each catalog has `id`, `descriptor.name`, `bppId`, `resources[].id`, `resources[].descriptor`. No `rateable: false` or `ratingValue: 0` on items without ratings |
-| SC-08 | Spatial search (s_dwithin near Bengaluru) | GET with `spatial: [{ op: "s_dwithin", targets: "$.availableAt[*].geo", geometry: { type: "Point", coordinates: [77.5946, 12.9716] }, distanceMeters: 5000, quantifier: "any" }]` | `context.action = "on_discover"`, `message.catalogs` may include the test item (within 5km of MG Road) |
+| SC-08 | Spatial search (s_dwithin near Bengaluru) | GET with `spatial: [{ op: "s_dwithin", targets: "$.catalogs[*].provider.availableAt[*].geo", geometry: { type: "Point", coordinates: [77.5946, 12.9716] }, distanceMeters: 5000, quantifier: "any" }]` | `context.action = "on_discover"`, `message.catalogs` may include the test item (within 5km of MG Road) |
 | SC-09 | Spatial search (far away — no results) | GET with coordinates `[0.0, 0.0]`, `distanceMeters: 1000` | `message.catalogs` = empty array (no items near [0,0]) |
 | SC-10 | Wrong action | GET with `"action": "wrong"` | `{"status":"NACK","error":{"errorCode":"SCHEMA_VALIDATION_FAILED",...}}` |
 | SC-11 | Missing transactionId | GET without `transactionId` | `{"status":"NACK",...}` (UUID validation fails) |

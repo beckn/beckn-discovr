@@ -33,7 +33,8 @@ topics:
 
 kafka:
   topics:
-    partitions: 3
+    partitions: ${KAFKA_TOPICS_PARTITIONS:4}
+    dlt-partitions: ${KAFKA_DLT_PARTITIONS:1}
     replication-factor: 1
 
 # HTTP client configuration for BAP notifications
