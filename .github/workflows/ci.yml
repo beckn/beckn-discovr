@@ -19,6 +19,9 @@ jobs:
           - name: catalog-publish-job
             path: jobs/catalog-publish-job
             run_integration_tests: true
+          - name: response-dispatcher
+            path: jobs/response-dispatcher
+            run_integration_tests: false
 
     steps:
       - name: Checkout
@@ -77,11 +80,12 @@ jobs:
           cache-dependency-path: |
             jobs/catalog-discover-job/build.gradle
             jobs/catalog-publish-job/build.gradle
+            jobs/response-dispatcher/build.gradle
 
       - name: Generate SBOMs (CycloneDX) for Java jobs
         run: |
           set -euo pipefail
-          for job in catalog-discover-job catalog-publish-job; do
+          for job in catalog-discover-job catalog-publish-job response-dispatcher; do
             echo "Generating SBOM for jobs/${job}"
             (cd "jobs/${job}" && chmod +x gradlew && ./gradlew --no-daemon cyclonedxDirectBom)
           done
@@ -109,7 +113,7 @@ jobs:
       - name: Scan SBOMs (Java jobs) with Trivy (HIGH,CRITICAL)
         run: |
           set -euo pipefail
-          for job in catalog-discover-job catalog-publish-job; do
+          for job in catalog-discover-job catalog-publish-job response-dispatcher; do
             bom="jobs/${job}/build/reports/cyclonedx-direct/bom.json"
             out="trivy-sbom-${job}.json"
             if [ ! -f "$bom" ]; then
@@ -139,6 +143,7 @@ jobs:
           path: |
             jobs/catalog-discover-job/build/reports/cyclonedx-direct/bom.json
             jobs/catalog-publish-job/build/reports/cyclonedx-direct/bom.json
+            jobs/response-dispatcher/build/reports/cyclonedx-direct/bom.json
           retention-days: 30
 
       - name: Upload Trivy SBOM reports (Java jobs)
