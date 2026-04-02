@@ -40,8 +40,10 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-core:2.15.2'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
 
-    // Cryptography - BouncyCastle for BLAKE2b-512
+    // Beckn Auth SDK (composite build — signing via Ed25519 + BLAKE-512)
+    implementation 'org.beckn:beckn-auth-sdk'
     implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
 
     // Metrics
     implementation 'io.micrometer:micrometer-registry-prometheus'

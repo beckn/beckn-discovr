@@ -72,8 +72,20 @@ app:
         depth-limit: ${ES_MAPPING_DEPTH_LIMIT:10}
         template-file: ${ES_MAPPING_TEMPLATE_FILE:}
 
-  http:
-    signature-verification-enabled: false
+  auth:
+    enabled: ${SIGNATURE_AUTH_ENABLED:false}
+    registry-base-url: ${SIGNATURE_REGISTRY_BASE_URL:}
+    registry-name: ${SIGNATURE_REGISTRY_NAME:keys}
+    registry-token: ${SIGNATURE_REGISTRY_TOKEN:}
+    clock-skew-seconds: ${SIGNATURE_CLOCK_SKEW_SECONDS:30}
+    cache-ttl-seconds: ${SIGNATURE_CACHE_TTL_SECONDS:2592000}
+    cache-max-keys: ${SIGNATURE_CACHE_MAX_KEYS:100}
+    timeout-seconds: ${SIGNATURE_TIMEOUT_SECONDS:10}
+    retry-attempts: ${SIGNATURE_RETRY_ATTEMPTS:3}
+    # Comma-separated METHOD:PATH pairs that bypass signature verification.
+    # Format: POST:/catalog/push,GET:/catalog/health
+    # Supports {param} and :param wildcards. Leave empty to protect all endpoints.
+    whitelisted-endpoints: ${SIGNATURE_WHITELISTED_ENDPOINTS:}
 
 spring:
   application:

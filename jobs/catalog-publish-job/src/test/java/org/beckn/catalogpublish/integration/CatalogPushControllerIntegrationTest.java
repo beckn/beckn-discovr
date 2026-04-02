@@ -242,7 +242,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void push_signatureVerificationDisabled_noAuthHeaderRequired() throws Exception {
-        // signature-verification-enabled: false in test config → no Authorization header needed
+        // SIGNATURE_AUTH_ENABLED defaults to false → BecknAuthFilter skips verification → no Authorization header needed
         String fixture = readFixture("fixtures/ev_charging_station_data.json");
 
         mockMvc.perform(post("/catalog/push")

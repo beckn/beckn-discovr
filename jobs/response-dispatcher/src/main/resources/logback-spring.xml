@@ -36,6 +36,9 @@
     <logger name="org.beckn.seeker" level="INFO" additivity="false">
       <appender-ref ref="ASYNC_JSON"/>
     </logger>
+    <logger name="org.beckn.auth" level="INFO" additivity="false">
+      <appender-ref ref="ASYNC_JSON"/>
+    </logger>
 
     <logger name="org.springframework.kafka" level="WARN" additivity="false">
       <appender-ref ref="ASYNC_JSON"/>
@@ -60,6 +63,9 @@
     </appender>
 
     <logger name="org.beckn.seeker" level="INFO" additivity="false">
+      <appender-ref ref="CONSOLE"/>
+    </logger>
+    <logger name="org.beckn.auth" level="INFO" additivity="false">
       <appender-ref ref="CONSOLE"/>
     </logger>
 
