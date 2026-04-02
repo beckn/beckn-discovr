@@ -32,21 +32,25 @@ spring:
       concurrency: 3
       missing-topics-fatal: false
 
+# Beckn Auth SDK — signature verification for /beckn/discover
+
 # Discovery Service Configuration
 discovery:
-  latency-tracking-enabled: ${DISCOVERY_LATENCY_TRACKING_ENABLED:true}
-  # Registry Authorization Configuration (Aligned with Node.js Env Vars)
-  registry-auth:
+  auth:
     enabled: ${SIGNATURE_AUTH_ENABLED:false}
-    base-url: ${REGISTRY_BASE_URL:https://api.testnet.beckn.one/registry/dedi/lookup}
-    registry-name: ${REGISTRY_NAME:subscribers.beckn.one}
-    registry-token: ${REGISTRY_API_TOKEN:}
-    cache-ttl-seconds: ${PUBLIC_KEY_CACHE_TTL_SEC:300}
-    cache-max-keys: ${PUBLIC_KEY_CACHE_MAX_KEYS:100}
-    cache-enabled: ${PUBLIC_KEY_CACHE_ENABLED:true}
-    retry-attempts: ${REGISTRY_RETRY_COUNT:3}
-    timeout-seconds: ${REGISTRY_TIMEOUT_SEC:10}
-    
+    registry-base-url: ${SIGNATURE_REGISTRY_BASE_URL:}
+    registry-name: ${SIGNATURE_REGISTRY_NAME:keys}
+    registry-token: ${SIGNATURE_REGISTRY_TOKEN:}
+    clock-skew-seconds: ${SIGNATURE_CLOCK_SKEW_SECONDS:30}
+    cache-ttl-seconds: ${SIGNATURE_CACHE_TTL_SECONDS:2592000}
+    cache-max-keys: ${SIGNATURE_CACHE_MAX_KEYS:100}
+    timeout-seconds: ${SIGNATURE_TIMEOUT_SECONDS:10}
+    retry-attempts: ${SIGNATURE_RETRY_ATTEMPTS:3}
+    # Comma-separated METHOD:PATH pairs that bypass signature verification.
+    # Format: POST:/beckn/discover,GET:/beckn/discover
+    # Supports {param} and :param wildcards. Leave empty to protect all endpoints.
+    whitelisted-endpoints: ${SIGNATURE_WHITELISTED_ENDPOINTS:}
+  latency-tracking-enabled: ${DISCOVERY_LATENCY_TRACKING_ENABLED:true}
   kafka:
     request-topic: ${KAFKA_REQUEST_TOPIC:discovr.discover.in.requests}
     response-topic: ${KAFKA_RESPONSE_TOPIC:discovr.discover.out.responses}

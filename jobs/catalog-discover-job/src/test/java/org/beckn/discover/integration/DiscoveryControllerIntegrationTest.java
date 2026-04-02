@@ -1,11 +1,13 @@
 package org.beckn.discover.integration;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Nested;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.test.context.TestPropertySource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -302,13 +304,29 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
         }
 
-        @Test
-        void postDiscover_WithRegistryAuthEnabled_MissingAuthHeader_Returns400() throws Exception {
-                // Enable registry auth for this test
-                boolean originalEnabled = discoveryProperties.getRegistryAuth().isEnabled();
-                discoveryProperties.getRegistryAuth().setEnabled(true);
+        /**
+         * Tests that verify Beckn Auth SDK integration is working correctly.
+         * Auth is enabled via @TestPropertySource so AuthProperties record is properly initialized.
+         */
+        @Nested
+        @TestPropertySource(properties = {
+                "discovery.auth.enabled=true",
+                "discovery.auth.registryBaseUrl=https://api.testnet.beckn.one/registry/dedi/lookup/",
+                "discovery.auth.registryName=subscribers.beckn.one",
+                "discovery.auth.registryToken=test-token",
+                "discovery.auth.clockSkewSeconds=30",
+                "discovery.auth.cacheTtlSeconds=2592000",
+                "discovery.auth.cacheMaxKeys=100",
+                "discovery.auth.timeoutSeconds=10",
+                "discovery.auth.retryAttempts=3"
+        })
+        @AutoConfigureMockMvc
+        class WithBecknAuthSDKEnabled extends BaseIntegrationTest {
+                @Autowired
+                private MockMvc mockMvc;
 
-                try {
+                @Test
+                void postDiscover_WithRegistryAuthEnabled_MissingAuthHeader_Returns400() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
                         // When registry auth is enabled and Authorization header is missing
@@ -322,19 +340,10 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_MISSING"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                         containsString("Missing Authorization")));
-                } finally {
-                        // Reset configuration
-                        discoveryProperties.getRegistryAuth().setEnabled(originalEnabled);
                 }
-        }
 
-        @Test
-        void postDiscover_WithRegistryAuthEnabled_InvalidKeyIdFormat_Returns400() throws Exception {
-                // Enable registry auth for this test
-                boolean originalEnabled = discoveryProperties.getRegistryAuth().isEnabled();
-                discoveryProperties.getRegistryAuth().setEnabled(true);
-
-                try {
+                @Test
+                void postDiscover_WithRegistryAuthEnabled_InvalidKeyIdFormat_Returns400() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
                         String invalidHeader = "Signature keyId=\"invalid|format\",algorithm=\"ed25519\",headers=\"(created)\",created=\"123\",expires=\"456\",signature=\"sig\"";
 
@@ -349,19 +358,10 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                         containsString("Invalid keyId format")));
-                } finally {
-                        // Reset configuration
-                        discoveryProperties.getRegistryAuth().setEnabled(originalEnabled);
                 }
-        }
 
-        @Test
-        void postDiscover_WithRegistryAuthEnabled_InvalidSignatureFormat_Returns400() throws Exception {
-                // Enable registry auth for this test
-                boolean originalEnabled = discoveryProperties.getRegistryAuth().isEnabled();
-                discoveryProperties.getRegistryAuth().setEnabled(true);
-
-                try {
+                @Test
+                void postDiscover_WithRegistryAuthEnabled_InvalidSignatureFormat_Returns400() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
                         // When registry auth is enabled and Authorization header has invalid format
@@ -376,27 +376,14 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                         containsString("Invalid Beckn HTTP Signature format")));
-                } finally {
-                        // Reset configuration
-                        discoveryProperties.getRegistryAuth().setEnabled(originalEnabled);
                 }
-        }
 
-        @Test
-        void postDiscover_WithRegistryAuthEnabled_KeyNotFound_Returns401() throws Exception {
-                // Enable registry auth for this test
-                boolean originalEnabled = discoveryProperties.getRegistryAuth().isEnabled();
-                discoveryProperties.getRegistryAuth().setEnabled(true);
-
-                try {
+                @Test
+                void postDiscover_WithRegistryAuthEnabled_KeyNotFound_Returns401() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
-                        // New Logic: Registry URL is constructed from config + subscriberId +
-                        // uniqueKeyId
-                        // We need to provide a valid signature header format with 3-part keyId
-
-                        // Construct a header with a keyId that will result in a 404 from the registry
-                        // keyId format: subscriber_id|unique_key_id|algorithm
+                        // Registry URL is constructed from config + subscriberId + uniqueKeyId
+                        // Provide a valid signature header format with 3-part keyId
                         String subscriberId = "unknown-subscriber";
                         String uniqueKeyId = "unknown-key";
                         String algorithm = "ed25519";
@@ -417,11 +404,6 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .andExpect(status().isUnauthorized())
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_KEY_NOT_FOUND"));
-                        // .andExpect(jsonPath("$.error.message", containsString("Failed to fetch public
-                        // key")));
-                } finally {
-                        // Reset configuration
-                        discoveryProperties.getRegistryAuth().setEnabled(originalEnabled);
                 }
         }
 }

@@ -19,7 +19,6 @@ public class DiscoveryProperties {
     @Valid private NLWeb nlweb = new NLWeb();
     @Valid private PostgreSQL postgresql = new PostgreSQL();
     @Valid private Schema schema = new Schema();
-    @Valid private RegistryAuthConfig registryAuth = new RegistryAuthConfig();
     @Valid private TextSearch textSearch = new TextSearch();
     @Valid private Spatial spatial = new Spatial();
     @Valid private Elasticsearch elasticsearch = new Elasticsearch();
@@ -62,14 +61,6 @@ public class DiscoveryProperties {
 
     public void setLatencyTrackingEnabled(boolean latencyTrackingEnabled) {
         this.latencyTrackingEnabled = latencyTrackingEnabled;
-    }
-
-    public RegistryAuthConfig getRegistryAuth() {
-        return registryAuth;
-    }
-
-    public void setRegistryAuth(RegistryAuthConfig registryAuth) {
-        this.registryAuth = registryAuth;
     }
 
     public TextSearch getTextSearch() {
@@ -465,90 +456,4 @@ public class DiscoveryProperties {
         }
     }
 
-    /**
-     * Registry Authorization Configuration
-     */
-    public static class RegistryAuthConfig {
-        private boolean enabled = false;
-        private String registryToken = "";
-        private String baseUrl = "https://api.testnet.beckn.one/registry/dedi/lookup";
-        private String registryName = "subscribers.beckn.one";
-        private int cacheTtlSeconds = 2592000;
-        private int cacheMaxKeys = 100;
-        private boolean cacheEnabled = true;
-        private int retryAttempts = 3;
-        private int timeoutSeconds = 10;
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-
-        public String getRegistryToken() {
-            return registryToken;
-        }
-
-        public void setRegistryToken(String registryToken) {
-            this.registryToken = registryToken;
-        }
-
-        public String getBaseUrl() {
-            return baseUrl;
-        }
-
-        public void setBaseUrl(String baseUrl) {
-            this.baseUrl = baseUrl;
-        }
-
-        public String getRegistryName() {
-            return registryName;
-        }
-
-        public void setRegistryName(String registryName) {
-            this.registryName = registryName;
-        }
-
-        public int getCacheTtlSeconds() {
-            return cacheTtlSeconds;
-        }
-
-        public void setCacheTtlSeconds(int cacheTtlSeconds) {
-            this.cacheTtlSeconds = cacheTtlSeconds;
-        }
-
-        public int getCacheMaxKeys() {
-            return cacheMaxKeys;
-        }
-
-        public void setCacheMaxKeys(int cacheMaxKeys) {
-            this.cacheMaxKeys = cacheMaxKeys;
-        }
-
-        public boolean isCacheEnabled() {
-            return cacheEnabled;
-        }
-
-        public void setCacheEnabled(boolean cacheEnabled) {
-            this.cacheEnabled = cacheEnabled;
-        }
-
-        public int getRetryAttempts() {
-            return retryAttempts;
-        }
-
-        public void setRetryAttempts(int retryAttempts) {
-            this.retryAttempts = retryAttempts;
-        }
-
-        public int getTimeoutSeconds() {
-            return timeoutSeconds;
-        }
-
-        public void setTimeoutSeconds(int timeoutSeconds) {
-            this.timeoutSeconds = timeoutSeconds;
-        }
-    }
 }
