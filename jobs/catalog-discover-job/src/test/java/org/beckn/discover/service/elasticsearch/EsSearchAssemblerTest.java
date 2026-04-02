@@ -475,8 +475,8 @@ class EsSearchAssemblerTest {
                 Map.entry("resource_rating_count", 120),
                 Map.entry("resource_provider_id", "ecopower-charging"),
                 Map.entry("resource_provider_name", "EcoPower Charging"),
-                Map.entry("resource_context", "https://custom.item.context"),
-                Map.entry("resource_type", "CustomItemType"),
+                Map.entry("resource_context", "https://custom.resource.context"),
+                Map.entry("resource_type", "CustomResourceType"),
                 Map.entry("resource_attributes", Map.of(
                         "@context", "https://custom.attr.context",
                         "@type", "EVCharger",

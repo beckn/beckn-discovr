@@ -207,18 +207,18 @@ public class EsSearchAssembler {
     }
 
     /**
-     * Collects only <b>direct item-level</b> location fields from the ES document.
+     * Collects only <b>direct resource-level</b> location fields from the ES document.
      *
      * <p>{@code GeoShapeExtractor} on the publish side indexes location objects from
      * any path as {@code loc_*} fields. However, offer-level, provider-level,
      * resourceAttributes-level, and providerAttributes-level locations are returned via
-     * their own response structures. Only direct item children
+     * their own response structures. Only direct resource children
      * (e.g. {@code availableAt}, {@code location}, or any spec-extended
      * location field) should be collected here.</p>
      */
     private static List<Location> collectItemLocations(Map<String, Object> doc) {
         return collectLocFields(doc, key ->
-                key.contains("_items_")
+                key.contains("_resources_")
                         && !key.contains("_provider_")
                         && !key.contains("_providerAttributes_")
                         && !key.contains("_resourceAttributes_")
@@ -227,7 +227,7 @@ public class EsSearchAssembler {
 
     /**
      * Collects provider-level location fields (e.g.
-     * {@code loc_catalogs_items_provider_locations})
+     * {@code loc_catalogs_resources_provider_locations})
      * for {@link Provider#setLocations}.
      */
     private static List<Location> collectProviderLocations(Map<String, Object> doc) {
