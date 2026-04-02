@@ -144,8 +144,8 @@ public class EsIndexManager {
                     "mappings": {
                       "dynamic_templates": [
                         { "geo_fields":               { "path_match": "*.geo",              "mapping": { "type": "geo_shape" } } },
-                        { "item_attrs_longs_as_float":   { "path_match": "item_attributes.*", "match_mapping_type": "long",   "mapping": { "type": "float" } } },
-                        { "item_attrs_doubles_as_float": { "path_match": "item_attributes.*", "match_mapping_type": "double", "mapping": { "type": "float" } } },
+                        { "resource_attrs_longs_as_float":   { "path_match": "resource_attributes.*", "match_mapping_type": "long",   "mapping": { "type": "float" } } },
+                        { "resource_attrs_doubles_as_float": { "path_match": "resource_attributes.*", "match_mapping_type": "double", "mapping": { "type": "float" } } },
                         { "strings_as_keywords":      { "match_mapping_type": "string",  "mapping": { "type": "keyword" } } },
                         { "integers_as_ints":         { "match_mapping_type": "long",    "mapping": { "type": "integer" } } },
                         { "doubles_as_doubles":       { "match_mapping_type": "double",  "mapping": { "type": "double"  } } },
@@ -156,39 +156,37 @@ public class EsIndexManager {
                         "catalog_context":         { "type": "keyword" },
                         "catalog_type":            { "type": "keyword" },
                         "catalog_name":            { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                        "catalog_images":          { "type": "keyword" },
-                        "item_id":                 { "type": "keyword" },
-                        "item_context":            { "type": "keyword" },
-                        "item_type":               { "type": "keyword" },
+                        "catalog_short_desc":      { "type": "text" },
+                        "catalog_long_desc":       { "type": "text" },
+                        "catalog_descriptor_thumbnail_image": { "type": "keyword" },
+                        "catalog_descriptor_docs":            { "type": "nested" },
+                        "catalog_descriptor_media_file":      { "type": "nested" },
+                        "catalog_provider_id":     { "type": "keyword" },
+                        "catalog_provider_name":   { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "catalog_is_active":       { "type": "boolean" },
+                        "resource_id":                 { "type": "keyword" },
+                        "resource_context":            { "type": "keyword" },
+                        "resource_type":               { "type": "keyword" },
                         "bpp_id":                  { "type": "keyword" },
                         "bpp_uri":                 { "type": "keyword" },
                         "network_id":              { "type": "keyword" },
                         "schema_type":             { "type": "keyword" },
-                        "item_name":               { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                        "item_short_desc":         { "type": "text" },
-                        "item_long_desc":          { "type": "text" },
-                        "item_provider_id":        { "type": "keyword" },
-                        "item_provider_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                        "item_descriptor_thumbnail_image": { "type": "keyword" },
-                        "item_descriptor_docs":            { "type": "nested" },
-                        "item_descriptor_media_file":      { "type": "nested" },
-                        "item_provider_alerts":            { "type": "nested" },
-                        "item_provider_policies": {
-                          "type": "nested",
-                          "properties": {
-                            "@type": { "type": "keyword" },
-                            "name":  { "type": "keyword" }
-                          }
-                        },
-                        "item_category_code":      { "type": "keyword" },
-                        "item_category_name":      { "type": "keyword" },
-                        "item_image":              { "type": "keyword" },
-                        "item_rating_value":       { "type": "float" },
-                        "item_rating_count":       { "type": "integer" },
-                        "item_rating_review_text": { "type": "text" },
-                        "item_is_active":          { "type": "boolean" },
-                        "item_rateable":           { "type": "boolean" },
-                        "item_attributes": {
+                        "resource_name":               { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "resource_short_desc":         { "type": "text" },
+                        "resource_long_desc":          { "type": "text" },
+                        "resource_provider_id":        { "type": "keyword" },
+                        "resource_provider_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "resource_descriptor_thumbnail_image": { "type": "keyword" },
+                        "resource_descriptor_docs":            { "type": "nested" },
+                        "resource_descriptor_media_file":      { "type": "nested" },
+                        "resource_category_code":      { "type": "keyword" },
+                        "resource_category_name":      { "type": "keyword" },
+                        "resource_rating_value":       { "type": "float" },
+                        "resource_rating_count":       { "type": "integer" },
+                        "resource_rating_review_text": { "type": "text" },
+                        "resource_is_active":          { "type": "boolean" },
+                        "resource_rateable":           { "type": "boolean" },
+                        "resource_attributes": {
                           "type": "object",
                           "dynamic": true,
                           "properties": {
@@ -196,8 +194,8 @@ public class EsIndexManager {
                             "@type":    { "type": "keyword" }
                           }
                         },
-                        "item_attributes_type":    { "type": "keyword" },
-                        "item_attributes_context": { "type": "keyword" },
+                        "resource_attributes_type":    { "type": "keyword" },
+                        "resource_attributes_context": { "type": "keyword" },
                         "constraints": {
                           "type": "nested",
                           "properties": {
@@ -217,7 +215,7 @@ public class EsIndexManager {
                         "offers":                  { "type": "nested" },
                         "full_text_blob":          { "type": "text", "analyzer": "standard" },
                         "indexed_at":              { "type": "date" },
-                        "item_vector":             { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }
+                        "resource_vector":             { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }
                       }
                     }
                   }
