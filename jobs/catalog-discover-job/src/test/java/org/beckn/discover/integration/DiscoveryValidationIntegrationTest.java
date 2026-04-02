@@ -261,14 +261,14 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
         JsonNode node = objectMapper.readTree(payload);
         var result = validationService.validateDiscoverRequest(node);
 
-        // The current draft spec does not enforce an anyOf requiring textSearch, filters,
-        // or spatial on Intent — an empty intent {} passes schema validation. This test
-        // documents current schema behaviour. When the spec adds the anyOf constraint,
-        // flip back to isFalse() with assertThat(result.getErrors()).isNotEmpty().
+        // Empty intent is now rejected with a clear validation error — at least one
+        // search criterion (textSearch, filters, or spatial) must be present.
         assertThat(result.isValid())
-                .as("Current draft spec allows empty intent — validation passes; errors: %s",
-                        result.getErrors())
-                .isTrue();
+                .as("Empty intent must be rejected — at least one search criterion required")
+                .isFalse();
+        assertThat(result.getErrors())
+                .as("Error should mention missing search criterion")
+                .anyMatch(e -> e.contains("at least one search criterion"));
     }
 
     @Test
