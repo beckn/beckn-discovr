@@ -148,7 +148,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                     .index(aliasName)
                     .query(q -> q.multiMatch(mm -> mm
                             .query(text)
-                            .fields("full_text_blob", "resource_name^2", "resource_rating_review_text")
+                            .fields("full_text_blob", "resource_name^2", "catalog_name^2", "resource_provider_name^1.5", "resource_rating_review_text")
                             .type(TextQueryType.BestFields)
                             .fuzziness("AUTO")))
                     .minScore(minScore)
@@ -208,7 +208,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
     private String buildTextSearchJson(String text) {
         Map<String, Object> multiMatch = new LinkedHashMap<>();
         multiMatch.put("query", text);
-        multiMatch.put("fields", List.of("full_text_blob", "resource_name^2", "resource_rating_review_text"));
+        multiMatch.put("fields", List.of("full_text_blob", "resource_name^2", "catalog_name^2", "resource_provider_name^1.5", "resource_rating_review_text"));
         multiMatch.put("type", "best_fields");
         multiMatch.put("fuzziness", "AUTO");
         Map<String, Object> body = new LinkedHashMap<>();

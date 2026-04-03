@@ -206,26 +206,112 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                 .hasMessageContaining("cannot be null or empty");
     }
 
+    /**
+     * Searching "charging" should match docs with "charger" via English stemming.
+     * ev-charger-002 blob contains "charger" so stemmer collapses both to same root.
+     */
+    @Test
+    void search_stemmingMatchesInflectedForm_returnsResult() throws Exception {
+        // "Type2" isolates ev-charger-002 from the other docs while "charging" tests stemming
+        List<Catalog> catalogs = searchEngine.search("Type2 charging", queryRequest("tx-stem-1"));
+
+        assertThat(catalogs).isNotEmpty();
+        boolean found = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .anyMatch(r -> r.getId().equals("ev-charger-002"));
+        assertThat(found).isTrue();
+    }
+
+    /**
+     * Searching "EV" should match the doc seeded with "electric vehicle" via synonym expansion.
+     * ev-charger-003 blob contains "electric vehicle" — the synonym rule expands "EV" to it.
+     */
+    @Test
+    void search_synonymExpansion_evMatchesElectricVehicle() throws Exception {
+        // ev-charger-003 blob: "DC Charger CHAdeMO 50kW electric vehicle GreenVolt"
+        // With synonym expansion EV → electric vehicle at search time, this doc should match
+        List<Catalog> catalogs = searchEngine.search("CHAdeMO EV", queryRequest("tx-syn-1"));
+
+        assertThat(catalogs).isNotEmpty();
+        boolean found = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .anyMatch(r -> r.getId().equals("ev-charger-003"));
+        assertThat(found).isTrue();
+    }
+
+    /**
+     * A numeric value ("150") placed in the full_text_blob should be findable by search.
+     * ev-charger-001 blob contains "150".
+     */
+    @Test
+    void search_numericTermInBlob_matchesDocument() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("150", queryRequest("tx-num-1"));
+
+        assertThat(catalogs).isNotEmpty();
+        boolean found = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .anyMatch(r -> r.getId().equals("ev-charger-001"));
+        assertThat(found).isTrue();
+    }
+
+    /**
+     * Searching by catalog_name (boosted ^2) should return results.
+     * "EcoPower Catalog" is the catalog_name for cat-ev-001 docs.
+     */
+    @Test
+    void search_catalogNameBoost_matchScoresHigher() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("EcoPower Catalog", queryRequest("tx-boost-1"));
+
+        assertThat(catalogs).isNotEmpty();
+        boolean found = catalogs.stream().anyMatch(c -> c.getId().equals("cat-ev-001"));
+        assertThat(found).isTrue();
+    }
+
     // ── Setup helpers ─────────────────────────────────────────────────────────
 
     private static void createIndexAndAlias() throws Exception {
-        String mappingJson = """
+        String indexJson = """
                 {
+                  "settings": {
+                    "analysis": {
+                      "filter": {
+                        "english_stop":    { "type": "stop",    "stopwords": "_english_" },
+                        "english_stemmer": { "type": "stemmer", "language": "english" },
+                        "beckn_synonyms":  { "type": "synonym", "synonyms": ["ev, electric vehicle", "charger, charging station"] }
+                      },
+                      "analyzer": {
+                        "beckn_text": {
+                          "type": "custom",
+                          "tokenizer": "standard",
+                          "filter": ["lowercase", "english_stop", "english_stemmer"]
+                        },
+                        "beckn_text_search": {
+                          "type": "custom",
+                          "tokenizer": "standard",
+                          "filter": ["lowercase", "english_stop", "beckn_synonyms", "english_stemmer"]
+                        }
+                      }
+                    }
+                  },
                   "mappings": {
                     "properties": {
-                      "full_text_blob": { "type": "text", "analyzer": "standard" },
-                      "resource_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                      "resource_short_desc":{ "type": "text" },
-                      "catalog_id":     { "type": "keyword" },
-                      "bpp_id":         { "type": "keyword" },
-                      "resource_id":        { "type": "keyword" }
+                      "full_text_blob":          { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
+                      "resource_name":           { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "resource_short_desc":     { "type": "text" },
+                      "resource_category_name":  { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "catalog_name":            { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "resource_provider_name":  { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "catalog_id":              { "type": "keyword" },
+                      "bpp_id":                  { "type": "keyword" },
+                      "resource_id":                  { "type": "keyword" },
+                      "resource_rating_review_text":  { "type": "text" }
                     }
                   }
                 }
                 """;
         esClient.indices().create(CreateIndexRequest.of(r -> r
                 .index(INDEX)
-                .withJson(new StringReader(mappingJson))));
+                .withJson(new StringReader(indexJson))));
         esClient.indices().putAlias(a -> a.index(INDEX).name(ALIAS));
     }
 
@@ -250,18 +336,19 @@ class ElasticsearchTextSearchEngineIntegrationTest {
      * - "EcoPower" → ev-charger-001 + ev-charger-002 (both cat-ev-001)
      * - "CHAdeMO" → only ev-charger-003 (cat-ev-002)
      * - "GreenVolt"→ only ev-charger-003 (cat-ev-002)
+     * - "150" → only ev-charger-001 (numeric blob value)
      */
     private static List<Map<String, Object>> testDocs() {
         return List.of(
-                doc("cat-ev-001", "bpp-ecopower", "https://bpp.ecopower.com",
+                doc("cat-ev-001", "EcoPower Catalog", "bpp-ecopower", "https://bpp.ecopower.com",
                         "ev-charger-001", "DC Fast Charger CCS2 60kW",
                         "60kW DC fast charger for EV", "CCS2 rapid charge",
                         "EV_CHARGING", "EV Charging", 4.5, 120,
                         "ecopower-charging", "EcoPower Charging Pvt Ltd",
                         Map.of("connectorType", "CCS2", "maxPowerKW", 60),
-                        "DC Fast Charger CCS2 60kW EV EcoPower"),
+                        "DC Fast Charger CCS2 60kW EV EcoPower 150"),
 
-                doc("cat-ev-001", "bpp-ecopower", "https://bpp.ecopower.com",
+                doc("cat-ev-001", "EcoPower Catalog", "bpp-ecopower", "https://bpp.ecopower.com",
                         "ev-charger-002", "AC Charger Type2 22kW",
                         "22kW AC charger Type2 for EV", "Type2 AC charge",
                         "EV_CHARGING", "EV Charging", 4.2, 85,
@@ -269,16 +356,17 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         Map.of("connectorType", "Type2", "maxPowerKW", 22),
                         "AC Charger Type2 22kW EV EcoPower"),
 
-                doc("cat-ev-002", "bpp-greenvolt", "https://bpp.greenvolt.com",
+                doc("cat-ev-002", "GreenVolt Catalog", "bpp-greenvolt", "https://bpp.greenvolt.com",
                         "ev-charger-003", "DC Charger CHAdeMO 50kW",
                         "50kW CHAdeMO DC fast charger", "CHAdeMO rapid charge",
                         "EV_CHARGING", "EV Charging", 3.9, 60,
                         "greenvolt-stations", "GreenVolt Charging Stations",
                         Map.of("connectorType", "CHAdeMO", "maxPowerKW", 50),
-                        "DC Charger CHAdeMO 50kW EV GreenVolt"));
+                        "DC Charger CHAdeMO 50kW electric vehicle GreenVolt"));
     }
 
-    private static Map<String, Object> doc(String catalogId, String bppId, String bppUri,
+    private static Map<String, Object> doc(String catalogId, String catalogName,
+            String bppId, String bppUri,
             String itemId, String itemName,
             String shortDesc, String longDesc,
             String categoryCode, String categoryName,
@@ -288,6 +376,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
             String fullTextBlob) {
         java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
         m.put("catalog_id", catalogId);
+        m.put("catalog_name", catalogName);
         m.put("bpp_id", bppId);
         m.put("bpp_uri", bppUri);
         m.put("network_id", "ondc-ev");

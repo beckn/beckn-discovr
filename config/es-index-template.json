@@ -3,7 +3,26 @@
   "template": {
     "settings": {
       "index.mapping.total_fields.limit": 2000,
-      "index.mapping.depth.limit": 10
+      "index.mapping.depth.limit": 10,
+      "analysis": {
+        "filter": {
+          "english_stop":     { "type": "stop",     "stopwords": "_english_" },
+          "english_stemmer":  { "type": "stemmer",  "language": "english" },
+          "beckn_synonyms":   { "type": "synonym",  "synonyms_path": "config/es-synonyms.txt" }
+        },
+        "analyzer": {
+          "beckn_text": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "english_stop", "english_stemmer"]
+          },
+          "beckn_text_search": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "english_stop", "beckn_synonyms", "english_stemmer"]
+          }
+        }
+      }
     },
     "mappings": {
       "dynamic_templates": [
@@ -54,7 +73,7 @@
         "resource_descriptor_docs":            { "type": "nested" },
         "resource_descriptor_media_file":      { "type": "nested" },
         "resource_category_code": { "type": "keyword" },
-        "resource_category_name": { "type": "keyword" },
+        "resource_category_name": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
         "resource_rating_value":       { "type": "float" },
         "resource_rating_count":       { "type": "integer" },
         "resource_rating_review_text": { "type": "text" },
@@ -87,7 +106,7 @@
         },
         "schema_version":     { "type": "keyword" },
         "offers":             { "type": "nested" },
-        "full_text_blob":     { "type": "text", "analyzer": "standard" },
+        "full_text_blob":     { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
         "indexed_at":         { "type": "date" },
         "resource_vector":        { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }
       }
