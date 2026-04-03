@@ -10,9 +10,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.StreamSupport;
 
 @Component
@@ -168,7 +171,7 @@ public class CatalogDocumentAssembler {
     }
 
     private String buildTextBlob(Map<String, Object> doc, JsonNode offersNode, JsonNode itemNode) {
-        List<String> parts = new ArrayList<>();
+        Set<String> parts = new LinkedHashSet<>();
 
         // Core item fields
         for (String key : List.of("resource_name", "resource_short_desc", "resource_long_desc",
@@ -203,7 +206,7 @@ public class CatalogDocumentAssembler {
      * (any object containing a geo/gps/polygon field at any depth, any key name),
      * collects all non-geo string values from it (address fields, etc.).
      */
-    private static void collectLocationText(JsonNode node, List<String> parts) {
+    private static void collectLocationText(JsonNode node, Collection<String> parts) {
         if (node == null || node.isMissingNode())
             return;
         if (node.isObject()) {
@@ -223,21 +226,28 @@ public class CatalogDocumentAssembler {
     }
 
     /**
-     * Recursively collects all non-blank string leaf values from a JsonNode tree.
-     * Skips JSON-LD metadata keys (@context, @type) and URL strings.
+     * Recursively collects searchable text from a JsonNode tree: string leaf values,
+     * numeric values as strings, and key names of boolean-true fields.
+     * Skips JSON-LD metadata keys and URL strings.
      */
-    private static void collectStrings(JsonNode node, List<String> parts) {
+    private static void collectStrings(JsonNode node, Collection<String> parts) {
         if (node == null || node.isMissingNode())
             return;
         if (node.isTextual()) {
             String val = node.asText();
-            if (!val.isBlank() && !val.startsWith("http") && !val.startsWith("@"))
+            if (!val.isBlank() && !val.startsWith("http://") && !val.startsWith("https://"))
                 parts.add(val);
+        } else if (node.isNumber()) {
+            parts.add(node.asText());
         } else if (node.isObject()) {
             node.fields().forEachRemaining(e -> {
                 String key = e.getKey();
-                if (!key.startsWith("@") && !key.equals("geo") && !key.equals("gps") && !key.equals("polygon"))
+                if (!key.startsWith("@") && !key.equals("geo") && !key.equals("gps") && !key.equals("polygon")) {
+                    if (e.getValue().isBoolean() && e.getValue().booleanValue()) {
+                        parts.add(key);
+                    }
                     collectStrings(e.getValue(), parts);
+                }
             });
         } else if (node.isArray()) {
             node.forEach(child -> collectStrings(child, parts));

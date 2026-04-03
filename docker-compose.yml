@@ -33,6 +33,8 @@ services:
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+      # synonyms_path in ES template is relative to ES config dir (/usr/share/elasticsearch/config/)
+      - ./config/es-synonyms.txt:/usr/share/elasticsearch/config/config/es-synonyms.txt
     networks:
       - beckn-network
     healthcheck:
