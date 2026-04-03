@@ -152,7 +152,7 @@ services:
       # Enable to generate and store item vectors in Elasticsearch.
       # Supports any OpenAI-compatible /v1/embeddings provider.
       # MUST use the same model as DISCOVERY_TEXT_SEARCH_EMBEDDING_NAME below.
-      - CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED=true
+      - CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED=false
       - CATALOG_TEXT_SEARCH_EMBEDDING_NAME=text-embedding-3-small
       - CATALOG_TEXT_SEARCH_EMBEDDING_BASE_URL=https://api.openai.com
       - CATALOG_TEXT_SEARCH_EMBEDDING_API_KEY=
