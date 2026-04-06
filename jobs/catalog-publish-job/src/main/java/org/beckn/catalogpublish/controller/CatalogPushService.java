@@ -1,46 +1,44 @@
 package org.beckn.catalogpublish.controller;
 
+import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.logging.LogEvent;
-import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
-import org.beckn.catalogpublish.util.CorrelationContext;
-import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 /**
- * Async processing bridge for the HTTP push path.
- * Decouples the HTTP response (202 Accepted) from catalog processing so the BPP
- * is not blocked while the pipeline runs.
+ * Publishes catalog push payloads to Kafka for async processing.
+ * The HTTP response (202 Accepted) is sent before this runs, and the
+ * {@link org.beckn.catalogpublish.consumer.CatalogPublishConsumer} picks up the
+ * message for durable, retryable processing.
  */
 @Service
 public class CatalogPushService {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogPushService.class);
 
-    private final CatalogPublishOrchestrator orchestrator;
-    private final CorrelationContext correlationContext;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final String ingestionTopic;
 
-    public CatalogPushService(CatalogPublishOrchestrator orchestrator,
-            CorrelationContext correlationContext) {
-        this.orchestrator = orchestrator;
-        this.correlationContext = correlationContext;
+    public CatalogPushService(KafkaTemplate<String, String> kafkaTemplate,
+            AppProperties props) {
+        this.kafkaTemplate = kafkaTemplate;
+        this.ingestionTopic = props.messaging().topics().ingestionRequests();
     }
 
     /**
-     * Processes the raw catalog push payload asynchronously.
-     * The HTTP response has already been sent (202) before this runs.
+     * Publishes the raw catalog push payload to Kafka for async processing.
+     * The existing {@code CatalogPublishConsumer} consumes from this topic.
      */
-    @Async("catalogProcessingExecutor")
     public void processAsync(String rawBody) {
-        try {
-            correlationContext.populateFallback();
-            orchestrator.processPublish(rawBody);
-        } catch (Exception e) {
-            log.error("event={} error={}", LogEvent.CONSUMER_ERROR, ErrorSanitizer.sanitize(e));
-        } finally {
-            correlationContext.clear();
-        }
+        kafkaTemplate.send(ingestionTopic, rawBody).whenComplete((result, ex) -> {
+            if (ex != null) {
+                log.error("event={} topic={} error={}", LogEvent.CONSUMER_ERROR, ingestionTopic, ex.getMessage());
+            } else {
+                log.info("event={} topic={} offset={}",
+                        LogEvent.PUSH_RECEIVED, ingestionTopic, result.getRecordMetadata().offset());
+            }
+        });
     }
 }
