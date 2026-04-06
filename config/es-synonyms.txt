@@ -18,4 +18,4 @@ vegan, plant-based
 
 # General commerce
 discount, offer, deal
-cod, cash on delivery
+cod, cash delivery
