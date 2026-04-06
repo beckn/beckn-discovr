@@ -144,7 +144,7 @@ public class EsIndexManager {
                         "filter": {
                           "english_stop":    { "type": "stop",    "stopwords": "_english_" },
                           "english_stemmer": { "type": "stemmer", "language": "english" },
-                          "beckn_synonyms":  { "type": "synonym", "synonyms": ["ev, electric vehicle", "charger, charging station", "kw, kilowatt", "logistics, shipping, delivery", "parcel, package, shipment", "organic, natural", "vegan, plant-based", "discount, offer, deal", "cod, cash on delivery"] }
+                          "beckn_synonyms":  { "type": "synonym", "lenient": true, "synonyms": ["ev, electric vehicle", "charger, charging station", "kw, kilowatt", "logistics, shipping, delivery", "parcel, package, shipment", "organic, natural", "vegan, plant-based", "discount, offer, deal", "cod, cash delivery"] }
                         },
                         "analyzer": {
                           "beckn_text": {
