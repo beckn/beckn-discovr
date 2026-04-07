@@ -44,36 +44,36 @@ services:
 
   # Ollama — local LLM server for generating vector embeddings
   # No host port binding — only accessible within beckn-network
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - beckn-network
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 20s
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - beckn-network
+  #   healthcheck:
+  #     test: ["CMD", "ollama", "list"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 10
+  #     start_period: 20s
 
   # Pulls required models once after Ollama is healthy — skips if already cached
   # OLLAMA_NOPRINTER=1 disables the TUI progress display so it works without a TTY
-  ollama-init:
-    image: ollama/ollama:latest
-    container_name: ollama-init
-    entrypoint: ["/bin/bash", "-c"]
-    command: "ollama pull nomic-embed-text 2>&1 | cat && ollama pull llama3.2:1b 2>&1 | cat"
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_NOPRINTER=1
-    depends_on:
-      ollama:
-        condition: service_healthy
-    networks:
-      - beckn-network
-    restart: "no"
+  # ollama-init:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama-init
+  #   entrypoint: ["/bin/bash", "-c"]
+  #   command: "ollama pull nomic-embed-text 2>&1 | cat && ollama pull llama3.2:1b 2>&1 | cat"
+  #   environment:
+  #     - OLLAMA_HOST=http://ollama:11434
+  #     - OLLAMA_NOPRINTER=1
+  #   depends_on:
+  #     ollama:
+  #       condition: service_healthy
+  #   networks:
+  #     - beckn-network
+  #   restart: "no"
 
   # on-discovery-api removed — catalog push is now handled by catalog-publish service (POST /catalog/push)
 
@@ -166,8 +166,8 @@ services:
         condition: service_healthy
       postgres-discovery:
         condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
+      # ollama-init:
+      #   condition: service_completed_successfully
     networks:
       - beckn-network
     restart: unless-stopped
@@ -261,8 +261,8 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
+      # ollama-init:
+      #   condition: service_completed_successfully
     networks:
       - beckn-network
     restart: unless-stopped
@@ -334,8 +334,8 @@ volumes:
     driver: local
   elasticsearch_data:
     driver: local
-  ollama_data:
-    driver: local
+  # ollama_data:
+  #   driver: local
 
 networks:
   beckn-network:
