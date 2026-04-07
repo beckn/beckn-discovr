@@ -39,6 +39,9 @@
     <logger name="org.beckn.discover" level="INFO" additivity="false">
       <appender-ref ref="ASYNC_JSON"/>
     </logger>
+    <logger name="org.beckn.auth" level="INFO" additivity="false">
+      <appender-ref ref="ASYNC_JSON"/>
+    </logger>
 
     <!-- Performance logger — separate from main app logger so it can be tuned independently -->
     <logger name="org.beckn.discover.performance" level="INFO" additivity="false">
@@ -68,6 +71,7 @@
     </appender>
 
     <logger name="org.beckn.discover"   level="INFO" additivity="false"><appender-ref ref="CONSOLE"/></logger>
+    <logger name="org.beckn.auth"       level="INFO" additivity="false"><appender-ref ref="CONSOLE"/></logger>
     <logger name="org.hibernate.SQL"    level="WARN" additivity="false"><appender-ref ref="CONSOLE"/></logger>
     <logger name="org.apache.kafka"     level="WARN" additivity="false"><appender-ref ref="CONSOLE"/></logger>
     <logger name="org.springframework.kafka" level="WARN" additivity="false"><appender-ref ref="CONSOLE"/></logger>

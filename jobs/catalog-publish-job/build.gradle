@@ -37,11 +37,17 @@ dependencies {
 
     implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
     implementation 'io.micrometer:micrometer-core'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
 
     implementation 'com.networknt:json-schema-validator:1.5.9'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     implementation 'co.elastic.clients:elasticsearch-java:8.15.0'
     implementation 'com.github.java-json-tools:json-patch:1.13'
+
+    // Beckn Auth SDK (composite build — signature verification for /catalog/push)
+    implementation 'org.beckn:beckn-auth-sdk'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
 
     implementation 'org.locationtech.jts:jts-core:1.19.0'
     implementation 'org.hibernate.orm:hibernate-spatial'

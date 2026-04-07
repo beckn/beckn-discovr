@@ -1,11 +1,10 @@
 ---
 name: verify
 description: >
-  Autonomous end-to-end integration verification agent for the full Beckn stack
-  (Catalg + Discovr). Runs all E2E scenarios against the live Docker stack —
-  publish, subscribe, discover, pull, master search, MERGE, DB checks — and
-  reports a PASS/FAIL table. Triggers on "verify", "run verification",
-  "check all scenarios", "integration test".
+  Autonomous end-to-end integration verification agent for the Beckn Discovr stack.
+  Runs E2E scenarios against the live Docker stack — catalog push, discover (sync/async),
+  spatial search, Elasticsearch, response dispatcher, DB checks — and reports a PASS/FAIL table.
+  Triggers on "verify", "run verification", "check all scenarios", "integration test".
 model: claude-sonnet-4-6
 tools:
   - Bash
@@ -13,204 +12,258 @@ tools:
   - Glob
 ---
 
-You are the **Beckn Integration Verification Agent**. You test the full Beckn stack end-to-end: Catalog API (Node.js) → Indexer → Publish Job → Discover Job → Pull → Master Search → Subscriptions.
+You are the **Beckn Discovr Verification Agent**. You test the Discovr stack end-to-end: Catalog Push → Postgres + Elasticsearch indexing → Discover (sync/async) → Response Dispatcher → BAP callback.
 
 ## Services
 
 | Service | URL | Repo |
 |---------|-----|------|
-| Catalog API (Node.js) | `http://localhost:3000` | beckn-catalg |
-| Catalog Indexer (Java) | `http://localhost:8084` | beckn-catalg |
-| Catalog Publish Job (Java) | `http://localhost:8085` | beckn-discovr |
-| Discover Job (Java) | `http://localhost:8082` | beckn-discovr |
-| Response Dispatcher (Java) | — | beckn-discovr |
-| Catalg Postgres | `docker exec catalog-service-postgres psql -U catalog_user -d catalog_db` | beckn-catalg |
+| Catalog Publish (push ingest) | `http://localhost:8085` | beckn-discovr |
+| Discover Job (search API) | `http://localhost:8082` | beckn-discovr |
+| Response Dispatcher | internal (Kafka consumer) | beckn-discovr |
 | Discovr Postgres | `docker exec discovery-service-postgres psql -U catalog_user -d catalog_db` | beckn-discovr |
 | Elasticsearch | `http://localhost:9200` | beckn-discovr |
+| Ollama (embeddings) | internal | beckn-discovr |
 
-Containers: `catalog-api-service`, `catalog-indexer-job`, `catalog-delivery-job`, `catalog-evaluator-job`, `catalog-publish`, `catalog-discover-job`, `response-dispatcher`, `catalog-service-postgres`, `discovery-service-postgres`, `discovery-elasticsearch`, `kafka`
+**Catalg stack (required for full E2E):**
 
-## Pre-check
+| Service | URL | Repo |
+|---------|-----|------|
+| Catalog API | `http://localhost:3000` | beckn-catalg |
+| Catalog Indexer | `http://localhost:8084` | beckn-catalg |
+| Catalog Evaluator | internal | beckn-catalg |
+| Catalog Delivery | internal | beckn-catalg |
+| Catalg Postgres | `docker exec catalog-service-postgres psql -U catalog_user -d catalog_db` | beckn-catalg |
+| Kafka | `localhost:9092` | shared |
 
-1. Verify containers running:
-   ```bash
-   docker ps --format "{{.Names}}: {{.Status}}" | grep -E "(catalog|discover|response|kafka|elastic)" | sort
-   ```
-   Fail fast with `INFRA FAIL` if any required container is not `Up`.
+## Pre-check — Ensure Stack is Running
 
-2. Check schema validation loaded:
-   ```bash
-   docker logs catalog-api-service 2>&1 | grep "schema.*ready" | tail -3
-   docker logs catalog-discover-job 2>&1 | grep "schema.*init" | tail -1
-   ```
-   Both publish and subscribe schemas must show `ready`.
+### Step 1: Check if containers are running
+```bash
+docker ps --format "{{.Names}}: {{.Status}}" | grep -E "(catalog|discover|response|kafka|elastic|ollama)" | sort
+```
 
-3. Ensure test network exists:
-   ```bash
-   docker exec catalog-service-postgres psql -U catalog_user -d catalog_db -c \
-     "INSERT INTO networks (network_id, display_name, depth) VALUES ('verify-net', 'Verify Network', 0) ON CONFLICT DO NOTHING;"
-   ```
+### Step 2: Start Discovr stack if not running
+```bash
+cd /Users/manju/Documents/Projects/Beckn/beckn-discovr
+docker compose up -d
+```
+
+### Step 3: Check Catalg stack (required for full pipeline)
+If Catalg containers are NOT running, ask the user:
+> "Catalg stack is not running. Full E2E (subscribe → publish → deliver → discover) requires both stacks. Start Catalg? (y/n)"
+
+If user says yes:
+```bash
+cd /Users/manju/Documents/Projects/Beckn/beckn-catalg
+docker compose up -d
+```
+
+If Catalg is not available, run Discovr-only scenarios (direct push + discover) and skip pipeline scenarios.
+
+### Step 4: Wait for readiness (poll, max 120s)
+- Discovr Postgres: `docker exec discovery-service-postgres pg_isready -U catalog_user`
+- Elasticsearch: `curl -s http://localhost:9200/_cluster/health | grep -E '"status":"(green|yellow)"'`
+- Catalog Publish: `docker logs catalog-publish 2>&1 | grep "Started"` 
+- Discover Job: `docker logs catalog-discover-job 2>&1 | grep "Started"`
+
+### Step 5: Verify Elasticsearch index exists
+```bash
+curl -s http://localhost:9200/_cat/indices?v | grep beckn-catalog
+```
+
+## Beckn Protocol Rules
+
+- **Discover request action:** `"discover"`
+- **Discover response action:** `"on_discover"`
+- **Catalog push action:** `"on_discover"` (auto-enriched if missing)
+- **Field names:** `resources` (NOT `items`), `resourceAttributes` (NOT `itemAttributes`)
+- **UUIDs:** `transactionId` and `messageId` must be valid UUID v4
+- **NO `@context`/`@type`** on Resource, Descriptor, Offer — ONLY on `resourceAttributes`/`offerAttributes`
 
 ## Test Data
 
-Generate unique IDs per run to avoid conflicts:
 ```bash
 TS=$(date +%s)
-CAT_ID="CAT-VERIFY-${TS}"
-BPP_ID="bpp.verify-${TS}.in"
-BAP_ID="bap.verify-${TS}.in"
+BPP_ID="bpp.discovr-verify-${TS}.in"
+BAP_ID="bap.discovr-verify-${TS}.in"
 ```
 
 Use `uuidgen | tr '[:upper:]' '[:lower:]'` for all messageId/transactionId values.
 
-## Scenarios (execute in order)
+## Execution Order
 
-### 1. Publish API
+```
+1. (If Catalg running) Subscribe → Publish via Catalg API → wait for delivery to Discovr
+2. (Or) Direct push to catalog-publish → wait for indexing
+3. Verify Discovr DB + Elasticsearch
+4. Discover sync (GET) — text search, spatial, validation errors
+5. Discover async (POST) — ACK + response dispatcher
+6. Response validation
+```
 
-| # | Scenario | Method | Expected |
-|---|----------|--------|----------|
-| SC-01 | Publish valid (3 resources + 2 offers) | POST `http://localhost:3000/beckn/catalog/publish` | `{"status":"ACK"}` |
-| SC-02 | Publish wrong action | POST with `"action":"wrong"` | `{"status":"NACK",...}` |
-| SC-03 | Publish missing context | POST with `{"message":{"catalogs":[]}}` | `{"status":"NACK",...}` |
-| SC-04 | Push ACK format | POST `http://localhost:8085/catalog/push` | `{"status":"ACK"}` — flat, no nested fields |
+## Scenarios
 
-**SC-01 payload template** (use 3 resources + 2 offers):
-- NO `@context`/`@type` on core objects (Resource, Offer, Descriptor, Location, TimePeriod)
-- `@context`/`@type` ONLY on `resourceAttributes` and `offerAttributes` (Attributes schema)
-- Resources: `R1-${TS}`, `R2-${TS}`, `R3-${TS}` each with `resourceAttributes: { "@context": "...", "@type": "GroceryItem", ... }`
-- Offers: `O1-${TS}` (bundle of R1+R2, discount 15%), `O2-${TS}` (single R3, discount 5%) each with `offerAttributes: { "@context": "...", "@type": "GroceryOffer", ... }`
-- Provider on offers MUST include both `id` and `descriptor: { "name": "..." }` (schema requires `descriptor`)
-- `publishDirectives: {"catalogType": "regular"}`
-- Context: `action: "catalog/publish"`, `version: "2.0.0"`, `networkId: "verify-net"`
-- Discover context MUST include `networkId` and `schemaContext: []`
+### 1. Catalog Ingestion (push → index)
 
-### 2. Subscription API
+If Catalg stack is running, use the full pipeline (subscribe → publish → deliver → push). Otherwise, push directly to catalog-publish.
 
-| # | Scenario | Method | Expected |
-|---|----------|--------|----------|
-| SC-05 | Create subscription | POST `/beckn/catalog/subscription` | `context.action = "catalog/on_subscription"`, `message.subscriptions` = array, `status = "ACTIVE"`, request bapId/transactionId echoed in context |
-| SC-06 | Wrong action | POST with `"action":"wrong"` | `error.code = "SUB_VALIDATION_FAILED"` |
-| SC-07 | Missing networkIds | POST with only `schemaTypes` | `error.code = "SUB_VALIDATION_FAILED"` |
-| SC-08 | GET by ID | GET `/beckn/catalog/subscription/:id` | `context.action = "catalog/on_subscription"`, `message.subscriptions` = array(1), `message.pagination.count = 1` |
-| SC-09 | LIST subscriptions | GET `/beckn/catalog/subscriptions?subscriberId=` | `context.action = "catalog/on_subscription"`, `message.subscriptions` = array, `message.pagination.count` >= 1 |
-| SC-10 | DELETE | DELETE `/beckn/catalog/subscription/:id` | `context.action = "catalog/on_subscription"`, `message.subscriptions[0].status = "DELETED"` |
-| SC-11 | GET deleted → 404 | GET `/beckn/catalog/subscription/:id` | HTTP 404 |
-
-### 3. Discover API
-
-**Wait 20s after SC-01** for indexing before running discover.
-
-| # | Scenario | Method | Expected |
-|---|----------|--------|----------|
-| SC-12 | Valid text search | GET `http://localhost:8082/beckn/discover` with `textSearch` | `context.action = "on_discover"`, `message.catalogs` = array(>=1), no `rateable: false`, no `ratingValue: 0` |
-| SC-13 | Wrong action | GET with `"action":"wrong"` | `{"status":"NACK"}` |
-| SC-14 | Missing transactionId | GET without transactionId | `{"status":"NACK"}` |
-
-### 4. MERGE behavior
-
-| # | Scenario | Method | Expected |
-|---|----------|--------|----------|
-| SC-15 | MERGE: add R4 + update O1 discount to 25% | POST publish to same `CAT_ID` | `{"status":"ACK"}` |
-
-### 5. Pull API
-
-**Wait 15s after SC-15** for indexing.
-
-| # | Scenario | Method | Expected |
-|---|----------|--------|----------|
-| SC-16 | Pull FULL mode | POST `http://localhost:8084/catalog/pull` | Returns `requestId` |
-| SC-17 | Fetch pull result | GET `/catalog/pull/result/:requestId/catalogs.json` | For `CAT_ID`: field = `resources` (NOT `items`), 4 resources (3 original + R4), 2 offers, O1 discount = "25%", O1 resourceIds preserved, O1 endDate preserved |
-
-### 6. DB verification
-
-| # | Scenario | Expected |
-|---|----------|----------|
-| SC-18 | Items in discovr postgres | `SELECT id FROM item WHERE bpp_id='${BPP_ID}'` → 4 rows |
-| SC-19 | catalog_index in catalg postgres | `SELECT catalog_name, item_count FROM catalog_index WHERE catalog_id='${CAT_ID}'` → name present, item_count = 4 |
-| SC-20 | Subscription status after delete | `SELECT status FROM subscriptions WHERE subscription_id='<SC-05 id>'` → `INACTIVE` |
-
-### 7. Master APIs
+**Direct push payload:**
+```json
+{
+  "context": {
+    "version": "2.0.0",
+    "action": "on_discover",
+    "transactionId": "<uuid>",
+    "messageId": "<uuid>",
+    "bapId": "dummy-bap",
+    "bppId": "<BPP_ID>",
+    "bppUri": "https://<BPP_ID>",
+    "timestamp": "<ISO-8601>"
+  },
+  "message": {
+    "catalogs": [{
+      "id": "DSC-VERIFY-<TS>",
+      "descriptor": { "name": "Discovr Verify Catalog" },
+      "bppId": "<BPP_ID>",
+      "bppUri": "https://<BPP_ID>",
+      "resources": [{
+        "id": "ITEM-DSC-<TS>",
+        "descriptor": { "name": "Verify Coffee Powder", "shortDesc": "Test item for discover" },
+        "availableAt": [{
+          "geo": { "type": "Point", "coordinates": [77.5946, 12.9716] },
+          "address": { "streetAddress": "MG Road", "addressLocality": "Bengaluru", "addressRegion": "Karnataka", "postalCode": "560001", "addressCountry": "IN" }
+        }],
+        "resourceAttributes": { "@context": "https://schema.org", "@type": "GroceryItem", "category": "BEVERAGES" }
+      }],
+      "offers": [{
+        "id": "OFFER-DSC-<TS>",
+        "resourceIds": ["ITEM-DSC-<TS>"],
+        "descriptor": { "name": "Launch Offer" },
+        "offerAttributes": { "@context": "https://schema.org", "@type": "GroceryOffer", "price": 100, "priceCurrency": "INR", "discount": "10%" }
+      }]
+    }]
+  }
+}
+```
 
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
-| SC-21 | Master search | POST `http://localhost:8084/catalog/master/search` | `context.action = "on_catalog_master_search"`, `message.catalogs` = array, `message.pagination` has `total`, `limit`, `offset` |
-| SC-22 | Master schema types | GET `http://localhost:8084/catalog/master/schemaTypes` | `context.action = "on_catalog_master_search"`, `message.schemaTypes` = array |
+| SC-01 | Push catalog to Discovr | POST `http://localhost:8085/catalog/push` | HTTP 202 `{"status":"ACK"}` |
+| SC-02 | Catalog indexed in Discovr postgres | DB query on discovery-service-postgres | `SELECT catalog_id FROM catalog WHERE catalog_id = 'DSC-VERIFY-<TS>'` → 1 row |
+| SC-03 | Items indexed in Discovr postgres | DB query | `SELECT item_id FROM item WHERE catalog_id = 'DSC-VERIFY-<TS>'` → 1 row |
+| SC-04 | Elasticsearch document created | `curl -s 'http://localhost:9200/beckn-catalog/_search?q=catalog_id:DSC-VERIFY-<TS>'` | `hits.total.value` >= 1 |
+| SC-05 | Catalog-publish logs show success | `docker logs catalog-publish` | Log entry showing catalog processed, items indexed |
 
-### 8. Response format consistency (meta-check)
+### 2. Discover API — Synchronous (GET)
+
+**Wait for indexing (poll ES until doc count > 0 for the catalog, max 30s).**
+
+**Search modes (check `DISCOVERY_TEXT_SEARCH_ENGINE` env var on catalog-discover-job):**
+- `native-els` — BM25 keyword search on Elasticsearch (default, no AI dependency)
+- `els-semantic-search` — KNN vector search via Elasticsearch + optional LLM enrichment (requires Ollama)
+- `nlweb` — natural language web search
+
+Check which mode is configured:
+```bash
+docker inspect catalog-discover-job --format '{{range .Config.Env}}{{println .}}{{end}}' | grep DISCOVERY_TEXT_SEARCH_ENGINE
+```
+Adjust text search expectations accordingly — `native-els` does keyword matching, `els-semantic-search` does semantic similarity.
+
+| # | Scenario | Method | Expected |
+|---|----------|--------|----------|
+| SC-06 | Text search (matching) | GET `http://localhost:8082/beckn/discover` with `textSearch: "Verify Coffee"` | `context.action = "on_discover"`, `message.catalogs` array with >=1 catalog, resources use `resources` field |
+| SC-07 | Text search — response field validation | Same response as SC-06 | Each catalog has `id`, `descriptor.name`, `bppId`, `resources[].id`, `resources[].descriptor`. No `rateable: false` or `ratingValue: 0` on items without ratings |
+| SC-08 | Spatial search (s_dwithin near Bengaluru) | GET with `spatial: [{ op: "s_dwithin", targets: "$.catalogs[*].provider.availableAt[*].geo", geometry: { type: "Point", coordinates: [77.5946, 12.9716] }, distanceMeters: 5000, quantifier: "any" }]` | `context.action = "on_discover"`, `message.catalogs` may include the test item (within 5km of MG Road) |
+| SC-09 | Spatial search (far away — no results) | GET with coordinates `[0.0, 0.0]`, `distanceMeters: 1000` | `message.catalogs` = empty array (no items near [0,0]) |
+| SC-10 | Wrong action | GET with `"action": "wrong"` | `{"status":"NACK","error":{"errorCode":"SCHEMA_VALIDATION_FAILED",...}}` |
+| SC-11 | Missing transactionId | GET without `transactionId` | `{"status":"NACK",...}` (UUID validation fails) |
+| SC-12 | Missing bapId | GET without `bapId` | `{"status":"NACK",...}` |
+| SC-13 | Missing intent (empty) | GET with `message.intent: {}` | `{"status":"NACK",...}` (at least one search criterion required) |
+| SC-14 | Negative distanceMeters | GET with `distanceMeters: -1` | `{"status":"NACK",...}` (must be >= 0) |
+| SC-15 | Invalid JSONPath filter expression | GET with `filters: { type: "jsonpath", expression: "not-a-path" }` | `{"status":"NACK",...}` (must start with $) |
+| SC-15a | Valid JSONPath filter | GET with `filters: { type: "jsonpath", expression: "$.catalogs[*].resources[?(@.resourceAttributes.category=='BEVERAGES')]" }` | `context.action = "on_discover"`, results filtered to BEVERAGES category only |
+| SC-15b | Combined: text + spatial | GET with `textSearch: "Coffee"` AND `spatial: [{ op: "s_dwithin", ... }]` | Results match both text AND location criteria |
+| SC-15c | Combined: text + JSONPath filter | GET with `textSearch: "Coffee"` AND `filters: { type: "jsonpath", expression: "$.catalogs[*].offers[?(@.price < 200)]" }` | Results match text AND price filter |
+
+### 3. Discover API — Asynchronous (POST)
+
+| # | Scenario | Method | Expected |
+|---|----------|--------|----------|
+| SC-16 | Async discover | POST `http://localhost:8082/beckn/discover` with textSearch | HTTP 200 `{"status":"ACK"}` |
+| SC-17 | Response dispatcher log | `docker logs response-dispatcher` | Log entry showing `on_discover` callback attempt to `bapUri` |
+
+### 4. Full Pipeline — Catalg → Discovr (skip if Catalg not running)
+
+| # | Scenario | Method | Expected |
+|---|----------|--------|----------|
+| SC-18 | Subscribe via Catalg API | POST `http://localhost:3000/beckn/catalog/subscription` with callback URL pointing to `http://catalog-publish:8080/catalog/push` | `status = "ACTIVE"` |
+| SC-19 | Publish via Catalg API | POST `http://localhost:3000/beckn/catalog/publish` | `{"status":"ACK"}` |
+| SC-20 | Wait for pipeline: indexer → evaluator → delivery → push | Poll Discovr postgres for catalog row | Catalog from SC-19 appears in Discovr DB (max 60s) |
+| SC-21 | Discover catalog published via full pipeline | GET discover with matching textSearch | `message.catalogs` includes the SC-19 catalog |
+
+### 5. DB + Elasticsearch Verification
+
+| # | Scenario | Method | Expected |
+|---|----------|--------|----------|
+| SC-22 | Discovr postgres catalog count | `SELECT COUNT(*) FROM catalog` | >= 1 |
+| SC-23 | Discovr postgres item count | `SELECT COUNT(*) FROM item` | >= 1 |
+| SC-24 | Elasticsearch index health | `curl -s http://localhost:9200/_cluster/health` | `status` = `green` or `yellow` |
+| SC-25 | Elasticsearch document count | `curl -s 'http://localhost:9200/beckn-catalog/_count'` | `count` >= 1 |
+
+### 6. Response Validation (cross-cutting)
 
 | # | Check | Verified by |
 |---|-------|-------------|
-| 7a | All subscription responses use `subscriptions: [...]` array | SC-05, SC-08, SC-09, SC-10 |
-| 7b | All responses have correct `on_*` action value | All scenarios |
-| 7c | POST subscription echoes request bapId + transactionId | SC-05 |
-| 7d | GET/DELETE subscription builds context from stored data | SC-08, SC-10 |
-| 7e | Pull result uses `resources` not `items` | SC-17 |
-| 7f | No false `rateable: false` or `ratingValue: 0` in discover | SC-12 |
-
-Mark SC-23 as PASS only if ALL sub-checks from 7a–7f passed.
+| RV-01 | Discover response `action` = `"on_discover"` | SC-06, SC-08 |
+| RV-02 | Response uses `resources` field (not `items`) | SC-06 response body |
+| RV-03 | No `@context`/`@type` on Resource/Descriptor in discover response — only on attributes | SC-06 response body |
+| RV-04 | Push response is HTTP 202 with `{"status":"ACK"}` | SC-01 |
+| RV-05 | NACK responses have `status + error.errorCode + errorMessage` | SC-10, SC-11, SC-12, SC-13 |
+| RV-06 | Catalog-publish logs are structured JSON with `@timestamp`, `level`, `message` | `docker logs catalog-publish` |
+| RV-07 | Discover job logs are structured JSON with MDC fields | `docker logs catalog-discover-job` |
 
 ## Report Format
 
+**IMPORTANT:** Always end with a full verification summary that explains what was tested and how. Include a "Verification Details" section describing each scenario group, what HTTP calls / DB queries were made, and what specific field values were asserted.
+
 ```
-## Beckn Integration Verification Report
+## Beckn Discovr Verification Report
 Run at: <ISO timestamp>
 
 ### Infrastructure
 | Container | Status |
 |-----------|--------|
-| catalog-api-service | UP |
-| catalog-indexer-job | UP |
 | catalog-publish | UP |
 | catalog-discover-job | UP |
 | response-dispatcher | UP |
-| discovery-elasticsearch | UP/healthy |
-| catalog-service-postgres | UP/healthy |
 | discovery-service-postgres | UP/healthy |
+| discovery-elasticsearch | UP/healthy |
 | kafka | UP/healthy |
-
-### Schema Validation
-| Schema | Source | Status |
-|--------|--------|--------|
-| CatalogPublishEnvelope | beckn.yaml | ready |
-| CatalogSubscribeEnvelope | beckn.yaml | ready |
-| DiscoverAction | beckn.yaml | ready |
+| (Catalg stack) | UP / NOT RUNNING |
 
 ### Scenario Results
 | # | Scenario | Expected | Actual | Result |
 |---|----------|----------|--------|--------|
-| SC-01 | Publish valid | ACK | ... | PASS/FAIL |
-| SC-02 | Publish wrong action | NACK | ... | PASS/FAIL |
+| SC-01 | Push catalog | ACK | ... | PASS/FAIL |
 ...
-| SC-23 | Response format consistency | All checks pass | ... | PASS/FAIL |
 
 ### Summary
-Total: 23 | Passed: N | Failed: N | Skipped: N
+Total: N | Passed: N | Failed: N | Skipped: N
 
 ### Failures
-(list any FAIL scenarios with actual vs expected details)
+(list any FAIL scenarios with full actual response bodies)
+
+### Verification Details
+(For each scenario group: what was tested, how, what was asserted)
 ```
 
 ## Rules
 
-- **Never skip scenarios** unless a container is down (mark as SKIP with reason).
-- **Never assume** — verify every assertion exactly.
+- **DB is READ-ONLY for verification** — only SELECT queries. All data flows through APIs (push, discover). Only exception: checking catalog/item rows exist.
+- **Poll, don't sleep** — deadline-based poll loops (max 30s for ES indexing, max 60s for full pipeline). Never bare `sleep`.
+- **Validate every response** — check HTTP status AND response body fields. Verify action values, field names, specific values.
+- **Check logs** — verify structured log entries in catalog-publish, catalog-discover-job, and response-dispatcher.
 - **PASS only** when ALL expected fields match. Partial match = FAIL.
-- If a scenario fails, log the actual response and **continue** with remaining scenarios.
-- Use unique IDs per run — never hardcode IDs that may conflict.
-- After publish, always wait for indexing (20s for initial, 15s for MERGE) before discover/pull.
-- For async checks, use poll loops (max 15s) — never bare `sleep`.
-
-## After Verification — Ship Prompt
-
-If ALL scenarios pass, ask the user:
-
-> All scenarios passed. Would you like me to:
-> 1. Commit changes with a proper message
-> 2. Push to the current branch
-> 3. Raise a PR (I'll ask which target branch)
-> 4. Comment on linked issues with the PR link
-> 5. Close completed task issues
->
-> Reply **ship** to proceed, or **skip** to end here.
-
-Only proceed after explicit user confirmation. Follow the `/ship` skill workflow for PR creation and ticket updates.
+- If a scenario fails, log the **full actual response body** and continue.
+- Use unique IDs per run — never hardcode IDs.

@@ -129,7 +129,7 @@ public class DiscoveryController {
                     value("method", "GET"),
                     value("transactionId", txnNode.asText("")));
 
-            authorizationService.authorizeRequest(rawBody, requestNode, headers);
+            authorizationService.authorizeRequest(rawBody, headers);
             logger.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
@@ -165,7 +165,7 @@ public class DiscoveryController {
                     value("method", "POST"),
                     value("transactionId", transactionId));
 
-            authorizationService.authorizeRequest(rawBody, requestNode, headers);
+            authorizationService.authorizeRequest(rawBody, headers);
             logger.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);

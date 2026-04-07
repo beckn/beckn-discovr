@@ -22,6 +22,9 @@ jobs:
           - name: catalog-publish-job
             context: jobs/catalog-publish-job
             dockerfile: jobs/catalog-publish-job/Dockerfile
+          - name: response-dispatcher
+            context: jobs/response-dispatcher
+            dockerfile: jobs/response-dispatcher/Dockerfile
 
     steps:
       - name: Checkout

@@ -15,6 +15,10 @@ public final class LogEvent {
     public static final String REQUEST_RECEIVED        = "discover.request.received";
     public static final String AUTH_PASSED             = "discover.auth.passed";
     public static final String AUTH_FAILED             = "discover.auth.failed";
+    public static final String AUTH_SKIPPED            = "discover.auth.skipped";
+    public static final String AUTH_DISABLED           = "discover.auth.disabled";
+    public static final String AUTH_VERIFY_START       = "discover.auth.verify.start";
+    public static final String AUTH_VERIFY_DONE        = "discover.auth.verify.done";
     public static final String VALIDATE_PASSED         = "discover.validate.passed";
     public static final String VALIDATE_FAILED         = "discover.validate.failed";
     public static final String KAFKA_QUEUED            = "discover.kafka.queued";

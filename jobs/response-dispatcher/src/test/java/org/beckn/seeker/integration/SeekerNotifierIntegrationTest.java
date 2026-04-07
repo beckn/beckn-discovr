@@ -37,7 +37,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 
-@SpringBootTest
+@SpringBootTest(properties = "http.client.url-validation-enabled=false")
 @Testcontainers
 @DirtiesContext
 class SeekerNotifierIntegrationTest {

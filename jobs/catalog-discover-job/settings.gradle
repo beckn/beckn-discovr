@@ -1,1 +1,2 @@
+includeBuild '../../sdks/beckn-auth-java-sdk'
 rootProject.name = 'discovery-service'

@@ -251,6 +251,16 @@ public class DiscoveryValidationService {
                 return new ValidationResult(false, List.of("$.message.intent: intent is required"), List.of("$.message.intent"));
             }
 
+            // At least one search criterion must be present in intent
+            boolean hasTextSearch = intentNode.has("textSearch") && !intentNode.path("textSearch").isNull();
+            boolean hasFilters = intentNode.has("filters") && !intentNode.path("filters").isNull();
+            boolean hasSpatial = intentNode.has("spatial") && !intentNode.path("spatial").isNull();
+            if (!hasTextSearch && !hasFilters && !hasSpatial) {
+                return new ValidationResult(false,
+                    List.of("$.message.intent: at least one search criterion is required (textSearch, filters, or spatial)"),
+                    List.of("$.message.intent"));
+            }
+
             // Presence checks for required Context V2.0 fields — enforced manually so they
             // are caught reliably regardless of whether the loaded schema provides a local
             // Context definition or relies on an external schema.beckn.io reference.

@@ -113,7 +113,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .size(limit)
                         .minScore(minScore)
                         .knn(k -> {
-                            var kb = k.field("item_vector")
+                            var kb = k.field("resource_vector")
                                     .queryVector(vec)
                                     .k(limit)
                                     .numCandidates(knnCandidates);
@@ -142,7 +142,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             String text = req.textSearch();
             mustQueries.add(Query.of(q -> q.multiMatch(mm -> mm
                     .query(text)
-                    .fields("full_text_blob", "item_name^2")
+                    .fields("full_text_blob", "resource_name^2")
                     .type(TextQueryType.BestFields)
                     .fuzziness("AUTO"))));
             applyMinScore = props.getElasticsearch().getMinScore();
