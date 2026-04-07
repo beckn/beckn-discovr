@@ -107,15 +107,32 @@ public class CatalogPushController {
                 context.put(BecknFields.TTL, "PT30S");
             }
 
-            // BPP context defaults (used by downstream persistence)
+            // BPP context defaults — derive from first catalog if missing in context
             String updatedBppId = textOrNull(context.get(BecknFields.BPP_ID));
             String updatedBppUri = textOrNull(context.get(BecknFields.BPP_URI));
 
-            if (isBlank(updatedBppId)) {
-                context.put(BecknFields.BPP_ID, "dummy-bpp-id");
-            }
-            if (isBlank(updatedBppUri)) {
-                context.put(BecknFields.BPP_URI, "http://dummy-bpp-uri.com");
+            if (isBlank(updatedBppId) || isBlank(updatedBppUri)) {
+                // Try to derive from the first catalog in the payload
+                JsonNode catalogs = root.path("message").path(BecknFields.CATALOGS);
+                if (catalogs.isArray() && !catalogs.isEmpty()) {
+                    JsonNode firstCatalog = catalogs.get(0);
+                    if (isBlank(updatedBppId)) {
+                        String catalogBppId = textOrNull(firstCatalog.get(BecknFields.BPP_ID));
+                        if (!isBlank(catalogBppId)) {
+                            context.put(BecknFields.BPP_ID, catalogBppId);
+                        } else {
+                            log.warn("event={} reason=missing-bppId", LogEvent.PUSH_RECEIVED);
+                        }
+                    }
+                    if (isBlank(updatedBppUri)) {
+                        String catalogBppUri = textOrNull(firstCatalog.get(BecknFields.BPP_URI));
+                        if (!isBlank(catalogBppUri)) {
+                            context.put(BecknFields.BPP_URI, catalogBppUri);
+                        } else {
+                            log.warn("event={} reason=missing-bppUri", LogEvent.PUSH_RECEIVED);
+                        }
+                    }
+                }
             }
 
             return objectMapper.writeValueAsString(root);
