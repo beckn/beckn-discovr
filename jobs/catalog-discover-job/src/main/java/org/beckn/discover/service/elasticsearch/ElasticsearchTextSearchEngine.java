@@ -33,10 +33,10 @@ import java.util.Optional;
  * <p>Supports two modes controlled by {@code discovery.text-search.engine}:</p>
  * <ul>
  *   <li><b>native-els</b> — keyword BM25 {@code multi_match} across {@code full_text_blob}
- *       and {@code item_name} (boosted ×2). Fast, no AI dependency.</li>
+ *       and {@code resource_name} (boosted ×2). Fast, no AI dependency.</li>
  *   <li><b>els-semantic-search</b> — the raw query is enriched by {@link QueryEnricher} (LLM)
  *       with related terms and domain vocabulary, then embedded via {@link EmbeddingClient}
- *       and searched using ES {@code knn} on the {@code item_vector} field.</li>
+ *       and searched using ES {@code knn} on the {@code resource_vector} field.</li>
  * </ul>
  *
  * <p>Switching between modes requires only a config change — no code changes.</p>
@@ -116,7 +116,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         .minScore(minScore)
                         .size(resultLimit)
                         .knn(k -> k
-                                .field("item_vector")
+                                .field("resource_vector")
                                 .queryVector(vec)
                                 .k(resultLimit)
                                 .numCandidates(knnCandidates)),
@@ -148,7 +148,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                     .index(aliasName)
                     .query(q -> q.multiMatch(mm -> mm
                             .query(text)
-                            .fields("full_text_blob", "item_name^2", "item_rating_review_text")
+                            .fields("full_text_blob", "resource_name^2", "resource_rating_review_text")
                             .type(TextQueryType.BestFields)
                             .fuzziness("AUTO")))
                     .minScore(minScore)
@@ -208,7 +208,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
     private String buildTextSearchJson(String text) {
         Map<String, Object> multiMatch = new LinkedHashMap<>();
         multiMatch.put("query", text);
-        multiMatch.put("fields", List.of("full_text_blob", "item_name^2", "item_rating_review_text"));
+        multiMatch.put("fields", List.of("full_text_blob", "resource_name^2", "resource_rating_review_text"));
         multiMatch.put("type", "best_fields");
         multiMatch.put("fuzziness", "AUTO");
         Map<String, Object> body = new LinkedHashMap<>();

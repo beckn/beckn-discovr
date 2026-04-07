@@ -101,7 +101,7 @@ public class ElasticIndexStep {
                 try {
                     JsonNode catalogNode = payloadNode.path("catalogs").path(0);
                     String itemJson = mapper.writeValueAsString(catalogNode);
-                    client.embed(itemJson).ifPresent(vec -> doc.put("item_vector", vec));
+                    client.embed(itemJson).ifPresent(vec -> doc.put("resource_vector", vec));
                 } catch (Exception e) {
                     log.warn("event={} reason=embedding-serialize-failed itemId={} error={}", LogEvent.ES_FAILED, item.getId(), e.getMessage());
                 }

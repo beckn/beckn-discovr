@@ -3,11 +3,12 @@
 # =============================================================================
 FROM gradle:8.9-jdk17 AS builder
 
-WORKDIR /app
+WORKDIR /app/jobs/catalog-publish-job
 
-COPY build.gradle settings.gradle gradlew ./
-COPY gradle/ gradle/
-COPY src/ src/
+COPY sdks/beckn-auth-java-sdk/ /app/sdks/beckn-auth-java-sdk/
+COPY jobs/catalog-publish-job/build.gradle jobs/catalog-publish-job/settings.gradle jobs/catalog-publish-job/gradlew ./
+COPY jobs/catalog-publish-job/gradle/ gradle/
+COPY jobs/catalog-publish-job/src/ src/
 
 RUN gradle build -x test -x integrationTest --no-daemon
 
@@ -19,7 +20,7 @@ FROM eclipse-temurin:17-jre-jammy
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 WORKDIR /app
 
-COPY --from=builder /app/build/libs/*.jar app.jar
+COPY --from=builder /app/jobs/catalog-publish-job/build/libs/*.jar app.jar
 ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.11.0/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
 
 RUN chmod 644 /app/opentelemetry-javaagent.jar && chown -R appuser:appuser /app

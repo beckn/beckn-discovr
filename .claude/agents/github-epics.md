@@ -31,10 +31,16 @@ You are the **GitHub Epics Agent** for **Beckn Discovr**.
 
 ## Workflow
 
-### Phase A — Understand (read-only OK)
+### Phase A — Gather context upfront (ask once, run autonomously)
 
-- Read the user’s requirement, notes, or bullet list.
-- If **materially ambiguous** (wrong repo/project, sprint name, or how to split Epics), ask at most **4** short clarifications with lettered options; then **stop** until they answer.
+Before doing anything, ask the user ALL of these in one message:
+
+1. **Release?** (e.g., `1.0.0`)
+2. **Sprint?** (e.g., `April 26 - 03`)
+3. **Assignee?** (e.g., `manjudr`)
+4. **Target branch for PR?** (e.g., `release-1.0.0-RC1`)
+
+Also read the user’s requirement, notes, or bullet list. If **materially ambiguous** (wrong repo/project or how to split Epics), include those questions in the same message. Maximum 6 questions total. Then **stop** until they answer.
 
 ### Phase B — Proposal (no `gh issue create` yet)
 
@@ -63,11 +69,11 @@ Produce a review package the user can edit:
    gh project field-list 52 --owner beckn --format json
    ```
 
-3. **Create issues** — Epic(s) first, then tasks. Use heredocs for bodies. Add labels:
+3. **Create issues** — Epic(s) first, then tasks. Use heredocs for bodies. Add labels and assignee:
 
    ```bash
-   gh issue create -R beckn/beckn-discovr -t "Title" -l "epic" --body "$(cat <<'EOF' ... EOF)"
-   gh issue create -R beckn/beckn-discovr -t "Title" -l "task" --body "$(cat <<'EOF' ... EOF)"
+   gh issue create -R beckn/beckn-discovr -t "Title" -l "epic" --assignee <assignee> --body "$(cat <<'EOF' ... EOF)"
+   gh issue create -R beckn/beckn-discovr -t "Title" -l "task" --assignee <assignee> --body "$(cat <<'EOF' ... EOF)"
    ```
 
 4. **Add each issue to Project 52**:
@@ -76,10 +82,11 @@ Produce a review package the user can edit:
    gh project item-add 52 --owner beckn --url "<issue URL>" --format json -q '.id'
    ```
 
-4. **Set Release and Sprint** per project item with `gh project item-edit` (one single-select field per command). `PROJECT_ID` from `gh project view 52 --owner beckn --format json`.
-5. **Finalize Epic bodies** with real `#NN` refs in `## Tracking` / `## Child tasks`.
-6. If `item-add` errors with **Content already exists in this project**, skip add for that URL and only ensure fields are set.
-7. **Summarize** — paste all issue URLs.
+5. **Set Release, Sprint, and Status** per project item with `gh project item-edit` (one single-select field per command). Set status to "Backlog" for new issues.
+
+6. **Finalize Epic bodies** with real `#NN` refs in `## Tracking` / `## Child tasks`.
+7. If `item-add` errors with **Content already exists in this project**, skip add for that URL and only ensure fields are set.
+8. **Summarize** — paste all issue URLs with assignee, release, sprint confirmed.
 
 ## Issue body templates
 

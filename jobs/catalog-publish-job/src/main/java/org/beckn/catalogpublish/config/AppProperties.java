@@ -16,8 +16,7 @@ import org.springframework.validation.annotation.Validated;
 public record AppProperties(
                 @Valid Datasource datasource,
                 @Valid Messaging messaging,
-                @Valid Catalog catalog,
-                @Valid Http http) {
+                @Valid Catalog catalog) {
         public record Datasource(
                         @NotBlank String url,
                         @NotBlank String driverClassName,
@@ -63,9 +62,6 @@ public record AppProperties(
                         @Min(1) int processingPoolSize,
                         @Valid Elasticsearch elasticsearch,
                         @Valid TextSearch textSearch) {
-        }
-
-        public record Http(boolean signatureVerificationEnabled) {
         }
 
         /**

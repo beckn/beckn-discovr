@@ -105,7 +105,8 @@ public class EsSearchAssembler {
         catalog.setId(catalogId);
         catalog.setBppId(str(doc, "bpp_id"));
         catalog.setBppUri(str(doc, "bpp_uri"));
-        catalog.setDescriptor(new Descriptor());
+        catalog.setDescriptor(buildCatalogDescriptor(doc));
+        catalog.setProviderId(str(doc, "catalog_provider_id"));
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         Object validityRaw = doc.get("catalog_validity");
@@ -113,6 +114,22 @@ public class EsSearchAssembler {
             catalog.setValidity(timePeriodFromMap((Map<String, Object>) validityMap));
         }
         return catalog;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Descriptor buildCatalogDescriptor(Map<String, Object> doc) {
+        Descriptor d = new Descriptor();
+        d.setName(str(doc, "catalog_name"));
+        d.setShortDesc(str(doc, "catalog_short_desc"));
+        d.setLongDesc(str(doc, "catalog_long_desc"));
+        d.setThumbnailImage(str(doc, "catalog_descriptor_thumbnail_image"));
+        Object docsRaw = doc.get("catalog_descriptor_docs");
+        if (docsRaw instanceof List<?> list && !list.isEmpty())
+            d.setDocs((List<Map<String, Object>>) list);
+        Object mediaRaw = doc.get("catalog_descriptor_media_file");
+        if (mediaRaw instanceof List<?> list && !list.isEmpty())
+            d.setMediaFile((List<Map<String, Object>>) list);
+        return d;
     }
 
     private static TimePeriod timePeriodFromMap(Map<String, Object> map) {
@@ -152,12 +169,12 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Resource buildResource(Map<String, Object> doc) {
         Resource resource = new Resource();
-        resource.setId(str(doc, "item_id"));
+        resource.setId(str(doc, "resource_id"));
         resource.setDescriptor(buildDescriptor(doc));
         resource.setCategory(buildCategory(doc));
         resource.setRating(buildRating(doc));
-        resource.setRateable(bool(doc, "item_rateable"));
-        resource.setIsActive(bool(doc, "item_is_active"));
+        resource.setRateable(bool(doc, "resource_rateable"));
+        resource.setIsActive(bool(doc, "resource_is_active"));
         Provider provider = buildProvider(doc);
         if (provider != null) {
             provider.setLocations(collectProviderLocations(doc));
@@ -190,18 +207,18 @@ public class EsSearchAssembler {
     }
 
     /**
-     * Collects only <b>direct item-level</b> location fields from the ES document.
+     * Collects only <b>direct resource-level</b> location fields from the ES document.
      *
      * <p>{@code GeoShapeExtractor} on the publish side indexes location objects from
      * any path as {@code loc_*} fields. However, offer-level, provider-level,
      * resourceAttributes-level, and providerAttributes-level locations are returned via
-     * their own response structures. Only direct item children
+     * their own response structures. Only direct resource children
      * (e.g. {@code availableAt}, {@code location}, or any spec-extended
      * location field) should be collected here.</p>
      */
     private static List<Location> collectItemLocations(Map<String, Object> doc) {
         return collectLocFields(doc, key ->
-                key.contains("_items_")
+                key.contains("_resources_")
                         && !key.contains("_provider_")
                         && !key.contains("_providerAttributes_")
                         && !key.contains("_resourceAttributes_")
@@ -210,7 +227,7 @@ public class EsSearchAssembler {
 
     /**
      * Collects provider-level location fields (e.g.
-     * {@code loc_catalogs_items_provider_locations})
+     * {@code loc_catalogs_resources_provider_locations})
      * for {@link Provider#setLocations}.
      */
     private static List<Location> collectProviderLocations(Map<String, Object> doc) {
@@ -273,35 +290,32 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Descriptor buildDescriptor(Map<String, Object> doc) {
         Descriptor d = new Descriptor();
-        d.setName(str(doc, "item_name"));
-        d.setShortDesc(str(doc, "item_short_desc"));
-        d.setLongDesc(str(doc, "item_long_desc"));
-        Object imgRaw = doc.get("item_image");
-        if (imgRaw instanceof List<?> list && !list.isEmpty())
-            d.setImage((List<String>) list);
-        d.setThumbnailImage(str(doc, "item_descriptor_thumbnail_image"));
-        Object docsRaw = doc.get("item_descriptor_docs");
+        d.setName(str(doc, "resource_name"));
+        d.setShortDesc(str(doc, "resource_short_desc"));
+        d.setLongDesc(str(doc, "resource_long_desc"));
+        d.setThumbnailImage(str(doc, "resource_descriptor_thumbnail_image"));
+        Object docsRaw = doc.get("resource_descriptor_docs");
         if (docsRaw instanceof List<?> list && !list.isEmpty())
             d.setDocs((List<Map<String, Object>>) list);
-        Object mediaRaw = doc.get("item_descriptor_media_file");
+        Object mediaRaw = doc.get("resource_descriptor_media_file");
         if (mediaRaw instanceof List<?> list && !list.isEmpty())
             d.setMediaFile((List<Map<String, Object>>) list);
         return d;
     }
 
     private static CategoryCode buildCategory(Map<String, Object> doc) {
-        String code = str(doc, "item_category_code");
+        String code = str(doc, "resource_category_code");
         if (code == null)
             return null;
         CategoryCode cat = new CategoryCode(code);
-        cat.setName(str(doc, "item_category_name"));
+        cat.setName(str(doc, "resource_category_name"));
         return cat;
     }
 
     private static Rating buildRating(Map<String, Object> doc) {
-        Object ratingValue = doc.get("item_rating_value");
-        Object ratingCount = doc.get("item_rating_count");
-        String reviewText = str(doc, "item_rating_review_text");
+        Object ratingValue = doc.get("resource_rating_value");
+        Object ratingCount = doc.get("resource_rating_count");
+        String reviewText = str(doc, "resource_rating_review_text");
         if (ratingValue == null && ratingCount == null && reviewText == null)
             return null;
         Rating r = new Rating();
@@ -313,39 +327,26 @@ public class EsSearchAssembler {
         return r;
     }
 
-    @SuppressWarnings("unchecked")
     private static Provider buildProvider(Map<String, Object> doc) {
-        String providerId = str(doc, "item_provider_id");
+        String providerId = str(doc, "resource_provider_id");
         if (providerId == null)
             return null;
         Descriptor desc = new Descriptor();
-        desc.setName(str(doc, "item_provider_name"));
-        Provider provider = new Provider(providerId, desc);
-        Object alertsRaw = doc.get("item_provider_alerts");
-        if (alertsRaw instanceof List<?> list && !list.isEmpty())
-            provider.setAlerts((List<Map<String, Object>>) list);
-        Object provPoliciesRaw = doc.get("item_provider_policies");
-        if (provPoliciesRaw instanceof List<?> list && !list.isEmpty()) {
-            List<Policy> policies = list.stream()
-                    .filter(e -> e instanceof Map<?, ?>)
-                    .map(e -> policyFromMap((Map<String, Object>) e))
-                    .toList();
-            if (!policies.isEmpty()) provider.setPolicies(policies);
-        }
-        return provider;
+        desc.setName(str(doc, "resource_provider_name"));
+        return new Provider(providerId, desc);
     }
 
     @SuppressWarnings("unchecked")
     private static Attributes buildAttributes(Map<String, Object> doc) {
-        Object attrsRaw = doc.get("item_attributes");
+        Object attrsRaw = doc.get("resource_attributes");
         if (attrsRaw instanceof Map<?, ?> map) {
             // Prefer the dedicated top-level ES fields for @type and @context when present,
-            // so that keyword filtering against item_attributes_type works correctly.
-            String atType = doc.containsKey("item_attributes_type")
-                    ? (String) doc.get("item_attributes_type")
+            // so that keyword filtering against resource_attributes_type works correctly.
+            String atType = doc.containsKey("resource_attributes_type")
+                    ? (String) doc.get("resource_attributes_type")
                     : (String) map.get(BecknFields.AT_TYPE);
-            String atContext = doc.containsKey("item_attributes_context")
-                    ? (String) doc.get("item_attributes_context")
+            String atContext = doc.containsKey("resource_attributes_context")
+                    ? (String) doc.get("resource_attributes_context")
                     : (String) map.get(BecknFields.AT_CONTEXT);
             Attributes attrs = new Attributes(atContext, atType);
             ((Map<String, Object>) map).forEach((k, v) -> {

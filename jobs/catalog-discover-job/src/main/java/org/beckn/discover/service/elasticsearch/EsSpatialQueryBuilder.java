@@ -141,7 +141,7 @@ public class EsSpatialQueryBuilder {
         // Extract must clauses from spatial JSON and append multi_match
         Map<String, Object> multiMatch = new LinkedHashMap<>();
         multiMatch.put("query", textSearch);
-        multiMatch.put("fields", List.of("full_text_blob", "item_name^2"));
+        multiMatch.put("fields", List.of("full_text_blob", "resource_name^2"));
         multiMatch.put("type", "best_fields");
         multiMatch.put("fuzziness", "AUTO");
 
@@ -243,10 +243,10 @@ public class EsSpatialQueryBuilder {
 
     /**
      * Normalizes a full JSONPath to an ES field name.
-     * Works for location fields anywhere in the payload — items, offers, or any custom field.
+     * Works for location fields anywhere in the payload — resources, offers, or any custom field.
      *
-     * Input:  $.catalogs[*].items[*].availableAt[*].geo
-     * Output: loc_catalogs_items_availableAt
+     * Input:  $.catalogs[*].resources[*].availableAt[*].geo
+     * Output: loc_catalogs_resources_availableAt
      *
      * Input:  $.catalogs[*].offers[*].location.geo
      * Output: loc_catalogs_offers_location

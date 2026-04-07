@@ -1,26 +1,20 @@
 package org.beckn.seeker.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 @Configuration
+@EnableConfigurationProperties(HttpClientProperties.class)
 public class RestTemplateConfig {
 
-    @Value("${http.client.connection-timeout}")
-    private int connectionTimeoutMs;
-
-    @Value("${http.client.timeout}")
-    private int readTimeoutMs;
-
     @Bean
-    public RestTemplate restTemplate() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(connectionTimeoutMs);
-        factory.setReadTimeout(readTimeoutMs);
-        
+    public RestTemplate restTemplate(HttpClientProperties httpClientProperties) {
+        var factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(httpClientProperties.connectionTimeout());
+        factory.setReadTimeout(httpClientProperties.timeout());
         return new RestTemplate(factory);
     }
 }

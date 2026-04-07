@@ -185,7 +185,7 @@ class EsSearchAssemblerTest {
     @Test
     void hitWithSingleLocField_populatesAvailableAt() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("loc_catalogs_beckn_items_beckn_availableAt", List.of(
+        doc.put("loc_catalogs_resources_availableAt", List.of(
                 Map.of("geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9)),
                         "address", Map.of("streetAddress", "MG Road", "extendedAddress", "Apt 4B",
                                 "addressLocality", "Bengaluru"))));
@@ -203,10 +203,10 @@ class EsSearchAssemblerTest {
     void hitWithMultipleLocFields_collectsAllLocations() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // item-level availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_availableAt", Map.of(
+        doc.put("loc_catalogs_resources_availableAt", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
         // item-level custom location field
-        doc.put("loc_catalogs_beckn_items_beckn_location", Map.of(
+        doc.put("loc_catalogs_resources_location", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(78.0, 13.0))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-2");
@@ -229,7 +229,7 @@ class EsSearchAssemblerTest {
     void offerLevelLocFields_notIncludedInAvailableAt() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // offer-level location — should NOT appear in item.availableAt
-        doc.put("loc_catalogs_beckn_offers_beckn_location", Map.of(
+        doc.put("loc_catalogs_offers_location", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-4");
@@ -242,7 +242,7 @@ class EsSearchAssemblerTest {
     void resourceAttributesLocFields_notIncludedInAvailableAt() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // resourceAttributes-level location — should NOT appear in item.availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_resourceAttributes_serviceArea", Map.of(
+        doc.put("loc_catalogs_resources_resourceAttributes_serviceArea", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(78.0, 13.0))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-5");
@@ -255,7 +255,7 @@ class EsSearchAssemblerTest {
     void providerLocFields_notIncludedInAvailableAt() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // provider-level location — should NOT appear in item.availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_provider_beckn_locations", Map.of(
+        doc.put("loc_catalogs_resources_provider_locations", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-6");
@@ -267,7 +267,7 @@ class EsSearchAssemblerTest {
     @Test
     void providerLocFields_setOnProvider() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("loc_catalogs_beckn_items_beckn_provider_beckn_locations", Map.of(
+        doc.put("loc_catalogs_resources_provider_locations", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9)),
                 "address", Map.of("addressLocality", "Bengaluru")));
 
@@ -283,16 +283,16 @@ class EsSearchAssemblerTest {
     void mixedLocFields_onlyItemLevelInAvailableAt_providerLevelOnProvider() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
         // item-level — SHOULD be in availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_availableAt", Map.of(
+        doc.put("loc_catalogs_resources_availableAt", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
         // provider-level — should be on provider.locations, NOT availableAt
-        doc.put("loc_catalogs_beckn_items_beckn_provider_beckn_locations", Map.of(
+        doc.put("loc_catalogs_resources_provider_locations", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(78.0, 13.0))));
         // offer-level — should NOT be in either
-        doc.put("loc_catalogs_beckn_offers_beckn_location", Map.of(
+        doc.put("loc_catalogs_offers_location", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(80.0, 15.0))));
         // resourceAttributes-level — should NOT be in either
-        doc.put("loc_catalogs_beckn_items_beckn_resourceAttributes_depot", Map.of(
+        doc.put("loc_catalogs_resources_resourceAttributes_depot", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(79.0, 14.0))));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-8");
@@ -311,7 +311,7 @@ class EsSearchAssemblerTest {
     @Test
     void hitWithThumbnailImage_populatesThumbnailImageOnDescriptor() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("item_descriptor_thumbnail_image", "https://example.org/thumb.jpg");
+        doc.put("resource_descriptor_thumbnail_image", "https://example.org/thumb.jpg");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-1");
 
@@ -322,7 +322,7 @@ class EsSearchAssemblerTest {
     @Test
     void hitWithDescriptorDocs_populatesDocsOnDescriptor() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("item_descriptor_docs", List.of(
+        doc.put("resource_descriptor_docs", List.of(
                 Map.of("url", "https://example.org/doc.pdf", "label", "Manual")));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-2");
@@ -335,7 +335,7 @@ class EsSearchAssemblerTest {
     @Test
     void hitWithDescriptorMediaFile_populatesMediaFileOnDescriptor() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("item_descriptor_media_file", List.of(
+        doc.put("resource_descriptor_media_file", List.of(
                 Map.of("url", "https://example.org/video.mp4", "mimetype", "video/mp4")));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-3");
@@ -346,37 +346,31 @@ class EsSearchAssemblerTest {
     }
 
     @Test
-    void hitWithProviderAlerts_populatesAlertsOnProvider() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("item_provider_alerts", List.of(
-                Map.of("type", "maintenance", "message", "Scheduled downtime tonight")));
+    void hitWithCatalogProvider_populatesProviderIdOnCatalog() {
+        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4");
 
-        Resource resource = catalogs.get(0).getResources().get(0);
-        assertThat(resource.getProvider().getAlerts()).isNotNull().hasSize(1);
-        assertThat(resource.getProvider().getAlerts().get(0).get("type")).isEqualTo("maintenance");
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getProviderId()).isEqualTo("ecopower-network");
     }
 
     @Test
-    void hitWithProviderPolicies_populatesPoliciesOnProvider() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("item_provider_policies", List.of(
-                Map.of("@type", "CancellationPolicy", "name", "No cancellations"),
-                Map.of("@type", "ReturnPolicy", "name", "30-day returns")));
+    void hitWithCatalogDescriptor_populatesDescriptorOnCatalog() {
+        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-5");
 
-        Resource resource = catalogs.get(0).getResources().get(0);
-        assertThat(resource.getProvider().getPolicies()).isNotNull().hasSize(2);
-        assertThat(resource.getProvider().getPolicies().get(0).getName()).isEqualTo("No cancellations");
-        assertThat(resource.getProvider().getPolicies().get(1).getName()).isEqualTo("30-day returns");
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getDescriptor()).isNotNull();
+        assertThat(catalog.getDescriptor().getName()).isEqualTo("EV Charging Catalog");
+        assertThat(catalog.getDescriptor().getShortDesc()).isEqualTo("Catalog of EV chargers");
     }
 
     @Test
     void hitWithRatingReviewText_populatesReviewTextOnRating() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
-        doc.put("item_rating_review_text", "Excellent service and fast charging");
+        doc.put("resource_rating_review_text", "Excellent service and fast charging");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-6");
 
@@ -462,24 +456,28 @@ class EsSearchAssemblerTest {
                 Map.entry("catalog_id", catalogId != null ? catalogId : ""),
                 Map.entry("catalog_context", "https://custom.catalog.context"),
                 Map.entry("catalog_type", "Catalog"),
+                Map.entry("catalog_name", "EV Charging Catalog"),
+                Map.entry("catalog_short_desc", "Catalog of EV chargers"),
+                Map.entry("catalog_provider_id", "ecopower-network"),
+                Map.entry("catalog_provider_name", "EcoPower Network"),
                 Map.entry("bpp_id", bppId),
                 Map.entry("bpp_uri", "https://bpp.example.com"),
                 Map.entry("network_id", "ondc-ev"),
-                Map.entry("item_id", itemId),
-                Map.entry("item_name", itemName),
-                Map.entry("item_short_desc", "60kW CCS2 charger"),
-                Map.entry("item_long_desc", "A fast DC charger supporting CCS2 connectors"),
-                Map.entry("item_category_code", "EV_CHARGING"),
-                Map.entry("item_category_name", "EV Charging"),
-                Map.entry("item_rateable", true),
-                Map.entry("item_is_active", true),
-                Map.entry("item_rating_value", 4.5),
-                Map.entry("item_rating_count", 120),
-                Map.entry("item_provider_id", "ecopower-charging"),
-                Map.entry("item_provider_name", "EcoPower Charging"),
-                Map.entry("item_context", "https://custom.item.context"),
-                Map.entry("item_type", "CustomItemType"),
-                Map.entry("item_attributes", Map.of(
+                Map.entry("resource_id", itemId),
+                Map.entry("resource_name", itemName),
+                Map.entry("resource_short_desc", "60kW CCS2 charger"),
+                Map.entry("resource_long_desc", "A fast DC charger supporting CCS2 connectors"),
+                Map.entry("resource_category_code", "EV_CHARGING"),
+                Map.entry("resource_category_name", "EV Charging"),
+                Map.entry("resource_rateable", true),
+                Map.entry("resource_is_active", true),
+                Map.entry("resource_rating_value", 4.5),
+                Map.entry("resource_rating_count", 120),
+                Map.entry("resource_provider_id", "ecopower-charging"),
+                Map.entry("resource_provider_name", "EcoPower Charging"),
+                Map.entry("resource_context", "https://custom.resource.context"),
+                Map.entry("resource_type", "CustomResourceType"),
+                Map.entry("resource_attributes", Map.of(
                         "@context", "https://custom.attr.context",
                         "@type", "EVCharger",
                         "connectorType", "CCS2",

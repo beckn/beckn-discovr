@@ -81,8 +81,8 @@ services:
   # This job acts as the bridge for discovery ingestion
   catalog-publish:
     build:
-      context: ./jobs/catalog-publish-job
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: jobs/catalog-publish-job/Dockerfile
     image: beckn/catalog-publish-job:1.0
     container_name: catalog-publish
     ports:
@@ -104,6 +104,21 @@ services:
       - APP_CATALOG_VALIDATION_ENABLED=false
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - JAVA_TOOL_OPTIONS=
+      # Beckn Auth SDK — signature verification for /catalog/push
+      - SIGNATURE_AUTH_ENABLED=false
+      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
+      - SIGNATURE_REGISTRY_TOKEN=
+      - SIGNATURE_CLOCK_SKEW_SECONDS=30
+      - SIGNATURE_CACHE_TTL_SECONDS=2592000
+      - SIGNATURE_CACHE_MAX_KEYS=100
+      - SIGNATURE_TIMEOUT_SECONDS=10
+      - SIGNATURE_RETRY_ATTEMPTS=3
+      # Whitelisted endpoints — comma-separated METHOD:PATH pairs that bypass signature verification
+      # Paths are absolute URI paths (e.g. POST:/catalog/push)
+      # Supports {param} and :param wildcards (e.g. GET:/catalog/{id})
+      # Leave empty to require auth on all endpoints when SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_WHITELISTED_ENDPOINTS=
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
@@ -137,7 +152,7 @@ services:
       # Enable to generate and store item vectors in Elasticsearch.
       # Supports any OpenAI-compatible /v1/embeddings provider.
       # MUST use the same model as DISCOVERY_TEXT_SEARCH_EMBEDDING_NAME below.
-      - CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED=true
+      - CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED=false
       - CATALOG_TEXT_SEARCH_EMBEDDING_NAME=text-embedding-3-small
       - CATALOG_TEXT_SEARCH_EMBEDDING_BASE_URL=https://api.openai.com
       - CATALOG_TEXT_SEARCH_EMBEDDING_API_KEY=
@@ -160,8 +175,8 @@ services:
   # Catalog Discover Job (formerly discovery-service)
   catalog-discover-job:
     build:
-      context: ./jobs/catalog-discover-job
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: jobs/catalog-discover-job/Dockerfile
     container_name: catalog-discover-job
     ports:
       - "8082:8080"
@@ -183,6 +198,21 @@ services:
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA=ERROR
       - LOGGING_LEVEL_ORG_APACHE_KAFKA=ERROR
       - OTEL_TRACES_EXPORTER=none
+      # Beckn Auth SDK — signature verification for /beckn/discover
+      - SIGNATURE_AUTH_ENABLED=false
+      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
+      - SIGNATURE_REGISTRY_TOKEN=
+      - SIGNATURE_CLOCK_SKEW_SECONDS=30
+      - SIGNATURE_CACHE_TTL_SECONDS=2592000
+      - SIGNATURE_CACHE_MAX_KEYS=100
+      - SIGNATURE_TIMEOUT_SECONDS=10
+      - SIGNATURE_RETRY_ATTEMPTS=3
+      # Whitelisted endpoints — comma-separated METHOD:PATH pairs that bypass signature verification
+      # Paths are absolute URI paths (e.g. POST:/beckn/discover, GET:/beckn/discover)
+      # Supports {param} and :param wildcards (e.g. GET:/beckn/discover/{id})
+      # Leave empty to require auth on all endpoints when SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_WHITELISTED_ENDPOINTS=
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
@@ -247,8 +277,8 @@ services:
   # Consumes discovery responses and notifies the BAP; failures go to a DLT topic.
   response-dispatcher:
     build:
-      context: ./jobs/response-dispatcher
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: jobs/response-dispatcher/Dockerfile
     image: beckn/response-dispatcher:1.0
     container_name: response-dispatcher
     ports:
@@ -260,7 +290,13 @@ services:
       - TOPICS_DLT=discovr.dispatcher.dlt.responses
       - SPRING_KAFKA_CONSUMER_GROUP_ID=seeker-notifier-group
       - SPRING_KAFKA_LISTENER_CONCURRENCY=1
+      # Beckn HTTP Signature — outgoing signing for on_discover callbacks to BAP
+      # Set SIGNING_ENABLED=true and provide key details to sign outbound callbacks
       - SIGNING_ENABLED=false
+      - SIGNING_SUBSCRIBER_ID=
+      - SIGNING_KEY_ID_SUFFIX=
+      - SIGNING_PRIVATE_KEY=
+      - SIGNING_EXPIRY_SECONDS=3600
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none

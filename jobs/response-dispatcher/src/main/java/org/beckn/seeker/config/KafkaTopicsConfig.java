@@ -14,9 +14,12 @@ public class KafkaTopicsConfig {
     @Value("${topics.dlt}")
     private String dltTopic;
     
-    @Value("${kafka.topics.partitions:3}")
+    @Value("${kafka.topics.partitions:4}")
     private int numPartitions;
-    
+
+    @Value("${kafka.topics.dlt-partitions:1}")
+    private int dltPartitions;
+
     @Value("${kafka.topics.replication-factor:1}")
     private short replicationFactor;
 
@@ -28,11 +31,10 @@ public class KafkaTopicsConfig {
                 .build();
     }
 
-
     @Bean
     public NewTopic dltTopic() {
         return TopicBuilder.name(dltTopic)
-                .partitions(numPartitions)
+                .partitions(dltPartitions)
                 .replicas(replicationFactor)
                 .build();
     }
