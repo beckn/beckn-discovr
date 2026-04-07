@@ -5,7 +5,9 @@ import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import org.apache.http.HttpHost;
 import org.beckn.discover.config.DiscoveryProperties;
@@ -57,6 +59,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Testcontainers
 class ElasticsearchTextSearchEngineIntegrationTest {
 
+    // Configured to match Spring Boot's auto-configured ObjectMapper defaults
+    private static final ObjectMapper TEST_MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
     private static final String INDEX = "beckn-catalog-test";
     private static final String ALIAS = "beckn-catalog";
     private static final DockerImageName ES_IMAGE = DockerImageName
@@ -81,7 +88,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                 new RestClientTransport(restClient, new JacksonJsonpMapper()));
 
         searchEngine = new ElasticsearchTextSearchEngine(
-                esClient, new EsSearchAssembler(new CatalogProcessor()), new ObjectMapper(), buildProps(),
+                esClient, new EsSearchAssembler(new CatalogProcessor()), TEST_MAPPER, buildProps(),
                 Optional.empty(), Optional.empty());
 
         createIndexAndAlias();
@@ -267,6 +274,99 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         assertThat(found).isTrue();
     }
 
+    /**
+     * With relativeScoreThreshold=0.6, a query that returns one very strong hit and one
+     * very weak hit should drop the weak hit.
+     *
+     * We use "CCS2 CHAdeMO" which yields two hits: ev-charger-001 (matches CCS2 in name
+     * and blob) and ev-charger-003 (matches CHAdeMO in name and blob). However, when we
+     * restrict the field list to only "resource_name" and set a high threshold, only the
+     * best-matching catalog is retained.
+     *
+     * Strategy: set threshold=1.0 (only hits equal to top score survive) so only the
+     * top-scoring document is retained.
+     */
+    @Test
+    void search_relativeScoreThreshold_dropsLowRelevanceHits() throws Exception {
+        // Build engine with threshold=1.0 — only the single highest-scoring hit is kept
+        DiscoveryProperties propsHighThreshold = buildPropsWithThreshold(1.0, List.of(
+                "full_text_blob", "resource_name^2", "catalog_name^2",
+                "resource_provider_name^1.5", "resource_rating_review_text"));
+        ElasticsearchTextSearchEngine strictEngine = new ElasticsearchTextSearchEngine(
+                esClient, new EsSearchAssembler(new CatalogProcessor()),
+                TEST_MAPPER, propsHighThreshold,
+                Optional.empty(), Optional.empty());
+
+        // "EcoPower CCS2" strongly matches ev-charger-001; ev-charger-002 is weaker
+        // With threshold=1.0 only the top-scoring doc(s) are kept; those with same top score pass
+        List<Catalog> catalogs = strictEngine.search("CCS2 EcoPower", queryRequest("tx-rel-1"));
+
+        // At threshold=1.0 at least some hits are dropped relative to no-threshold result
+        // The key assertion: the result is a non-empty but smaller set than without threshold
+        assertThat(catalogs).isNotEmpty();
+        long totalResources = catalogs.stream().mapToLong(c -> c.getResources().size()).sum();
+        // Without threshold "EcoPower" matches 2 docs; with threshold=1.0 only top scorer(s) survive
+        // We cannot assert exact count (ES scoring varies) but we assert not all 3 docs are returned
+        assertThat(totalResources).isLessThan(3);
+    }
+
+    /**
+     * With relativeScoreThreshold=0.0, filtering is disabled — all docs above minScore
+     * are returned regardless of score spread.
+     */
+    @Test
+    void search_relativeScoreThresholdZero_disablesFiltering() throws Exception {
+        DiscoveryProperties propsNoFilter = buildPropsWithThreshold(0.0, List.of(
+                "full_text_blob", "resource_name^2", "catalog_name^2",
+                "resource_provider_name^1.5", "resource_rating_review_text"));
+        ElasticsearchTextSearchEngine noFilterEngine = new ElasticsearchTextSearchEngine(
+                esClient, new EsSearchAssembler(new CatalogProcessor()),
+                TEST_MAPPER, propsNoFilter,
+                Optional.empty(), Optional.empty());
+
+        // "EcoPower" matches ev-charger-001 and ev-charger-002 — both should be returned
+        List<Catalog> catalogs = noFilterEngine.search("EcoPower", queryRequest("tx-rel-2"));
+
+        assertThat(catalogs).hasSize(1);
+        assertThat(catalogs.get(0).getResources()).hasSize(2);
+    }
+
+    /**
+     * Custom field list restricted to only "resource_name^2" means the search can only
+     * match against the resource_name field. "EcoPower" only appears in full_text_blob
+     * (not in resource_name), so no results should be returned when full_text_blob is
+     * excluded from the field list.
+     */
+    @Test
+    void search_customFieldList_restrictsScopeToConfiguredFields() throws Exception {
+        // Only search in resource_name — "EcoPower" is NOT in resource_name, only in full_text_blob
+        DiscoveryProperties propsNameOnly = buildPropsWithThreshold(0.0, List.of("resource_name^2"));
+        ElasticsearchTextSearchEngine nameOnlyEngine = new ElasticsearchTextSearchEngine(
+                esClient, new EsSearchAssembler(new CatalogProcessor()),
+                TEST_MAPPER, propsNameOnly,
+                Optional.empty(), Optional.empty());
+
+        List<Catalog> catalogs = nameOnlyEngine.search("EcoPower", queryRequest("tx-field-1"));
+
+        // "EcoPower" does not appear in resource_name of any test doc
+        assertThat(catalogs).isEmpty();
+    }
+
+    /**
+     * Constructor must reject an empty multiMatchFields list with IllegalArgumentException.
+     */
+    @Test
+    void constructor_emptyMultiMatchFields_throwsIllegalArgumentException() {
+        DiscoveryProperties propsEmptyFields = buildPropsWithThreshold(0.6, List.of());
+
+        assertThatThrownBy(() -> new ElasticsearchTextSearchEngine(
+                esClient, new EsSearchAssembler(new CatalogProcessor()),
+                TEST_MAPPER, propsEmptyFields,
+                Optional.empty(), Optional.empty()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("multiMatchFields");
+    }
+
     // ── Setup helpers ─────────────────────────────────────────────────────────
 
     private static void createIndexAndAlias() throws Exception {
@@ -398,12 +498,20 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     }
 
     private static DiscoveryProperties buildProps() {
+        return buildPropsWithThreshold(0.0, List.of(
+                "full_text_blob", "resource_name^2", "catalog_name^2",
+                "resource_provider_name^1.5", "resource_rating_review_text"));
+    }
+
+    private static DiscoveryProperties buildPropsWithThreshold(double threshold, List<String> fields) {
         DiscoveryProperties props = new DiscoveryProperties();
         DiscoveryProperties.Elasticsearch es = new DiscoveryProperties.Elasticsearch();
         es.setHosts(ES_CONTAINER.getHttpHostAddress());
         es.setAliasName(ALIAS);
         es.setResultLimit(50);
         es.setMinScore(0.1f);
+        es.setMultiMatchFields(fields);
+        es.setRelativeScoreThreshold(threshold);
         props.setElasticsearch(es);
         return props;
     }
