@@ -19,4 +19,7 @@ public interface ItemJpaRepository extends JpaRepository<Item, ItemId> {
     List<Item> findAllByBppIdAndAnyOfferId(
             @Param("bppId") String bppId,
             @Param("offerIds") List<String> offerIds);
+
+    /** Cross-BPP lookup by resource ID only — no BPP filter. Spring Data auto-derives the query. */
+    List<Item> findAllByIdIn(List<String> ids);
 }

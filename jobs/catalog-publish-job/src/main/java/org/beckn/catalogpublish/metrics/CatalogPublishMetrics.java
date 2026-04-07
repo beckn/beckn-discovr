@@ -24,6 +24,9 @@ public class CatalogPublishMetrics {
     private final Map<CatalogOperation, Counter> failureCounters;
     private final Counter batchPublishFailure;
     private final Map<CatalogOperation, Timer> processingTimers;
+    private final Counter offerResolveSuccess;
+    private final Counter offerResolveMissing;
+    private final Counter offerResolveFailed;
 
     public CatalogPublishMetrics(MeterRegistry registry) {
         successCounters = new EnumMap<>(CatalogOperation.class);
@@ -48,6 +51,16 @@ public class CatalogPublishMetrics {
         batchPublishFailure = Counter.builder("catalog.batch.publish.failure")
                 .description("Catalog batches that failed during post-commit routing/assembly")
                 .register(registry);
+
+        offerResolveSuccess = Counter.builder("catalog.offer.resolve.success")
+                .description("Items updated via cross-BPP offer resolution (Phase 3)")
+                .register(registry);
+        offerResolveMissing = Counter.builder("catalog.offer.resolve.missing")
+                .description("Resource IDs referenced by offers but not found in DB")
+                .register(registry);
+        offerResolveFailed = Counter.builder("catalog.offer.resolve.failed")
+                .description("Items that failed during cross-BPP offer merge (Phase 3)")
+                .register(registry);
     }
 
     public void recordMessageSuccess(CatalogOperation op) {
@@ -60,6 +73,18 @@ public class CatalogPublishMetrics {
 
     public void recordBatchPublishFailure() {
         batchPublishFailure.increment();
+    }
+
+    public void recordOfferResolveSuccess() {
+        offerResolveSuccess.increment();
+    }
+
+    public void recordOfferResolveMissing(int count) {
+        offerResolveMissing.increment(count);
+    }
+
+    public void recordOfferResolveFailed() {
+        offerResolveFailed.increment();
     }
 
     /**
