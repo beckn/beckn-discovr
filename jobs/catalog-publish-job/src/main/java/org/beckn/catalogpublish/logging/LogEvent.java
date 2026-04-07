@@ -38,4 +38,8 @@ public final class LogEvent {
     public static final String AUTH_VERIFY_START  = "catalog.push.auth.verify.start";
     public static final String AUTH_VERIFY_DONE   = "catalog.push.auth.verify.done";
     public static final String AUTH_VERIFY_FAILED = "catalog.push.auth.verify.failed";
+
+    // Phase 3: cross-BPP offer resolution
+    public static final String OFFER_RESOLVE_COMPLETED = "OFFER_RESOLVE_COMPLETED";
+    public static final String OFFER_RESOLVE_SKIPPED   = "OFFER_RESOLVE_SKIPPED";
 }

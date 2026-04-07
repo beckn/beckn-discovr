@@ -50,19 +50,22 @@ public class PersistenceStep {
     private final PayloadMergeService mergeService;
     private final GeometryExtractor geometryExtractor;
     private final ObjectMapper objectMapper;
+    private final OfferResolutionStep offerResolutionStep;
 
     public PersistenceStep(ItemStore itemStore,
             ItemLocationCollectionStore locationStore,
             ItemPayloadBuilder payloadBuilder,
             PayloadMergeService mergeService,
             GeometryExtractor geometryExtractor,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            OfferResolutionStep offerResolutionStep) {
         this.itemStore = itemStore;
         this.locationStore = locationStore;
         this.payloadBuilder = payloadBuilder;
         this.mergeService = mergeService;
         this.geometryExtractor = geometryExtractor;
         this.objectMapper = objectMapper;
+        this.offerResolutionStep = offerResolutionStep;
     }
 
     /**
@@ -107,6 +110,9 @@ public class PersistenceStep {
         List<ProcessingError> errors = new ArrayList<>();
         String catalogContextUrl = FieldExtractor.extractContextUrl(catalogNode);
         for (JsonNode itemNode : FieldExtractor.iterableItems(catalogNode)) {
+            // Skip minimal resources (no descriptor) — these are reference-only entries from
+            // offer-only catalogs. Persisting them would create garbage item rows.
+            if (!FieldExtractor.isRealResource(itemNode)) continue;
             try {
                 pairs.add(new IdAndNode(extractItemId(itemNode), itemNode, itemNode));
             } catch (Exception e) {
@@ -246,6 +252,18 @@ public class PersistenceStep {
                     log.warn("event={} itemId={} catalogId={} error={}",
                             LogEvent.PERSIST_FAILED, linkedItem.getId(), catalogId, sanitized);
                 }
+            }
+        }
+
+        // Phase 3: Cross-BPP offer resolution — attach offers to items owned by other BPPs.
+        // Collect all IDs already written by Phase 1 and Phase 2 to avoid double-processing.
+        if (!incomingOfferById.isEmpty()) {
+            Set<String> handledIds = new HashSet<>(allItemIds);
+            built.forEach(iwn -> handledIds.add(iwn.item().getId()));
+
+            var resolved = offerResolutionStep.resolveCrossBppOffers(incomingOfferById, handledIds, ctx);
+            for (var r : resolved) {
+                built.add(new ItemWithNode(r.item(), r.payloadNode()));
             }
         }
 
