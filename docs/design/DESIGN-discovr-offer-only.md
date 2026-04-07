@@ -94,9 +94,9 @@ Catalog arrives at PersistenceStep
 |------|--------|
 | `step/PersistenceStep.java` | Add `OfferResolutionStep` as constructor param. Phase 0: add `isRealResource()` check. After Phase 2: call `offerResolutionStep.resolveCrossBppOffers()`, add results to `built` list. |
 | `util/FieldExtractor.java` | Add `isRealResource(JsonNode)`: returns true if resource has non-null `descriptor` field |
-| `store/ItemStore.java` | Add `findAllByIdInAndNetworkOverlap(List<String> ids, String[] networkIds)` |
-| `store/jpa/ItemJpaRepository.java` | Add native query: `SELECT DISTINCT i.* FROM item i WHERE i.id IN (:ids) AND i.network_id && CAST(:networkIds AS TEXT[])` |
-| `store/jpa/JpaItemStore.java` | Implement with empty-list guard |
+| `store/ItemStore.java` | Add `findAllByIdIn(List<String> ids)` — cross-network lookup by resource ID only |
+| `store/jpa/ItemJpaRepository.java` | Add Spring Data method: `List<Item> findAllByIdIn(List<String> ids)` |
+| `store/jpa/JpaItemStore.java` | Implement with empty-list guard and 500-row chunking to avoid PostgreSQL bind parameter limits |
 | `logging/LogEvent.java` | Add `OFFER_RESOLVE_COMPLETED`, `OFFER_RESOLVE_SKIPPED` |
 | `metrics/CatalogPublishMetrics.java` | Add counters: `catalog.offer.resolve.success`, `catalog.offer.resolve.missing` |
 
@@ -124,15 +124,16 @@ public class OfferResolutionStep {
 public static boolean isRealResource(JsonNode resourceNode);
 
 // ── ItemStore addition ──────────────────────────────────────────────
-List<Item> findAllByIdInAndNetworkOverlap(List<String> itemIds, String[] networkIds);
+// Cross-network by design: offer resourceIds are globally unique across BPPs.
+// Network isolation is enforced at the evaluator/delivery layer, not at index time.
+List<Item> findAllByIdIn(List<String> itemIds);
 ```
 
 ### DB Migration
 
-```sql
--- V10__Add_item_network_id_gin_index.sql
-CREATE INDEX IF NOT EXISTS idx_item_network_id ON item USING GIN (network_id);
-```
+No new migration required for Phase 3. The `findAllByIdIn` query uses the existing PK index on `item.id`.
+The previously proposed `V10__Add_item_network_id_gin_index.sql` (GIN index on `network_id`) is not needed
+because Phase 3 does not filter by network.
 
 ---
 
@@ -163,7 +164,7 @@ CREATE INDEX IF NOT EXISTS idx_item_network_id ON item USING GIN (network_id);
 - **Do NOT set the publishing BPP's `bpp_id` on cross-BPP items** — item retains its original owner
 - **Do NOT create new Kafka topics** — existing topics suffice
 - **Do NOT fail the entire publish for missing resourceIds** — log + skip + continue
-- **Do NOT query without network scope** — always filter by `network_id && CAST(:networkIds AS TEXT[])`
+- **Do NOT add a network filter to Phase 3 resource lookup** — `findAllByIdIn` is intentionally cross-network; resource IDs are globally unique and network isolation is enforced at the evaluator/delivery layer
 - **Do NOT use `@Autowired` field injection** — constructor injection only
 - **Do NOT use `new ObjectMapper()`** — inject Spring Boot's bean
 - **Do NOT break existing tests**
