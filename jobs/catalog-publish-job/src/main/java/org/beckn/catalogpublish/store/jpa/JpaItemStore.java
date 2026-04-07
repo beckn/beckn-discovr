@@ -14,6 +14,8 @@ import java.util.List;
 @Primary
 public class JpaItemStore implements ItemStore {
 
+    private static final int QUERY_CHUNK_SIZE = 500;
+
     private final ItemJpaRepository repo;
 
     public JpaItemStore(ItemJpaRepository repo) {
@@ -41,11 +43,11 @@ public class JpaItemStore implements ItemStore {
     @Override
     public List<Item> findAllByIdIn(List<String> itemIds) {
         if (itemIds == null || itemIds.isEmpty()) return List.of();
-        // Chunk into batches of 500 to avoid PostgreSQL bind parameter limits at scale
-        if (itemIds.size() <= 500) return repo.findAllByIdIn(itemIds);
+        // Chunk into batches to avoid PostgreSQL bind parameter limits at scale
+        if (itemIds.size() <= QUERY_CHUNK_SIZE) return repo.findAllByIdIn(itemIds);
         var results = new ArrayList<Item>();
-        for (int i = 0; i < itemIds.size(); i += 500) {
-            var chunk = itemIds.subList(i, Math.min(i + 500, itemIds.size()));
+        for (int i = 0; i < itemIds.size(); i += QUERY_CHUNK_SIZE) {
+            var chunk = itemIds.subList(i, Math.min(i + QUERY_CHUNK_SIZE, itemIds.size()));
             results.addAll(repo.findAllByIdIn(chunk));
         }
         return results;

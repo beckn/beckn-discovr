@@ -184,7 +184,7 @@ public final class FieldExtractor {
             var fields = attrs.fieldNames();
             while (fields.hasNext()) {
                 String f = fields.next();
-                if (!"@type".equals(f) && !"@context".equals(f)) return true;
+                if (!BecknFields.JSON_LD_TYPE.equals(f) && !BecknFields.JSON_LD_CONTEXT.equals(f)) return true;
             }
         }
 
