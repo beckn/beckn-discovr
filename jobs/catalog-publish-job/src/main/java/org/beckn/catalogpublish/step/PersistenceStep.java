@@ -100,6 +100,12 @@ public class PersistenceStep {
         var updateMode = publishDirectives.path("updateMode").asText("MERGE");
         boolean isFullReplace = "FULL".equalsIgnoreCase(updateMode);
 
+        // Strip publishDirectives from catalog — it's an internal control field,
+        // not part of the Beckn catalog data model. Must not be stored in DB or ES.
+        if (catalogNode.isObject() && catalogNode.has("publishDirectives")) {
+            ((com.fasterxml.jackson.databind.node.ObjectNode) catalogNode).remove("publishDirectives");
+        }
+
         if (isFullReplace) {
             // Delete locations BEFORE items — location subquery references item table
             locationStore.deleteByCatalogIdAndBppId(catalogId, ctx.bppId());
