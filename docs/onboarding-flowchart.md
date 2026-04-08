@@ -16,6 +16,106 @@
 
 ---
 
+## DeDi Structure — How It Actually Looks
+
+```
+DeDi Global (dedi.global)
+│
+├── openretail.org/                              ← NFO Namespace (verified domain)
+│   │
+│   └── electronics-india/                       ← Network Registry
+│       │   Schema: Beckn subscriber reference
+│       │
+│       ├── Entry 1:                             ← Reference (pointer to Croma)
+│       │     subscriber_id: croma.com
+│       │     url: https://api.dedi.global/dedi/lookup/namespaces/croma.com/registries/beckn-subscriber
+│       │     type: Registry
+│       │
+│       ├── Entry 2:                             ← Reference (pointer to Amazon)
+│       │     subscriber_id: amazon.in
+│       │     url: https://api.dedi.global/dedi/lookup/namespaces/amazon.in/registries/beckn-subscriber
+│       │     type: Registry
+│       │
+│       └── Entry 3:                             ← Reference (pointer to PriceHunt)
+│             subscriber_id: pricehunt.in
+│             url: https://api.dedi.global/dedi/lookup/namespaces/pricehunt.in/registries/beckn-subscriber
+│             type: Registry
+│
+├── croma.com/                                   ← BPP Namespace (verified domain)
+│   │
+│   └── beckn-subscriber/                        ← Subscriber Registry
+│       │   Schema: Beckn subscriber
+│       │
+│       └── Record: rec_5f8a2b                   ← Subscriber Record (Croma's identity)
+│             subscriber_id: croma.com
+│             subscriber_url: https://croma.com/bpp/beckn
+│             type: BPP
+│             signing_public_key: K7xM2pQ9nR... (Ed25519, Base64)
+│             encryption_public_key: lCI84I0Q... (optional)
+│             valid_from: 2026-01-01T00:00:00Z
+│
+├── amazon.in/                                   ← BPP Namespace (verified domain)
+│   │
+│   └── beckn-subscriber/                        ← Subscriber Registry
+│       │
+│       └── Record: rec_7c2d4e                   ← Subscriber Record (Amazon's identity)
+│             subscriber_id: amazon.in
+│             subscriber_url: https://amazon.in/bpp/beckn
+│             type: BPP
+│             signing_public_key: P4mK8jL2... (Ed25519, Base64)
+│
+└── pricehunt.in/                                ← BAP Namespace (verified domain)
+    │
+    └── beckn-subscriber/                        ← Subscriber Registry
+        │
+        └── Record: rec_8d3f1a                   ← Subscriber Record (PriceHunt's identity)
+              subscriber_id: pricehunt.in
+              subscriber_url: https://pricehunt.in/bap/beckn
+              type: BAP
+              signing_public_key: R3mN7kL5... (Ed25519, Base64)
+```
+
+### How the pieces connect
+
+```
+Namespace → Registry → Record
+
+Think of it like a file system:
+  Domain (folder)  →  Registry (sub-folder)  →  Record (file)
+
+NFO's registry contains REFERENCES (shortcuts/links) to other namespaces' records.
+It does NOT copy the data — it just points to it.
+```
+
+### Key lookup flow
+
+```
+Someone wants to verify Croma's signature:
+
+1. They know: network_id = openretail.org/electronics-india
+               subscriber_id = croma.com
+
+2. Look up NFO registry → find reference for croma.com
+   → url: https://api.dedi.global/dedi/lookup/namespaces/croma.com/registries/beckn-subscriber
+
+3. Follow that URL → find Croma's subscriber record
+   → signing_public_key: K7xM2pQ9nR...
+
+4. Use that public key to verify the signature ✅
+```
+
+### Cached for speed
+
+```
+Raw lookup: DeDi Global API → slow (network call every time)
+
+Cached at: https://fabric.nfh.global/registry/croma.com/subscribers.beckn.one/rec_5f8a2b
+           → Fast cached lookup, updated every few minutes
+           → This is what ONIX and Discovr actually use
+```
+
+---
+
 ## Full Onboarding Flow
 
 ```mermaid
