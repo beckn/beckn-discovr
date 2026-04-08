@@ -1,5 +1,21 @@
 # Electronics Network Onboarding — Flowchart
 
+## Glossary
+
+| Abbreviation | Full Form | One-line Summary |
+|---|---|---|
+| **NFO** | **N**etwork **F**acilitator **O**rganization | The trusted gatekeeper that creates a Beckn network, verifies participants, and sets network rules — but does not own data, set prices, or take commissions. |
+| **BAP** | **B**eckn **A**pplication **P**latform | The demand side — the app customers use to search and discover products/services across the network (e.g., PriceHunt, Paytm, Google Shopping). |
+| **BPP** | **B**eckn **P**rovider **P**latform | The supply side — the system sellers use to publish catalogs and fulfill orders on the network (e.g., Croma, Amazon, a local kirana store). |
+| **ONIX** | **O**pen **N**etwork **I**nterchange E**x**change | The Beckn protocol gateway software that every participant (BAP/BPP) runs on their server — handles message signing, signature verification, and protocol routing. |
+| **Catalg** | Beckn Catalg (Catalog Management) | The catalog management system where BPPs publish their product/service catalogs — validates, indexes, and pushes data to Discovr for search. |
+| **Discovr** | Beckn Discovr (Discovery Engine) | The search engine that matches BAP discover requests to indexed catalogs across all BPPs — can be self-hosted by a BAP or run as shared infrastructure. |
+| **DeDi** | **De**centralized **Di**rectory | The decentralized identity and registry infrastructure (dedi.global) where participants publish their subscriber details (URL, public key, role) and NFOs maintain network registries. |
+| **Registry** | Registry (on DeDi) | A structured collection of records on DeDi Global — NFOs create a **network registry** (list of approved participants), while each BAP/BPP creates a **subscriber registry** (their own identity card with URL, public key, and role). |
+| **Namespace** | Namespace (on DeDi) | A verified domain on DeDi Global (e.g., `croma.com`, `openretail.org`) that proves the organization owns that domain — all registries are created under a namespace, like folders under a verified identity. |
+
+---
+
 ## Full Onboarding Flow
 
 ```mermaid
