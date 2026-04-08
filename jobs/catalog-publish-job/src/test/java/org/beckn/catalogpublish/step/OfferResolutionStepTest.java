@@ -110,8 +110,8 @@ class OfferResolutionStepTest {
 
         assertThat(results).isEmpty();
         // Missing counter must have been incremented
-        assertThat(registry.counter("catalog.offer.resolve.missing").count()).isEqualTo(1.0);
-        assertThat(registry.counter("catalog.offer.resolve.success").count()).isEqualTo(0.0);
+        assertThat(registry.counter("discovr.publish.offer.resolve.missing").count()).isEqualTo(1.0);
+        assertThat(registry.counter("discovr.publish.offer.resolve.success").count()).isEqualTo(0.0);
     }
 
     // ── Empty offers map ───────────────────────────────────────────────────────
@@ -177,8 +177,8 @@ class OfferResolutionStepTest {
         assertThat(results).hasSize(1);
         assertThat(results.get(0).item().getId()).isEqualTo("item-a");
         // Missing counter incremented for item-missing
-        assertThat(registry.counter("catalog.offer.resolve.missing").count()).isEqualTo(1.0);
-        assertThat(registry.counter("catalog.offer.resolve.success").count()).isEqualTo(1.0);
+        assertThat(registry.counter("discovr.publish.offer.resolve.missing").count()).isEqualTo(1.0);
+        assertThat(registry.counter("discovr.publish.offer.resolve.success").count()).isEqualTo(1.0);
     }
 
     // ── Preserves existing offer IDs when merging new ones ────────────────────
