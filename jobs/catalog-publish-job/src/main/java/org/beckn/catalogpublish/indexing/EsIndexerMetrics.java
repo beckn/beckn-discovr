@@ -24,17 +24,17 @@ public class EsIndexerMetrics {
     private final AtomicLong pendingFailures = new AtomicLong(0);
 
     public EsIndexerMetrics(MeterRegistry registry) {
-        indexed          = counter(registry, "es.indexer.item.indexed",       "Items successfully indexed to ES");
-        itemFailure      = counter(registry, "es.indexer.item.failure",        "Per-item bulk failures");
-        batchFailure     = counter(registry, "es.indexer.batch.failure",       "Full batch-level failures");
-        retried          = counter(registry, "es.indexer.retry",               "Bulk retry attempts");
-        recovered        = counter(registry, "es.indexer.recovered",           "Items recovered by failure consumer");
-        permanentFailure = counter(registry, "es.indexer.permanent.failure",   "Items exceeding max retry attempts");
-        indexCreated     = counter(registry, "es.indexer.index.created",       "ES indices created for root networks");
-        bulkDuration     = Timer.builder("es.indexer.bulk.duration")
+        indexed          = counter(registry, "discovr.publish.es.item.indexed",       "Items successfully indexed to ES");
+        itemFailure      = counter(registry, "discovr.publish.es.item.failure",        "Per-item bulk failures");
+        batchFailure     = counter(registry, "discovr.publish.es.batch.failure",       "Full batch-level failures");
+        retried          = counter(registry, "discovr.publish.es.retry",               "Bulk retry attempts");
+        recovered        = counter(registry, "discovr.publish.es.recovered",           "Items recovered by failure consumer");
+        permanentFailure = counter(registry, "discovr.publish.es.permanent.failure",   "Items exceeding max retry attempts");
+        indexCreated     = counter(registry, "discovr.publish.es.index.created",       "ES indices created for root networks");
+        bulkDuration     = Timer.builder("discovr.publish.es.bulk.duration")
                                 .description("End-to-end bulk request latency")
                                 .register(registry);
-        Gauge.builder("es.indexer.failures.pending", pendingFailures, AtomicLong::get)
+        Gauge.builder("discovr.publish.es.failures.pending", pendingFailures, AtomicLong::get)
              .description("Items currently queued in the ES failure topic")
              .register(registry);
     }
