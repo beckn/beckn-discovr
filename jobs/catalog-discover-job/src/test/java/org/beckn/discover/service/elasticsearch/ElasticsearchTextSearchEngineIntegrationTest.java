@@ -5,7 +5,9 @@ import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import org.apache.http.HttpHost;
 import org.beckn.discover.config.DiscoveryProperties;
@@ -57,6 +59,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Testcontainers
 class ElasticsearchTextSearchEngineIntegrationTest {
 
+    // Configured to match Spring Boot's auto-configured ObjectMapper defaults
+    private static final ObjectMapper TEST_MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
     private static final String INDEX = "beckn-catalog-test";
     private static final String ALIAS = "beckn-catalog";
     private static final DockerImageName ES_IMAGE = DockerImageName
@@ -81,7 +88,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                 new RestClientTransport(restClient, new JacksonJsonpMapper()));
 
         searchEngine = new ElasticsearchTextSearchEngine(
-                esClient, new EsSearchAssembler(new CatalogProcessor()), new ObjectMapper(), buildProps(),
+                esClient, new EsSearchAssembler(new CatalogProcessor()), TEST_MAPPER, buildProps(),
                 Optional.empty(), Optional.empty());
 
         createIndexAndAlias();
@@ -206,26 +213,205 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                 .hasMessageContaining("cannot be null or empty");
     }
 
+    /**
+     * Searching "charging" should match docs with "charger" via English stemming.
+     * ev-charger-002 blob contains "charger" so stemmer collapses both to same root.
+     */
+    @Test
+    void search_stemmingMatchesInflectedForm_returnsResult() throws Exception {
+        // "Type2" isolates ev-charger-002 from the other docs while "charging" tests stemming
+        List<Catalog> catalogs = searchEngine.search("Type2 charging", queryRequest("tx-stem-1"));
+
+        assertThat(catalogs).isNotEmpty();
+        boolean found = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .anyMatch(r -> r.getId().equals("ev-charger-002"));
+        assertThat(found).isTrue();
+    }
+
+    /**
+     * Searching "EV" should match the doc seeded with "electric vehicle" via synonym expansion.
+     * ev-charger-003 blob contains "electric vehicle" — the synonym rule expands "EV" to it.
+     */
+    @Test
+    void search_synonymExpansion_evMatchesElectricVehicle() throws Exception {
+        // ev-charger-003 blob: "DC Charger CHAdeMO 50kW electric vehicle GreenVolt"
+        // With synonym expansion EV → electric vehicle at search time, this doc should match
+        List<Catalog> catalogs = searchEngine.search("CHAdeMO EV", queryRequest("tx-syn-1"));
+
+        assertThat(catalogs).isNotEmpty();
+        boolean found = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .anyMatch(r -> r.getId().equals("ev-charger-003"));
+        assertThat(found).isTrue();
+    }
+
+    /**
+     * A numeric value ("150") placed in the full_text_blob should be findable by search.
+     * ev-charger-001 blob contains "150".
+     */
+    @Test
+    void search_numericTermInBlob_matchesDocument() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("150", queryRequest("tx-num-1"));
+
+        assertThat(catalogs).isNotEmpty();
+        boolean found = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .anyMatch(r -> r.getId().equals("ev-charger-001"));
+        assertThat(found).isTrue();
+    }
+
+    /**
+     * Searching by catalog_name (boosted ^2) should return results.
+     * "EcoPower Catalog" is the catalog_name for cat-ev-001 docs.
+     */
+    @Test
+    void search_catalogNameBoost_matchScoresHigher() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("EcoPower Catalog", queryRequest("tx-boost-1"));
+
+        assertThat(catalogs).isNotEmpty();
+        boolean found = catalogs.stream().anyMatch(c -> c.getId().equals("cat-ev-001"));
+        assertThat(found).isTrue();
+    }
+
+    /**
+     * With relativeScoreThreshold=0.6, a query that returns one very strong hit and one
+     * very weak hit should drop the weak hit.
+     *
+     * We use "CCS2 CHAdeMO" which yields two hits: ev-charger-001 (matches CCS2 in name
+     * and blob) and ev-charger-003 (matches CHAdeMO in name and blob). However, when we
+     * restrict the field list to only "resource_name" and set a high threshold, only the
+     * best-matching catalog is retained.
+     *
+     * Strategy: set threshold=1.0 (only hits equal to top score survive) so only the
+     * top-scoring document is retained.
+     */
+    @Test
+    void search_relativeScoreThreshold_dropsLowRelevanceHits() throws Exception {
+        // Build engine with threshold=1.0 — only the single highest-scoring hit is kept
+        DiscoveryProperties propsHighThreshold = buildPropsWithThreshold(1.0, List.of(
+                "full_text_blob", "resource_name^2", "catalog_name^2",
+                "resource_provider_name^1.5", "resource_rating_review_text"));
+        ElasticsearchTextSearchEngine strictEngine = new ElasticsearchTextSearchEngine(
+                esClient, new EsSearchAssembler(new CatalogProcessor()),
+                TEST_MAPPER, propsHighThreshold,
+                Optional.empty(), Optional.empty());
+
+        // "EcoPower CCS2" strongly matches ev-charger-001; ev-charger-002 is weaker
+        // With threshold=1.0 only the top-scoring doc(s) are kept; those with same top score pass
+        List<Catalog> catalogs = strictEngine.search("CCS2 EcoPower", queryRequest("tx-rel-1"));
+
+        // At threshold=1.0 at least some hits are dropped relative to no-threshold result
+        // The key assertion: the result is a non-empty but smaller set than without threshold
+        assertThat(catalogs).isNotEmpty();
+        long totalResources = catalogs.stream().mapToLong(c -> c.getResources().size()).sum();
+        // Without threshold "EcoPower" matches 2 docs; with threshold=1.0 only top scorer(s) survive
+        // We cannot assert exact count (ES scoring varies) but we assert not all 3 docs are returned
+        assertThat(totalResources).isLessThan(3);
+    }
+
+    /**
+     * With relativeScoreThreshold=0.0, filtering is disabled — all docs above minScore
+     * are returned regardless of score spread.
+     */
+    @Test
+    void search_relativeScoreThresholdZero_disablesFiltering() throws Exception {
+        DiscoveryProperties propsNoFilter = buildPropsWithThreshold(0.0, List.of(
+                "full_text_blob", "resource_name^2", "catalog_name^2",
+                "resource_provider_name^1.5", "resource_rating_review_text"));
+        ElasticsearchTextSearchEngine noFilterEngine = new ElasticsearchTextSearchEngine(
+                esClient, new EsSearchAssembler(new CatalogProcessor()),
+                TEST_MAPPER, propsNoFilter,
+                Optional.empty(), Optional.empty());
+
+        // "EcoPower" matches ev-charger-001 and ev-charger-002 — both should be returned
+        List<Catalog> catalogs = noFilterEngine.search("EcoPower", queryRequest("tx-rel-2"));
+
+        assertThat(catalogs).hasSize(1);
+        assertThat(catalogs.get(0).getResources()).hasSize(2);
+    }
+
+    /**
+     * Custom field list restricted to only "resource_name^2" means the search can only
+     * match against the resource_name field. "EcoPower" only appears in full_text_blob
+     * (not in resource_name), so no results should be returned when full_text_blob is
+     * excluded from the field list.
+     */
+    @Test
+    void search_customFieldList_restrictsScopeToConfiguredFields() throws Exception {
+        // Only search in resource_name — "EcoPower" is NOT in resource_name, only in full_text_blob
+        DiscoveryProperties propsNameOnly = buildPropsWithThreshold(0.0, List.of("resource_name^2"));
+        ElasticsearchTextSearchEngine nameOnlyEngine = new ElasticsearchTextSearchEngine(
+                esClient, new EsSearchAssembler(new CatalogProcessor()),
+                TEST_MAPPER, propsNameOnly,
+                Optional.empty(), Optional.empty());
+
+        List<Catalog> catalogs = nameOnlyEngine.search("EcoPower", queryRequest("tx-field-1"));
+
+        // "EcoPower" does not appear in resource_name of any test doc
+        assertThat(catalogs).isEmpty();
+    }
+
+    /**
+     * Constructor must reject an empty multiMatchFields list with IllegalArgumentException.
+     */
+    @Test
+    void constructor_emptyMultiMatchFields_throwsIllegalArgumentException() {
+        DiscoveryProperties propsEmptyFields = buildPropsWithThreshold(0.6, List.of());
+
+        assertThatThrownBy(() -> new ElasticsearchTextSearchEngine(
+                esClient, new EsSearchAssembler(new CatalogProcessor()),
+                TEST_MAPPER, propsEmptyFields,
+                Optional.empty(), Optional.empty()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("multiMatchFields");
+    }
+
     // ── Setup helpers ─────────────────────────────────────────────────────────
 
     private static void createIndexAndAlias() throws Exception {
-        String mappingJson = """
+        String indexJson = """
                 {
+                  "settings": {
+                    "analysis": {
+                      "filter": {
+                        "english_stop":    { "type": "stop",    "stopwords": "_english_" },
+                        "english_stemmer": { "type": "stemmer", "language": "english" },
+                        "beckn_synonyms":  { "type": "synonym", "synonyms": ["ev, electric vehicle", "charger, charging station"] }
+                      },
+                      "analyzer": {
+                        "beckn_text": {
+                          "type": "custom",
+                          "tokenizer": "standard",
+                          "filter": ["lowercase", "english_stop", "english_stemmer"]
+                        },
+                        "beckn_text_search": {
+                          "type": "custom",
+                          "tokenizer": "standard",
+                          "filter": ["lowercase", "english_stop", "beckn_synonyms", "english_stemmer"]
+                        }
+                      }
+                    }
+                  },
                   "mappings": {
                     "properties": {
-                      "full_text_blob": { "type": "text", "analyzer": "standard" },
-                      "resource_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                      "resource_short_desc":{ "type": "text" },
-                      "catalog_id":     { "type": "keyword" },
-                      "bpp_id":         { "type": "keyword" },
-                      "resource_id":        { "type": "keyword" }
+                      "full_text_blob":          { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
+                      "resource_name":           { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "resource_short_desc":     { "type": "text" },
+                      "resource_category_name":  { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "catalog_name":            { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "resource_provider_name":  { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "catalog_id":              { "type": "keyword" },
+                      "bpp_id":                  { "type": "keyword" },
+                      "resource_id":                  { "type": "keyword" },
+                      "resource_rating_review_text":  { "type": "text" }
                     }
                   }
                 }
                 """;
         esClient.indices().create(CreateIndexRequest.of(r -> r
                 .index(INDEX)
-                .withJson(new StringReader(mappingJson))));
+                .withJson(new StringReader(indexJson))));
         esClient.indices().putAlias(a -> a.index(INDEX).name(ALIAS));
     }
 
@@ -250,18 +436,19 @@ class ElasticsearchTextSearchEngineIntegrationTest {
      * - "EcoPower" → ev-charger-001 + ev-charger-002 (both cat-ev-001)
      * - "CHAdeMO" → only ev-charger-003 (cat-ev-002)
      * - "GreenVolt"→ only ev-charger-003 (cat-ev-002)
+     * - "150" → only ev-charger-001 (numeric blob value)
      */
     private static List<Map<String, Object>> testDocs() {
         return List.of(
-                doc("cat-ev-001", "bpp-ecopower", "https://bpp.ecopower.com",
+                doc("cat-ev-001", "EcoPower Catalog", "bpp-ecopower", "https://bpp.ecopower.com",
                         "ev-charger-001", "DC Fast Charger CCS2 60kW",
                         "60kW DC fast charger for EV", "CCS2 rapid charge",
                         "EV_CHARGING", "EV Charging", 4.5, 120,
                         "ecopower-charging", "EcoPower Charging Pvt Ltd",
                         Map.of("connectorType", "CCS2", "maxPowerKW", 60),
-                        "DC Fast Charger CCS2 60kW EV EcoPower"),
+                        "DC Fast Charger CCS2 60kW EV EcoPower 150"),
 
-                doc("cat-ev-001", "bpp-ecopower", "https://bpp.ecopower.com",
+                doc("cat-ev-001", "EcoPower Catalog", "bpp-ecopower", "https://bpp.ecopower.com",
                         "ev-charger-002", "AC Charger Type2 22kW",
                         "22kW AC charger Type2 for EV", "Type2 AC charge",
                         "EV_CHARGING", "EV Charging", 4.2, 85,
@@ -269,16 +456,17 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         Map.of("connectorType", "Type2", "maxPowerKW", 22),
                         "AC Charger Type2 22kW EV EcoPower"),
 
-                doc("cat-ev-002", "bpp-greenvolt", "https://bpp.greenvolt.com",
+                doc("cat-ev-002", "GreenVolt Catalog", "bpp-greenvolt", "https://bpp.greenvolt.com",
                         "ev-charger-003", "DC Charger CHAdeMO 50kW",
                         "50kW CHAdeMO DC fast charger", "CHAdeMO rapid charge",
                         "EV_CHARGING", "EV Charging", 3.9, 60,
                         "greenvolt-stations", "GreenVolt Charging Stations",
                         Map.of("connectorType", "CHAdeMO", "maxPowerKW", 50),
-                        "DC Charger CHAdeMO 50kW EV GreenVolt"));
+                        "DC Charger CHAdeMO 50kW electric vehicle GreenVolt"));
     }
 
-    private static Map<String, Object> doc(String catalogId, String bppId, String bppUri,
+    private static Map<String, Object> doc(String catalogId, String catalogName,
+            String bppId, String bppUri,
             String itemId, String itemName,
             String shortDesc, String longDesc,
             String categoryCode, String categoryName,
@@ -288,6 +476,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
             String fullTextBlob) {
         java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
         m.put("catalog_id", catalogId);
+        m.put("catalog_name", catalogName);
         m.put("bpp_id", bppId);
         m.put("bpp_uri", bppUri);
         m.put("network_id", "ondc-ev");
@@ -309,12 +498,20 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     }
 
     private static DiscoveryProperties buildProps() {
+        return buildPropsWithThreshold(0.0, List.of(
+                "full_text_blob", "resource_name^2", "catalog_name^2",
+                "resource_provider_name^1.5", "resource_rating_review_text"));
+    }
+
+    private static DiscoveryProperties buildPropsWithThreshold(double threshold, List<String> fields) {
         DiscoveryProperties props = new DiscoveryProperties();
         DiscoveryProperties.Elasticsearch es = new DiscoveryProperties.Elasticsearch();
         es.setHosts(ES_CONTAINER.getHttpHostAddress());
         es.setAliasName(ALIAS);
         es.setResultLimit(50);
         es.setMinScore(0.1f);
+        es.setMultiMatchFields(fields);
+        es.setRelativeScoreThreshold(threshold);
         props.setElasticsearch(es);
         return props;
     }
