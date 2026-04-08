@@ -14,6 +14,8 @@ import org.beckn.catalogpublish.util.FieldExtractor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -67,6 +69,7 @@ public class OfferResolutionStep {
      * @param ctx                 the publishing BPP's catalog context (NOT used for item BPP identity)
      * @return list of resolved items with their updated payloads; never null
      */
+    @Transactional(propagation = Propagation.MANDATORY)
     public List<ResolvedItem> resolveCrossBppOffers(
             Map<String, JsonNode> incomingOfferById,
             Set<String> alreadyHandledIds,
@@ -147,12 +150,13 @@ public class OfferResolutionStep {
                 if (existing != null) mergedOfferIds.addAll(Arrays.asList(existing));
                 if (newOfferIds != null) mergedOfferIds.addAll(Arrays.asList(newOfferIds));
 
-                // Preserve the original item's BPP identity — never overwrite with the publishing BPP
+                // Preserve the original item's BPP identity — never overwrite with the publishing BPP.
+                // contextNode is null: the publishing BPP's context must not leak into another BPP's item.
                 var originalCtx = new CatalogContext(
                         existingItem.getBppId(),
                         existingItem.getBppUri(),
                         existingItem.getNetworkIds(),
-                        ctx.contextNode());
+                        null);
 
                 Item updatedItem = Item.from(
                         existingItem.getId(),

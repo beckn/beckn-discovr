@@ -36,7 +36,7 @@ public class ItemPayloadBuilder {
         ObjectNode slice = objectMapper.createObjectNode();
         catalogNode.fields().forEachRemaining(e -> {
             // Exclude items/resources (per-item data) and offers — added back per-item in buildDenormalizedPayloadFromSlice
-            if (!BecknFields.ITEMS.equals(e.getKey()) && !BecknFields.RESOURCES.equals(e.getKey())
+            if (!"items".equals(e.getKey()) && !BecknFields.RESOURCES.equals(e.getKey())
                     && !BecknFields.OFFERS.equals(e.getKey()))
                 slice.set(e.getKey(), e.getValue());
         });

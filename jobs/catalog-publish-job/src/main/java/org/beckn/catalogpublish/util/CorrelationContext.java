@@ -27,8 +27,7 @@ public class CorrelationContext {
     public void populate(CatalogContext ctx, String messageId) {
         String mid = (messageId != null && !messageId.isBlank()) ? messageId : null;
         String txnId = ctx.contextNode() != null
-                ? ctx.contextNode().path("transactionId").asText(
-                        ctx.contextNode().path("transaction_id").asText("unknown"))
+                ? ctx.contextNode().path("transactionId").asText("unknown")
                 : "unknown";
         MDC.put(MdcField.MESSAGE_ID, mid != null ? mid : "unknown");
         MDC.put(MdcField.BPP_ID, ctx.bppId() != null ? ctx.bppId() : "unknown");

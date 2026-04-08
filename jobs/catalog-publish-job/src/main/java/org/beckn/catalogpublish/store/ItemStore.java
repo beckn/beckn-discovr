@@ -15,6 +15,6 @@ public interface ItemStore {
     /** Finds items by their IDs across all BPPs. Used by Phase 3 cross-BPP offer resolution. */
     List<Item> findAllByIdIn(List<String> itemIds);
 
-    /** Deletes all items belonging to the given catalog and BPP. Used by FULL replace mode. */
-    void deleteByCatalogIdAndBppId(String catalogId, String bppId);
+    /** Deletes all items belonging to the given catalog and BPP. Used by FULL replace mode. Returns count of deleted rows. */
+    int deleteByCatalogIdAndBppId(String catalogId, String bppId);
 }

@@ -11,6 +11,7 @@ import org.beckn.catalogpublish.indexing.document.CatalogDocumentAssembler;
 import org.beckn.catalogpublish.indexing.failure.EsFailurePublisher;
 import org.beckn.catalogpublish.model.Item;
 import org.beckn.catalogpublish.logging.LogEvent;
+import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.beckn.catalogpublish.service.embedding.EmbeddingClient;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.MdcSupport;
@@ -52,6 +53,7 @@ public class ElasticIndexStep {
     private final BulkIndexService bulkIndexService;
     private final EsFailurePublisher failurePublisher;
     private final EsIndexerMetrics metrics;
+    private final CatalogPublishMetrics publishMetrics;
     private final ObjectMapper mapper;
     private final int batchSize;
     private final Optional<EmbeddingClient> embeddingClient;
@@ -60,6 +62,7 @@ public class ElasticIndexStep {
             BulkIndexService bulkIndexService,
             EsFailurePublisher failurePublisher,
             EsIndexerMetrics metrics,
+            CatalogPublishMetrics publishMetrics,
             ObjectMapper mapper,
             AppProperties props,
             Optional<EmbeddingClient> embeddingClient) {
@@ -67,6 +70,7 @@ public class ElasticIndexStep {
         this.bulkIndexService = bulkIndexService;
         this.failurePublisher = failurePublisher;
         this.metrics = metrics;
+        this.publishMetrics = publishMetrics;
         this.mapper = mapper;
         this.batchSize = props.catalog().elasticsearch().bulkBatchSize();
         this.embeddingClient = embeddingClient;
@@ -85,7 +89,8 @@ public class ElasticIndexStep {
         // FULL replace: delete all existing ES documents for this catalog+bpp before indexing fresh ones.
         // This runs after the DB transaction has committed, so the DB is already clean.
         if (batch.fullReplace()) {
-            bulkIndexService.deleteByCatalogAndBpp(batch.catalogId(), batch.context().bppId());
+            long esDeleted = bulkIndexService.deleteByCatalogAndBpp(batch.catalogId(), batch.context().bppId());
+            publishMetrics.recordFullReplaceEsDeleted(esDeleted);
         }
 
         Map<String, List<Map<String, Object>>> bySchemaType = new LinkedHashMap<>();
@@ -141,10 +146,11 @@ public class ElasticIndexStep {
     }
 
     private void publishFailures(String schemaType, BulkIndexResult result, CatalogBatch batch) {
+        // O(1) lookup per failure instead of O(n) linear scan
+        Map<String, Item> itemById = batch.savedItems().stream()
+                .collect(java.util.stream.Collectors.toMap(Item::getId, i -> i, (a, b) -> a));
         result.failed().forEach(failedDoc -> {
-            Item item = batch.savedItems().stream()
-                    .filter(i -> failedDoc.itemId().equals(i.getId()))
-                    .findFirst().orElse(null);
+            Item item = itemById.get(failedDoc.itemId());
             JsonNode payloadNode = item != null ? batch.payloadNodes().get(item.getId()) : null;
             String payloadJson = toJson(payloadNode);
             failurePublisher.publishFailures(schemaType, payloadJson, List.of(failedDoc));

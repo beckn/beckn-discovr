@@ -21,5 +21,5 @@ public interface ItemLocationCollectionJpaRepository
             SELECT id FROM item WHERE catalog_id = :catalogId AND bpp_id = :bppId
         )
         """, nativeQuery = true)
-    void deleteByCatalogIdAndBppId(@Param("catalogId") String catalogId, @Param("bppId") String bppId);
+    int deleteByCatalogIdAndBppId(@Param("catalogId") String catalogId, @Param("bppId") String bppId);
 }

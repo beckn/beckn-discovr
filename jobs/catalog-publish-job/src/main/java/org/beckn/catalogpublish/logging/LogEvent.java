@@ -44,5 +44,9 @@ public final class LogEvent {
     public static final String OFFER_RESOLVE_SKIPPED   = "offer.resolve.skipped";
 
     // FULL replace
-    public static final String FULL_REPLACE_DELETED = "full.replace.deleted";
+    public static final String FULL_REPLACE_DELETED    = "full.replace.deleted";
+    public static final String FULL_REPLACE_ES_DELETED = "full.replace.es.deleted";
+
+    // Merge mode
+    public static final String MERGE_COMPLETED = "merge.completed";
 }
