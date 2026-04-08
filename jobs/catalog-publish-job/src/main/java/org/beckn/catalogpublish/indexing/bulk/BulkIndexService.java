@@ -43,6 +43,26 @@ public class BulkIndexService {
         this.retryInitialDelayMs = props.catalog().elasticsearch().retryInitialDelayMs();
     }
 
+    /**
+     * Deletes all ES documents matching the given catalogId and bppId across all index patterns.
+     * Used by FULL replace mode to remove stale documents before re-indexing.
+     */
+    public void deleteByCatalogAndBpp(String catalogId, String bppId) {
+        try {
+            esClient.deleteByQuery(d -> d
+                    .index("beckn-catalog-*")
+                    .query(q -> q.bool(b -> b
+                            .must(m -> m.term(t -> t.field("catalog_id").value(catalogId)))
+                            .must(m -> m.term(t -> t.field("bpp_id").value(bppId)))
+                    ))
+            );
+            log.info("event=es.delete-by-query catalogId={} bppId={}", catalogId, bppId);
+        } catch (Exception e) {
+            log.error("event=es.delete-by-query.failed catalogId={} bppId={} error={}",
+                    catalogId, bppId, ErrorSanitizer.sanitize(e));
+        }
+    }
+
     public BulkIndexResult index(String indexKey, List<Map<String, Object>> docs) {
         if (docs.isEmpty()) return new BulkIndexResult(List.of(), List.of());
 

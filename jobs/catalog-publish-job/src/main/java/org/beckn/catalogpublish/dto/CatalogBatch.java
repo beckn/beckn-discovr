@@ -21,7 +21,8 @@ public record CatalogBatch(
     CatalogOperation operation,
     List<Item> savedItems,
     List<ProcessingError> errors,
-    Map<String, JsonNode> payloadNodes
+    Map<String, JsonNode> payloadNodes,
+    boolean fullReplace
 ) {
     public boolean hasErrors() {
         return !errors.isEmpty();

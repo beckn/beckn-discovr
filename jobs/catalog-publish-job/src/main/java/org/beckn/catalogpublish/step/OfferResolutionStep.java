@@ -133,7 +133,7 @@ public class OfferResolutionStep {
 
                     if (payloadOfferIndex == null) payloadOfferIndex = mergeService.buildOfferIndex(payload);
                     mergeService.mergeOfferIntoPayload(
-                            payload, mergeService.stripNulls(offer), offerId, payloadOfferIndex);
+                            payload, offer, offerId, payloadOfferIndex);
                     changed = true;
                 }
 

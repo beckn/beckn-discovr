@@ -42,4 +42,7 @@ public final class LogEvent {
     // Phase 3: cross-BPP offer resolution
     public static final String OFFER_RESOLVE_COMPLETED = "OFFER_RESOLVE_COMPLETED";
     public static final String OFFER_RESOLVE_SKIPPED   = "OFFER_RESOLVE_SKIPPED";
+
+    // FULL replace
+    public static final String FULL_REPLACE_DELETED = "FULL_REPLACE_DELETED";
 }
