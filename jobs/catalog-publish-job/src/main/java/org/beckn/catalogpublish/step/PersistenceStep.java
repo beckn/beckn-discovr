@@ -159,9 +159,11 @@ public class PersistenceStep {
                 Item existing = existingById.get(itemId);
                 JsonNode payload;
                 if (existing != null) {
-                    // Upsert path: RFC 7396 merge-patch — null means "delete this field".
-                    // BPPs that want to remove a field send explicit null; omission preserves the stored value.
-                    payload = mergeService.mergeItemPayload(existing.getPayload(), itemNode);
+                    // Replace payload with incoming resource. Catalg already resolved the
+                    // complete resource (master-wins merge, RFC 7396 field deletion, etc.)
+                    // before distributing. Merging here would resurrect deleted fields from
+                    // the existing DB payload.
+                    payload = payloadBuilder.buildDenormalizedPayloadFromSlice(baseSlice, itemNode, offerIndex, itemId);
 
                     // Determine which incoming offers apply to this item.
                     // Primary source of truth: the offer_ids DB column (tracks all linked offers
