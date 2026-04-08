@@ -2,6 +2,9 @@
 
 ## The Big Picture
 
+> **Note:** Catalg and Discovr have **separate infrastructure** — they do not share databases, Kafka, or Elasticsearch.
+> Discovr can be **self-hosted by a BAP** — it is not a centralized service. Any BAP can run their own Discovr instance for full control over search, ranking, and performance.
+
 ```mermaid
 flowchart TB
     subgraph NETWORK["Beckn Network: openretail.org/electronics-india"]
@@ -12,37 +15,40 @@ flowchart TB
             SANG["Sangeetha<br/>BPP + ONIX"]
         end
 
-        subgraph CATALG["Beckn Catalg (Catalog Management)"]
+        subgraph CATALG["Beckn Catalg (Catalog Management) — BPP side"]
             PUBAPI["Publish API<br/>POST /catalog/publish"]
             SUBAPI["Subscription API<br/>POST /catalog/subscription"]
             INDEXER["Catalog Indexer"]
             CATDB[("Catalg DB<br/>(catalog master)")]
+            CATKAFKA["Catalg Kafka"]
         end
 
-        subgraph DISCOVR["Beckn Discovr (Discovery Engine)"]
-            subgraph PUBLISH_JOB["Catalog Publish Job :8085"]
-                PUSH["POST /catalog/push"]
-                PUBCONSUMER["Consumer<br/>Parse → Validate → Persist"]
+        subgraph BAP_HOSTED["Hosted by BAP (or shared infra)"]
+            subgraph DISCOVR["Beckn Discovr (Discovery Engine)"]
+                subgraph PUBLISH_JOB["Catalog Publish Job :8085"]
+                    PUSH["POST /catalog/push"]
+                    PUBCONSUMER["Consumer<br/>Parse → Validate → Persist"]
+                end
+
+                subgraph DISCOVER_JOB["Catalog Discover Job :8082"]
+                    DISCAPI["POST /beckn/discover"]
+                    DISCONSUMER["Discovery Consumer"]
+                    QE["Query Engine"]
+                    PIPELINE["Catalog Pipeline<br/>Filter → Dedup → Prune"]
+                    RESP["Response Processor"]
+                end
+
+                subgraph DISPATCHER["Response Dispatcher"]
+                    LISTENER["Event Listener"]
+                    SIGNER["Signature Service"]
+                end
             end
 
-            subgraph DISCOVER_JOB["Catalog Discover Job :8082"]
-                DISCAPI["POST /beckn/discover"]
-                DISCONSUMER["Discovery Consumer"]
-                QE["Query Engine"]
-                PIPELINE["Catalog Pipeline<br/>Filter → Dedup → Prune"]
-                RESP["Response Processor"]
+            subgraph DISCOVR_INFRA["Discovr Infrastructure (separate from Catalg)"]
+                DKAFKA["Discovr Kafka"]
+                PG[("PostgreSQL<br/>+ PostGIS")]
+                ES[("Elasticsearch")]
             end
-
-            subgraph DISPATCHER["Response Dispatcher"]
-                LISTENER["Event Listener"]
-                SIGNER["Signature Service"]
-            end
-        end
-
-        subgraph INFRA["Infrastructure"]
-            KAFKA["Apache Kafka"]
-            PG[("PostgreSQL<br/>+ PostGIS")]
-            ES[("Elasticsearch")]
         end
 
         subgraph BAPS["BAPs (Apps)"]
@@ -56,37 +62,40 @@ flowchart TB
         REG["Network Registry<br/>Public Keys & Subscriber Info"]
     end
 
-    %% Publish flow
+    %% Publish flow — BPP to Catalg
     CROMA -->|"1. catalog/publish"| PUBAPI
     AMAZON -->|"1. catalog/publish"| PUBAPI
     SANG -->|"1. catalog/publish"| PUBAPI
 
     PUBAPI --> INDEXER
     INDEXER --> CATDB
-    INDEXER -->|"push indexed data"| PUSH
 
-    PUSH -->|"to Kafka"| KAFKA
-    KAFKA -->|"consume"| PUBCONSUMER
+    %% Catalg pushes to Discovr (cross-system boundary)
+    INDEXER -->|"2. push indexed data<br/>(HTTP)"| PUSH
+
+    %% Discovr internal flow
+    PUSH -->|"to Kafka"| DKAFKA
+    DKAFKA -->|"consume"| PUBCONSUMER
     PUBCONSUMER -->|"index"| ES
     PUBCONSUMER -->|"persist"| PG
 
     %% Discover flow
-    PRICE -->|"5. discover"| DISCAPI
-    PAYTM -->|"5. discover"| DISCAPI
-    DISCAPI -->|"to Kafka"| KAFKA
-    KAFKA -->|"consume"| DISCONSUMER
+    PRICE -->|"3. discover"| DISCAPI
+    PAYTM -->|"3. discover"| DISCAPI
+    DISCAPI -->|"to Kafka"| DKAFKA
+    DKAFKA -->|"consume"| DISCONSUMER
     DISCONSUMER --> QE
     QE -->|"spatial"| PG
     QE -->|"text search"| ES
     QE --> PIPELINE
     PIPELINE --> RESP
-    RESP -->|"to Kafka"| KAFKA
+    RESP -->|"to Kafka"| DKAFKA
 
     %% Response dispatch
-    KAFKA -->|"consume"| LISTENER
+    DKAFKA -->|"consume"| LISTENER
     LISTENER --> SIGNER
-    SIGNER -->|"6. on_discover<br/>(signed)"| PRICE
-    SIGNER -->|"6. on_discover<br/>(signed)"| PAYTM
+    SIGNER -->|"4. on_discover<br/>(signed)"| PRICE
+    SIGNER -->|"4. on_discover<br/>(signed)"| PAYTM
 
     %% Trust layer
     SIGNER -.->|"lookup public key"| REG
@@ -96,7 +105,8 @@ flowchart TB
     style BAPS fill:#e0f7fa,stroke:#00838f
     style CATALG fill:#fff3e0,stroke:#e65100
     style DISCOVR fill:#e8f5e9,stroke:#2e7d32
-    style INFRA fill:#f5f5f5,stroke:#616161
+    style DISCOVR_INFRA fill:#f5f5f5,stroke:#616161
+    style BAP_HOSTED fill:#e8f5e9,stroke:#2e7d32,stroke-dasharray: 5 5
     style DEDI fill:#fce4ec,stroke:#c62828
 ```
 
@@ -311,29 +321,33 @@ flowchart TD
 
 ## Where Each System Lives
 
+> Catalg and Discovr run on **separate infrastructure**. Discovr can be hosted by the BAP, a shared infra provider, or independently.
+
 ```mermaid
 flowchart LR
     subgraph BPP_SERVER["Croma's Server"]
         BPP_APP["Croma Backend"]
-        BPP_ONIX["ONIX<br/>(signs & verifies)"]
+        BPP_ONIX["ONIX"]
     end
 
-    subgraph CATALG_SERVER["Catalg Server"]
-        CATALG["Beckn Catalg<br/>(catalog management)"]
-    end
-
-    subgraph DISCOVR_SERVER["Discovr Server"]
-        PUB["Publish Job"]
-        DISC["Discover Job"]
-        DISP["Response Dispatcher"]
-        KF["Kafka"]
-        PG["PostgreSQL"]
-        ES["Elasticsearch"]
+    subgraph CATALG_SERVER["Catalg Server (BPP-side infra)"]
+        CATALG["Beckn Catalg"]
+        CATALG_DB["Catalg DB"]
+        CATALG_KF["Catalg Kafka"]
     end
 
     subgraph BAP_SERVER["PriceHunt's Server"]
         BAP_APP["PriceHunt Backend"]
-        BAP_ONIX["ONIX<br/>(signs & verifies)"]
+        BAP_ONIX["ONIX"]
+
+        subgraph DISCOVR_SERVER["Discovr (BAP can self-host)"]
+            PUB["Publish Job"]
+            DISC["Discover Job"]
+            DISP["Response Dispatcher"]
+            KF["Discovr Kafka"]
+            PG["PostgreSQL"]
+            ES["Elasticsearch"]
+        end
     end
 
     subgraph TRUST["DeDi Global"]
@@ -341,9 +355,9 @@ flowchart LR
     end
 
     BPP_ONIX -->|"publish"| CATALG
-    CATALG -->|"push"| PUB
-    BAP_ONIX -->|"discover"| DISC
-    DISP -->|"on_discover"| BAP_ONIX
+    CATALG -->|"HTTP push"| PUB
+    BAP_APP -->|"discover"| DISC
+    DISP -->|"on_discover"| BAP_APP
 
     BPP_ONIX -.->|"register keys"| REGISTRY
     BAP_ONIX -.->|"register keys"| REGISTRY
@@ -352,6 +366,16 @@ flowchart LR
     style BPP_SERVER fill:#e3f2fd,stroke:#1565c0
     style BAP_SERVER fill:#e0f7fa,stroke:#00838f
     style CATALG_SERVER fill:#fff3e0,stroke:#e65100
-    style DISCOVR_SERVER fill:#e8f5e9,stroke:#2e7d32
+    style DISCOVR_SERVER fill:#e8f5e9,stroke:#2e7d32,stroke-dasharray: 5 5
     style TRUST fill:#fce4ec,stroke:#c62828
 ```
+
+### Hosting Options for Discovr
+
+| Option | Who runs Discovr | Example |
+|--------|-----------------|---------|
+| **BAP self-hosts** | The BAP runs its own Discovr instance | PriceHunt runs Discovr on their own AWS/GCP — full control over search tuning, ranking, performance |
+| **Shared infra** | A third party hosts Discovr for multiple BAPs | A cloud provider offers "Beckn Discovery as a Service" |
+| **NFO-provided** | The NFO hosts a shared Discovr for the network | ONDC runs a shared discovery layer for all BAPs on their network |
+
+The BAP chooses based on their needs — a large BAP like Paytm would self-host for control, while a small startup might use shared infra.
