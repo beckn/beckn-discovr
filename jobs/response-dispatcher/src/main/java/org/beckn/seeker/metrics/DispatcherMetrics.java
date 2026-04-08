@@ -20,8 +20,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class DispatcherMetrics {
 
-    private static final String METRIC_MESSAGES_TOTAL    = "dispatcher.messages.total";
-    private static final String METRIC_CALLBACK_DURATION = "dispatcher.callback.duration";
+    private static final String METRIC_MESSAGES_TOTAL    = "discovr.dispatcher.messages.total";
+    private static final String METRIC_CALLBACK_DURATION = "discovr.dispatcher.callback.duration";
 
     private static final String TAG_STATUS       = "status";
     private static final String TAG_OUTCOME      = "outcome";

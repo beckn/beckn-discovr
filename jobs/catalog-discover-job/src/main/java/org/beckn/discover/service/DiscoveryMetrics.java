@@ -66,28 +66,28 @@ public class DiscoveryMetrics {
     private final AtomicLong totalProcessingTime = new AtomicLong();
 
     public DiscoveryMetrics(MeterRegistry meterRegistry) {
-        this.totalRequestsCounter = Counter.builder("discovery.requests.total")
+        this.totalRequestsCounter = Counter.builder("discovr.discover.requests.total")
                 .description("Total discovery requests received")
                 .register(meterRegistry);
-        this.successCounter = Counter.builder("discovery.requests.success")
+        this.successCounter = Counter.builder("discovr.discover.requests.success")
                 .description("Successful discovery requests")
                 .register(meterRegistry);
-        this.failureCounter = Counter.builder("discovery.requests.failure")
+        this.failureCounter = Counter.builder("discovr.discover.requests.failure")
                 .description("Failed discovery requests")
                 .register(meterRegistry);
-        this.processingTimer = Timer.builder("discovery.processing.duration")
+        this.processingTimer = Timer.builder("discovr.discover.processing.duration")
                 .description("Discovery request processing duration")
                 .register(meterRegistry);
 
         this.searchTimers = Map.of(
-                ENGINE_POSTGRES,      Timer.builder("discovery.search.duration").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
-                ENGINE_ELASTICSEARCH, Timer.builder("discovery.search.duration").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
-                ENGINE_NLWEB,         Timer.builder("discovery.search.duration").tag("engine", ENGINE_NLWEB).register(meterRegistry)
+                ENGINE_POSTGRES,      Timer.builder("discovr.discover.search.duration").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
+                ENGINE_ELASTICSEARCH, Timer.builder("discovr.discover.search.duration").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
+                ENGINE_NLWEB,         Timer.builder("discovr.discover.search.duration").tag("engine", ENGINE_NLWEB).register(meterRegistry)
         );
         this.resultSummaries = Map.of(
-                ENGINE_POSTGRES,      DistributionSummary.builder("discovery.results.count").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
-                ENGINE_ELASTICSEARCH, DistributionSummary.builder("discovery.results.count").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
-                ENGINE_NLWEB,         DistributionSummary.builder("discovery.results.count").tag("engine", ENGINE_NLWEB).register(meterRegistry)
+                ENGINE_POSTGRES,      DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
+                ENGINE_ELASTICSEARCH, DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
+                ENGINE_NLWEB,         DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_NLWEB).register(meterRegistry)
         );
     }
 
