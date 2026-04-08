@@ -46,20 +46,27 @@ public class BulkIndexService {
     /**
      * Deletes all ES documents matching the given catalogId and bppId across all index patterns.
      * Used by FULL replace mode to remove stale documents before re-indexing.
+     *
+     * @return number of documents deleted
+     * @throws RuntimeException if the delete fails — caller must handle (FULL replace cannot proceed with stale docs)
      */
-    public void deleteByCatalogAndBpp(String catalogId, String bppId) {
+    public long deleteByCatalogAndBpp(String catalogId, String bppId) {
         try {
-            esClient.deleteByQuery(d -> d
+            var response = esClient.deleteByQuery(d -> d
                     .index("beckn-catalog-*")
                     .query(q -> q.bool(b -> b
                             .must(m -> m.term(t -> t.field("catalog_id").value(catalogId)))
                             .must(m -> m.term(t -> t.field("bpp_id").value(bppId)))
                     ))
             );
-            log.info("event=es.delete-by-query catalogId={} bppId={}", catalogId, bppId);
+            long deleted = response.deleted() != null ? response.deleted() : 0;
+            log.info("event={} catalogId={} bppId={} deletedDocs={}",
+                    LogEvent.FULL_REPLACE_ES_DELETED, catalogId, bppId, deleted);
+            return deleted;
         } catch (Exception e) {
-            log.error("event=es.delete-by-query.failed catalogId={} bppId={} error={}",
-                    catalogId, bppId, ErrorSanitizer.sanitize(e));
+            log.error("event={} catalogId={} bppId={} error={}",
+                    LogEvent.ES_FAILED, catalogId, bppId, ErrorSanitizer.sanitize(e));
+            throw new RuntimeException("ES deleteByQuery failed for FULL replace: " + catalogId, e);
         }
     }
 

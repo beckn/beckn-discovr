@@ -72,7 +72,13 @@ public class EsFailureConsumer {
             msg = mapper.readValue(json, EsFailureMessage.class);
         } catch (Exception e) {
             log.error("event={} reason=parse-error error={}", LogEvent.CONSUMER_ERROR, ErrorSanitizer.sanitize(e));
-            return; // commit offset — malformed message cannot be retried
+            // Route unparseable message to DLQ so operators can investigate — don't silently drop
+            try {
+                kafka.send(finalDlqTopic, "unknown", json);
+            } catch (Exception dlqErr) {
+                log.error("event={} reason=dlq-publish-failed error={}", LogEvent.KAFKA_FAILED, ErrorSanitizer.sanitize(dlqErr));
+            }
+            return;
         }
 
         if (msg.attempt() >= maxAttempts) {

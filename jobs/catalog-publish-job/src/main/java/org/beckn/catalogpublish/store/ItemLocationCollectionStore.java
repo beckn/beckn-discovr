@@ -8,6 +8,6 @@ public interface ItemLocationCollectionStore {
 
     void saveLocations(List<ItemLocationCollection> locations);
 
-    /** Deletes all location records for items belonging to the given catalog and BPP. Used by FULL replace mode. */
-    void deleteByCatalogIdAndBppId(String catalogId, String bppId);
+    /** Deletes all location records for items belonging to the given catalog and BPP. Used by FULL replace mode. Returns count of deleted rows. */
+    int deleteByCatalogIdAndBppId(String catalogId, String bppId);
 }

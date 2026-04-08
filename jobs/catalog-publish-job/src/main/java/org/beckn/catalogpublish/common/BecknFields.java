@@ -40,9 +40,6 @@ public final class BecknFields {
 
     // ── Catalog / Item fields ─────────────────────────────────────────────────
     public static final String ID              = "id";
-    /** @deprecated Retained only for excluding legacy field from copies. All new writes use RESOURCES. */
-    @Deprecated
-    public static final String ITEMS           = "items";
     public static final String OFFERS          = "offers";
     public static final String DESCRIPTOR      = "descriptor";
     public static final String PROVIDER        = "provider";
@@ -63,6 +60,10 @@ public final class BecknFields {
     public static final String CONSTRAINTS     = "constraints";
     public static final String POLICIES        = "policies";
 
+    // ── Publish directives ────────────────────────────────────────────────────
+    public static final String PUBLISH_DIRECTIVES = "publishDirectives";
+    public static final String UPDATE_MODE        = "updateMode";
+
     // ── Publish-specific fields ──────────────────────────────────────────────
     public static final String CATALOG         = "catalog";
     public static final String CATALOGS        = "catalogs";
@@ -74,15 +75,6 @@ public final class BecknFields {
     public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
     public static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
 
-    // ── Context V1.0 field names (snake_case — legacy Beckn v1.x) ────────────
-    public static final String BAP_ID_V1         = "bap_id";
-    public static final String BAP_URI_V1        = "bap_uri";
-    public static final String BPP_ID_V1         = "bpp_id";
-    public static final String BPP_URI_V1        = "bpp_uri";
-    public static final String MESSAGE_ID_V1     = "message_id";
-    public static final String TRANSACTION_ID_V1 = "transaction_id";
-    public static final String DOMAIN_V1         = "domain";
-    public static final String LOCATION_V1       = "location";
 
     // ── Context V2.0 new fields ───────────────────────────────────────────────
     public static final String TRY              = "try";

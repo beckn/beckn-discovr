@@ -149,7 +149,7 @@ public class CatalogPublishPayloadAssembler {
         // Copy catalog-level fields; items and offers are assembled below.
         ObjectNode catalogNode = objectMapper.createObjectNode();
         catalogTemplate.fields().forEachRemaining(entry -> {
-            if (!BecknFields.ITEMS.equals(entry.getKey()) && !BecknFields.RESOURCES.equals(entry.getKey())
+            if (!"items".equals(entry.getKey()) && !BecknFields.RESOURCES.equals(entry.getKey())
                     && !BecknFields.OFFERS.equals(entry.getKey())) {
                 catalogNode.set(entry.getKey(), entry.getValue());
             }
