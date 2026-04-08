@@ -139,7 +139,26 @@ public class EsIndexManager {
                   "template": {
                     "settings": {
                       "index.mapping.total_fields.limit": %d,
-                      "index.mapping.depth.limit": %d
+                      "index.mapping.depth.limit": %d,
+                      "analysis": {
+                        "filter": {
+                          "english_stop":    { "type": "stop",    "stopwords": "_english_" },
+                          "english_stemmer": { "type": "stemmer", "language": "english" },
+                          "beckn_synonyms":  { "type": "synonym", "lenient": true, "synonyms": ["ev, electric vehicle", "charger, charging station", "kw, kilowatt", "logistics, shipping, delivery", "parcel, package, shipment", "organic, natural", "vegan, plant-based", "discount, offer, deal", "cod, cash delivery"] }
+                        },
+                        "analyzer": {
+                          "beckn_text": {
+                            "type": "custom",
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "english_stop", "english_stemmer"]
+                          },
+                          "beckn_text_search": {
+                            "type": "custom",
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "english_stop", "beckn_synonyms", "english_stemmer"]
+                          }
+                        }
+                      }
                     },
                     "mappings": {
                       "dynamic_templates": [
@@ -164,6 +183,16 @@ public class EsIndexManager {
                         "catalog_provider_id":     { "type": "keyword" },
                         "catalog_provider_name":   { "type": "text", "fields": { "raw": { "type": "keyword" } } },
                         "catalog_is_active":       { "type": "boolean" },
+                        "catalog_validity": {
+                          "type": "object",
+                          "properties": {
+                            "@type":     { "type": "keyword" },
+                            "startDate": { "type": "date" },
+                            "endDate":   { "type": "date" },
+                            "startTime": { "type": "keyword" },
+                            "endTime":   { "type": "keyword" }
+                          }
+                        },
                         "resource_id":                 { "type": "keyword" },
                         "resource_context":            { "type": "keyword" },
                         "resource_type":               { "type": "keyword" },
@@ -180,7 +209,7 @@ public class EsIndexManager {
                         "resource_descriptor_docs":            { "type": "nested" },
                         "resource_descriptor_media_file":      { "type": "nested" },
                         "resource_category_code":      { "type": "keyword" },
-                        "resource_category_name":      { "type": "keyword" },
+                        "resource_category_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
                         "resource_rating_value":       { "type": "float" },
                         "resource_rating_count":       { "type": "integer" },
                         "resource_rating_review_text": { "type": "text" },
@@ -213,7 +242,7 @@ public class EsIndexManager {
                         },
                         "schema_version":          { "type": "keyword" },
                         "offers":                  { "type": "nested" },
-                        "full_text_blob":          { "type": "text", "analyzer": "standard" },
+                        "full_text_blob":          { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
                         "indexed_at":              { "type": "date" },
                         "resource_vector":             { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }
                       }

@@ -407,6 +407,92 @@ class CatalogDocumentAssemblerTest {
         assertThat(networkId).containsExactly("net-only");
     }
 
+    // ── full_text_blob: numeric values ────────────────────────────────────────
+
+    @Test
+    void assemble_numericResourceAttributes_includedInTextBlob() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "@type": "beckn:Resource",
+                  "id": "item-ev-numeric",
+                  "descriptor": {"name": "EV Fast Charger"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {
+                    "@context": "https://example.org/ev.jsonld",
+                    "@type": "ChargingService",
+                    "powerKw": 150,
+                    "pricePerKwh": 12.5
+                  }
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "ChargingService");
+
+        String blob = (String) doc.get("full_text_blob");
+        assertThat(blob).contains("150");
+        assertThat(blob).contains("12.5");
+    }
+
+    // ── full_text_blob: boolean key names ─────────────────────────────────────
+
+    @Test
+    void assemble_booleanTrueResourceAttributes_keyNameIncludedInTextBlob() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "@type": "beckn:Resource",
+                  "id": "item-organic",
+                  "descriptor": {"name": "Organic Produce"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {
+                    "@context": "https://example.org/food.jsonld",
+                    "@type": "GroceryItem",
+                    "organic": true,
+                    "frozen": false
+                  }
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GroceryItem");
+
+        String blob = (String) doc.get("full_text_blob");
+        assertThat(blob).contains("organic");
+        assertThat(blob).doesNotContain("frozen");
+    }
+
+    // ── full_text_blob: deduplication ─────────────────────────────────────────
+
+    @Test
+    void assemble_duplicateTextInBlob_deduplicatedInOutput() throws Exception {
+        // resource_name "EV Charger" also appears in resourceAttributes.label — should appear once
+        JsonNode payload = buildPayload("""
+                {
+                  "@type": "beckn:Resource",
+                  "id": "item-dedup",
+                  "descriptor": {
+                    "name": "EV Charger",
+                    "shortDesc": "EV Charger"
+                  },
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {
+                    "@context": "https://example.org/ev.jsonld",
+                    "@type": "ChargingService",
+                    "label": "EV Charger"
+                  }
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "ChargingService");
+
+        String blob = (String) doc.get("full_text_blob");
+        // Split on space and count occurrences of "EV" to verify no duplicates from dedup
+        String[] tokens = blob.split("\\s+");
+        long count = java.util.Arrays.stream(tokens).filter("EV Charger"::equals).count();
+        // The full phrase won't occur as a single token, but we can count how many times
+        // "EV" appears — with LinkedHashSet dedup it should appear exactly once
+        long evCount = java.util.Arrays.stream(tokens).filter("EV"::equals).count();
+        assertThat(evCount).isEqualTo(1L);
+    }
+
     // ── full_text_blob includes constraints and policies text ─────────────────
 
     @Test
