@@ -22,4 +22,7 @@ public interface ItemJpaRepository extends JpaRepository<Item, ItemId> {
 
     /** Cross-BPP lookup by resource ID only — no BPP filter. Spring Data auto-derives the query. */
     List<Item> findAllByIdIn(List<String> ids);
+
+    /** Deletes all items for the given catalog and BPP. Used by FULL replace mode. Spring Data auto-derives. */
+    void deleteByCatalogIdAndBppId(String catalogId, String bppId);
 }

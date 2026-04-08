@@ -94,6 +94,21 @@ public class PersistenceStep {
         // Gap 2 fix: pass context node so context.schemaContext is used when item @type is absent
         String schemaType = FieldExtractor.extractSchemaType(catalogNode, ctx.contextNode());
 
+        // Read updateMode from publishDirectives — default is MERGE.
+        // FULL mode: delete all existing items for this catalog+bpp before inserting fresh ones.
+        var publishDirectives = catalogNode.path("publishDirectives");
+        var updateMode = publishDirectives.path("updateMode").asText("MERGE");
+        boolean isFullReplace = "FULL".equalsIgnoreCase(updateMode);
+
+        if (isFullReplace) {
+            // Delete locations BEFORE items — location subquery references item table
+            locationStore.deleteByCatalogIdAndBppId(catalogId, ctx.bppId());
+            itemStore.deleteByCatalogIdAndBppId(catalogId, ctx.bppId());
+            log.info(LogEvent.FULL_REPLACE_DELETED,
+                    net.logstash.logback.argument.StructuredArguments.value("catalogId", catalogId),
+                    net.logstash.logback.argument.StructuredArguments.value("bppId", ctx.bppId()));
+        }
+
         ObjectNode baseSlice = payloadBuilder.buildCatalogMetadataSlice(catalogNode, ctx);
         OfferIndex offerIndex = OfferIndex.build(allOffers, objectMapper);
 
@@ -144,10 +159,9 @@ public class PersistenceStep {
                 Item existing = existingById.get(itemId);
                 JsonNode payload;
                 if (existing != null) {
-                    // Upsert path: null-safe merge — strip nulls first so that a null in the
-                    // incoming publish payload means "no change" rather than RFC 7396 "delete".
-                    payload = mergeService.mergeItemPayload(existing.getPayload(),
-                            mergeService.stripNulls(itemNode));
+                    // Upsert path: RFC 7396 merge-patch — null means "delete this field".
+                    // BPPs that want to remove a field send explicit null; omission preserves the stored value.
+                    payload = mergeService.mergeItemPayload(existing.getPayload(), itemNode);
 
                     // Determine which incoming offers apply to this item.
                     // Primary source of truth: the offer_ids DB column (tracks all linked offers
@@ -167,7 +181,7 @@ public class PersistenceStep {
                             JsonNode incomingOffer = incomingOfferById.get(offerId);
                             if (incomingOffer != null)
                                 mergeService.mergeOfferIntoPayload(payload,
-                                        mergeService.stripNulls(incomingOffer), offerId, payloadOfferIndex);
+                                        incomingOffer, offerId, payloadOfferIndex);
                         }
                     }
                 } else {
@@ -229,7 +243,7 @@ public class PersistenceStep {
                             if (payloadOfferIndex == null)
                                 payloadOfferIndex = mergeService.buildOfferIndex(payload);
                             mergeService.mergeOfferIntoPayload(
-                                    payload, mergeService.stripNulls(incomingOffer),
+                                    payload, incomingOffer,
                                     linkedOfferId, payloadOfferIndex);
                             changed = true;
                         }
@@ -268,7 +282,7 @@ public class PersistenceStep {
         }
 
         if (built.isEmpty()) {
-            return new CatalogBatch(catalogId, ctx, schemaType, op, List.of(), List.copyOf(errors), Map.of());
+            return new CatalogBatch(catalogId, ctx, schemaType, op, List.of(), List.copyOf(errors), Map.of(), isFullReplace);
         }
 
         // Build a lookup map so we can pass the pre-parsed JsonNode to
@@ -289,7 +303,7 @@ public class PersistenceStep {
         log.info("event={} catalogId={} items={} locations={} errors={}",
                 LogEvent.PERSIST_COMPLETED, catalogId, savedItems.size(), allLocations.size(), errors.size());
         return new CatalogBatch(catalogId, ctx, schemaType, op,
-                List.copyOf(savedItems), List.copyOf(errors), Map.copyOf(payloadNodeById));
+                List.copyOf(savedItems), List.copyOf(errors), Map.copyOf(payloadNodeById), isFullReplace);
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────────

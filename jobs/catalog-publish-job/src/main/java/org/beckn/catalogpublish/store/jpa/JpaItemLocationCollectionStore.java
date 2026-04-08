@@ -26,4 +26,10 @@ public class JpaItemLocationCollectionStore implements ItemLocationCollectionSto
             repo.saveAll(locations);
         }
     }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void deleteByCatalogIdAndBppId(String catalogId, String bppId) {
+        repo.deleteByCatalogIdAndBppId(catalogId, bppId);
+    }
 }

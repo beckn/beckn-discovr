@@ -52,4 +52,10 @@ public class JpaItemStore implements ItemStore {
         }
         return results;
     }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void deleteByCatalogIdAndBppId(String catalogId, String bppId) {
+        repo.deleteByCatalogIdAndBppId(catalogId, bppId);
+    }
 }

@@ -82,6 +82,12 @@ public class ElasticIndexStep {
         if (!batch.hasItems())
             return;
 
+        // FULL replace: delete all existing ES documents for this catalog+bpp before indexing fresh ones.
+        // This runs after the DB transaction has committed, so the DB is already clean.
+        if (batch.fullReplace()) {
+            bulkIndexService.deleteByCatalogAndBpp(batch.catalogId(), batch.context().bppId());
+        }
+
         Map<String, List<Map<String, Object>>> bySchemaType = new LinkedHashMap<>();
         for (Item item : batch.savedItems()) {
             JsonNode payloadNode = batch.payloadNodes().get(item.getId());
