@@ -34,31 +34,31 @@ public class CatalogPublishMetrics {
         processingTimers = new EnumMap<>(CatalogOperation.class);
 
         for (CatalogOperation op : CatalogOperation.values()) {
-            successCounters.put(op, Counter.builder("catalog.publish.success")
+            successCounters.put(op, Counter.builder("discovr.publish.success")
                     .description("Kafka messages processed and acknowledged by the consumer")
                     .tag("op", op.name())
                     .register(registry));
-            failureCounters.put(op, Counter.builder("catalog.publish.failure")
+            failureCounters.put(op, Counter.builder("discovr.publish.failure")
                     .description("Kafka messages rejected at the consumer layer (parse/validation errors)")
                     .tag("op", op.name())
                     .register(registry));
-            processingTimers.put(op, Timer.builder("catalog.publish.message.duration")
+            processingTimers.put(op, Timer.builder("discovr.publish.message.duration")
                     .description("End-to-end processing time per Kafka message")
                     .tag("op", op.name())
                     .register(registry));
         }
 
-        batchPublishFailure = Counter.builder("catalog.batch.publish.failure")
+        batchPublishFailure = Counter.builder("discovr.publish.batch.failure")
                 .description("Catalog batches that failed during post-commit routing/assembly")
                 .register(registry);
 
-        offerResolveSuccess = Counter.builder("catalog.offer.resolve.success")
+        offerResolveSuccess = Counter.builder("discovr.publish.offer.resolve.success")
                 .description("Items updated via cross-BPP offer resolution (Phase 3)")
                 .register(registry);
-        offerResolveMissing = Counter.builder("catalog.offer.resolve.missing")
+        offerResolveMissing = Counter.builder("discovr.publish.offer.resolve.missing")
                 .description("Resource IDs referenced by offers but not found in DB")
                 .register(registry);
-        offerResolveFailed = Counter.builder("catalog.offer.resolve.failed")
+        offerResolveFailed = Counter.builder("discovr.publish.offer.resolve.failed")
                 .description("Items that failed during cross-BPP offer merge (Phase 3)")
                 .register(registry);
     }

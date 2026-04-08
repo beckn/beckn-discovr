@@ -4,25 +4,25 @@ public final class LogEvent {
     private LogEvent() {}
 
     // Consumer lifecycle
-    public static final String CONSUMER_RECEIVED  = "CONSUMER_RECEIVED";
-    public static final String CONSUMER_PROCESSED = "CONSUMER_PROCESSED";
-    public static final String CONSUMER_ERROR     = "CONSUMER_ERROR";
+    public static final String CONSUMER_RECEIVED  = "consumer.received";
+    public static final String CONSUMER_PROCESSED = "consumer.processed";
+    public static final String CONSUMER_ERROR     = "consumer.error";
 
     // Callback delivery
-    public static final String CALLBACK_RESOLVED         = "CALLBACK_RESOLVED";
-    public static final String CALLBACK_SENT             = "CALLBACK_SENT";
-    public static final String CALLBACK_ACK              = "CALLBACK_ACK";
-    public static final String CALLBACK_NACK             = "CALLBACK_NACK";
-    public static final String CALLBACK_ACK_NO_CALLBACK  = "CALLBACK_ACK_NO_CALLBACK";
-    public static final String CALLBACK_ERROR            = "CALLBACK_ERROR";
+    public static final String CALLBACK_RESOLVED         = "callback.resolved";
+    public static final String CALLBACK_SENT             = "callback.sent";
+    public static final String CALLBACK_ACK              = "callback.ack";
+    public static final String CALLBACK_NACK             = "callback.nack";
+    public static final String CALLBACK_ACK_NO_CALLBACK  = "callback.ack.no.callback";
+    public static final String CALLBACK_ERROR            = "callback.error";
 
     // Signature
-    public static final String SIGNATURE_INIT      = "SIGNATURE_INIT";
-    public static final String SIGNATURE_DISABLED  = "SIGNATURE_DISABLED";
-    public static final String SIGNATURE_GENERATED = "SIGNATURE_GENERATED";
-    public static final String SIGNATURE_FAILED    = "SIGNATURE_FAILED";
+    public static final String SIGNATURE_INIT      = "signature.init";
+    public static final String SIGNATURE_DISABLED  = "signature.disabled";
+    public static final String SIGNATURE_GENERATED = "signature.generated";
+    public static final String SIGNATURE_FAILED    = "signature.failed";
 
     // Dead-letter topic
-    public static final String DLT_SENT   = "DLT_SENT";
-    public static final String DLT_FAILED = "DLT_FAILED";
+    public static final String DLT_SENT   = "dlt.sent";
+    public static final String DLT_FAILED = "dlt.failed";
 }
