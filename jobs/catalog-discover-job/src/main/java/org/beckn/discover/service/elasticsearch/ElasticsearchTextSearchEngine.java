@@ -57,6 +57,8 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
     private final int                       knnCandidates;
     private final Optional<EmbeddingClient> embeddingClient;
     private final Optional<QueryEnricher>   queryEnricher;
+    private final List<String>              multiMatchFields;
+    private final double                    relativeScoreThreshold;
 
     public ElasticsearchTextSearchEngine(ElasticsearchClient esClient,
                                          EsSearchAssembler assembler,
@@ -70,10 +72,17 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         this.embeddingClient = embeddingClient;
         this.queryEnricher   = queryEnricher;
         DiscoveryProperties.Elasticsearch es = props.getElasticsearch();
-        this.aliasName     = es.getAliasName();
-        this.resultLimit   = es.getResultLimit();
-        this.minScore      = es.getMinScore();
-        this.knnCandidates = Math.max(props.getTextSearch().getEmbeddingModel().getKnnCandidates(), this.resultLimit);
+        this.aliasName              = es.getAliasName();
+        this.resultLimit            = es.getResultLimit();
+        this.minScore               = es.getMinScore();
+        this.knnCandidates          = Math.max(props.getTextSearch().getEmbeddingModel().getKnnCandidates(), this.resultLimit);
+        this.relativeScoreThreshold = es.getRelativeScoreThreshold();
+        List<String> fields = es.getMultiMatchFields();
+        if (fields == null || fields.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "discovery.elasticsearch.multiMatchFields must not be empty");
+        }
+        this.multiMatchFields = List.copyOf(fields);
     }
 
     @Override
@@ -121,7 +130,9 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                                 .k(resultLimit)
                                 .numCandidates(knnCandidates)),
                         Map.class);
-                return assembleAndLog(response, txId, start, "knn");
+                // knn cosine scores are already normalized to a tight range by minScore;
+                // relative filtering is unnecessary and could over-prune.
+                return assembleAndLog(response.hits().hits(), txId, start, "knn");
             } catch (ElasticsearchException e) {
                 if ("index_not_found_exception".equals(e.error().type())) {
                     log.info(LogEvent.ES_SEARCH_COMPLETED + ".knn-index-not-found",
@@ -148,13 +159,14 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                     .index(aliasName)
                     .query(q -> q.multiMatch(mm -> mm
                             .query(text)
-                            .fields("full_text_blob", "resource_name^2", "resource_rating_review_text")
+                            .fields(multiMatchFields)
                             .type(TextQueryType.BestFields)
                             .fuzziness("AUTO")))
                     .minScore(minScore)
                     .size(resultLimit),
                     Map.class);
-            return assembleAndLog(response, txId, start, "keyword");
+            var filteredHits = filterByRelativeScore(response.hits().hits(), txId);
+            return assembleAndLog(filteredHits, txId, start, "keyword");
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ElasticsearchException e) {
@@ -182,9 +194,9 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private List<Catalog> assembleAndLog(SearchResponse<Map> response, String txId, Instant start, String mode) {
-        List<Map<String, Object>> hits = response.hits().hits().stream()
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private List<Catalog> assembleAndLog(List<Hit<Map>> rawHits, String txId, Instant start, String mode) {
+        List<Map<String, Object>> hits = rawHits.stream()
                 .map(Hit::source)
                 .filter(Objects::nonNull)
                 .map(m -> (Map<String, Object>) m)
@@ -205,10 +217,36 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         return catalogs;
     }
 
+    @SuppressWarnings("rawtypes")
+    private List<Hit<Map>> filterByRelativeScore(List<Hit<Map>> hits, String txId) {
+        if (relativeScoreThreshold <= 0.0 || hits.isEmpty()) {
+            return hits;
+        }
+        Double topScore = hits.get(0).score();
+        if (topScore == null || topScore <= 0.0) {
+            return hits;
+        }
+        double cutoff = topScore * relativeScoreThreshold;
+        var filtered = hits.stream()
+                .filter(h -> h.score() != null && h.score() >= cutoff)
+                .toList();
+        int dropped = hits.size() - filtered.size();
+        if (dropped > 0) {
+            log.debug(LogEvent.ES_SEARCH_COMPLETED + ".relative-score-filter",
+                    value("dropped", dropped),
+                    value("kept", filtered.size()),
+                    value("topScore", topScore),
+                    value("cutoff", cutoff),
+                    value("threshold", relativeScoreThreshold),
+                    value("transactionId", txId));
+        }
+        return filtered;
+    }
+
     private String buildTextSearchJson(String text) {
         Map<String, Object> multiMatch = new LinkedHashMap<>();
         multiMatch.put("query", text);
-        multiMatch.put("fields", List.of("full_text_blob", "resource_name^2", "resource_rating_review_text"));
+        multiMatch.put("fields", multiMatchFields);
         multiMatch.put("type", "best_fields");
         multiMatch.put("fuzziness", "AUTO");
         Map<String, Object> body = new LinkedHashMap<>();
