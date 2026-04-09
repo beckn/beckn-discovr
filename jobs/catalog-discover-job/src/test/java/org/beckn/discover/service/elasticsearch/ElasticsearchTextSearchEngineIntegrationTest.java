@@ -139,7 +139,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                 .flatMap(c -> c.getResources().stream())
                 .map(r -> r.getId())
                 .toList();
-        assertThat(resourceIds).containsAnyOf("ev-charger-001", "ev-charger-002", "ev-charger-003");
+        assertThat(resourceIds).containsExactlyInAnyOrder("ev-charger-001", "ev-charger-002", "ev-charger-003");
     }
 
     /**
@@ -173,7 +173,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                 .flatMap(c -> c.getResources().stream())
                 .map(r -> r.getId())
                 .toList();
-        assertThat(resourceIds).containsAnyOf("ev-charger-001", "ev-charger-002", "ev-charger-003");
+        assertThat(resourceIds).containsExactlyInAnyOrder("ev-charger-001", "ev-charger-002", "ev-charger-003");
     }
 
     /**
@@ -190,7 +190,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                 .map(r -> r.getId())
                 .toList();
         // All 3 docs have context=https://schema.org/EV — all should match
-        assertThat(resourceIds).containsAnyOf("ev-charger-001", "ev-charger-002", "ev-charger-003");
+        assertThat(resourceIds).containsExactlyInAnyOrder("ev-charger-001", "ev-charger-002", "ev-charger-003");
     }
 
     /**
@@ -205,7 +205,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                 .flatMap(c -> c.getResources().stream())
                 .map(r -> r.getId())
                 .toList();
-        assertThat(resourceIds).containsAnyOf("ev-charger-001", "ev-charger-002", "ev-charger-003");
+        assertThat(resourceIds).containsExactlyInAnyOrder("ev-charger-001", "ev-charger-002", "ev-charger-003");
     }
 
     /**
@@ -652,12 +652,9 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     }
 
     private static QueryRequest queryRequestWithSchema(String txId, List<String> rawSchemaContextUrls) {
-        // Extract type fragments from the raw schema context URLs.
-        // QueryRequest stores split base URLs (schemaContextUrls) and types (schemaTypes).
-        // EsSchemaFilterBuilder.buildSchemaFilters(QueryRequest) reconstructs pairs from these.
         var parts = org.beckn.discover.util.DiscoveryServiceUtil.extractSchemaContextParts(rawSchemaContextUrls);
         return new QueryRequest(txId, "msg-" + txId, null, List.of(), null,
-                parts.types(), parts.urls());
+                parts.types(), parts.urls(), rawSchemaContextUrls);
     }
 
     /**

@@ -80,32 +80,15 @@ public final class EsSchemaFilterBuilder {
      * @return list of filter queries; empty when no schema filter requested
      */
     public static List<Query> buildSchemaFilters(QueryRequest req) {
-        // Reconstruct raw-form URLs from the pre-split base + type lists.
-        // QueryRequest splits "https://schema.org/Product#GroceryItem" into
-        //   schemaContextUrls = ["https://schema.org/Product"]
-        //   schemaTypes       = ["GroceryItem"]
-        // We need the raw URL list to preserve pairing. Reconstruct it:
-        //   - If equal counts: pair each base URL with the same-index type fragment
-        //   - Otherwise: emit context-only filters (safe; no cross-matching)
-        var baseUrls = req.schemaContextUrls();
-        var types    = req.schemaTypes();
+        // Use raw schemaContext URLs to preserve exact (context, type) pairing.
+        // The pre-split schemaContextUrls/schemaTypes lose pairing due to HashSet
+        // deduplication in extractSchemaContextParts.
+        var rawUrls = req.rawSchemaContextUrls();
 
-        if (baseUrls.isEmpty()) {
+        if (rawUrls.isEmpty()) {
             log.debug(LogEvent.ES_SCHEMA_FILTER_SKIPPED,
                     value("transactionId", req.transactionId()));
             return List.of();
-        }
-
-        // Reconstruct raw URLs with fragments for paired matching
-        List<String> rawUrls = new ArrayList<>(baseUrls.size());
-        if (types.size() == baseUrls.size()) {
-            // 1:1 correspondence — reconstruct paired raw URLs
-            for (int i = 0; i < baseUrls.size(); i++) {
-                rawUrls.add(baseUrls.get(i) + "#" + types.get(i));
-            }
-        } else {
-            // Sizes differ — emit context-only filters (safe, no cross-matching risk)
-            rawUrls.addAll(baseUrls);
         }
 
         return buildSchemaFilters(rawUrls, req.transactionId());
