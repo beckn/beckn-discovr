@@ -1,77 +1,87 @@
-name: Docker Build
+name: GCP Artifact Registry — Build & Push
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'                    # All services: v1.5.0
+      - 'discover/v*'           # Only catalog-discover-job: discover/v1.5.0
+      - 'publish/v*'            # Only catalog-publish-job: publish/v1.5.0
+      - 'dispatcher/v*'         # Only response-dispatcher: dispatcher/v1.5.0
 
 jobs:
   build-and-push:
+    name: Build & Push — ${{ matrix.name }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      id-token: write   # Required for OIDC token
 
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: catalog-discover-job
-            context: jobs/catalog-discover-job
             dockerfile: jobs/catalog-discover-job/Dockerfile
           - name: catalog-publish-job
-            context: jobs/catalog-publish-job
             dockerfile: jobs/catalog-publish-job/Dockerfile
           - name: response-dispatcher
-            context: jobs/response-dispatcher
             dockerfile: jobs/response-dispatcher/Dockerfile
+
+    # Only run jobs for services matching the tag prefix
+    if: |
+      (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '/')) ||
+      (startsWith(github.ref, 'refs/tags/discover/') && matrix.name == 'catalog-discover-job') ||
+      (startsWith(github.ref, 'refs/tags/publish/') && matrix.name == 'catalog-publish-job') ||
+      (startsWith(github.ref, 'refs/tags/dispatcher/') && matrix.name == 'response-dispatcher')
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve version tag (remove prefix for selective tags)
+        id: resolve
+        run: |
+          TAG="${{ github.ref_name }}"
+
+          # If tag contains '/', remove prefix (discover/, publish/, dispatcher/)
+          if [[ "$TAG" == *"/"* ]]; then
+            VERSION="${TAG#*/}"
+          else
+            VERSION="$TAG"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Authenticate to Google Cloud (OIDC)
+        id: auth
+        uses: google-github-actions/auth@v2
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          context: .
+          file:    ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${{ steps.resolve.outputs.version }}
+            asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Determine image ref for scanning
-        id: image-ref
-        run: |
-          set -euo pipefail
-          first="$(printf "%s\n" "${{ steps.meta.outputs.tags }}" | head -n 1)"
-          echo "ref=${first#ref=}" >> "$GITHUB_OUTPUT"
-
       - name: Run Trivy image scan (HIGH,CRITICAL) [non-blocking]
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
-          image-ref: ${{ steps.image-ref.outputs.ref }}
+          image-ref: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${{ steps.resolve.outputs.version }}
           format: json
           output: trivy-image-report.json
           severity: HIGH,CRITICAL
