@@ -212,6 +212,80 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void push_bppIdMissingFromContextButPresentInCatalog_persistsItemWithCatalogBppId() throws Exception {
+        // bppId/bppUri absent from context — controller derives them from the first catalog
+        String payload = """
+                {
+                  "context": {
+                    "networkId": "test-net"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-bpp-derive",
+                      "bppId": "derived-bpp.example.com",
+                      "bppUri": "https://derived-bpp.example.com",
+                      "resources": [{
+                        "id": "item-derived-1",
+                        "descriptor": { "name": "Derived Item" }
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/catalog/push")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("ACK"));
+
+        await().atMost(10, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    var items = itemRepository.findAll();
+                    assertThat(items).hasSize(1);
+                    var item = items.get(0);
+                    assertThat(item.getBppId()).isEqualTo("derived-bpp.example.com");
+                    assertThat(item.getBppUri()).isEqualTo("https://derived-bpp.example.com");
+                    assertThat(item.getId()).isEqualTo("item-derived-1");
+                });
+    }
+
+    @Test
+    void push_bppIdMissingFromBothContextAndCatalog_doesNotPersist() throws Exception {
+        // bppId/bppUri absent from both context and all catalogs — pipeline rejects
+        long countBefore = itemRepository.count();
+
+        String payload = """
+                {
+                  "context": {
+                    "networkId": "test-net"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-no-bpp",
+                      "resources": [{
+                        "id": "item-no-bpp",
+                        "descriptor": { "name": "Orphan Item" }
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/catalog/push")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("ACK"));
+
+        // Pipeline (ValidateStep) will reject due to missing bppId — count must not increase
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+    }
+
+    @Test
     void push_emptyCatalogsList_returns202ButDoesNotPersist() throws Exception {
         long countBefore = itemRepository.count();
 

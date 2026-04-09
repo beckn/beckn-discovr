@@ -6,7 +6,9 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import org.beckn.discover.config.DiscoveryProperties;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
+import org.beckn.discover.service.DiscoveryMetrics;
 import org.beckn.discover.service.engine.QueryEngine;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.postgresql.PostgreSQLQueryEngine;
@@ -15,6 +17,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -46,6 +50,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
     private final ElasticsearchClient       esClient;
     private final EsSearchAssembler         assembler;
     private final DiscoveryProperties       props;
+    private final DiscoveryMetrics          metrics;
     private final Optional<EmbeddingClient> embeddingClient;
     private final Optional<QueryEnricher>   queryEnricher;
     private final int                       knnCandidates;
@@ -55,6 +60,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                                     ElasticsearchClient esClient,
                                     EsSearchAssembler assembler,
                                     DiscoveryProperties props,
+                                    DiscoveryMetrics metrics,
                                     Optional<EmbeddingClient> embeddingClient,
                                     Optional<QueryEnricher> queryEnricher) {
         this.pgEngine        = pgEngine;
@@ -62,6 +68,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
         this.esClient        = esClient;
         this.assembler       = assembler;
         this.props           = props;
+        this.metrics         = metrics;
         this.embeddingClient = embeddingClient;
         this.queryEnricher   = queryEnricher;
         this.knnCandidates   = Math.max(
@@ -105,8 +112,16 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             }
             List<Float> vec = vecOpt.get();
             double minScore = props.getElasticsearch().getMinScore();
-            log.info("es.engine.spatial+semantic.request txId={} alias={} k={} numCandidates={} geoFilters={}",
-                    req.transactionId(), alias, limit, knnCandidates, geoQueries.size());
+            List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(req);
+            log.info("es.engine.spatial+semantic.request txId={} alias={} k={} numCandidates={} geoFilters={} schemaFilters={}",
+                    req.transactionId(), alias, limit, knnCandidates, geoQueries.size(), schemaFilters.size());
+            if (!schemaFilters.isEmpty()) {
+                metrics.incrementSchemaFilterApplied();
+                log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
+                        value("path", "spatial+semantic"),
+                        value("schemaFilters", schemaFilters.size()),
+                        value("transactionId", req.transactionId()));
+            }
             try {
                 SearchResponse<Map> response = esClient.search(s -> s
                         .index(alias)
@@ -118,6 +133,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                                     .k(limit)
                                     .numCandidates(knnCandidates);
                             geoQueries.forEach(kb::filter);
+                            schemaFilters.forEach(kb::filter);
                             return kb;
                         }), Map.class);
 
@@ -136,6 +152,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
 
         // ── BM25 text + spatial OR spatial only: geo_shape in bool.must ──────
         List<Query> mustQueries = new ArrayList<>(geoQueries);
+        List<Query> spatialSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(req);
         double applyMinScore = 0.0;
 
         if (hasText) {
@@ -146,14 +163,25 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                     .type(TextQueryType.BestFields)
                     .fuzziness("AUTO"))));
             applyMinScore = props.getElasticsearch().getMinScore();
-            log.info("es.spatial+text.request txId={} {}", req.transactionId(),
+            log.info("es.spatial+text.request txId={} schemaFilters={} {}", req.transactionId(),
+                    spatialSchemaFilters.size(),
                     spatialBuilder.buildCombinedRequestJson(req.spatial(), text, alias, limit, applyMinScore));
         } else {
-            log.info("es.spatial.request txId={} {}", req.transactionId(),
+            log.info("es.spatial.request txId={} schemaFilters={} {}", req.transactionId(),
+                    spatialSchemaFilters.size(),
                     spatialBuilder.buildRequestJson(req.spatial(), alias, limit));
         }
 
+        if (!spatialSchemaFilters.isEmpty()) {
+            metrics.incrementSchemaFilterApplied();
+            log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
+                    value("path", hasText ? "spatial+text" : "spatial"),
+                    value("schemaFilters", spatialSchemaFilters.size()),
+                    value("transactionId", req.transactionId()));
+        }
+
         final List<Query> finalQueries = mustQueries;
+        final List<Query> finalSchemaFilters = spatialSchemaFilters;
         final double finalMinScore = applyMinScore;
 
         try {
@@ -162,6 +190,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .size(limit)
                         .query(q -> q.bool(bq -> {
                             finalQueries.forEach(bq::must);
+                            finalSchemaFilters.forEach(bq::filter);
                             return bq;
                         }));
                 return finalMinScore > 0 ? b.minScore(finalMinScore) : b;

@@ -157,6 +157,40 @@ public final class FieldExtractor {
         return (n.isMissingNode() || !n.isTextual()) ? "unknown" : n.asText("unknown");
     }
 
+    /**
+     * Returns true if the resource node represents a real published resource.
+     *
+     * <p>A minimal resource from an offer-only catalog has only {@code id} +
+     * {@code resourceAttributes} with just {@code @type} and {@code @context} —
+     * no {@code descriptor}, no domain-specific attributes. These must not create item rows.
+     *
+     * <p>Detection (either condition makes it real):
+     * <ol>
+     *   <li>{@code descriptor.name} is present and non-blank</li>
+     *   <li>{@code resourceAttributes} has any field beyond {@code @type}/{@code @context}
+     *       (e.g., price, weight, specs — domain fields)</li>
+     * </ol>
+     */
+    public static boolean isRealResource(JsonNode resourceNode) {
+        if (resourceNode == null || resourceNode.isMissingNode()) return false;
+
+        // Check 1: descriptor.name present and non-blank → real resource
+        JsonNode name = resourceNode.path(BecknFields.DESCRIPTOR).path(BecknFields.NAME);
+        if (name.isTextual() && !name.asText().isBlank()) return true;
+
+        // Check 2: resourceAttributes has domain fields beyond @type/@context → real resource
+        JsonNode attrs = resourceNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+        if (attrs.isObject()) {
+            var fields = attrs.fieldNames();
+            while (fields.hasNext()) {
+                String f = fields.next();
+                if (!BecknFields.JSON_LD_TYPE.equals(f) && !BecknFields.JSON_LD_CONTEXT.equals(f)) return true;
+            }
+        }
+
+        return false;
+    }
+
     public static Iterable<JsonNode> iterableItems(JsonNode catalogNode) {
         if (catalogNode == null)
             return List.of();

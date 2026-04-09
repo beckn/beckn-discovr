@@ -68,7 +68,7 @@ public class CatalogPublishConsumer {
     private void dispatch(String raw, String topic, long offset, Acknowledgment ack,
             CatalogOperation operation, Function<String, PublishOutcome> handler) {
         try {
-            int rawByteLen = payloadSizeBytes(raw);
+            long rawByteLen = payloadSizeBytes(raw);
             if (rawByteLen > maxPayloadSize) {
                 log.warn("event={} op={} topic={} offset={} sizeBytes={} limit={}",
                         LogEvent.CONSUMER_REJECTED, operation, topic, offset, rawByteLen, maxPayloadSize);
@@ -107,9 +107,9 @@ public class CatalogPublishConsumer {
     }
 
     /** UTF-8 byte length; if char length already &gt; max, skips allocation and returns max+1. */
-    private int payloadSizeBytes(String raw) {
+    private long payloadSizeBytes(String raw) {
         if (raw == null) return 0;
-        return raw.length() > maxPayloadSize ? (int) maxPayloadSize + 1 : raw.getBytes(StandardCharsets.UTF_8).length;
+        return raw.length() > maxPayloadSize ? maxPayloadSize + 1 : raw.getBytes(StandardCharsets.UTF_8).length;
     }
 
     private void rejectAndAck(String raw, String reason, CatalogOperation operation, Acknowledgment ack) {

@@ -24,7 +24,7 @@ class ResultStepTest {
         CatalogContext ctx = new CatalogContext("b1", "http://b1", new String[0], null);
         Item item = Item.from("i1", "{}", new String[0], ctx, "c1", null, null, null, null, "2.0");
         CatalogBatch batch = new CatalogBatch("c1", ctx, null, CatalogOperation.PUBLISH, List.of(item), List.of(),
-                Map.of());
+                Map.of(), false);
         ProcessingResult result = resultStep.buildResult(batch);
         assertThat(result).isInstanceOf(ProcessingResult.Success.class);
         assertThat(result.status()).isEqualTo(ProcessingStatus.ACCEPTED);
@@ -34,7 +34,7 @@ class ResultStepTest {
     void buildResult_rejectedWhenNoItemsSavedAndHasErrors() {
         CatalogContext ctx = new CatalogContext("b1", "http://b1", new String[0], null);
         CatalogBatch batch = new CatalogBatch("c1", ctx, null, CatalogOperation.PUBLISH, List.of(),
-                List.of(new ProcessingError("i1", ProcessingErrorCode.NET_INTERNAL_ERROR, "err")), Map.of());
+                List.of(new ProcessingError("i1", ProcessingErrorCode.NET_INTERNAL_ERROR, "err")), Map.of(), false);
         ProcessingResult result = resultStep.buildResult(batch);
         assertThat(result).isInstanceOf(ProcessingResult.Rejected.class);
     }

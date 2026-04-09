@@ -34,7 +34,7 @@ public class CatalogPushService {
     public void processAsync(String rawBody) {
         kafkaTemplate.send(ingestionTopic, rawBody).whenComplete((result, ex) -> {
             if (ex != null) {
-                log.error("event={} topic={} error={}", LogEvent.CONSUMER_ERROR, ingestionTopic, ex.getMessage());
+                log.error("event={} topic={} error={}", LogEvent.CONSUMER_ERROR, ingestionTopic, ex.getMessage(), ex);
             } else {
                 log.info("event={} topic={} offset={}",
                         LogEvent.PUSH_RECEIVED, ingestionTopic, result.getRecordMetadata().offset());

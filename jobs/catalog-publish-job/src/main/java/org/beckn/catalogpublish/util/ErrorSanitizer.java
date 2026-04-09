@@ -23,6 +23,16 @@ public final class ErrorSanitizer {
         return truncate(scrub(msg), 200);
     }
 
+    /**
+     * Sanitizes a user-supplied string for safe logging.
+     * Strips credentials, JDBC URLs, tokens and truncates to 200 chars.
+     */
+    public static String sanitize(String input) {
+        if (input == null || input.isBlank())
+            return "";
+        return truncate(scrub(input), 200);
+    }
+
     private static String scrub(String msg) {
         msg = PASS_PATTERN.matcher(msg).replaceAll("password=***");
         msg = SECRET_PATTERN.matcher(msg).replaceAll("secret=***");

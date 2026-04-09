@@ -20,6 +20,7 @@ import org.beckn.catalogpublish.common.SchemaVersion;
 import org.beckn.catalogpublish.store.ItemLocationCollectionStore;
 import org.beckn.catalogpublish.store.ItemStore;
 import org.beckn.catalogpublish.logging.LogEvent;
+import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.FieldExtractor;
 import org.slf4j.Logger;
@@ -50,19 +51,25 @@ public class PersistenceStep {
     private final PayloadMergeService mergeService;
     private final GeometryExtractor geometryExtractor;
     private final ObjectMapper objectMapper;
+    private final OfferResolutionStep offerResolutionStep;
+    private final CatalogPublishMetrics metrics;
 
     public PersistenceStep(ItemStore itemStore,
             ItemLocationCollectionStore locationStore,
             ItemPayloadBuilder payloadBuilder,
             PayloadMergeService mergeService,
             GeometryExtractor geometryExtractor,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            OfferResolutionStep offerResolutionStep,
+            CatalogPublishMetrics metrics) {
         this.itemStore = itemStore;
         this.locationStore = locationStore;
         this.payloadBuilder = payloadBuilder;
         this.mergeService = mergeService;
         this.geometryExtractor = geometryExtractor;
         this.objectMapper = objectMapper;
+        this.offerResolutionStep = offerResolutionStep;
+        this.metrics = metrics;
     }
 
     /**
@@ -91,6 +98,29 @@ public class PersistenceStep {
         // Gap 2 fix: pass context node so context.schemaContext is used when item @type is absent
         String schemaType = FieldExtractor.extractSchemaType(catalogNode, ctx.contextNode());
 
+        // Read updateMode from publishDirectives — default is MERGE.
+        // FULL mode: delete all existing items for this catalog+bpp before inserting fresh ones.
+        var publishDirectives = catalogNode.path(BecknFields.PUBLISH_DIRECTIVES);
+        var updateMode = publishDirectives.path(BecknFields.UPDATE_MODE).asText("MERGE");
+        boolean isFullReplace = "FULL".equalsIgnoreCase(updateMode);
+
+        // Strip publishDirectives from catalog — it's an internal control field,
+        // not part of the Beckn catalog data model. Must not be stored in DB or ES.
+        if (catalogNode.isObject() && catalogNode.has(BecknFields.PUBLISH_DIRECTIVES)) {
+            ((com.fasterxml.jackson.databind.node.ObjectNode) catalogNode).remove(BecknFields.PUBLISH_DIRECTIVES);
+        }
+
+        if (isFullReplace) {
+            // Delete locations BEFORE items — location subquery references item table
+            int deletedLocations = locationStore.deleteByCatalogIdAndBppId(catalogId, ctx.bppId());
+            int deletedItems = itemStore.deleteByCatalogIdAndBppId(catalogId, ctx.bppId());
+            metrics.recordFullReplace(deletedItems, deletedLocations);
+            log.info("event={} catalogId={} bppId={} deletedItems={} deletedLocations={}",
+                    LogEvent.FULL_REPLACE_DELETED, catalogId, ctx.bppId(), deletedItems, deletedLocations);
+        } else {
+            metrics.recordMerge();
+        }
+
         ObjectNode baseSlice = payloadBuilder.buildCatalogMetadataSlice(catalogNode, ctx);
         OfferIndex offerIndex = OfferIndex.build(allOffers, objectMapper);
 
@@ -101,14 +131,17 @@ public class PersistenceStep {
 
         // Phase 0: collect (itemId, itemNode, itemNode) triples in declaration order.
         // Items with unresolvable IDs go straight to errors.
-        record IdAndNode(String itemId, JsonNode itemNode, JsonNode normalizedItemNode) {
+        record IdAndNode(String itemId, JsonNode itemNode) {
         }
         List<IdAndNode> pairs = new ArrayList<>();
         List<ProcessingError> errors = new ArrayList<>();
         String catalogContextUrl = FieldExtractor.extractContextUrl(catalogNode);
         for (JsonNode itemNode : FieldExtractor.iterableItems(catalogNode)) {
+            // Skip minimal resources (no descriptor) — these are reference-only entries from
+            // offer-only catalogs. Persisting them would create garbage item rows.
+            if (!FieldExtractor.isRealResource(itemNode)) continue;
             try {
-                pairs.add(new IdAndNode(extractItemId(itemNode), itemNode, itemNode));
+                pairs.add(new IdAndNode(extractItemId(itemNode), itemNode));
             } catch (Exception e) {
                 errors.add(new ProcessingError("unknown", ProcessingErrorCode.NET_INTERNAL_ERROR,
                         ErrorSanitizer.sanitize(e)));
@@ -130,18 +163,18 @@ public class PersistenceStep {
         // Phase 1: process explicitly listed items (new or upsert).
         for (IdAndNode pair : pairs) {
             String itemId = pair.itemId();
-            JsonNode itemNode = pair.itemNode();            // original — stored in DB
-            JsonNode normalizedItemNode = pair.normalizedItemNode(); // canonical — used for extraction
+            JsonNode itemNode = pair.itemNode();
             try {
                 SchemaVersion version = SchemaVersion.V2_1;
 
                 Item existing = existingById.get(itemId);
                 JsonNode payload;
                 if (existing != null) {
-                    // Upsert path: null-safe merge — strip nulls first so that a null in the
-                    // incoming publish payload means "no change" rather than RFC 7396 "delete".
-                    payload = mergeService.mergeItemPayload(existing.getPayload(),
-                            mergeService.stripNulls(itemNode));
+                    // Replace payload with incoming resource. Catalg already resolved the
+                    // complete resource (master-wins merge, RFC 7396 field deletion, etc.)
+                    // before distributing. Merging here would resurrect deleted fields from
+                    // the existing DB payload.
+                    payload = payloadBuilder.buildDenormalizedPayloadFromSlice(baseSlice, itemNode, offerIndex, itemId);
 
                     // Determine which incoming offers apply to this item.
                     // Primary source of truth: the offer_ids DB column (tracks all linked offers
@@ -161,7 +194,7 @@ public class PersistenceStep {
                             JsonNode incomingOffer = incomingOfferById.get(offerId);
                             if (incomingOffer != null)
                                 mergeService.mergeOfferIntoPayload(payload,
-                                        mergeService.stripNulls(incomingOffer), offerId, payloadOfferIndex);
+                                        incomingOffer, offerId, payloadOfferIndex);
                         }
                     }
                 } else {
@@ -171,12 +204,12 @@ public class PersistenceStep {
                 }
                 String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
                 // Use normalized node for all field extraction — field names are canonical here.
-                String name = FieldExtractor.extractItemName(normalizedItemNode);
-                String type = Optional.ofNullable(FieldExtractor.extractItemAttributesType(normalizedItemNode))
-                        .orElse(FieldExtractor.extractItemType(normalizedItemNode));
-                String providerId = FieldExtractor.extractItemProviderId(normalizedItemNode);
-                String attrsContextUrl = FieldExtractor.extractItemAttributesContextUrl(normalizedItemNode);
-                String itemContextUrl = FieldExtractor.extractContextUrl(normalizedItemNode);
+                String name = FieldExtractor.extractItemName(itemNode);
+                String type = Optional.ofNullable(FieldExtractor.extractItemAttributesType(itemNode))
+                        .orElse(FieldExtractor.extractItemType(itemNode));
+                String providerId = FieldExtractor.extractItemProviderId(itemNode);
+                String attrsContextUrl = FieldExtractor.extractItemAttributesContextUrl(itemNode);
+                String itemContextUrl = FieldExtractor.extractContextUrl(itemNode);
                 String contextUrl = attrsContextUrl != null
                         ? attrsContextUrl
                         : (itemContextUrl != null ? itemContextUrl : catalogContextUrl);
@@ -223,7 +256,7 @@ public class PersistenceStep {
                             if (payloadOfferIndex == null)
                                 payloadOfferIndex = mergeService.buildOfferIndex(payload);
                             mergeService.mergeOfferIntoPayload(
-                                    payload, mergeService.stripNulls(incomingOffer),
+                                    payload, incomingOffer,
                                     linkedOfferId, payloadOfferIndex);
                             changed = true;
                         }
@@ -249,14 +282,32 @@ public class PersistenceStep {
             }
         }
 
+        // Phase 3: Cross-BPP offer resolution — attach offers to items owned by other BPPs.
+        // Collect all IDs already written by Phase 1 and Phase 2 to avoid double-processing.
+        if (!incomingOfferById.isEmpty()) {
+            Set<String> handledIds = new HashSet<>(allItemIds);
+            built.forEach(iwn -> handledIds.add(iwn.item().getId()));
+
+            var resolved = offerResolutionStep.resolveCrossBppOffers(incomingOfferById, handledIds, ctx);
+            for (var r : resolved) {
+                built.add(new ItemWithNode(r.item(), r.payloadNode()));
+            }
+        }
+
         if (built.isEmpty()) {
-            return new CatalogBatch(catalogId, ctx, schemaType, op, List.of(), List.copyOf(errors), Map.of());
+            return new CatalogBatch(catalogId, ctx, schemaType, op, List.of(), List.copyOf(errors), Map.of(), isFullReplace);
         }
 
         // Build a lookup map so we can pass the pre-parsed JsonNode to
         // GeometryExtractor — no re-parse.
         Map<String, JsonNode> payloadNodeById = new HashMap<>();
         built.forEach(p -> payloadNodeById.put(p.item().getId(), p.payloadNode()));
+
+        // Track insert vs update counts for MERGE mode observability
+        int insertCount = (int) built.stream()
+                .filter(iwn -> !existingById.containsKey(iwn.item().getId()))
+                .count();
+        int updateCount = built.size() - insertCount;
 
         List<Item> savedItems = itemStore.saveAll(built.stream().map(ItemWithNode::item).toList());
         List<ItemLocationCollection> allLocations = savedItems.stream()
@@ -268,10 +319,14 @@ public class PersistenceStep {
                 })
                 .toList();
         locationStore.saveLocations(allLocations);
-        log.info("event={} catalogId={} items={} locations={} errors={}",
-                LogEvent.PERSIST_COMPLETED, catalogId, savedItems.size(), allLocations.size(), errors.size());
+
+        metrics.recordPersistInserted(insertCount);
+        metrics.recordPersistUpdated(updateCount);
+        log.info("event={} catalogId={} mode={} items={} inserted={} updated={} locations={} errors={}",
+                LogEvent.PERSIST_COMPLETED, catalogId, updateMode, savedItems.size(),
+                insertCount, updateCount, allLocations.size(), errors.size());
         return new CatalogBatch(catalogId, ctx, schemaType, op,
-                List.copyOf(savedItems), List.copyOf(errors), Map.copyOf(payloadNodeById));
+                List.copyOf(savedItems), List.copyOf(errors), Map.copyOf(payloadNodeById), isFullReplace);
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────────

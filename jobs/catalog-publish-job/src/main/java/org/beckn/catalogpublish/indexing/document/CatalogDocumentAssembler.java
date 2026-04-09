@@ -16,7 +16,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.StreamSupport;
 
 @Component
 @ConditionalOnProperty(name = "app.catalog.elasticsearch.enabled", havingValue = "true")
@@ -40,7 +39,9 @@ public class CatalogDocumentAssembler {
     public Map<String, Object> assemble(JsonNode payloadNode, String indexKey) {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
         JsonNode itemNode = catalog.path(BecknFields.RESOURCES).path(0);
-        JsonNode netNode = itemNode.path(BecknFields.NETWORK_ID);
+        // networkId is on context, not on resources — try context first, fall back to catalog
+        JsonNode netNode = payloadNode.path(BecknFields.CONTEXT).path(BecknFields.NETWORK_ID);
+        if (netNode.isMissingNode()) netNode = catalog.path(BecknFields.NETWORK_ID);
         List<String> networkIds;
         if (netNode.isArray()) {
             networkIds = new ArrayList<>();
@@ -53,13 +54,12 @@ public class CatalogDocumentAssembler {
             String single = netNode.asText(null);
             networkIds = (single != null && !single.isBlank()) ? List.of(single) : List.of();
         }
-        // schema_version not available from payload alone — default to "2.0" for retry
-        // path
+        // schema_version not available from payload alone — default to "2.1" for retry path
         return build(payloadNode, indexKey, networkIds,
                 text(itemNode, BecknFields.ID),
                 text(catalog, BecknFields.BPP_ID),
                 text(catalog, BecknFields.BPP_URI),
-                "2.0");
+                "2.1");
     }
 
     // ── Core builder ─────────────────────────────────────────────────────────
@@ -310,9 +310,4 @@ public class CatalogDocumentAssembler {
             doc.put(key, value);
     }
 
-    private List<String> arrayToList(JsonNode n) {
-        if (!n.isArray())
-            return List.of();
-        return StreamSupport.stream(n.spliterator(), false).map(JsonNode::asText).toList();
-    }
 }
