@@ -22,24 +22,39 @@ jobs:
         include:
           - name: catalog-discover-job
             dockerfile: jobs/catalog-discover-job/Dockerfile
+            tag_prefix: 'discover'
           - name: catalog-publish-job
             dockerfile: jobs/catalog-publish-job/Dockerfile
+            tag_prefix: 'publish'
           - name: response-dispatcher
             dockerfile: jobs/response-dispatcher/Dockerfile
-
-    # Only run jobs for services matching the tag prefix
-    if: |
-      (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '/')) ||
-      (startsWith(github.ref, 'refs/tags/discover/') && matrix.name == 'catalog-discover-job') ||
-      (startsWith(github.ref, 'refs/tags/publish/') && matrix.name == 'catalog-publish-job') ||
-      (startsWith(github.ref, 'refs/tags/dispatcher/') && matrix.name == 'response-dispatcher')
+            tag_prefix: 'dispatcher'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check if this service should build
+        id: should_build
+        run: |
+          TAG="${{ github.ref_name }}"
+          PREFIX="${{ matrix.tag_prefix }}"
+
+          # Check if tag matches this service
+          if [[ "$TAG" == "v"* && ! "$TAG" == *"/"* ]]; then
+            # Universal tag (v1.0.0) - build all services
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG" == "${PREFIX}/"* ]]; then
+            # Service-specific tag (discover/v1.0.0) - build only this service
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            # Tag doesn't match this service
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Resolve version tag (remove prefix for selective tags)
         id: resolve
+        if: steps.should_build.outputs.build == 'true'
         run: |
           TAG="${{ github.ref_name }}"
 
@@ -53,9 +68,11 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
+        if: steps.should_build.outputs.build == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Authenticate to Google Cloud (OIDC)
+        if: steps.should_build.outputs.build == 'true'
         id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -63,9 +80,11 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Configure Docker for Artifact Registry
+        if: steps.should_build.outputs.build == 'true'
         run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
       - name: Build and push Docker image
+        if: steps.should_build.outputs.build == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -78,6 +97,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy image scan (HIGH,CRITICAL) [non-blocking]
+        if: steps.should_build.outputs.build == 'true'
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
@@ -89,7 +109,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy image report
-        if: always()
+        if: always() && steps.should_build.outputs.build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: trivy-image-report-${{ matrix.name }}
