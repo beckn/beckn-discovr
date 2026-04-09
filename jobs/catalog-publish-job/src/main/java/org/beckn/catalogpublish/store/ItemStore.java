@@ -8,7 +8,14 @@ public interface ItemStore {
 
     List<Item> saveAll(List<Item> items);
 
-    List<Item> findAllByIdInAndBppId(List<String> itemIds, String bppId);
+    /**
+     * Batch lookup by id. The item PK is {@code (id)} as of V13 — no BPP filter needed.
+     */
+    List<Item> findAllByIdIn(List<String> itemIds);
 
-    List<Item> findAllByBppIdAndAnyOfferId(String bppId, List<String> offerIds);
+    /**
+     * Finds all items whose {@code offer_ids} array contains any of the supplied offer ids,
+     * regardless of which BPP owns them. Used by Phase 2 offer propagation.
+     */
+    List<Item> findAllByAnyOfferId(List<String> offerIds);
 }

@@ -59,6 +59,10 @@ public class CatalogPushController {
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         String enrichedBody = enrichContextIfNeeded(rawBody);
 
+        // bppId / bppUri are read from the catalog object itself during persistence
+        // (not from context). Context may omit them entirely; persistence tolerates
+        // absence and writes null to the item row. No synchronous validation here.
+
         log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
         pushService.processAsync(enrichedBody);
 
@@ -100,23 +104,14 @@ public class CatalogPushController {
             if (isBlank(textOrNull(context.get(BecknFields.TRANSACTION_ID)))) {
                 context.put(BecknFields.TRANSACTION_ID, UUID.randomUUID().toString());
             }
-            if (isBlank(textOrNull(context.get(BecknFields.BAP_ID)))) {
-                context.put(BecknFields.BAP_ID, "dummy-bap-id");
-            }
             if (isBlank(textOrNull(context.get(BecknFields.TTL)))) {
                 context.put(BecknFields.TTL, "PT30S");
             }
 
-            // BPP context defaults (used by downstream persistence)
-            String updatedBppId = textOrNull(context.get(BecknFields.BPP_ID));
-            String updatedBppUri = textOrNull(context.get(BecknFields.BPP_URI));
-
-            if (isBlank(updatedBppId)) {
-                context.put(BecknFields.BPP_ID, "dummy-bpp-id");
-            }
-            if (isBlank(updatedBppUri)) {
-                context.put(BecknFields.BPP_URI, "http://dummy-bpp-uri.com");
-            }
+            // BPP context fields (bppId, bppUri) are optional per Beckn v2.0 schema —
+            // they are NOT injected with defaults here. Downstream persistence must
+            // tolerate absence. Previously this block injected "dummy-bpp-id" /
+            // "http://dummy-bpp-uri.com" which corrupted Postgres + Elasticsearch.
 
             return objectMapper.writeValueAsString(root);
         } catch (Exception e) {

@@ -3,7 +3,6 @@ package org.beckn.catalogpublish.model;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import org.beckn.catalogpublish.dto.CatalogContext;
 import org.hibernate.annotations.CreationTimestamp;
@@ -16,15 +15,13 @@ import java.util.Objects;
 
 @Entity
 @Table(name = "item")
-@IdClass(ItemId.class)
 public class Item {
 
     @Id
     @Column(name = "id", nullable = false)
     private String id;
 
-    @Id
-    @Column(name = "bpp_id", nullable = false)
+    @Column(name = "bpp_id")
     private String bppId;
 
     @Column(name = "bpp_uri")
@@ -71,13 +68,21 @@ public class Item {
     protected Item() {
     }
 
+    /**
+     * Builds an Item row. {@code bppId} and {@code bppUri} are sourced from the catalog
+     * object (not the Beckn context) and may be {@code null} when the catalog does
+     * not carry them — the columns are nullable.
+     *
+     * <p>{@code networkIds} comes from the Beckn context (a routing/correlation field,
+     * not part of the catalog data model).
+     */
     public static Item from(String id, String payload, String[] offerIds, CatalogContext ctx,
             String catalogId, String name, String type, String providerId, String contextUrl,
-            String schemaVersion) {
+            String schemaVersion, String bppId, String bppUri) {
         Item item = new Item();
         item.id = id;
-        item.bppId = ctx.bppId();
-        item.bppUri = ctx.bppUri();
+        item.bppId = bppId;
+        item.bppUri = bppUri;
         item.name = name;
         item.contextUrl = contextUrl;
         item.type = type;
@@ -96,12 +101,12 @@ public class Item {
             return true;
         if (!(o instanceof Item other))
             return false;
-        return Objects.equals(id, other.id) && Objects.equals(bppId, other.bppId);
+        return Objects.equals(id, other.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, bppId);
+        return Objects.hash(id);
     }
 
     public String getId() {
