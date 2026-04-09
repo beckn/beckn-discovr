@@ -148,10 +148,11 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void push_missingBppId_returns202ButDoesNotPersist() throws Exception {
+    void push_missingBppId_returns400Nack() throws Exception {
         long countBefore = itemRepository.count();
 
-        // context present but bppId missing → controller should enrich context and pipeline should run
+        // bppId is required by Discovr's composite PK (id, bpp_id). Blank/missing
+        // bppId must be rejected synchronously with 400 NACK — no silent async drop.
         String payload = """
                 {
                   "context": {
@@ -170,18 +171,22 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post("/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value("NACK"))
+                .andExpect(jsonPath("$.error.errorCode").value("BPP_ID_REQUIRED"));
 
-        await().atMost(5, TimeUnit.SECONDS)
+        // No async dispatch at all — nothing should land in the DB
+        await().atMost(3, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
     }
 
     @Test
-    void push_missingBppFields_enrichedFromCatalogAndPersists() throws Exception {
+    void push_missingBppFieldsInContext_returns400Nack() throws Exception {
         long countBefore = itemRepository.count();
 
+        // bppId/bppUri inside catalog body (not context) is NOT promoted to context.
+        // bppId in context is missing → 400 NACK.
         String payload = """
                 {
                   "context": {
@@ -194,6 +199,43 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                       "bppUri": "https://bpp.example.com",
                       "resources": [{
                         "id": "item-1"
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/catalog/push")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value("NACK"))
+                .andExpect(jsonPath("$.error.errorCode").value("BPP_ID_REQUIRED"));
+
+        await().atMost(3, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+    }
+
+    @Test
+    void push_bppIdPresent_bppUriMissing_persistsWithNullBppUri() throws Exception {
+        // Beckn v2.0 schema: bppUri is OPTIONAL. bppId is present → must succeed,
+        // with bpp_uri stored as null in Postgres (nullable column).
+        long countBefore = itemRepository.count();
+
+        String payload = """
+                {
+                  "context": {
+                    "bppId": "bpp.optional-uri",
+                    "networkId": "test-net",
+                    "action": "on_discover",
+                    "version": "2.0.0"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-nulluri",
+                      "resources": [{
+                        "id": "item-nulluri-1"
                       }]
                     }]
                   }

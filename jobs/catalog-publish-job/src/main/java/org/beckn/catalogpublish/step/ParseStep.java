@@ -50,8 +50,11 @@ public class ParseStep {
     private CatalogContext extractContext(JsonNode root) {
         JsonNode ctx = FieldExtractor.requireNode(root, BecknFields.CONTEXT);
         ContextNormalizer.normalize(ctx);  // V1.0 snake_case → V2.0 camelCase
+        // bppId is required — it is part of the item composite PK (id, bpp_id) and
+        // prevents cross-BPP data corruption (see V7__Composite_pk_item.sql).
         String bppId = FieldExtractor.requireString(ctx, BecknFields.BPP_ID);
-        String bppUri = FieldExtractor.requireString(ctx, BecknFields.BPP_URI);
+        // bppUri is optional per Beckn v2.0 schema. Stored as null when absent.
+        String bppUri = FieldExtractor.extractString(ctx, BecknFields.BPP_URI).orElse(null);
         String[] netIds = FieldExtractor.extractNetworkIds(ctx);
         return new CatalogContext(bppId, bppUri, netIds, ctx);
     }
