@@ -24,6 +24,20 @@ public class CatalogPublishMetrics {
     private final Map<CatalogOperation, Counter> failureCounters;
     private final Counter batchPublishFailure;
     private final Map<CatalogOperation, Timer> processingTimers;
+    private final Counter offerResolveSuccess;
+    private final Counter offerResolveMissing;
+    private final Counter offerResolveFailed;
+
+    // FULL replace metrics
+    private final Counter fullReplaceDeletedItems;
+    private final Counter fullReplaceDeletedLocations;
+    private final Counter fullReplaceDeletedEsDocs;
+    private final Counter fullReplaceCount;
+
+    // Mode-tagged persist metrics
+    private final Counter persistInserted;
+    private final Counter persistUpdated;
+    private final Counter mergeCount;
 
     public CatalogPublishMetrics(MeterRegistry registry) {
         successCounters = new EnumMap<>(CatalogOperation.class);
@@ -31,22 +45,57 @@ public class CatalogPublishMetrics {
         processingTimers = new EnumMap<>(CatalogOperation.class);
 
         for (CatalogOperation op : CatalogOperation.values()) {
-            successCounters.put(op, Counter.builder("catalog.publish.success")
+            successCounters.put(op, Counter.builder("discovr.publish.success")
                     .description("Kafka messages processed and acknowledged by the consumer")
                     .tag("op", op.name())
                     .register(registry));
-            failureCounters.put(op, Counter.builder("catalog.publish.failure")
+            failureCounters.put(op, Counter.builder("discovr.publish.failure")
                     .description("Kafka messages rejected at the consumer layer (parse/validation errors)")
                     .tag("op", op.name())
                     .register(registry));
-            processingTimers.put(op, Timer.builder("catalog.publish.message.duration")
+            processingTimers.put(op, Timer.builder("discovr.publish.message.duration")
                     .description("End-to-end processing time per Kafka message")
                     .tag("op", op.name())
                     .register(registry));
         }
 
-        batchPublishFailure = Counter.builder("catalog.batch.publish.failure")
+        batchPublishFailure = Counter.builder("discovr.publish.batch.failure")
                 .description("Catalog batches that failed during post-commit routing/assembly")
+                .register(registry);
+
+        offerResolveSuccess = Counter.builder("discovr.publish.offer.resolve.success")
+                .description("Items updated via cross-BPP offer resolution (Phase 3)")
+                .register(registry);
+        offerResolveMissing = Counter.builder("discovr.publish.offer.resolve.missing")
+                .description("Resource IDs referenced by offers but not found in DB")
+                .register(registry);
+        offerResolveFailed = Counter.builder("discovr.publish.offer.resolve.failed")
+                .description("Items that failed during cross-BPP offer merge (Phase 3)")
+                .register(registry);
+
+        // FULL replace
+        fullReplaceCount = Counter.builder("discovr.publish.full_replace")
+                .description("Number of FULL replace operations executed")
+                .register(registry);
+        fullReplaceDeletedItems = Counter.builder("discovr.publish.full_replace.deleted.items")
+                .description("Items deleted during FULL replace")
+                .register(registry);
+        fullReplaceDeletedLocations = Counter.builder("discovr.publish.full_replace.deleted.locations")
+                .description("Locations deleted during FULL replace")
+                .register(registry);
+        fullReplaceDeletedEsDocs = Counter.builder("discovr.publish.full_replace.deleted.es_docs")
+                .description("ES documents deleted during FULL replace deleteByQuery")
+                .register(registry);
+
+        // MERGE mode + insert/update breakdown
+        mergeCount = Counter.builder("discovr.publish.merge")
+                .description("Number of MERGE operations executed")
+                .register(registry);
+        persistInserted = Counter.builder("discovr.publish.persist.inserted")
+                .description("New items inserted during persist")
+                .register(registry);
+        persistUpdated = Counter.builder("discovr.publish.persist.updated")
+                .description("Existing items updated during persist")
                 .register(registry);
     }
 
@@ -60,6 +109,40 @@ public class CatalogPublishMetrics {
 
     public void recordBatchPublishFailure() {
         batchPublishFailure.increment();
+    }
+
+    public void recordOfferResolveSuccess() {
+        offerResolveSuccess.increment();
+    }
+
+    public void recordOfferResolveMissing(int count) {
+        offerResolveMissing.increment(count);
+    }
+
+    public void recordOfferResolveFailed() {
+        offerResolveFailed.increment();
+    }
+
+    public void recordFullReplace(int deletedItems, int deletedLocations) {
+        fullReplaceCount.increment();
+        fullReplaceDeletedItems.increment(deletedItems);
+        fullReplaceDeletedLocations.increment(deletedLocations);
+    }
+
+    public void recordFullReplaceEsDeleted(long count) {
+        fullReplaceDeletedEsDocs.increment(count);
+    }
+
+    public void recordMerge() {
+        mergeCount.increment();
+    }
+
+    public void recordPersistInserted(int count) {
+        persistInserted.increment(count);
+    }
+
+    public void recordPersistUpdated(int count) {
+        persistUpdated.increment(count);
     }
 
     /**

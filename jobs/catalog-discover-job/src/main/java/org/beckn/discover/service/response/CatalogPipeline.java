@@ -58,8 +58,10 @@ public class CatalogPipeline {
      * Runs the full post-processing pipeline on {@code catalogs} and returns
      * the processed list.
      *
-     * <p>The input list is not mutated; a new mutable list is used
-     * internally.</p>
+     * <p>Delegates to {@link #process(List, QueryRequest, boolean)} with
+     * {@code schemaPreFiltered=false}, so step 1 (schema context filtering)
+     * always runs. This is the correct choice for NLWeb-backed queries where
+     * ES/PG has not already applied schema filtering.</p>
      *
      * @param catalogs raw catalogs from any engine/assembler; {@code null}
      *                 is treated as empty
@@ -67,6 +69,28 @@ public class CatalogPipeline {
      * @return processed catalogs; never {@code null}, may be empty
      */
     public List<Catalog> process(List<Catalog> catalogs, QueryRequest request) {
+        return process(catalogs, request, false);
+    }
+
+    /**
+     * Runs the post-processing pipeline on {@code catalogs} and returns the
+     * processed list.
+     *
+     * <p>When {@code schemaPreFiltered} is {@code true}, step 1 (schema context
+     * filtering) is skipped because the query engine has already applied it at
+     * the ES or PostgreSQL layer. Pass {@code true} for ES and PostgreSQL paths;
+     * pass {@code false} (or use the 2-arg overload) for NLWeb paths.</p>
+     *
+     * <p>The input list is not mutated; a new mutable list is used
+     * internally.</p>
+     *
+     * @param catalogs         raw catalogs from any engine/assembler; {@code null}
+     *                         is treated as empty
+     * @param request          provides schema context URLs for the filtering step
+     * @param schemaPreFiltered when {@code true}, step 1 is skipped
+     * @return processed catalogs; never {@code null}, may be empty
+     */
+    public List<Catalog> process(List<Catalog> catalogs, QueryRequest request, boolean schemaPreFiltered) {
         if (catalogs == null || catalogs.isEmpty()) {
             log.debug("pipeline.empty transactionId={}", request.transactionId());
             return List.of();
@@ -78,18 +102,24 @@ public class CatalogPipeline {
         // Work on a mutable copy so we can remove empty catalogs at the end
         List<Catalog> work = new ArrayList<>(catalogs);
 
-        step1FilterBySchemaContext(work, request);
+        if (!schemaPreFiltered) {
+            step1FilterBySchemaContext(work, request);
+        } else {
+            log.debug("pipeline.step1.skipped reason=schema-pre-filtered transactionId={}",
+                    request.transactionId());
+        }
         step2DeduplicateOffers(work);
         step3FilterItemsByOfferReferences(work);
         step4FilterOffersByItemIds(work);
         step5RemoveEmptyCatalogs(work, request.transactionId());
 
         long ms = (System.nanoTime() - t0) / 1_000_000;
-        log.info("pipeline.done input={} output={} resources={} durationMs={} transactionId={}",
+        log.info("pipeline.done input={} output={} resources={} durationMs={} schemaPreFiltered={} transactionId={}",
                 inputSize,
                 work.size(),
                 work.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
                 ms,
+                schemaPreFiltered,
                 request.transactionId());
 
         return work;

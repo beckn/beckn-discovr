@@ -1,20 +1,23 @@
 package org.beckn.catalogpublish.config;
 
+import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
 import java.util.List;
 
+@Validated
 @ConfigurationProperties(prefix = "app.auth")
 public record AuthProperties(
         boolean enabled,
         String registryBaseUrl,
         String registryName,
         String registryToken,
-        long clockSkewSeconds,
-        long cacheTtlSeconds,
-        int cacheMaxKeys,
-        int timeoutSeconds,
-        int retryAttempts,
+        @Positive long clockSkewSeconds,
+        @Positive long cacheTtlSeconds,
+        @Positive int cacheMaxKeys,
+        @Positive int timeoutSeconds,
+        @Positive int retryAttempts,
         List<String> whitelistedEndpoints) {
 
     public AuthProperties {

@@ -35,13 +35,17 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
-     * Null fields in the second publish must NOT delete existing stored data.
-     * The item's gps, id, and other fields published in round-1 must survive
-     * even when the round-2 publish sends those fields as null.
+     * RFC 7396 null-deletion in MERGE mode: an explicit {@code null} value in the second publish
+     * deletes that field from the stored payload. The item must still pass {@code isRealResource}
+     * (has a descriptor name) so that the null-deletion patch is applied.
+     *
+     * <p>In round-1 the item has both a name and a custom attribute {@code weight: "5kg"}.
+     * In round-2 we explicitly null {@code weight} → it should be removed. The name is absent
+     * (not sent) so it is preserved via RFC 7396 omission semantics.
      */
     @Test
-    void upsertPublish_nullFieldsInSecondPublish_doNotDeleteExistingData() {
-        // Round 1: publish item with name + gps
+    void upsertPublish_nullAttributeInSecondPublish_deletesFieldViaRfc7396() {
+        // Round 1: publish item with name + resourceAttributes including weight
         String round1 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
@@ -49,42 +53,58 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   "message": {"catalogs": [{"id": "cat-1",
                     "resources": [{"id": "item-1",
                       "descriptor": {"name": "EV Station"},
-                      "gps": "12.34,56.78"}],
+                      "gps": "12.34,56.78",
+                      "resourceAttributes": {
+                        "@context": "https://schema.example.org",
+                        "@type": "EVCharger",
+                        "weight": "5kg"
+                      }}],
                     "offers": []}]}
                 }""";
         orchestrator.processPublish(round1);
         assertThat(itemRepository.count()).isEqualTo(1);
         var afterRound1 = itemRepository.findAll().get(0);
-        assertThat(afterRound1.getPayload()).contains("EV Station").contains("12.34,56.78");
+        assertThat(afterRound1.getPayload()).contains("5kg").contains("EV Station").contains("12.34,56.78");
 
-        // Round 2: publish same item with name set to null and gps absent — neither should delete stored data
+        // Round 2: send item with descriptor name present (so isRealResource=true)
+        // and explicit null on weight → RFC 7396 deletes weight.
+        // gps is absent → preserved.
         String round2 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
                   "message": {"catalogs": [{"id": "cat-1",
                     "resources": [{"id": "item-1",
-                      "descriptor": {"name": null}}],
+                      "descriptor": {"name": "EV Station"},
+                      "resourceAttributes": {
+                        "@context": "https://schema.example.org",
+                        "@type": "EVCharger",
+                        "weight": null
+                      }}],
                     "offers": []}]}
                 }""";
         orchestrator.processPublish(round2);
 
         assertThat(itemRepository.count()).isEqualTo(1);
         var afterRound2 = itemRepository.findAll().get(0);
-        // null name must not delete the stored name
-        assertThat(afterRound2.getPayload()).contains("EV Station");
-        // absent gps must not delete the stored gps
+        // explicit null weight → field deleted from stored payload
+        assertThat(afterRound2.getPayload()).doesNotContain("5kg");
+        // absent gps → preserved (RFC 7396: omission means no change)
         assertThat(afterRound2.getPayload()).contains("12.34,56.78");
+        // descriptor name still present (sent in round 2)
+        assertThat(afterRound2.getPayload()).contains("EV Station");
         // item id must remain intact
         assertThat(afterRound2.getId()).isEqualTo("item-1");
     }
 
     /**
-     * Null fields inside an offer in the second publish must NOT delete existing offer data,
-     * specifically the resourceIds item-link array that associates the offer to items.
+     * RFC 7396 null-deletion in offers: an explicit {@code null} on {@code resourceIds}
+     * in the second publish deletes the resourceIds field from the stored offer.
+     * The offer-to-item link in the {@code offer_ids} DB column is maintained separately
+     * and survives the offer field deletion.
      */
     @Test
-    void upsertPublish_nullFieldInOffer_doesNotDeleteOfferItemLink() {
+    void upsertPublish_nullResourceIdsInOffer_deletesResourceIdsFieldViaRfc7396() {
         // Round 1: publish with an offer that links to item-1
         String round1 = """
                 {
@@ -102,8 +122,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         var afterRound1 = itemRepository.findAll().get(0);
         assertThat(afterRound1.getPayload()).contains("offer-1").contains("Offer One");
 
-        // Round 2: update only the offer name — send null for resourceIds (accidentally omitted/nulled)
-        // The resourceIds link inside the stored offer must be preserved
+        // Round 2: explicit null on resourceIds → RFC 7396 deletes resourceIds from the stored offer.
+        // The offer_ids DB column is set from the new incoming offer and reflects the merged state.
         String round2 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
@@ -121,9 +141,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         var afterRound2 = itemRepository.findAll().get(0);
         // Offer name must be updated
         assertThat(afterRound2.getPayload()).contains("Offer One Updated");
-        // resourceIds link inside the offer must NOT be deleted despite null in round-2
-        assertThat(afterRound2.getOfferIds()).contains("offer-1");
-        assertThat(afterRound2.getPayload()).contains("\"resourceIds\"");
+        // explicit null resourceIds → resourceIds field deleted from stored offer (RFC 7396)
+        assertThat(afterRound2.getPayload()).doesNotContain("\"resourceIds\"");
     }
 
     /**

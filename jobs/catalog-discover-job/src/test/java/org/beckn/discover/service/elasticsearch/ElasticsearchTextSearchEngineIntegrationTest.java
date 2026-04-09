@@ -104,6 +104,123 @@ class ElasticsearchTextSearchEngineIntegrationTest {
 
     // ── Tests ─────────────────────────────────────────────────────────────────
 
+    // ── Schema context filtering tests ────────────────────────────────────────
+
+    /**
+     * Schema filter: request schemaContext="https://schema.org/EV#Charger"
+     * Only ev-charger-001 and ev-charger-002 carry that context+type.
+     * ev-charger-003 carries "https://schema.org/EV#Battery" — should be excluded.
+     */
+    @Test
+    void search_schemaContextFilter_returnsOnlyMatchingDocs() throws Exception {
+        // Both "charger" docs match "charging" text, but schema filter restricts to Charger type
+        List<Catalog> catalogs = searchEngine.search("charging", queryRequestWithSchema(
+                "tx-schema-1", List.of("https://schema.org/EV#Charger")));
+
+        assertThat(catalogs).isNotEmpty();
+        var resourceIds = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .map(r -> r.getId())
+                .toList();
+        assertThat(resourceIds).contains("ev-charger-001", "ev-charger-002");
+        assertThat(resourceIds).doesNotContain("ev-charger-003");
+    }
+
+    /**
+     * Regression: request WITHOUT schemaContext returns ALL matching docs.
+     * Ensures schema filter injection does not affect no-schema requests.
+     */
+    @Test
+    void search_noSchemaContext_returnsAllMatchingDocs() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("charging", queryRequest("tx-schema-reg"));
+
+        // All 3 docs match "charging" — all should be returned with no schema filter
+        var resourceIds = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .map(r -> r.getId())
+                .toList();
+        assertThat(resourceIds).containsExactlyInAnyOrder("ev-charger-001", "ev-charger-002", "ev-charger-003");
+    }
+
+    /**
+     * Paired matching: requesting "https://schema.org/EV#Battery" should return only
+     * ev-charger-003, not ev-charger-001/002 which have context=schema.org/EV but type=Charger.
+     */
+    @Test
+    void search_schemaContextFilter_noCrossMatchBetweenDifferentTypes() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("charging", queryRequestWithSchema(
+                "tx-schema-paired", List.of("https://schema.org/EV#Battery")));
+
+        var resourceIds = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .map(r -> r.getId())
+                .toList();
+        assertThat(resourceIds).containsOnly("ev-charger-003");
+    }
+
+    /**
+     * Multiple schema context URLs: requesting both "Charger" and "Battery" types
+     * should return all three docs (matching either pair).
+     */
+    @Test
+    void search_multipleSchemaContextUrls_returnsDocMatchingAnyPair() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("charging", queryRequestWithSchema(
+                "tx-schema-multi", List.of(
+                        "https://schema.org/EV#Charger",
+                        "https://schema.org/EV#Battery")));
+
+        var resourceIds = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .map(r -> r.getId())
+                .toList();
+        assertThat(resourceIds).containsExactlyInAnyOrder("ev-charger-001", "ev-charger-002", "ev-charger-003");
+    }
+
+    /**
+     * Context-only filter (URL without fragment): requests "https://schema.org/EV"
+     * should match docs with that exact context regardless of their type.
+     */
+    @Test
+    void search_schemaContextUrlWithoutFragment_matchesAllTypesUnderContext() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("charging", queryRequestWithSchema(
+                "tx-schema-ctx-only", List.of("https://schema.org/EV")));
+
+        var resourceIds = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .map(r -> r.getId())
+                .toList();
+        // All 3 docs have context=https://schema.org/EV — all should match
+        assertThat(resourceIds).containsExactlyInAnyOrder("ev-charger-001", "ev-charger-002", "ev-charger-003");
+    }
+
+    /**
+     * Empty schemaContext list: treated the same as no schema context — no filter added.
+     */
+    @Test
+    void search_emptySchemaContextList_noFilterApplied() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("charging",
+                queryRequestWithSchema("tx-schema-empty", List.of()));
+
+        var resourceIds = catalogs.stream()
+                .flatMap(c -> c.getResources().stream())
+                .map(r -> r.getId())
+                .toList();
+        assertThat(resourceIds).containsExactlyInAnyOrder("ev-charger-001", "ev-charger-002", "ev-charger-003");
+    }
+
+    /**
+     * Schema context URL with a base URL that does not match any doc: returns empty.
+     */
+    @Test
+    void search_schemaContextFilterNoMatch_returnsEmpty() throws Exception {
+        List<Catalog> catalogs = searchEngine.search("charging", queryRequestWithSchema(
+                "tx-schema-nomatch", List.of("https://totally.different.domain/Schema#NonExistentType")));
+
+        assertThat(catalogs).isEmpty();
+    }
+
+    // ── Existing tests ────────────────────────────────────────────────────────
+
     /**
      * "CCS2" is unique to ev-charger-001 (resource_name + full_text_blob).
      * Verifies end-to-end assembly: catalog fields, resource fields, provider,
@@ -395,16 +512,18 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                   },
                   "mappings": {
                     "properties": {
-                      "full_text_blob":          { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
-                      "resource_name":           { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                      "resource_short_desc":     { "type": "text" },
-                      "resource_category_name":  { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                      "catalog_name":            { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                      "resource_provider_name":  { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                      "catalog_id":              { "type": "keyword" },
-                      "bpp_id":                  { "type": "keyword" },
-                      "resource_id":                  { "type": "keyword" },
-                      "resource_rating_review_text":  { "type": "text" }
+                      "full_text_blob":                  { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
+                      "resource_name":                   { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "resource_short_desc":             { "type": "text" },
+                      "resource_category_name":          { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "catalog_name":                    { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "resource_provider_name":          { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                      "catalog_id":                      { "type": "keyword" },
+                      "bpp_id":                          { "type": "keyword" },
+                      "resource_id":                     { "type": "keyword" },
+                      "resource_rating_review_text":     { "type": "text" },
+                      "resource_attributes_context":     { "type": "keyword" },
+                      "resource_attributes_type":        { "type": "keyword" }
                     }
                   }
                 }
@@ -437,6 +556,11 @@ class ElasticsearchTextSearchEngineIntegrationTest {
      * - "CHAdeMO" → only ev-charger-003 (cat-ev-002)
      * - "GreenVolt"→ only ev-charger-003 (cat-ev-002)
      * - "150" → only ev-charger-001 (numeric blob value)
+     *
+     * Schema context values:
+     * - ev-charger-001: context=https://schema.org/EV, type=Charger
+     * - ev-charger-002: context=https://schema.org/EV, type=Charger
+     * - ev-charger-003: context=https://schema.org/EV, type=Battery
      */
     private static List<Map<String, Object>> testDocs() {
         return List.of(
@@ -446,7 +570,8 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         "EV_CHARGING", "EV Charging", 4.5, 120,
                         "ecopower-charging", "EcoPower Charging Pvt Ltd",
                         Map.of("connectorType", "CCS2", "maxPowerKW", 60),
-                        "DC Fast Charger CCS2 60kW EV EcoPower 150"),
+                        "DC Fast Charger CCS2 60kW EV EcoPower 150",
+                        "https://schema.org/EV", "Charger"),
 
                 doc("cat-ev-001", "EcoPower Catalog", "bpp-ecopower", "https://bpp.ecopower.com",
                         "ev-charger-002", "AC Charger Type2 22kW",
@@ -454,7 +579,8 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         "EV_CHARGING", "EV Charging", 4.2, 85,
                         "ecopower-charging", "EcoPower Charging Pvt Ltd",
                         Map.of("connectorType", "Type2", "maxPowerKW", 22),
-                        "AC Charger Type2 22kW EV EcoPower"),
+                        "AC Charger Type2 22kW EV EcoPower",
+                        "https://schema.org/EV", "Charger"),
 
                 doc("cat-ev-002", "GreenVolt Catalog", "bpp-greenvolt", "https://bpp.greenvolt.com",
                         "ev-charger-003", "DC Charger CHAdeMO 50kW",
@@ -462,7 +588,8 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         "EV_CHARGING", "EV Charging", 3.9, 60,
                         "greenvolt-stations", "GreenVolt Charging Stations",
                         Map.of("connectorType", "CHAdeMO", "maxPowerKW", 50),
-                        "DC Charger CHAdeMO 50kW electric vehicle GreenVolt"));
+                        "DC Charger CHAdeMO 50kW electric vehicle GreenVolt",
+                        "https://schema.org/EV", "Battery"));
     }
 
     private static Map<String, Object> doc(String catalogId, String catalogName,
@@ -473,7 +600,9 @@ class ElasticsearchTextSearchEngineIntegrationTest {
             double ratingValue, int ratingCount,
             String providerId, String providerName,
             Map<String, Object> itemAttributes,
-            String fullTextBlob) {
+            String fullTextBlob,
+            String resourceAttributesContext,
+            String resourceAttributesType) {
         java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
         m.put("catalog_id", catalogId);
         m.put("catalog_name", catalogName);
@@ -493,6 +622,8 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         m.put("resource_provider_id", providerId);
         m.put("resource_provider_name", providerName);
         m.put("resource_attributes", itemAttributes);
+        m.put("resource_attributes_context", resourceAttributesContext);
+        m.put("resource_attributes_type", resourceAttributesType);
         m.put("full_text_blob", fullTextBlob);
         return m;
     }
@@ -518,5 +649,19 @@ class ElasticsearchTextSearchEngineIntegrationTest {
 
     private static QueryRequest queryRequest(String txId) {
         return new QueryRequest(txId, "msg-" + txId, null, List.of(), null, List.of(), List.of());
+    }
+
+    private static QueryRequest queryRequestWithSchema(String txId, List<String> rawSchemaContextUrls) {
+        var parts = org.beckn.discover.util.DiscoveryServiceUtil.extractSchemaContextParts(rawSchemaContextUrls);
+        return new QueryRequest(txId, "msg-" + txId, null, List.of(), null,
+                parts.types(), parts.urls(), rawSchemaContextUrls);
+    }
+
+    /**
+     * Override of appliesSchemaFilter() test — confirms ElasticsearchTextSearchEngine returns true.
+     */
+    @Test
+    void appliesSchemaFilter_returnsTrue() {
+        assertThat(searchEngine.appliesSchemaFilter()).isTrue();
     }
 }

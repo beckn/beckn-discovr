@@ -27,8 +27,7 @@ public class CorrelationContext {
     public void populate(CatalogContext ctx, String messageId) {
         String mid = (messageId != null && !messageId.isBlank()) ? messageId : null;
         String txnId = ctx.contextNode() != null
-                ? ctx.contextNode().path("transactionId").asText(
-                        ctx.contextNode().path("transaction_id").asText("unknown"))
+                ? ctx.contextNode().path("transactionId").asText("unknown")
                 : "unknown";
         MDC.put(MdcField.MESSAGE_ID, mid != null ? mid : "unknown");
         MDC.put(MdcField.BPP_ID, ctx.bppId() != null ? ctx.bppId() : "unknown");
@@ -37,6 +36,23 @@ public class CorrelationContext {
         MDC.put(MdcField.CORRELATION_ID, mid != null ? mid : UUID.randomUUID().toString());
         if (ctx.networkIds() != null && ctx.networkIds().length > 0) {
             MDC.put(MdcField.NETWORK_ID, ctx.networkIds()[0]);
+        }
+        if (ctx.contextNode() != null) {
+            String catalogId = ctx.contextNode().path("catalogId").asText(null);
+            if (catalogId != null && !catalogId.isBlank()) {
+                MDC.put(MdcField.CATALOG_ID, catalogId);
+            } else {
+                MDC.remove(MdcField.CATALOG_ID);
+            }
+            String bapId = ctx.contextNode().path("bapId").asText(null);
+            if (bapId != null && !bapId.isBlank()) {
+                MDC.put(MdcField.BAP_ID, bapId);
+            } else {
+                MDC.remove(MdcField.BAP_ID);
+            }
+        } else {
+            MDC.remove(MdcField.CATALOG_ID);
+            MDC.remove(MdcField.BAP_ID);
         }
     }
 
@@ -51,6 +67,8 @@ public class CorrelationContext {
         MDC.put(MdcField.BPP_URI, "unknown");
         MDC.put(MdcField.TRANSACTION_ID, "unknown");
         MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
+        MDC.remove(MdcField.CATALOG_ID);
+        MDC.remove(MdcField.BAP_ID);
     }
 
     public void clear() {

@@ -1,0 +1,288 @@
+# Electronics Network Onboarding — Flowchart
+
+## Glossary
+
+| Abbreviation | Full Form | One-line Summary |
+|---|---|---|
+| **NFO** | **N**etwork **F**acilitator **O**rganization | The trusted gatekeeper that creates a Beckn network, verifies participants, and sets network rules — but does not own data, set prices, or take commissions. |
+| **BAP** | **B**eckn **A**pplication **P**latform | The demand side — the app customers use to search and discover products/services across the network (e.g., PriceHunt, Paytm, Google Shopping). |
+| **BPP** | **B**eckn **P**rovider **P**latform | The supply side — the system sellers use to publish catalogs and fulfill orders on the network (e.g., Croma, Amazon, a local kirana store). |
+| **ONIX** | **O**pen **N**etwork **I**nterchange E**x**change | The Beckn protocol gateway software that every participant (BAP/BPP) runs on their server — handles message signing, signature verification, and protocol routing. |
+| **Catalg** | Beckn Catalg (Catalog Management) | The catalog management system where BPPs publish their product/service catalogs — validates, indexes, and pushes data to Discovr for search. |
+| **Discovr** | Beckn Discovr (Discovery Engine) | The search engine that matches BAP discover requests to indexed catalogs across all BPPs — can be self-hosted by a BAP or run as shared infrastructure. |
+| **DeDi** | **De**centralized **Di**rectory | The decentralized identity and registry infrastructure (dedi.global) where participants publish their subscriber details (URL, public key, role) and NFOs maintain network registries. |
+| **Registry** | Registry (on DeDi) | A structured collection of records on DeDi Global — NFOs create a **network registry** (list of approved participants), while each BAP/BPP creates a **subscriber registry** (their own identity card with URL, public key, and role). |
+| **Namespace** | Namespace (on DeDi) | A verified domain on DeDi Global (e.g., `croma.com`, `openretail.org`) that proves the organization owns that domain — all registries are created under a namespace, like folders under a verified identity. |
+
+---
+
+## DeDi Structure — How It Actually Looks
+
+```
+DeDi Global (dedi.global)
+│
+├── openretail.org/                              ← NFO Namespace (verified domain)
+│   │
+│   └── electronics-india/                       ← Network Registry
+│       │   Schema: Beckn subscriber reference
+│       │
+│       ├── Entry 1:                             ← Reference (pointer to Croma)
+│       │     subscriber_id: croma.com
+│       │     url: https://api.dedi.global/dedi/lookup/namespaces/croma.com/registries/beckn-subscriber
+│       │     type: Registry
+│       │
+│       ├── Entry 2:                             ← Reference (pointer to Amazon)
+│       │     subscriber_id: amazon.in
+│       │     url: https://api.dedi.global/dedi/lookup/namespaces/amazon.in/registries/beckn-subscriber
+│       │     type: Registry
+│       │
+│       └── Entry 3:                             ← Reference (pointer to PriceHunt)
+│             subscriber_id: pricehunt.in
+│             url: https://api.dedi.global/dedi/lookup/namespaces/pricehunt.in/registries/beckn-subscriber
+│             type: Registry
+│
+├── croma.com/                                   ← BPP Namespace (verified domain)
+│   │
+│   └── beckn-subscriber/                        ← Subscriber Registry
+│       │   Schema: Beckn subscriber
+│       │
+│       └── Record: rec_5f8a2b                   ← Subscriber Record (Croma's identity)
+│             subscriber_id: croma.com
+│             subscriber_url: https://croma.com/bpp/beckn
+│             type: BPP
+│             signing_public_key: K7xM2pQ9nR... (Ed25519, Base64)
+│             encryption_public_key: lCI84I0Q... (optional)
+│             valid_from: 2026-01-01T00:00:00Z
+│
+├── amazon.in/                                   ← BPP Namespace (verified domain)
+│   │
+│   └── beckn-subscriber/                        ← Subscriber Registry
+│       │
+│       └── Record: rec_7c2d4e                   ← Subscriber Record (Amazon's identity)
+│             subscriber_id: amazon.in
+│             subscriber_url: https://amazon.in/bpp/beckn
+│             type: BPP
+│             signing_public_key: P4mK8jL2... (Ed25519, Base64)
+│
+└── pricehunt.in/                                ← BAP Namespace (verified domain)
+    │
+    └── beckn-subscriber/                        ← Subscriber Registry
+        │
+        └── Record: rec_8d3f1a                   ← Subscriber Record (PriceHunt's identity)
+              subscriber_id: pricehunt.in
+              subscriber_url: https://pricehunt.in/bap/beckn
+              type: BAP
+              signing_public_key: R3mN7kL5... (Ed25519, Base64)
+```
+
+### How the pieces connect
+
+```
+Namespace → Registry → Record
+
+Think of it like a file system:
+  Domain (folder)  →  Registry (sub-folder)  →  Record (file)
+
+NFO's registry contains REFERENCES (shortcuts/links) to other namespaces' records.
+It does NOT copy the data — it just points to it.
+```
+
+### Key lookup flow
+
+```
+Someone wants to verify Croma's signature:
+
+1. They know: network_id = openretail.org/electronics-india
+               subscriber_id = croma.com
+
+2. Look up NFO registry → find reference for croma.com
+   → url: https://api.dedi.global/dedi/lookup/namespaces/croma.com/registries/beckn-subscriber
+
+3. Follow that URL → find Croma's subscriber record
+   → signing_public_key: K7xM2pQ9nR...
+
+4. Use that public key to verify the signature ✅
+```
+
+### Cached for speed
+
+```
+Raw lookup: DeDi Global API → slow (network call every time)
+
+Cached at: https://fabric.nfh.global/registry/croma.com/subscribers.beckn.one/rec_5f8a2b
+           → Fast cached lookup, updated every few minutes
+           → This is what ONIX and Discovr actually use
+```
+
+---
+
+## Full Onboarding Flow
+
+```mermaid
+flowchart TD
+    subgraph PHASE1["Phase 1: NFO Creates the Network (One-Time)"]
+        A1[NFO creates DeDi Global account] --> A2[Create namespace: openretail.org]
+        A2 --> A3[Add TXT record to DNS]
+        A3 --> A4{Domain verified?}
+        A4 -->|No, wait 15min-48hrs| A3
+        A4 -->|Yes| A5[Create registry: electronics-india]
+        A5 --> A6[/"network_id = openretail.org/electronics-india"/]
+    end
+
+    subgraph PHASE2["Phase 2: BPP Publishes Identity (e.g., Croma)"]
+        B1[Croma creates DeDi Global account] --> B2[Create namespace: croma.com]
+        B2 --> B3[Add TXT record to DNS]
+        B3 --> B4{Domain verified?}
+        B4 -->|No, wait| B3
+        B4 -->|Yes| B5[Create registry: beckn-subscriber]
+        B5 --> B6[Publish subscriber record]
+        B6 --> B7["subscriber_id: croma.com
+        URL: https://croma.com/bpp/beckn
+        Type: BPP
+        Signing Public Key: K7xM2pQ9..."]
+        B7 --> B8[Note record ID = key_id]
+        B8 --> B9["Verify key lookup at
+        fabric.nfh.global/registry/croma.com/..."]
+        B9 --> B10{Key accessible?}
+        B10 -->|No, wait 5-10 min| B9
+        B10 -->|Yes| B11[Croma's identity is published]
+    end
+
+    subgraph PHASE3["Phase 3: NFO Adds BPP to Network"]
+        C1{NFO validates Croma} --> C2[Is it a real business?]
+        C1 --> C3[Is callback URL reachable?]
+        C1 --> C4[Is public key valid?]
+        C1 --> C5[Correct environment?]
+        C2 --> C6{All checks pass?}
+        C3 --> C6
+        C4 --> C6
+        C5 --> C6
+        C6 -->|No| C7[Reject - ask Croma to fix]
+        C6 -->|Yes| C8["Add reference to electronics-india registry:
+        subscriber_id: croma.com
+        url: DeDi lookup URL
+        type: Registry"]
+        C8 --> C9[Croma is part of the network]
+    end
+
+    subgraph PHASE4["Phase 4: BPP Configures ONIX"]
+        D1["Configure ONIX on Croma's server:
+        subscriber_id: croma.com
+        key_id: rec_5f8a2b
+        private_key: secret
+        network_id: openretail.org/electronics-india"] --> D2[ONIX handles signing & verification]
+        D2 --> D3[Croma can now publish catalogs]
+    end
+
+    subgraph PHASE5["Phase 5: BAP Onboards (e.g., PriceHunt)"]
+        E1[PriceHunt creates DeDi account] --> E2[Verify domain: pricehunt.in]
+        E2 --> E3["Publish subscriber record:
+        subscriber_id: pricehunt.in
+        URL: https://pricehunt.in/bap/beckn
+        Type: BAP
+        Signing Public Key: R3mN7kL..."]
+        E3 --> E4[Verify key lookup]
+        E4 --> E5[NFO validates PriceHunt]
+        E5 --> E6["NFO adds reference to
+        electronics-india registry"]
+        E6 --> E7["Configure ONIX:
+        subscriber_id: pricehunt.in
+        network_id: openretail.org/electronics-india"]
+        E7 --> E8[PriceHunt can now send discover requests]
+    end
+
+    subgraph PHASE6["Phase 6: Network is Live"]
+        F1[PriceHunt user searches iPhone 16]
+        F1 --> F2["PriceHunt ONIX signs discover request"]
+        F2 --> F3["Discovr verifies signature
+        via DeDi public key lookup"]
+        F3 --> F4["Searches catalogs:
+        Croma, Amazon, Sangeetha"]
+        F4 --> F5["on_discover callback
+        to PriceHunt"]
+        F5 --> F6["User sees iPhone 16
+        from all sellers"]
+    end
+
+    A6 --> B1
+    B11 --> C1
+    C9 --> D1
+    D3 --> E1
+    E8 --> F1
+
+    style PHASE1 fill:#e8f5e9,stroke:#2e7d32
+    style PHASE2 fill:#e3f2fd,stroke:#1565c0
+    style PHASE3 fill:#fff3e0,stroke:#e65100
+    style PHASE4 fill:#f3e5f5,stroke:#6a1b9a
+    style PHASE5 fill:#e0f7fa,stroke:#00838f
+    style PHASE6 fill:#fce4ec,stroke:#c62828
+```
+
+## Simplified Overview
+
+```mermaid
+flowchart LR
+    subgraph NFO
+        N1[Create Network]
+    end
+
+    subgraph BPP["BPP (Croma)"]
+        B1[Publish Identity on DeDi]
+    end
+
+    subgraph BAP["BAP (PriceHunt)"]
+        A1[Publish Identity on DeDi]
+    end
+
+    subgraph NETWORK["Live Network"]
+        L1[Discover & Transact]
+    end
+
+    N1 -->|"NFO adds reference"| B1
+    N1 -->|"NFO adds reference"| A1
+    B1 -->|"Configure ONIX"| NETWORK
+    A1 -->|"Configure ONIX"| NETWORK
+```
+
+## Who Creates What on DeDi
+
+```mermaid
+flowchart TD
+    DEDI["DeDi Global"]
+
+    subgraph NFO_NS["openretail.org (NFO Namespace)"]
+        NR["electronics-india (Network Registry)"]
+        NR --> REF1["→ croma.com (reference)"]
+        NR --> REF2["→ amazon.in (reference)"]
+        NR --> REF3["→ pricehunt.in (reference)"]
+    end
+
+    subgraph CROMA_NS["croma.com (Croma Namespace)"]
+        CR["beckn-subscriber (Identity Registry)"]
+        CR --> CREC["Record: URL, Key, Role=BPP"]
+    end
+
+    subgraph AMAZON_NS["amazon.in (Amazon Namespace)"]
+        AR["beckn-subscriber (Identity Registry)"]
+        AR --> AREC["Record: URL, Key, Role=BPP"]
+    end
+
+    subgraph PH_NS["pricehunt.in (PriceHunt Namespace)"]
+        PR["beckn-subscriber (Identity Registry)"]
+        PR --> PREC["Record: URL, Key, Role=BAP"]
+    end
+
+    DEDI --> NFO_NS
+    DEDI --> CROMA_NS
+    DEDI --> AMAZON_NS
+    DEDI --> PH_NS
+
+    REF1 -.->|"points to"| CREC
+    REF2 -.->|"points to"| AREC
+    REF3 -.->|"points to"| PREC
+
+    style NFO_NS fill:#e8f5e9,stroke:#2e7d32
+    style CROMA_NS fill:#e3f2fd,stroke:#1565c0
+    style AMAZON_NS fill:#e3f2fd,stroke:#1565c0
+    style PH_NS fill:#e0f7fa,stroke:#00838f
+```

@@ -7,11 +7,20 @@ import com.fasterxml.jackson.databind.JsonNode;
  *
  * <p>
  * {@code contextNode} is the original, unmodified context {@link JsonNode} from
- * the
- * inbound Kafka message. It is carried through to the outbound event so the
- * full context
- * (message_id, transaction_id, network_id, etc.) is forwarded as-is — no fields
- * are lost.
+ * the inbound Kafka message. It is carried through to the outbound event so the
+ * full context (messageId, transactionId, networkId, etc.) is forwarded as-is —
+ * no fields are lost.
  */
 public record CatalogContext(String bppId, String bppUri, String[] networkIds, JsonNode contextNode) {
+
+    /** Defensive copy of mutable array to guarantee thread safety. */
+    public CatalogContext {
+        networkIds = networkIds != null ? networkIds.clone() : new String[0];
+    }
+
+    /** Returns a defensive copy — callers cannot mutate the internal array. */
+    @Override
+    public String[] networkIds() {
+        return networkIds.clone();
+    }
 }
