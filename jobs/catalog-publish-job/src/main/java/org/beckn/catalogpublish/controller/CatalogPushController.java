@@ -59,51 +59,14 @@ public class CatalogPushController {
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         String enrichedBody = enrichContextIfNeeded(rawBody);
 
-        // bppId is required by Discovr's data model: item composite PK (id, bpp_id)
-        // prevents cross-BPP data corruption. When the body is a parseable JSON
-        // object with a context but no bppId, reject synchronously with 400 NACK so
-        // BPPs get a loud error instead of a silent async drop. Unparseable JSON is
-        // still accepted here (202) and fails downstream in ParseStep — matching the
-        // pre-existing contract for malformed input. bppUri remains optional per
-        // Beckn v2.0 schema and is tolerated as null.
-        BppIdCheck check = checkContextBppId(enrichedBody);
-        if (check == BppIdCheck.MISSING) {
-            log.warn("event={} reason=missing_bpp_id", LogEvent.PUSH_REJECTED);
-            return ResponseEntity.badRequest().body(Map.of(
-                    "status", "NACK",
-                    "error", Map.of(
-                            "errorCode", "BPP_ID_REQUIRED",
-                            "errorMessage", "context.bppId is required")));
-        }
+        // bppId / bppUri are read from the catalog object itself during persistence
+        // (not from context). Context may omit them entirely; persistence tolerates
+        // absence and writes null to the item row. No synchronous validation here.
 
         log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
         pushService.processAsync(enrichedBody);
 
         return ResponseEntity.accepted().body(ACK_RESPONSE);
-    }
-
-    private enum BppIdCheck { PRESENT, MISSING, UNPARSEABLE }
-
-    /**
-     * Inspects the body for {@code context.bppId}. Returns {@code MISSING} only
-     * when the body is valid JSON with a context object and the bppId field is
-     * absent/blank. Returns {@code UNPARSEABLE} when the body cannot be parsed
-     * or has no context object — those failures flow through to the async
-     * pipeline, preserving the existing invalid-payload contract.
-     */
-    private BppIdCheck checkContextBppId(String body) {
-        JsonNode root;
-        try {
-            root = objectMapper.readTree(body);
-        } catch (Exception e) {
-            return BppIdCheck.UNPARSEABLE;
-        }
-        if (root == null || !root.isObject()) return BppIdCheck.UNPARSEABLE;
-        JsonNode ctx = root.get(BecknFields.CONTEXT);
-        if (ctx == null || !ctx.isObject()) return BppIdCheck.UNPARSEABLE;
-        JsonNode v = ctx.get(BecknFields.BPP_ID);
-        String s = (v == null || v.isNull()) ? null : v.asText(null);
-        return isBlank(s) ? BppIdCheck.MISSING : BppIdCheck.PRESENT;
     }
 
     /**

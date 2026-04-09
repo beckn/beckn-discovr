@@ -148,11 +148,12 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void push_missingBppId_returns400Nack() throws Exception {
+    void push_missingBppIdEverywhere_accepted_persistsWithNullBppId() throws Exception {
         long countBefore = itemRepository.count();
 
-        // bppId is required by Discovr's composite PK (id, bpp_id). Blank/missing
-        // bppId must be rejected synchronously with 400 NACK — no silent async drop.
+        // New contract: bppId is no longer required on context OR catalog. When the
+        // catalog object has no bppId, persistence writes null to the nullable column.
+        // The push returns 202 ACK and the pipeline processes the catalog normally.
         String payload = """
                 {
                   "context": {
@@ -161,44 +162,10 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                   },
                   "message": {
                     "catalogs": [{
-                      "id": "cat-x",
-                      "resources": []
-                    }]
-                  }
-                }
-                """;
-
-        mockMvc.perform(post("/catalog/push")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value("NACK"))
-                .andExpect(jsonPath("$.error.errorCode").value("BPP_ID_REQUIRED"));
-
-        // No async dispatch at all — nothing should land in the DB
-        await().atMost(3, TimeUnit.SECONDS)
-                .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
-    }
-
-    @Test
-    void push_missingBppFieldsInContext_returns400Nack() throws Exception {
-        long countBefore = itemRepository.count();
-
-        // bppId/bppUri inside catalog body (not context) is NOT promoted to context.
-        // bppId in context is missing → 400 NACK.
-        String payload = """
-                {
-                  "context": {
-                    "networkId": "test-net"
-                  },
-                  "message": {
-                    "catalogs": [{
-                      "id": "cat-1",
-                      "bppId": "bpp.test",
-                      "bppUri": "https://bpp.example.com",
+                      "id": "cat-nobppid",
                       "resources": [{
-                        "id": "item-1"
+                        "id": "item-nobppid",
+                        "descriptor": {"name": "Item without bppId"}
                       }]
                     }]
                   }
@@ -208,13 +175,57 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post("/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value("NACK"))
-                .andExpect(jsonPath("$.error.errorCode").value("BPP_ID_REQUIRED"));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("ACK"));
 
-        await().atMost(3, TimeUnit.SECONDS)
+        // Async pipeline persists the row with bpp_id = null
+        await().atMost(5, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore + 1));
+        var item = itemRepository.findById("item-nobppid").orElseThrow();
+        assertThat(item.getBppId()).isNull();
+        assertThat(item.getCatalogId()).isEqualTo("cat-nobppid");
+    }
+
+    @Test
+    void push_bppIdInCatalogObject_persistsWithCatalogBppId() throws Exception {
+        long countBefore = itemRepository.count();
+
+        // New contract: bppId/bppUri are sourced from the catalog object (not context).
+        // Even when context lacks them, the catalog carries the authoritative values
+        // and persistence picks them up.
+        String payload = """
+                {
+                  "context": {
+                    "networkId": "test-net"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-bppincat",
+                      "bppId": "bpp.test",
+                      "bppUri": "https://bpp.example.com",
+                      "resources": [{
+                        "id": "item-bppincat",
+                        "descriptor": {"name": "Item with catalog.bppId"}
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/catalog/push")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("ACK"));
+
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore + 1));
+        var item = itemRepository.findById("item-bppincat").orElseThrow();
+        assertThat(item.getBppId()).isEqualTo("bpp.test");
+        assertThat(item.getBppUri()).isEqualTo("https://bpp.example.com");
+        assertThat(item.getCatalogId()).isEqualTo("cat-bppincat");
     }
 
     @Test

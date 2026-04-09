@@ -1,6 +1,5 @@
 package org.beckn.catalogpublish.integration;
 
-import org.beckn.catalogpublish.model.ItemId;
 import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,7 +19,10 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
 
         var itemAfterPublish = itemRepository.findAll().get(0);
         assertThat(itemAfterPublish.getId()).isEqualTo("item-1");
-        assertThat(itemAfterPublish.getBppId()).isEqualTo("bpp-1");
+        // bpp_id is sourced from catalog.bppId (not context). This fixture only sets
+        // context.bppId, so the persisted bpp_id is null — the new contract tolerates
+        // absence and writes null to the nullable column.
+        assertThat(itemAfterPublish.getBppId()).isNull();
         assertThat(itemAfterPublish.getName()).isEqualTo("EV Station");
         assertThat(itemAfterPublish.getCatalogId()).isEqualTo("cat-1");
 
@@ -158,8 +160,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                 }""";
         orchestrator.processPublish(round1);
         assertThat(itemRepository.count()).isEqualTo(2);
-        var item1AfterR1 = itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow();
-        var item2AfterR1 = itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow();
+        var item1AfterR1 = itemRepository.findById("item-1").orElseThrow();
+        var item2AfterR1 = itemRepository.findById("item-2").orElseThrow();
         // Verify both items have offer-A in their offer_ids DB column
         assertThat(item1AfterR1.getOfferIds()).contains("offer-A");
         assertThat(item2AfterR1.getOfferIds()).contains("offer-A");
@@ -185,8 +187,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         orchestrator.processPublish(round2);
 
         assertThat(itemRepository.count()).isEqualTo(2);
-        var item1AfterR2 = itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow();
-        var item2AfterR2 = itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow();
+        var item1AfterR2 = itemRepository.findById("item-1").orElseThrow();
+        var item2AfterR2 = itemRepository.findById("item-2").orElseThrow();
 
         // item-1: updated via Phase 1 (explicit), new price must be present
         assertThat(item1AfterR2.getPayload())
@@ -230,8 +232,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   }]}
                 }""";
         orchestrator.processPublish(round1);
-        assertThat(itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
-        assertThat(itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
+        assertThat(itemRepository.findById("item-1").orElseThrow().getOfferIds()).contains("offer-A");
+        assertThat(itemRepository.findById("item-2").orElseThrow().getOfferIds()).contains("offer-A");
 
         // Round 2: offer-A updated with resourceIds = ["item-1"] ONLY — item-2 intentionally absent.
         // Despite item-2 being absent from offer.resourceIds, Phase 2 MUST still update item-2
@@ -251,8 +253,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         orchestrator.processPublish(round2);
 
         assertThat(itemRepository.count()).isEqualTo(2);
-        var item1 = itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow();
-        var item2 = itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow();
+        var item1 = itemRepository.findById("item-1").orElseThrow();
+        var item2 = itemRepository.findById("item-2").orElseThrow();
 
         // item-1: offer-A mentions it — must be updated via Phase 2 DB lookup
         assertThat(item1.getPayload())
@@ -299,8 +301,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                 }""";
         orchestrator.processPublish(round1);
         assertThat(itemRepository.count()).isEqualTo(2);
-        assertThat(itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
-        assertThat(itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
+        assertThat(itemRepository.findById("item-1").orElseThrow().getOfferIds()).contains("offer-A");
+        assertThat(itemRepository.findById("item-2").orElseThrow().getOfferIds()).contains("offer-A");
 
         // Round 2: no explicit resources at all — only an updated offer.
         // Phase 2 must propagate to BOTH items via the DB offer_ids column.
@@ -322,8 +324,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(results).hasSize(1);
 
         assertThat(itemRepository.count()).isEqualTo(2);
-        var item1 = itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow();
-        var item2 = itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow();
+        var item1 = itemRepository.findById("item-1").orElseThrow();
+        var item2 = itemRepository.findById("item-2").orElseThrow();
 
         // item-1: no explicit items in round-2 → updated ONLY via Phase 2 DB column lookup
         assertThat(item1.getPayload())

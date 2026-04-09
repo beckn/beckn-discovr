@@ -91,6 +91,12 @@ public class PersistenceStep {
         // Gap 2 fix: pass context node so context.schemaContext is used when item @type is absent
         String schemaType = FieldExtractor.extractSchemaType(catalogNode, ctx.contextNode());
 
+        // Read bppId/bppUri from the catalog object itself (not the Beckn context).
+        // These are optional per the publish contract — when absent, persistence writes
+        // null to the item row (bpp_id / bpp_uri columns are nullable).
+        String catalogBppId = FieldExtractor.extractString(catalogNode, BecknFields.BPP_ID).orElse(null);
+        String catalogBppUri = FieldExtractor.extractString(catalogNode, BecknFields.BPP_URI).orElse(null);
+
         ObjectNode baseSlice = payloadBuilder.buildCatalogMetadataSlice(catalogNode, ctx);
         OfferIndex offerIndex = OfferIndex.build(allOffers, objectMapper);
 
@@ -116,9 +122,11 @@ public class PersistenceStep {
         }
 
         // Single batch DB lookup — avoids N individual queries for the upsert check.
+        // Lookup by id alone: the item PK is (id) after V13. Cross-BPP collisions are
+        // handled at the protocol level — resource ids must be unique across BPPs.
         List<String> allItemIds = pairs.stream().map(IdAndNode::itemId).toList();
         Map<String, Item> existingById = allItemIds.isEmpty() ? Map.of()
-                : itemStore.findAllByIdInAndBppId(allItemIds, ctx.bppId()).stream()
+                : itemStore.findAllByIdIn(allItemIds).stream()
                         .collect(Collectors.toMap(Item::getId, Function.identity()));
 
         // Keep the already-parsed JsonNode alongside the Item to avoid re-parsing for
@@ -182,7 +190,7 @@ public class PersistenceStep {
                         : (itemContextUrl != null ? itemContextUrl : catalogContextUrl);
                 built.add(new ItemWithNode(
                         Item.from(itemId, payload.toString(), offerIds, ctx, catalogId, name, type, providerId,
-                                contextUrl, version.getValue()),
+                                contextUrl, version.getValue(), catalogBppId, catalogBppUri),
                         payload));
             } catch (Exception e) {
                 String sanitized = ErrorSanitizer.sanitize(e);
@@ -203,8 +211,10 @@ public class PersistenceStep {
         // skip any item already handled in Phase 1.
         if (!incomingOfferById.isEmpty()) {
             Set<String> explicitIds = new HashSet<>(allItemIds);
-            List<Item> linkedItems = itemStore.findAllByBppIdAndAnyOfferId(
-                    ctx.bppId(), new ArrayList<>(incomingOfferById.keySet()));
+            // Phase 2 propagation: lookup by offer_ids only — no BPP filter.
+            // Preserves each linked item's own bpp_id/bpp_uri (they are not overwritten below).
+            List<Item> linkedItems = itemStore.findAllByAnyOfferId(
+                    new ArrayList<>(incomingOfferById.keySet()));
 
             for (Item linkedItem : linkedItems) {
                 if (explicitIds.contains(linkedItem.getId()))
@@ -230,11 +240,14 @@ public class PersistenceStep {
                     }
                     if (changed) {
                         String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
+                        // Preserve the linked item's original bpp_id / bpp_uri — never
+                        // overwrite with the publishing BPP's values during offer propagation.
                         built.add(new ItemWithNode(
                                 Item.from(linkedItem.getId(), payload.toString(), offerIds, ctx,
                                         catalogId, linkedItem.getName(), linkedItem.getType(),
                                         linkedItem.getProviderId(), linkedItem.getContextUrl(),
-                                        linkedItem.getSchemaVersion()),
+                                        linkedItem.getSchemaVersion(),
+                                        linkedItem.getBppId(), linkedItem.getBppUri()),
                                 payload));
                         log.debug("event={} itemId={} offers={}", LogEvent.PERSIST_COMPLETED,
                                 linkedItem.getId(), Arrays.toString(linkedItem.getOfferIds()));
