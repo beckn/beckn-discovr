@@ -52,6 +52,7 @@ public class DiscoveryMetrics {
     private final Counter totalRequestsCounter;
     private final Counter successCounter;
     private final Counter failureCounter;
+    private final Counter schemaFilterAppliedCounter;
     private final Timer   processingTimer;
 
     // Pre-registered per-engine meters (avoids per-call registration overhead)
@@ -75,6 +76,9 @@ public class DiscoveryMetrics {
         this.failureCounter = Counter.builder("discovr.discover.requests.failure")
                 .description("Failed discovery requests")
                 .register(meterRegistry);
+        this.schemaFilterAppliedCounter = Counter.builder("discovr.discover.schema_filter.applied")
+                .description("Number of times schema context filtering was applied in ES queries")
+                .register(meterRegistry);
         this.processingTimer = Timer.builder("discovr.discover.processing.duration")
                 .description("Discovery request processing duration")
                 .register(meterRegistry);
@@ -92,6 +96,14 @@ public class DiscoveryMetrics {
     }
 
     // ── Recording ────────────────────────────────────────────────────────────
+
+    /**
+     * Increments the schema filter applied counter.
+     * Call when a request carries schemaContext URLs that are pushed down into ES.
+     */
+    public void incrementSchemaFilterApplied() {
+        schemaFilterAppliedCounter.increment();
+    }
 
     /** Increments the total request counter. Call at the start of each request. */
     public void incrementTotalRequests() {

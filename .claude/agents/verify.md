@@ -112,6 +112,7 @@ Use `uuidgen | tr '[:upper:]' '[:lower:]'` for all messageId/transactionId value
  8. DB + Elasticsearch Verification — SC-36 to SC-39
  9. Observability checks (logs, metrics) — SC-40 to SC-43
 10. Response Validation (cross-cutting) — RV-01 to RV-10
+11. Schema Context Filtering (ES pushdown) — SC-44 to SC-53
 ```
 
 ## Scenarios
@@ -297,6 +298,26 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
 | RV-09 | Cross-BPP: BPP identity never overwritten | SC-29 |
 | RV-10 | Structured logs use dot.separated.lowercase event names | SC-40, SC-41 |
 
+
+### 11. Schema Context Filtering (ES pushdown)
+
+**Purpose:** Verify that `schemaContext` filtering is pushed into Elasticsearch queries, returning only matching documents without post-filter discard. See `docs/scenarios/10-schema-context-filtering.md` for full test data and verification depth.
+
+**Pre-requisite:** Push a second catalog `DSC-SCHEMA-<TS>` with resources using `@context: "https://beckn.org/Mobility"` and `@type: "RideService"` / `"BikeService"`, plus one resource with `@context: "https://schema.org"` and `@type: "ElectronicsItem"`. Wait for ES indexing (poll, max 30s).
+
+| # | Scenario | Method | Expected |
+|---|----------|--------|----------|
+| SC-44 | Single schemaContext — only matching docs | GET discover with `schemaContext: ["https://schema.org/Product#GroceryItem"]` | Only resources with `@context: "https://schema.org/Product"` + `@type: "GroceryItem"` returned. No Mobility resources. |
+| SC-45 | Multiple schemas, different base URLs — paired matching | GET discover with `schemaContext: ["https://schema.org#GroceryItem", "https://beckn.org/Mobility#RideService"]` | GroceryItem + RideService returned. No cross-matches (`schema.org` + `RideService`). |
+| SC-46 | Fragment-only — same base URL, different type | GET discover with `schemaContext: ["https://schema.org#ElectronicsItem"]` | Returns ElectronicsItem resource only. No GroceryItem despite same `@context` base. |
+| SC-47 | No fragment — context-only filter | GET discover with `schemaContext: ["https://beckn.org/Mobility"]` | All Mobility resources returned (RideService + BikeService). No schema.org resources. |
+| SC-48 | Empty schemaContext — no filter (regression guard) | GET discover with `textSearch: "Schema"` and no `schemaContext` | All matching resources returned regardless of `@context`/`@type`. |
+| SC-49 | Combined: schemaContext + textSearch | GET discover with `schemaContext: ["https://beckn.org/Mobility#RideService"]` + `textSearch: "Schema Ride"` | Only RS1 (matches both schema pair AND text). Excludes RS2 (wrong type) and GroceryItems. |
+| SC-50 | Combined: schemaContext + spatial | GET discover with `schemaContext: ["https://beckn.org/Mobility#RideService"]` + spatial near [77.5946, 12.9716] | Only RS1 (has location + correct schema). Excludes RS2 (no location). |
+| SC-51 | No matches — unknown schemaContext | GET discover with `schemaContext: ["https://example.org/NonExistent#FakeType"]` | `message.catalogs` = empty array. No errors. |
+| SC-52 | KNN path — semantic + schemaContext | GET discover with semantic/KNN search + `schemaContext: ["https://beckn.org/Mobility#RideService"]` | KNN candidates restricted to Mobility/RideService. Only matching docs returned. |
+| SC-53 | Metrics — schema filter counter | `curl -s http://localhost:8082/actuator/prometheus` | `discovr_discover_schema_filter_applied` counter > 0 after SC-44 through SC-52. |
+
 ## Verification Depth — What to Check for Every Operation
 
 ### After EVERY Push:
@@ -343,6 +364,14 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
 3. **`message.catalogs`** is array
 4. **Field names**: `resources` (not `items`), `resourceAttributes` (not `itemAttributes`)
 5. **No default false/zero values**: no `rateable: false`, no `ratingValue: 0` on items without ratings
+
+
+### After Schema Context Discover (SC-44 to SC-52):
+1. **Paired tuple correctness**: no cross-matches between schema pairs with different base URLs
+2. **Fragment parsing**: URL fragment correctly split into `@type`, base URL into `@context`
+3. **Context-only filter**: no-fragment URLs match all `@type` values for that `@context`
+4. **Empty schemaContext**: no accidental empty-filter exclusion (all docs returned)
+5. **Combined filters**: both schemaContext AND other criteria (text/spatial) applied simultaneously
 
 ## Report Format
 

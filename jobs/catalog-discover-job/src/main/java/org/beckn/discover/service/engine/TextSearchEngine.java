@@ -36,4 +36,18 @@ public interface TextSearchEngine {
      * @throws Exception                on transient infrastructure failure (may be retried by caller)
      */
     List<Catalog> search(String text, QueryRequest context) throws Exception;
+
+    /**
+     * Returns {@code true} when this engine natively applies schema context
+     * filtering inside its ES/PG queries, so the pipeline step that post-filters
+     * by schema context can be safely skipped.
+     *
+     * <p>Default: {@code false} — NLWeb relies on
+     * {@link org.beckn.discover.service.response.CatalogPipeline} step 1 for
+     * schema filtering. Override to {@code true} in Elasticsearch-backed
+     * implementations.</p>
+     */
+    default boolean appliesSchemaFilter() {
+        return false;
+    }
 }

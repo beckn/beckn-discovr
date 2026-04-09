@@ -120,6 +120,12 @@ public class DiscoveryService {
                     value("messageId", request.getContext().getMessageId()));
 
             QueryRequest qr = QueryRequest.from(request);
+
+            // Track schema filter metric when ES path will apply schema push-down
+            if (qr.hasSchemaFilters() && textSearchEngine.appliesSchemaFilter()) {
+                metrics.incrementSchemaFilterApplied();
+            }
+
             DiscoverResponse response = route(qr, request.getContext(), tracker);
 
             long ms = Duration.between(start, Instant.now()).toMillis();
@@ -221,7 +227,8 @@ public class DiscoveryService {
         }
 
         // combined.get() may be an empty list — that is a valid "no results" response
-        List<Catalog> processed = catalogPipeline.process(combined.get(), qr);
+        // Path A uses PostgreSQL (schema already filtered in SQL WHERE)
+        List<Catalog> processed = catalogPipeline.process(combined.get(), qr, true);
         recordStep(tracker, "path-a.pipeline");
 
         return buildResponse(processed, context);
@@ -279,7 +286,8 @@ public class DiscoveryService {
             return responseProcessor.buildEmptyResponse(context);
         }
 
-        List<Catalog> processed = catalogPipeline.process(intersected, qr);
+        // Path A-parallel: PostgreSQL filter + ES spatial — schema filtered in SQL
+        List<Catalog> processed = catalogPipeline.process(intersected, qr, true);
         recordStep(tracker, "path-a.parallel.pipeline");
 
         return buildResponse(processed, context);
@@ -295,7 +303,8 @@ public class DiscoveryService {
         metrics.recordResultCount("postgres", catalogs.size());
         recordStep(tracker, "path-b.query");
 
-        List<Catalog> processed = catalogPipeline.process(catalogs, qr);
+        // Path B: PostgreSQL — schema already filtered in SQL WHERE clause
+        List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
         recordStep(tracker, "path-b.pipeline");
 
         return buildResponse(processed, context);
@@ -311,7 +320,8 @@ public class DiscoveryService {
         metrics.recordResultCount("postgres", catalogs.size());
         recordStep(tracker, "path-c.query");
 
-        List<Catalog> processed = catalogPipeline.process(catalogs, qr);
+        // Path C: ES spatial or PostgreSQL spatial — schema filtered in ES knn.filter or SQL
+        List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
         recordStep(tracker, "path-c.pipeline");
 
         return buildResponse(processed, context);
@@ -356,7 +366,9 @@ public class DiscoveryService {
         metrics.recordResultCount(engine, catalogs.size());
         recordStep(tracker, "path-d.search");
 
-        List<Catalog> processed = catalogPipeline.process(catalogs, qr);
+        // Path D: use appliesSchemaFilter() to decide if pipeline step 1 can be skipped.
+        // ElasticsearchTextSearchEngine returns true; NLWebTextSearchEngine returns false.
+        List<Catalog> processed = catalogPipeline.process(catalogs, qr, textSearchEngine.appliesSchemaFilter());
         recordStep(tracker, "path-d.pipeline");
 
         return buildResponse(processed, context);

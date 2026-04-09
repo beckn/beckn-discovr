@@ -51,4 +51,8 @@ public final class LogEvent {
     public static final String NLWEB_SEARCH_STARTED    = "nlweb.search.started";
     public static final String NLWEB_SEARCH_COMPLETED  = "nlweb.search.completed";
     public static final String NLWEB_SEARCH_FAILED     = "nlweb.search.failed";
+
+    // ── Schema context ES push-down ───────────────────────────────────────────
+    public static final String ES_SCHEMA_FILTER_APPLIED = "es.schema.filter.applied";
+    public static final String ES_SCHEMA_FILTER_SKIPPED = "es.schema.filter.skipped";
 }

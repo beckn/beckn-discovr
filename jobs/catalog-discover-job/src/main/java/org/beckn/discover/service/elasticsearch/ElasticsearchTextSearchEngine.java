@@ -2,6 +2,7 @@ package org.beckn.discover.service.elasticsearch;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
@@ -85,6 +86,17 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         this.multiMatchFields = List.copyOf(fields);
     }
 
+    /**
+     * Returns {@code true}: this engine injects schema context filters directly
+     * into ES queries (both BM25 and KNN paths), so
+     * {@link org.beckn.discover.service.response.CatalogPipeline} step 1 can
+     * be safely skipped for this engine.
+     */
+    @Override
+    public boolean appliesSchemaFilter() {
+        return true;
+    }
+
     @Override
     @SuppressWarnings({"rawtypes", "unchecked"})
     public List<Catalog> search(String text, QueryRequest context) throws Exception {
@@ -113,22 +125,27 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
             }
 
             List<Float> vec = queryVector.get();
+            List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(context);
             log.debug(LogEvent.ES_SEARCH_STARTED + ".knn",
                     value("index", aliasName),
                     value("k", resultLimit),
                     value("numCandidates", knnCandidates),
                     value("minScore", minScore),
+                    value("schemaFilters", schemaFilters.size()),
                     value("transactionId", txId));
             try {
                 SearchResponse<Map> response = esClient.search(s -> s
                         .index(aliasName)
                         .minScore(minScore)
                         .size(resultLimit)
-                        .knn(k -> k
-                                .field("resource_vector")
-                                .queryVector(vec)
-                                .k(resultLimit)
-                                .numCandidates(knnCandidates)),
+                        .knn(k -> {
+                            var kb = k.field("resource_vector")
+                                    .queryVector(vec)
+                                    .k(resultLimit)
+                                    .numCandidates(knnCandidates);
+                            schemaFilters.forEach(kb::filter);
+                            return kb;
+                        }),
                         Map.class);
                 // knn cosine scores are already normalized to a tight range by minScore;
                 // relative filtering is unnecessary and could over-prune.
@@ -151,17 +168,23 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         }
 
         // ── Keyword search path (engine=native-els only) ──────────────────────
+        List<Query> keywordSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(context);
         log.info(LogEvent.ES_SEARCH_STARTED + ".keyword",
                 value("transactionId", txId),
+                value("schemaFilters", keywordSchemaFilters.size()),
                 value("query", buildTextSearchJson(text)));
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                     .index(aliasName)
-                    .query(q -> q.multiMatch(mm -> mm
-                            .query(text)
-                            .fields(multiMatchFields)
-                            .type(TextQueryType.BestFields)
-                            .fuzziness("AUTO")))
+                    .query(q -> q.bool(b -> {
+                        b.must(Query.of(mq -> mq.multiMatch(mm -> mm
+                                .query(text)
+                                .fields(multiMatchFields)
+                                .type(TextQueryType.BestFields)
+                                .fuzziness("AUTO"))));
+                        keywordSchemaFilters.forEach(b::filter);
+                        return b;
+                    }))
                     .minScore(minScore)
                     .size(resultLimit),
                     Map.class);
