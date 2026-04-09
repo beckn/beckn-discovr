@@ -55,9 +55,9 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         Set<String> ids = items.stream().map(Item::getId).collect(Collectors.toSet());
         assertThat(ids).containsExactlyInAnyOrder("ev-charger-ccs2-001", "ev-charger-ccs2-002", "ev-charger-type2-001");
 
-        // bpp_id is now sourced from catalog.bppId (not context). Fixtures in this test
-        // only carry context.bppId — catalog has none — so persisted bpp_id is null.
-        items.forEach(item -> assertThat(item.getBppId()).isNull());
+        // bpp_id is now sourced from catalog.bppId. This fixture (ev_charging_catalog_example)
+        // sets bppId on the catalog object, so persistence picks it up correctly.
+        items.forEach(item -> assertThat(item.getBppId()).isEqualTo("bpp.example.com1"));
 
         Item ccs2_001 = items.stream().filter(i -> "ev-charger-ccs2-001".equals(i.getId())).findFirst().orElseThrow();
         Item ccs2_002 = items.stream().filter(i -> "ev-charger-ccs2-002".equals(i.getId())).findFirst().orElseThrow();
