@@ -271,7 +271,17 @@ class EsSchemaFilterBuilderTest {
     }
 
     private static QueryRequest queryRequest(List<String> schemaContextUrls, List<String> schemaTypes) {
-        return new QueryRequest(TX, "msg-" + TX, null, List.of(), null, schemaTypes, schemaContextUrls);
+        // Reconstruct raw URLs from base + type for paired matching
+        var rawUrls = new java.util.ArrayList<String>();
+        if (schemaContextUrls.size() == schemaTypes.size()) {
+            for (int i = 0; i < schemaContextUrls.size(); i++) {
+                rawUrls.add(schemaContextUrls.get(i) + "#" + schemaTypes.get(i));
+            }
+        } else {
+            rawUrls.addAll(schemaContextUrls);
+        }
+        return new QueryRequest(TX, "msg-" + TX, null, List.of(), null,
+                schemaTypes, schemaContextUrls, rawUrls);
     }
 
     private static BoolQuery requireBool(Query query) {

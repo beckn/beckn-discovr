@@ -172,7 +172,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         log.info(LogEvent.ES_SEARCH_STARTED + ".keyword",
                 value("transactionId", txId),
                 value("schemaFilters", keywordSchemaFilters.size()),
-                value("query", buildTextSearchJson(text)));
+                value("query", buildTextSearchJson(sanitizeForLog(text))));
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                     .index(aliasName)
@@ -264,6 +264,12 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                     value("transactionId", txId));
         }
         return filtered;
+    }
+
+    /** Strips control characters and newlines from user input before logging. */
+    private static String sanitizeForLog(String input) {
+        if (input == null) return null;
+        return input.replaceAll("[\\r\\n\\t]", " ").replaceAll("[\\p{Cntrl}]", "");
     }
 
     private String buildTextSearchJson(String text) {

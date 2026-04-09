@@ -30,7 +30,9 @@ public record QueryRequest(
         List<DiscoverRequest.SpatialConstraint> spatial,
         String textSearch,
         List<String> schemaTypes,
-        List<String> schemaContextUrls
+        List<String> schemaContextUrls,
+        /** Raw schemaContext URLs preserving fragment pairing (e.g. "https://schema.org#GroceryItem"). */
+        List<String> rawSchemaContextUrls
 ) {
 
     /**
@@ -42,9 +44,18 @@ public record QueryRequest(
      */
     public QueryRequest {
         // Defensive unmodifiable views; callers may not assume mutability
-        spatial           = spatial           != null ? List.copyOf(spatial)           : List.of();
-        schemaTypes       = schemaTypes       != null ? List.copyOf(schemaTypes)       : List.of();
-        schemaContextUrls = schemaContextUrls != null ? List.copyOf(schemaContextUrls) : List.of();
+        spatial              = spatial              != null ? List.copyOf(spatial)              : List.of();
+        schemaTypes          = schemaTypes          != null ? List.copyOf(schemaTypes)          : List.of();
+        schemaContextUrls    = schemaContextUrls    != null ? List.copyOf(schemaContextUrls)    : List.of();
+        rawSchemaContextUrls = rawSchemaContextUrls != null ? List.copyOf(rawSchemaContextUrls) : List.of();
+    }
+
+    /** Backward-compatible 7-arg constructor (rawSchemaContextUrls defaults to empty). */
+    public QueryRequest(String transactionId, String messageId, String filters,
+                        List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
+                        List<String> schemaTypes, List<String> schemaContextUrls) {
+        this(transactionId, messageId, filters, spatial, textSearch,
+                schemaTypes, schemaContextUrls, List.of());
     }
 
     // ── Factory ─────────────────────────────────────────────────────────────
@@ -72,7 +83,8 @@ public record QueryRequest(
                 request.getSpatial(),
                 request.getTextSearch(),
                 parts.types(),
-                parts.urls()
+                parts.urls(),
+                schemaContextUrls
         );
     }
 
