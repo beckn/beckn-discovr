@@ -101,11 +101,14 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           # Build image tags: always include version tag, only add latest for universal tags
-          TAGS="asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${VERSION}"
-          if [[ "$IS_UNIVERSAL" == "true" ]]; then
-            TAGS="${TAGS}"$'\n'"asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
-          fi
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${VERSION}"
+            if [[ "$IS_UNIVERSAL" == "true" ]]; then
+              echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         if: steps.should_build.outputs.build == 'true'
