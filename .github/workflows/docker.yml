@@ -1,5 +1,25 @@
 name: GCP Artifact Registry — Build & Push
 
+# ═════════════════════════════════════════════════════════════════════════════════
+# PREREQUISITES: GCP Workload Identity Federation (OIDC) Setup Required
+# ═════════════════════════════════════════════════════════════════════════════════
+# This workflow requires GCP OIDC setup to be completed BEFORE merging:
+#
+# Required GitHub Secrets (must be configured in repository settings):
+#   1. GCP_WORKLOAD_IDENTITY_PROVIDER
+#      - Format: projects/{PROJECT_NUMBER}/locations/global/workloadIdentityPools/{POOL_ID}/providers/{PROVIDER_ID}
+#
+#   2. GCP_SERVICE_ACCOUNT
+#      - Format: {SERVICE_ACCOUNT_NAME}@{PROJECT_ID}.iam.gserviceaccount.com
+#
+# If these secrets are NOT configured:
+#   - Workflow will fail at the "Authenticate to Google Cloud (OIDC)" step
+#   - Error: "Unable to generate Google Cloud federated token"
+#   - All tag pushes will be blocked until secrets are configured
+#
+# Setup Instructions: See docs/GITHUB_ACTIONS_GCP_AR_SETUP.md
+# ═════════════════════════════════════════════════════════════════════════════════
+
 on:
   push:
     tags:
@@ -14,7 +34,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # Required for OIDC token
+      # ─────────────────────────────────────────────────────────────────────────────
+      # id-token: write
+      # ─────────────────────────────────────────────────────────────────────────────
+      # Generates OpenID Connect (OIDC) token from GitHub Actions that can be used
+      # for keyless authentication with GCP. This token is sent to GCP's Workload
+      # Identity Federation endpoint, where it is verified and exchanged for temporary
+      # service account credentials. These credentials allow access to GCP Artifact
+      # Registry and other GCP resources without storing long-lived secrets.
+      # ─────────────────────────────────────────────────────────────────────────────
+      id-token: write
 
     strategy:
       fail-fast: false
@@ -44,12 +73,15 @@ jobs:
           if [[ "$TAG" == "v"* && ! "$TAG" == *"/"* ]]; then
             # Universal tag (v1.0.0) - build all services
             echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "is_universal=true" >> "$GITHUB_OUTPUT"
           elif [[ "$TAG" == "${PREFIX}/"* ]]; then
             # Service-specific tag (discover/v1.0.0) - build only this service
             echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "is_universal=false" >> "$GITHUB_OUTPUT"
           else
             # Tag doesn't match this service
             echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "is_universal=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Resolve version tag (remove prefix for selective tags)
@@ -57,6 +89,7 @@ jobs:
         if: steps.should_build.outputs.build == 'true'
         run: |
           TAG="${{ github.ref_name }}"
+          IS_UNIVERSAL="${{ steps.should_build.outputs.is_universal }}"
 
           # If tag contains '/', remove prefix (discover/, publish/, dispatcher/)
           if [[ "$TAG" == *"/"* ]]; then
@@ -66,6 +99,14 @@ jobs:
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # Build image tags: always include version tag, only add latest for universal tags
+          TAGS="asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${VERSION}"
+          if [[ "$IS_UNIVERSAL" == "true" ]]; then
+            TAGS="${TAGS}
+asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         if: steps.should_build.outputs.build == 'true'
@@ -83,6 +124,17 @@ jobs:
         if: steps.should_build.outputs.build == 'true'
         run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
+      # ─────────────────────────────────────────────────────────────────────────────
+      # Build Context: Repository Root (.)
+      # ─────────────────────────────────────────────────────────────────────────────
+      # Build context is set to repository root (.) because Dockerfiles use absolute
+      # paths to access shared dependencies:
+      #   - COPY sdks/beckn-auth-java-sdk/      (shared SDK)
+      #   - COPY jobs/<job-name>/               (service-specific files)
+      #
+      # If context were set to jobs/<job>/ subdirectory, these COPY commands would
+      # fail because the sdks/ directory would be outside the build context.
+      # ─────────────────────────────────────────────────────────────────────────────
       - name: Build and push Docker image
         if: steps.should_build.outputs.build == 'true'
         uses: docker/build-push-action@v6
@@ -90,15 +142,13 @@ jobs:
           context: .
           file:    ${{ matrix.dockerfile }}
           push: true
-          tags: |
-            asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${{ steps.resolve.outputs.version }}
-            asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest
+          tags: ${{ steps.resolve.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Run Trivy image scan (HIGH,CRITICAL) [non-blocking]
         if: steps.should_build.outputs.build == 'true'
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.24.0
         with:
           scan-type: image
           image-ref: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${{ steps.resolve.outputs.version }}
