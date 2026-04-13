@@ -103,8 +103,7 @@ jobs:
           # Build image tags: always include version tag, only add latest for universal tags
           TAGS="asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${VERSION}"
           if [[ "$IS_UNIVERSAL" == "true" ]]; then
-            TAGS="${TAGS}
-asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
+            TAGS="${TAGS}"$'\n'"asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
           fi
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
