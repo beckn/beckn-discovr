@@ -2,7 +2,6 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
 
 jobs:
   gradle-tests:
@@ -91,7 +90,7 @@ jobs:
           done
 
       - name: Run Trivy filesystem scan (HIGH,CRITICAL, vuln-only)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           scan-ref: .
