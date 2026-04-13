@@ -1,4 +1,4 @@
-name: CI
+name: Code Quality & Security Tests
 
 on:
   pull_request:

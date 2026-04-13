@@ -1,4 +1,4 @@
-name: GCP Artifact Registry — Build & Push
+name: Build & Push to GCP Artifact Registry
 
 # ═════════════════════════════════════════════════════════════════════════════════
 # PREREQUISITES: GCP Workload Identity Federation (OIDC) Setup Required
