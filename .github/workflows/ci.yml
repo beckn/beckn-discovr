@@ -107,7 +107,7 @@ jobs:
             **/node_modules
 
       - name: Install Trivy CLI (for SBOM scanning)
-        uses: aquasecurity/setup-trivy@v0.3.0
+        uses: aquasecurity/setup-trivy@v0.2.6
 
       - name: Scan SBOMs (Java jobs) with Trivy (HIGH,CRITICAL)
         run: |
