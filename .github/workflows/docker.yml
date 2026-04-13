@@ -147,7 +147,7 @@ jobs:
 
       - name: Run Trivy image scan (HIGH,CRITICAL) [non-blocking]
         if: steps.should_build.outputs.build == 'true'
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: image
           image-ref: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${{ steps.resolve.outputs.version }}
