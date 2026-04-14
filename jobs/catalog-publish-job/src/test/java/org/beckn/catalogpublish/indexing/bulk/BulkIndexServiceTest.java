@@ -41,10 +41,6 @@ class BulkIndexServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(props.catalog()).thenReturn(catalogProps);
-        when(catalogProps.elasticsearch()).thenReturn(esProps);
-        when(esProps.indexPrefix()).thenReturn("items");
-
         bulkIndexService = new BulkIndexService(esClient, indexManager, metrics, props);
     }
 

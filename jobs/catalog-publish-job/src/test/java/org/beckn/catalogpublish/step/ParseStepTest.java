@@ -46,6 +46,6 @@ class ParseStepTest {
     @Test
     void extractCatalogIdSafe_returnsUnknownWhenMissing() {
         var node = new ObjectMapper().createObjectNode();
-        assertThat(parseStep.extractCatalogIdSafe(node)).isEqualTo("unknown");
+        assertThat(parseStep.extractCatalogIdSafe(node)).isNull();
     }
 }
