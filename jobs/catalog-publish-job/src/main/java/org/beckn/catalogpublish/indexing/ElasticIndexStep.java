@@ -88,6 +88,9 @@ public class ElasticIndexStep {
         // FULL replace: delete all existing ES documents for this catalog before indexing fresh ones.
         // This runs after the DB transaction has committed, so the DB is already clean.
         // Failure is non-fatal: stale docs will remain until the next FULL replace; new docs are still indexed.
+        // TODO: PG + ES are NOT transactional. If ES delete/index fails, PG and ES diverge.
+        // Consider: (1) retry ES delete via EsFailureConsumer, (2) periodic reconciliation job
+        // that compares PG item_ids with ES doc_ids per catalog and removes orphans.
         if (batch.fullReplace()) {
             try {
                 long esDeleted = bulkIndexService.deleteByCatalog(batch.catalogId());
