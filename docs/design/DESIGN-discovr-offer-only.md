@@ -1,8 +1,15 @@
 # Design: Discovr Offer-Only Catalog Support
 
-**Status:** PROPOSED  
-**Date:** 2026-04-07  
+**Status:** IMPLEMENTED (Design B)
+**Date:** 2026-04-07
 **Recommendation:** Design B (Extracted OfferResolutionStep)
+
+> **Schema note (2026-04-13):** This design was written before the `table-changes` schema
+> redesign. The `item` table PK is now `(id, catalog_id)` — not `(id, bpp_id)`. References
+> in this doc to `bpp_id` in item PK, acceptance criteria, and "What NOT to Do" reflect
+> the old schema and are superseded. The implemented `OfferResolutionStep` uses `catalog_id`
+> for all item lookups and there are no `bpp_id`/`bpp_uri` columns on `item`. See
+> `docs/DATABASE_SCHEMA.md` in beckn-catalg for the authoritative schema.
 
 ---
 
