@@ -125,7 +125,7 @@ public class DiscoveryController {
             }
 
             logger.info(LogEvent.REQUEST_RECEIVED,
-                    value("method", "GET"),
+                    value("method", httpRequest.getMethod()),
                     value("transactionId", txnNode.asText("")));
 
             authorizationService.authorizeRequest(rawBody, headers);

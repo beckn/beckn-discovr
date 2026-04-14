@@ -80,11 +80,15 @@ public class EventListener {
                 log.warn("{}", value("event", LogEvent.DLT_SENT),
                         value("topic", record.topic()),
                         value("key", messageKey));
+                // Ack only after successful DLT publish. If DLT publish fails we must
+                // NOT ack — throw so the container error handler retries or raises an alert.
+                ack.acknowledge();
             } catch (Exception dltEx) {
                 log.error("{}", value("event", LogEvent.DLT_FAILED),
                         value("errorMessage", dltEx.getMessage()), dltEx);
-            } finally {
-                ack.acknowledge();
+                // Re-throw so the container error handler sees the failure and does not
+                // commit the offset. The message will be retried on the next poll.
+                throw new RuntimeException("DLT publish failed — offset not committed", dltEx);
             }
         } finally {
             BecknMdcContext.clear();

@@ -83,8 +83,11 @@ public class PersistenceStep {
         var updateMode = publishDirectives.path(BecknFields.UPDATE_MODE).asText("MERGE");
         boolean isFullReplace = "FULL".equalsIgnoreCase(updateMode);
 
-        // Strip publishDirectives — internal control field, must not be stored in DB or ES.
+        // Deep-copy before mutating — the input node may be shared across parallel catalog
+        // processing threads (CompletableFuture fan-out in CatalogPublishOrchestrator).
+        // ObjectNode is NOT thread-safe; mutating the original would cause data races.
         if (catalogNode.isObject() && catalogNode.has(BecknFields.PUBLISH_DIRECTIVES)) {
+            catalogNode = catalogNode.deepCopy();
             ((com.fasterxml.jackson.databind.node.ObjectNode) catalogNode).remove(BecknFields.PUBLISH_DIRECTIVES);
         }
 
@@ -197,6 +200,8 @@ public class PersistenceStep {
 
         // Phase 3: Cross-catalog offer resolution — attach offers to items owned by other catalogs.
         if (!incomingOfferById.isEmpty()) {
+            // Phase 2 items must be in handledIds to prevent Phase 3 (cross-BPP offers) from
+            // double-processing items that were already updated by Phase 2 (same-catalog offer propagation).
             Set<String> handledIds = new HashSet<>(allItemIds);
             built.forEach(iwn -> handledIds.add(iwn.item().getId()));
 

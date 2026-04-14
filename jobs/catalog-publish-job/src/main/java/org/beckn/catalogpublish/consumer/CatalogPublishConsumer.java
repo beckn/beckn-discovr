@@ -82,10 +82,13 @@ public class CatalogPublishConsumer {
             PublishOutcome outcome = handler.apply(raw);
             List<ProcessingResult> results = outcome.results();
 
-            if (!results.isEmpty() && results.stream().allMatch(r -> r.status() == ProcessingStatus.INTERNAL_ERROR)) {
-                log.error("event={} op={} topic={} offset={} count={} — retrying",
-                        LogEvent.CONSUMER_ERROR, operation, topic, offset, results.size());
-                throw new RuntimeException("All " + results.size() + " catalog(s) returned INTERNAL_ERROR");
+            // Retry if ANY catalog has INTERNAL_ERROR — partial failure must not be silently acked.
+            // A failed catalog not re-queued is permanently lost; retry allows recovery.
+            long errorCount = results.stream().filter(r -> r.status() == ProcessingStatus.INTERNAL_ERROR).count();
+            if (!results.isEmpty() && errorCount > 0) {
+                log.error("event={} op={} topic={} offset={} errorCount={} totalCount={} — retrying",
+                        LogEvent.CONSUMER_ERROR, operation, topic, offset, errorCount, results.size());
+                throw new RuntimeException(errorCount + " of " + results.size() + " catalog(s) returned INTERNAL_ERROR");
             }
 
             responsePublisher.publishResponse(outcome.context().contextNode(), results);

@@ -153,7 +153,9 @@ public class DiscoveryService {
         } finally {
             if (tracker != null) tracker.logSummary(request.getContext().getTransactionId(),
                     metrics.getProcessingStats().successfulRequests() > 0);
-            clearMDC();
+            // MDC lifecycle is owned by the caller (controller finally-block or consumer
+            // finally-block). The service must not clear MDC here — doing so would erase
+            // correlation fields before the caller's own cleanup and logging run.
         }
     }
 
@@ -259,6 +261,11 @@ public class DiscoveryService {
 
         try {
             CompletableFuture.allOf(filterFuture, spatialFuture).get(timeoutSec, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            filterFuture.cancel(true);
+            spatialFuture.cancel(true);
+            throw new RuntimeException("Interrupted during parallel query", e);
         } catch (Exception e) {
             log.error(LogEvent.QUERY_TIMEOUT,
                     value("path", "A-parallel"),
@@ -479,10 +486,6 @@ public class DiscoveryService {
 
     private static void restoreMDC(Map<String, String> snapshot) {
         if (snapshot != null) MDC.setContextMap(snapshot);
-    }
-
-    private static void clearMDC() {
-        BecknMdcContext.clear();
     }
 
     // ── Latency tracking ──────────────────────────────────────────────────────

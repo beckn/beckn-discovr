@@ -125,12 +125,16 @@ public class DiscoveryEventConsumer {
             }
 
             DiscoverResponse response = discoveryService.processDiscoveryRequest(discoverRequest);
+
+            // Publish the response BEFORE acknowledging so that a publish failure keeps
+            // the message un-acked and allows the container error handler to retry/DLT it.
+            // If we ack first and publish fails, the BAP never receives its callback.
+            publishResponse(response, discoverRequest);
+
             acknowledgment.acknowledge();
             logger.info(LogEvent.QUERY_COMPLETED,
                     value("partition", partition),
                     value("offset", offset));
-
-            publishResponse(response, discoverRequest);
 
         } catch (Exception e) {
             logger.error(LogEvent.QUERY_FAILED,
@@ -146,10 +150,15 @@ public class DiscoveryEventConsumer {
     /**
      * Publishes the discovery response to the Kafka response topic.
      *
-     * <p>Publish failures are logged and swallowed: the Kafka request message has already been
-     * acknowledged and cannot be retried here.  A lost response means the BAP will not receive
-     * its callback; this is a known trade-off of the async approach and should be monitored
-     * via metrics/alerts on the response topic lag.</p>
+     * <p>This method blocks until the send completes so that the caller can decide
+     * whether to acknowledge the inbound message.  If the send fails, a
+     * {@link RuntimeException} is thrown — the caller's catch block will
+     * rethrow it, keeping the inbound message un-acked so the container
+     * error handler can retry or route it to the DLT.</p>
+     *
+     * <p>If the response topic is not configured, the failure is logged as a
+     * warning and the method returns normally (misconfiguration is an ops issue,
+     * not a message-level retry candidate).</p>
      */
     private void publishResponse(DiscoverResponse response, DiscoverRequest request) {
         String responseTopic = discoveryProperties.getKafka().getResponseTopic();
@@ -158,26 +167,28 @@ public class DiscoveryEventConsumer {
                     value("reason", "response-topic-not-configured"));
             return;
         }
+        String transactionId = request.getContext() != null ? request.getContext().getTransactionId() : null;
         try {
             String responseJson = objectMapper.writeValueAsString(response);
-            String transactionId = request.getContext() != null ? request.getContext().getTransactionId() : null;
-            kafkaTemplate.send(responseTopic, transactionId, responseJson)
-                    .whenComplete((result, ex) -> {
-                        if (ex != null) {
-                            logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
-                                    value("topic", responseTopic),
-                                    value("transactionId", transactionId),
-                                    ex);
-                        } else {
-                            logger.info(LogEvent.RESPONSE_PUBLISHED,
-                                    value("topic", responseTopic),
-                                    value("transactionId", transactionId));
-                        }
-                    });
+            // Block until Kafka broker confirms receipt so that any send failure propagates
+            // before the inbound offset is acknowledged.
+            kafkaTemplate.send(responseTopic, transactionId, responseJson).get();
+            logger.info(LogEvent.RESPONSE_PUBLISHED,
+                    value("topic", responseTopic),
+                    value("transactionId", transactionId));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
+                    value("topic", responseTopic),
+                    value("transactionId", transactionId),
+                    e);
+            throw new RuntimeException("Interrupted while publishing response", e);
         } catch (Exception e) {
             logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),
+                    value("transactionId", transactionId),
                     e);
+            throw new RuntimeException("Failed to publish on_discover response", e);
         }
     }
 
