@@ -1,5 +1,6 @@
 package org.beckn.catalogpublish.integration;
 
+import org.beckn.catalogpublish.model.Item;
 import org.beckn.catalogpublish.model.ItemId;
 import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
 import org.junit.jupiter.api.Test;
@@ -10,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Integration tests for FULL replace mode (updateMode=FULL in publishDirectives).
  *
- * <p>FULL mode deletes all existing items for the catalog+bpp before inserting fresh ones.
+ * <p>FULL mode deletes all existing items for the catalog before inserting fresh ones.
  * Items from the previous publish that are not in the new payload are removed.
  */
 class FullReplaceIntegrationTest extends BaseIntegrationTest {
@@ -39,8 +40,8 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
                 }""";
         orchestrator.processPublish(round1);
         assertThat(itemRepository.count()).isEqualTo(2);
-        assertThat(itemRepository.findById(new ItemId("item-old",  "bpp-1"))).isPresent();
-        assertThat(itemRepository.findById(new ItemId("item-keep", "bpp-1"))).isPresent();
+        assertThat(itemRepository.findById(new ItemId("item-old",  "cat-1"))).isPresent();
+        assertThat(itemRepository.findById(new ItemId("item-keep", "cat-1"))).isPresent();
 
         // Round 2: FULL replace — only item-new in the payload
         String round2 = """
@@ -61,11 +62,11 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
 
         // item-old and item-keep must be gone; only item-new must exist
         assertThat(itemRepository.count()).isEqualTo(1);
-        assertThat(itemRepository.findById(new ItemId("item-old",  "bpp-1"))).isEmpty();
-        assertThat(itemRepository.findById(new ItemId("item-keep", "bpp-1"))).isEmpty();
+        assertThat(itemRepository.findById(new ItemId("item-old",  "cat-1"))).isEmpty();
+        assertThat(itemRepository.findById(new ItemId("item-keep", "cat-1"))).isEmpty();
 
-        var newItem = itemRepository.findById(new ItemId("item-new", "bpp-1")).orElseThrow();
-        assertThat(newItem.getName()).isEqualTo("New Item");
+        var newItem = itemRepository.findById(new ItemId("item-new", "cat-1")).orElseThrow();
+        assertThat(newItem.getPayload()).contains("New Item");
         assertThat(newItem.getCatalogId()).isEqualTo("cat-1");
     }
 
@@ -110,9 +111,9 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
 
         // cat-1 items replaced; cat-2 item unaffected
         assertThat(itemRepository.count()).isEqualTo(2);
-        assertThat(itemRepository.findById(new ItemId("cat1-item",     "bpp-1"))).isEmpty();
-        assertThat(itemRepository.findById(new ItemId("cat1-item-new", "bpp-1"))).isPresent();
-        assertThat(itemRepository.findById(new ItemId("cat2-item",     "bpp-1"))).isPresent();
+        assertThat(itemRepository.findById(new ItemId("cat1-item",     "cat-1"))).isEmpty();
+        assertThat(itemRepository.findById(new ItemId("cat1-item-new", "cat-1"))).isPresent();
+        assertThat(itemRepository.findById(new ItemId("cat2-item",     "cat-2"))).isPresent();
     }
 
     /**
@@ -137,8 +138,8 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
         orchestrator.processPublish(payload);
 
         assertThat(itemRepository.count()).isEqualTo(1);
-        var item = itemRepository.findById(new ItemId("item-a", "bpp-1")).orElseThrow();
-        assertThat(item.getName()).isEqualTo("Item A");
+        var item = itemRepository.findById(new ItemId("item-a", "cat-1")).orElseThrow();
+        assertThat(item.getPayload()).contains("Item A");
     }
 
     /**
@@ -176,9 +177,140 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
         orchestrator.processPublish(round2);
 
         assertThat(itemRepository.count()).isEqualTo(2);
-        var item1 = itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow();
-        var item2 = itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow();
-        assertThat(item1.getName()).isEqualTo("Item One Updated");
-        assertThat(item2.getName()).isEqualTo("Item Two");
+        var item1 = itemRepository.findById(new ItemId("item-1", "cat-1")).orElseThrow();
+        var item2 = itemRepository.findById(new ItemId("item-2", "cat-1")).orElseThrow();
+        assertThat(item1.getPayload()).contains("Item One Updated");
+        assertThat(item2.getPayload()).contains("Item Two");
+    }
+
+    /**
+     * Audit fields: first publish sets createdBy and updatedBy.
+     * On republish, createdBy must be unchanged (updatable=false), updatedBy may be updated.
+     */
+    @Test
+    void auditFields_createdByNotOverwrittenOnRepublish() {
+        String round1 = """
+                {
+                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                               "messageId":"m1","transactionId":"t1",
+                               "networkId":"net-1"},
+                  "message": {"catalogs": [{"id": "cat-audit",
+                    "resources": [{"id": "audit-item", "descriptor": {"name": "Audit Item"}}],
+                    "offers": []}]}
+                }""";
+        orchestrator.processPublish(round1);
+
+        Item afterFirstPublish = itemRepository.findById(new ItemId("audit-item", "cat-audit")).orElseThrow();
+        assertThat(afterFirstPublish.getCreatedBy()).isNotBlank();
+        assertThat(afterFirstPublish.getUpdatedBy()).isNotBlank();
+        String originalCreatedBy = afterFirstPublish.getCreatedBy();
+
+        // Round 2: same catalog, same item — createdBy must NOT change
+        String round2 = """
+                {
+                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                               "messageId":"m2","transactionId":"t2",
+                               "networkId":"net-1"},
+                  "message": {"catalogs": [{"id": "cat-audit",
+                    "resources": [{"id": "audit-item", "descriptor": {"name": "Audit Item Updated"}}],
+                    "offers": []}]}
+                }""";
+        orchestrator.processPublish(round2);
+
+        Item afterSecondPublish = itemRepository.findById(new ItemId("audit-item", "cat-audit")).orElseThrow();
+        assertThat(afterSecondPublish.getCreatedBy())
+                .as("createdBy must not change on republish")
+                .isEqualTo(originalCreatedBy);
+        assertThat(afterSecondPublish.getPayload()).contains("Audit Item Updated");
+    }
+
+    /**
+     * Location isolation: FULL replace on catalog-A must not delete locations of items
+     * with the same id in catalog-B.
+     *
+     * Regression test for the unsafe subquery DELETE that matched item ids across catalogs.
+     * The fix uses a JOIN: DELETE ... USING item WHERE ilc.item_id = i.id AND i.catalog_id = ?
+     */
+    @Test
+    void fullReplace_locationDeleteScopedToCatalog_otherCatalogLocationsUnaffected() {
+        // Round 1: publish res-001 in catalog-A and catalog-B with locations in each
+        String publishA = """
+                {
+                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                               "messageId":"m1","transactionId":"t1"},
+                  "message": {"catalogs": [{
+                    "id": "cat-loc-A",
+                    "resources": [{
+                      "id": "res-shared",
+                      "descriptor": {"name": "Shared Resource A"},
+                      "availableAt": [{"geo": {"type": "Point", "coordinates": [77.5, 12.9]}}]
+                    }],
+                    "offers": []
+                  }]}
+                }""";
+        String publishB = """
+                {
+                  "context": {"bppId":"bpp-2","bppUri":"http://bpp2.example.com",
+                               "messageId":"m2","transactionId":"t2"},
+                  "message": {"catalogs": [{
+                    "id": "cat-loc-B",
+                    "resources": [{
+                      "id": "res-shared",
+                      "descriptor": {"name": "Shared Resource B"},
+                      "availableAt": [{"geo": {"type": "Point", "coordinates": [78.0, 13.0]}}]
+                    }],
+                    "offers": []
+                  }]}
+                }""";
+        orchestrator.processPublish(publishA);
+        orchestrator.processPublish(publishB);
+
+        // Both catalogs must have locations before the FULL replace
+        long locationsBeforeA = locationRepository.findAll().stream()
+                .filter(l -> "cat-loc-A".equals(l.getId().getCatalogId()))
+                .count();
+        long locationsBeforeB = locationRepository.findAll().stream()
+                .filter(l -> "cat-loc-B".equals(l.getId().getCatalogId()))
+                .count();
+        assertThat(locationsBeforeA).as("cat-loc-A must have locations").isGreaterThan(0);
+        assertThat(locationsBeforeB).as("cat-loc-B must have locations").isGreaterThan(0);
+
+        // Round 2: FULL replace on cat-loc-A — should NOT touch cat-loc-B
+        String fullReplaceA = """
+                {
+                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                               "messageId":"m3","transactionId":"t3"},
+                  "message": {"catalogs": [{
+                    "id": "cat-loc-A",
+                    "publishDirectives": {"updateMode": "FULL"},
+                    "resources": [{
+                      "id": "res-new",
+                      "descriptor": {"name": "New Resource A"}
+                    }],
+                    "offers": []
+                  }]}
+                }""";
+        orchestrator.processPublish(fullReplaceA);
+
+        // cat-loc-A: old item gone, new item present
+        assertThat(itemRepository.findById(new ItemId("res-shared", "cat-loc-A"))).isEmpty();
+        assertThat(itemRepository.findById(new ItemId("res-new",    "cat-loc-A"))).isPresent();
+
+        // cat-loc-A: item_location_collection rows for deleted item must also be gone
+        long locationsAfterAFull = locationRepository.findAll().stream()
+                .filter(l -> "cat-loc-A".equals(l.getId().getCatalogId()))
+                .count();
+        assertThat(locationsAfterAFull)
+                .as("item_location_collection rows for cat-loc-A must be deleted by FULL replace")
+                .isEqualTo(0);
+
+        // cat-loc-B: res-shared must still have a location
+        assertThat(itemRepository.findById(new ItemId("res-shared", "cat-loc-B"))).isPresent();
+        long locationsAfterBFull = locationRepository.findAll().stream()
+                .filter(l -> "cat-loc-B".equals(l.getId().getCatalogId()))
+                .count();
+        assertThat(locationsAfterBFull)
+                .as("cat-loc-B locations must survive FULL replace of cat-loc-A")
+                .isGreaterThan(0);
     }
 }

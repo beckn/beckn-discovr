@@ -91,10 +91,6 @@ public abstract class BaseIntegrationTest {
     void clearDatabase() {
         locationRepository.deleteAll();
         itemRepository.deleteAll();
-        // Networks table has a self-referencing FK (children reference parents).
-        // Null out child references first so the subsequent DELETE has no FK violations.
-        jdbcTemplate.execute("UPDATE networks SET parent_network_id = NULL WHERE parent_network_id IS NOT NULL");
-        jdbcTemplate.execute("DELETE FROM networks");
     }
 
     protected String readFixture(String relativePath) {

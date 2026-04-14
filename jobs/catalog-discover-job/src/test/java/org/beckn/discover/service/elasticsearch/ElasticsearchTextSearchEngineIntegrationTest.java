@@ -233,8 +233,6 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         assertThat(catalogs).hasSize(1);
         Catalog catalog = catalogs.get(0);
         assertThat(catalog.getId()).isEqualTo("cat-ev-001");
-        assertThat(catalog.getBppId()).isEqualTo("bpp-ecopower");
-        assertThat(catalog.getBppUri()).isEqualTo("https://bpp.ecopower.com");
         assertThat(catalog.getResources()).hasSize(1);
 
         Resource resource = catalog.getResources().get(0);
@@ -259,7 +257,6 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         assertThat(catalogs).hasSize(1);
         Catalog catalog = catalogs.get(0);
         assertThat(catalog.getId()).isEqualTo("cat-ev-001");
-        assertThat(catalog.getBppId()).isEqualTo("bpp-ecopower");
         assertThat(catalog.getResources()).hasSize(2);
         assertThat(catalog.getResources())
                 .extracting(Resource::getId)
@@ -279,8 +276,6 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         assertThat(catalogs).hasSize(2);
         assertThat(catalogs).extracting(Catalog::getId)
                 .containsExactlyInAnyOrder("cat-ev-001", "cat-ev-002");
-        assertThat(catalogs).extracting(Catalog::getBppId)
-                .containsExactlyInAnyOrder("bpp-ecopower", "bpp-greenvolt");
     }
 
     /**
@@ -519,11 +514,11 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                       "catalog_name":                    { "type": "text", "fields": { "raw": { "type": "keyword" } } },
                       "resource_provider_name":          { "type": "text", "fields": { "raw": { "type": "keyword" } } },
                       "catalog_id":                      { "type": "keyword" },
-                      "bpp_id":                          { "type": "keyword" },
                       "resource_id":                     { "type": "keyword" },
                       "resource_rating_review_text":     { "type": "text" },
                       "resource_attributes_context":     { "type": "keyword" },
-                      "resource_attributes_type":        { "type": "keyword" }
+                      "resource_attributes_type":        { "type": "keyword" },
+                      "network_id":                      { "type": "keyword" }
                     }
                   }
                 }
@@ -537,7 +532,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     private static void seedTestDocs() throws Exception {
         BulkRequest.Builder bulk = new BulkRequest.Builder();
         for (Map<String, Object> doc : testDocs()) {
-            String id = doc.get("bpp_id") + ":" + doc.get("resource_id");
+            String id = doc.get("catalog_id") + ":" + doc.get("resource_id");
             bulk.operations(op -> op.index(i -> i.index(INDEX).id(id).document(doc)));
         }
         BulkResponse response = esClient.bulk(bulk.build());
@@ -564,7 +559,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
      */
     private static List<Map<String, Object>> testDocs() {
         return List.of(
-                doc("cat-ev-001", "EcoPower Catalog", "bpp-ecopower", "https://bpp.ecopower.com",
+                doc("cat-ev-001", "EcoPower Catalog",
                         "ev-charger-001", "DC Fast Charger CCS2 60kW",
                         "60kW DC fast charger for EV", "CCS2 rapid charge",
                         "EV_CHARGING", "EV Charging", 4.5, 120,
@@ -573,7 +568,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         "DC Fast Charger CCS2 60kW EV EcoPower 150",
                         "https://schema.org/EV", "Charger"),
 
-                doc("cat-ev-001", "EcoPower Catalog", "bpp-ecopower", "https://bpp.ecopower.com",
+                doc("cat-ev-001", "EcoPower Catalog",
                         "ev-charger-002", "AC Charger Type2 22kW",
                         "22kW AC charger Type2 for EV", "Type2 AC charge",
                         "EV_CHARGING", "EV Charging", 4.2, 85,
@@ -582,7 +577,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         "AC Charger Type2 22kW EV EcoPower",
                         "https://schema.org/EV", "Charger"),
 
-                doc("cat-ev-002", "GreenVolt Catalog", "bpp-greenvolt", "https://bpp.greenvolt.com",
+                doc("cat-ev-002", "GreenVolt Catalog",
                         "ev-charger-003", "DC Charger CHAdeMO 50kW",
                         "50kW CHAdeMO DC fast charger", "CHAdeMO rapid charge",
                         "EV_CHARGING", "EV Charging", 3.9, 60,
@@ -593,7 +588,6 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     }
 
     private static Map<String, Object> doc(String catalogId, String catalogName,
-            String bppId, String bppUri,
             String itemId, String itemName,
             String shortDesc, String longDesc,
             String categoryCode, String categoryName,
@@ -606,8 +600,6 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
         m.put("catalog_id", catalogId);
         m.put("catalog_name", catalogName);
-        m.put("bpp_id", bppId);
-        m.put("bpp_uri", bppUri);
         m.put("network_id", "ondc-ev");
         m.put("resource_id", itemId);
         m.put("resource_name", itemName);

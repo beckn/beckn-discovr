@@ -35,7 +35,7 @@ public class CatalogPushController {
             Map.of("status", "ACK");
     private static final Map<String, Object> NACK_MISSING_CONTEXT = Map.of(
             "status", "NACK",
-            "error", Map.of("errorCode", "INVALID_REQUEST", "errorMessage", "Missing or incomplete context: bppId and bppUri are required"));
+            "error", Map.of("errorCode", "INVALID_REQUEST", "errorMessage", "Missing or invalid context object"));
 
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
@@ -71,7 +71,8 @@ public class CatalogPushController {
     }
 
     /**
-     * Validates that the payload has context.bppId and context.bppUri.
+     * Validates that the payload has a valid context object with at least one
+     * mandatory Beckn correlation field (messageId or transactionId).
      * No enrichment or fallback — callers must send a complete Beckn context.
      */
     private boolean hasRequiredContext(String rawBody) {
@@ -82,10 +83,12 @@ public class CatalogPushController {
                 log.warn("event={} reason=missing-context", LogEvent.PUSH_REJECTED);
                 return false;
             }
-            String bppId = ctx.path(BecknFields.BPP_ID).asText(null);
-            String bppUri = ctx.path(BecknFields.BPP_URI).asText(null);
-            if (bppId == null || bppId.isBlank() || bppUri == null || bppUri.isBlank()) {
-                log.warn("event={} reason=missing-bppId-or-bppUri", LogEvent.PUSH_REJECTED);
+            boolean hasMessageId = !ctx.path(BecknFields.MESSAGE_ID).isMissingNode()
+                    && !ctx.path(BecknFields.MESSAGE_ID).asText("").isBlank();
+            boolean hasTransactionId = !ctx.path(BecknFields.TRANSACTION_ID).isMissingNode()
+                    && !ctx.path(BecknFields.TRANSACTION_ID).asText("").isBlank();
+            if (!hasMessageId && !hasTransactionId) {
+                log.warn("event={} reason=missing-correlation-id", LogEvent.PUSH_REJECTED);
                 return false;
             }
             return true;

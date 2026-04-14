@@ -27,14 +27,13 @@ class EsSearchAssemblerTest {
 
     @Test
     void singleHit_assemblesCatalogWithOneItem() {
-        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "DC Fast Charger");
+        Map<String, Object> doc = evChargerDoc("cat-1", "item-1", "DC Fast Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-1");
 
         assertThat(catalogs).hasSize(1);
         Catalog catalog = catalogs.get(0);
         assertThat(catalog.getId()).isEqualTo("cat-1");
-        assertThat(catalog.getBppId()).isEqualTo("bpp-1");
         assertThat(catalog.getResources()).hasSize(1);
 
         Resource resource = catalog.getResources().get(0);
@@ -46,8 +45,8 @@ class EsSearchAssemblerTest {
     @Test
     void multipleHitsSameCatalog_groupedIntoOneCatalogWithManyItems() {
         List<Map<String, Object>> docs = List.of(
-                evChargerDoc("cat-1", "bpp-1", "item-1", "DC Fast Charger CCS2"),
-                evChargerDoc("cat-1", "bpp-1", "item-2", "AC Charger Type2"));
+                evChargerDoc("cat-1", "item-1", "DC Fast Charger CCS2"),
+                evChargerDoc("cat-1", "item-2", "AC Charger Type2"));
 
         List<Catalog> catalogs = assembler.assemble(docs, "tx-2");
 
@@ -61,8 +60,8 @@ class EsSearchAssemblerTest {
     @Test
     void hitsDifferentCatalogs_produceSeparateCatalogObjects() {
         List<Map<String, Object>> docs = List.of(
-                evChargerDoc("cat-1", "bpp-1", "item-1", "CCS2 Charger"),
-                evChargerDoc("cat-2", "bpp-2", "item-3", "Solar Panel"));
+                evChargerDoc("cat-1", "item-1", "CCS2 Charger"),
+                evChargerDoc("cat-2", "item-3", "Solar Panel"));
 
         List<Catalog> catalogs = assembler.assemble(docs, "tx-3");
 
@@ -73,7 +72,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithCategory_populatesCategoryOnItem() {
-        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+        Map<String, Object> doc = evChargerDoc("cat-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-4");
 
@@ -85,7 +84,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithRating_populatesRatingOnItem() {
-        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+        Map<String, Object> doc = evChargerDoc("cat-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-5");
 
@@ -97,7 +96,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithProvider_populatesProviderOnItem() {
-        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+        Map<String, Object> doc = evChargerDoc("cat-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-6");
 
@@ -109,7 +108,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithItemAttributes_populatesAttributes() {
-        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+        Map<String, Object> doc = evChargerDoc("cat-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-7");
 
@@ -122,7 +121,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitMissingCatalogId_isSkipped() {
-        Map<String, Object> doc = evChargerDoc(null, "bpp-1", "item-1", "Charger");
+        Map<String, Object> doc = evChargerDoc(null, "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-8");
 
@@ -132,7 +131,7 @@ class EsSearchAssemblerTest {
     @Test
     void hitWithOffers_offersSetOnCatalog() {
         Map<String, Object> offer = Map.of("id", "offer-1", "price", Map.of("value", 150.0));
-        Map<String, Object> doc = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "Charger", List.of(offer));
+        Map<String, Object> doc = evChargerDocWithOffers("cat-1", "item-1", "Charger", List.of(offer));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-9");
 
@@ -147,8 +146,8 @@ class EsSearchAssemblerTest {
         Map<String, Object> offer = Map.of("id", "offer-1", "resourceIds", List.of("item-1"), "price",
                 Map.of("value", 99.0));
 
-        Map<String, Object> noOfferDoc = evChargerDoc("cat-1", "bpp-1", "item-2", "AC Charger");
-        Map<String, Object> offerDoc = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "DC Fast Charger",
+        Map<String, Object> noOfferDoc = evChargerDoc("cat-1", "item-2", "AC Charger");
+        Map<String, Object> offerDoc = evChargerDocWithOffers("cat-1", "item-1", "DC Fast Charger",
                 List.of(offer));
 
         List<Catalog> catalogs = assembler.assemble(List.of(noOfferDoc, offerDoc), "tx-10");
@@ -169,8 +168,8 @@ class EsSearchAssemblerTest {
         // runs.
         Map<String, Object> offer = Map.of("id", "offer-shared", "resourceIds", List.of("item-1", "item-2"));
 
-        Map<String, Object> doc1 = evChargerDocWithOffers("cat-1", "bpp-1", "item-1", "CCS2 Charger", List.of(offer));
-        Map<String, Object> doc2 = evChargerDocWithOffers("cat-1", "bpp-1", "item-2", "AC Charger", List.of(offer));
+        Map<String, Object> doc1 = evChargerDocWithOffers("cat-1", "item-1", "CCS2 Charger", List.of(offer));
+        Map<String, Object> doc2 = evChargerDocWithOffers("cat-1", "item-2", "AC Charger", List.of(offer));
 
         // Raw assembly (before pipeline) accumulates duplicates
         List<Catalog> raw = assembler.assemble(List.of(doc1, doc2), "tx-11");
@@ -184,7 +183,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithSingleLocField_populatesAvailableAt() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("loc_catalogs_resources_availableAt", List.of(
                 Map.of("geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9)),
                         "address", Map.of("streetAddress", "MG Road", "extendedAddress", "Apt 4B",
@@ -201,7 +200,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithMultipleLocFields_collectsAllLocations() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         // item-level availableAt
         doc.put("loc_catalogs_resources_availableAt", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
@@ -217,7 +216,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithNoLocFields_availableAtIsNull() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-3");
 
@@ -227,7 +226,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void offerLevelLocFields_notIncludedInAvailableAt() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         // offer-level location — should NOT appear in item.availableAt
         doc.put("loc_catalogs_offers_location", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
@@ -240,7 +239,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void resourceAttributesLocFields_notIncludedInAvailableAt() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         // resourceAttributes-level location — should NOT appear in item.availableAt
         doc.put("loc_catalogs_resources_resourceAttributes_serviceArea", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(78.0, 13.0))));
@@ -253,7 +252,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void providerLocFields_notIncludedInAvailableAt() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         // provider-level location — should NOT appear in item.availableAt
         doc.put("loc_catalogs_resources_provider_locations", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
@@ -266,7 +265,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void providerLocFields_setOnProvider() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("loc_catalogs_resources_provider_locations", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9)),
                 "address", Map.of("addressLocality", "Bengaluru")));
@@ -281,7 +280,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void mixedLocFields_onlyItemLevelInAvailableAt_providerLevelOnProvider() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         // item-level — SHOULD be in availableAt
         doc.put("loc_catalogs_resources_availableAt", Map.of(
                 "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9))));
@@ -310,7 +309,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithThumbnailImage_populatesThumbnailImageOnDescriptor() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("resource_descriptor_thumbnail_image", "https://example.org/thumb.jpg");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-1");
@@ -321,7 +320,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithDescriptorDocs_populatesDocsOnDescriptor() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("resource_descriptor_docs", List.of(
                 Map.of("url", "https://example.org/doc.pdf", "label", "Manual")));
 
@@ -334,7 +333,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithDescriptorMediaFile_populatesMediaFileOnDescriptor() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("resource_descriptor_media_file", List.of(
                 Map.of("url", "https://example.org/video.mp4", "mimetype", "video/mp4")));
 
@@ -347,7 +346,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithCatalogProvider_populatesProviderIdOnCatalog() {
-        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+        Map<String, Object> doc = evChargerDoc("cat-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4");
 
@@ -357,7 +356,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithCatalogDescriptor_populatesDescriptorOnCatalog() {
-        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+        Map<String, Object> doc = evChargerDoc("cat-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-5");
 
@@ -369,7 +368,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithRatingReviewText_populatesReviewTextOnRating() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("resource_rating_review_text", "Excellent service and fast charging");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-6");
@@ -383,7 +382,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithCatalogValidity_populatesValidityOnCatalog() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("catalog_validity", Map.of(
                 "@type", "TimePeriod",
                 "startDate", "2024-10-01T00:00:00Z",
@@ -402,7 +401,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithCatalogValidityWithTimes_populatesStartEndTime() {
-        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger"));
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("catalog_validity", Map.of(
                 "@type", "TimePeriod",
                 "startTime", "09:00",
@@ -419,7 +418,7 @@ class EsSearchAssemblerTest {
 
     @Test
     void hitWithoutCatalogValidity_validityIsNull() {
-        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+        Map<String, Object> doc = evChargerDoc("cat-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-val-3");
 
@@ -429,13 +428,13 @@ class EsSearchAssemblerTest {
 
     @Test
     void multipleCatalogHits_eachCatalogRetainsItsOwnValidity() {
-        Map<String, Object> doc1 = new java.util.HashMap<>(evChargerDoc("cat-1", "bpp-1", "item-1", "Charger A"));
+        Map<String, Object> doc1 = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger A"));
         doc1.put("catalog_validity", Map.of(
                 "@type", "TimePeriod",
                 "startDate", "2024-01-01T00:00:00Z",
                 "endDate", "2024-06-30T23:59:59Z"));
 
-        Map<String, Object> doc2 = new java.util.HashMap<>(evChargerDoc("cat-2", "bpp-2", "item-2", "Charger B"));
+        Map<String, Object> doc2 = new java.util.HashMap<>(evChargerDoc("cat-2", "item-2", "Charger B"));
         // cat-2 has no validity
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc1, doc2), "tx-val-4");
@@ -450,8 +449,7 @@ class EsSearchAssemblerTest {
 
     // ── Fixtures ─────────────────────────────────────────────────────────────
 
-    private static Map<String, Object> evChargerDoc(String catalogId, String bppId,
-            String itemId, String itemName) {
+    private static Map<String, Object> evChargerDoc(String catalogId, String itemId, String itemName) {
         return Map.ofEntries(
                 Map.entry("catalog_id", catalogId != null ? catalogId : ""),
                 Map.entry("catalog_context", "https://custom.catalog.context"),
@@ -460,8 +458,6 @@ class EsSearchAssemblerTest {
                 Map.entry("catalog_short_desc", "Catalog of EV chargers"),
                 Map.entry("catalog_provider_id", "ecopower-network"),
                 Map.entry("catalog_provider_name", "EcoPower Network"),
-                Map.entry("bpp_id", bppId),
-                Map.entry("bpp_uri", "https://bpp.example.com"),
                 Map.entry("network_id", "ondc-ev"),
                 Map.entry("resource_id", itemId),
                 Map.entry("resource_name", itemName),
@@ -484,10 +480,9 @@ class EsSearchAssemblerTest {
                         "maxPowerKW", 60)));
     }
 
-    private static Map<String, Object> evChargerDocWithOffers(String catalogId, String bppId,
-            String itemId, String itemName,
+    private static Map<String, Object> evChargerDocWithOffers(String catalogId, String itemId, String itemName,
             List<Object> offers) {
-        java.util.Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc(catalogId, bppId, itemId, itemName));
+        java.util.Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc(catalogId, itemId, itemName));
         doc.put("offers", offers);
         return doc;
     }

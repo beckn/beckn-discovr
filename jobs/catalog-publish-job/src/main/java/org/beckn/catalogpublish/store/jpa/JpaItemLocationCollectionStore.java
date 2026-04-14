@@ -29,7 +29,7 @@ public class JpaItemLocationCollectionStore implements ItemLocationCollectionSto
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public int deleteByCatalogIdAndBppId(String catalogId, String bppId) {
-        return repo.deleteByCatalogIdAndBppId(catalogId, bppId);
+    public int deleteByCatalogId(String catalogId) {
+        return repo.deleteByCatalogId(catalogId);
     }
 }

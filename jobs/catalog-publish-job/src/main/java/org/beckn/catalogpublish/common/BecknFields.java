@@ -79,6 +79,7 @@ public final class BecknFields {
     // ── Context V2.0 new fields ───────────────────────────────────────────────
     public static final String TRY              = "try";
     public static final String LINEAGE          = "lineage";
+    public static final String SUBSCRIBER_ID    = "subscriberId";
 
     // ── Catalog validity field ────────────────────────────────────────────────
     public static final String VALIDITY          = "validity";

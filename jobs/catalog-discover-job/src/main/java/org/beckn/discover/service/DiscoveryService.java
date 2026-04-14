@@ -434,8 +434,6 @@ public class DiscoveryService {
         copy.setId(src.getId());
         copy.setDescriptor(src.getDescriptor());
         copy.setProviderId(src.getProviderId());
-        copy.setBppId(src.getBppId());
-        copy.setBppUri(src.getBppUri());
         copy.setValidity(src.getValidity());
         copy.setOffers(src.getOffers() != null ? new java.util.ArrayList<>(src.getOffers()) : new java.util.ArrayList<>());
         copy.setResources(new java.util.ArrayList<>());

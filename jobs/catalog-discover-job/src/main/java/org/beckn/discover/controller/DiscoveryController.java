@@ -28,7 +28,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.beckn.discover.util.ContextNormalizer;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
@@ -114,7 +113,7 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
+
 
         JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
         BecknMdcContext.populate(contextNode);
@@ -148,7 +147,7 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
+
 
         JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
         BecknMdcContext.populate(contextNode);

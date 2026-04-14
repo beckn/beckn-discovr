@@ -32,16 +32,16 @@ public class ItemPayloadBuilder {
 
     public ObjectNode buildCatalogMetadataSlice(JsonNode catalogNode, CatalogContext ctx) {
         // Copy only non-item/offer fields — avoids deep-copying all items/offers just to discard them.
-        // buildDenormalizedPayloadFromSlice deep-copies this slice per item, so shallow refs are safe here.
         ObjectNode slice = objectMapper.createObjectNode();
         catalogNode.fields().forEachRemaining(e -> {
-            // Exclude items/resources (per-item data) and offers — added back per-item in buildDenormalizedPayloadFromSlice
-            if (!"items".equals(e.getKey()) && !BecknFields.RESOURCES.equals(e.getKey())
-                    && !BecknFields.OFFERS.equals(e.getKey()))
-                slice.set(e.getKey(), e.getValue());
+            // Exclude items/resources (per-item data), offers (added back per-item in buildDenormalizedPayloadFromSlice),
+            // and bppId/bppUri (never stored — auth ownership is tracked via subscriberId, not BPP identity)
+            String key = e.getKey();
+            if (!"items".equals(key) && !BecknFields.RESOURCES.equals(key)
+                    && !BecknFields.OFFERS.equals(key)
+                    && !BecknFields.BPP_ID.equals(key) && !BecknFields.BPP_URI.equals(key))
+                slice.set(key, e.getValue());
         });
-        if (!slice.has(BecknFields.BPP_ID)) slice.put(BecknFields.BPP_ID, ctx.bppId());
-        if (!slice.has(BecknFields.BPP_URI)) slice.put(BecknFields.BPP_URI, ctx.bppUri());
         return slice;
     }
 

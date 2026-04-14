@@ -34,7 +34,7 @@ public class GeometryExtractor {
 
     @FunctionalInterface
     private interface GeometryParser {
-        Optional<Geometry> parse(JsonNode value, String itemId, String path);
+        Optional<Geometry> parse(JsonNode value, String itemId, String catalogId, String path);
     }
 
     /**
@@ -42,9 +42,9 @@ public class GeometryExtractor {
      * Drives both dispatch in walkJsonTree and the skip-recursion guard — single source of truth.
      */
     private static final Map<String, GeometryParser> GEOMETRY_PARSERS = Map.of(
-            "gps",     (n, id, p) -> tryParseGps(n.asText(), id, p),
-            "geo",     GeometryExtractor::tryParseGeoJson,
-            "polygon", GeometryExtractor::tryParsePolygon
+            "gps",     (n, id, catId, p) -> tryParseGps(n.asText(), id, p),
+            "geo",     (n, id, catId, p) -> tryParseGeoJson(n, id, p),
+            "polygon", (n, id, catId, p) -> tryParsePolygon(n, id, p)
     );
 
     private final ObjectMapper objectMapper;
@@ -59,10 +59,10 @@ public class GeometryExtractor {
      * Accepts a pre-parsed JsonNode to avoid redundant deserialization when the caller
      * already holds the payload as a JsonNode.
      */
-    public List<ItemLocationCollection> extractLocations(String itemId, JsonNode payloadRoot) {
+    public List<ItemLocationCollection> extractLocations(String itemId, String catalogId, JsonNode payloadRoot) {
         try {
             List<ItemLocationCollection> result = new ArrayList<>();
-            walkJsonTree(itemId, payloadRoot, "$", 0, result);
+            walkJsonTree(itemId, catalogId, payloadRoot, "$", 0, result);
             return List.copyOf(result);
         } catch (Exception e) {
             log.warn("geometry.extract.failed itemId={}", itemId);
@@ -71,16 +71,16 @@ public class GeometryExtractor {
     }
 
     /** Convenience overload — parses the payload JSON string before walking the tree. */
-    public List<ItemLocationCollection> extractLocations(String itemId, String payloadJson) {
+    public List<ItemLocationCollection> extractLocations(String itemId, String catalogId, String payloadJson) {
         try {
-            return extractLocations(itemId, objectMapper.readTree(payloadJson));
+            return extractLocations(itemId, catalogId, objectMapper.readTree(payloadJson));
         } catch (Exception e) {
             log.warn("geometry.extract.parse-failed itemId={}: {}", itemId, e.getMessage());
             return List.of();
         }
     }
 
-    private void walkJsonTree(String itemId, JsonNode node, String path, int depth,
+    private void walkJsonTree(String itemId, String catalogId, JsonNode node, String path, int depth,
             List<ItemLocationCollection> accumulator) {
         if (node == null || node.isMissingNode()) return;
         if (depth > MAX_DEPTH) {
@@ -95,18 +95,18 @@ public class GeometryExtractor {
                 String segPath = pathSegment(path, key);
                 GeometryParser parser = GEOMETRY_PARSERS.get(key);
                 if (parser != null) {
-                    parser.parse(entry.getValue(), itemId, segPath)
-                            .map(geom -> new ItemLocationCollection(itemId, segPath, geom))
+                    parser.parse(entry.getValue(), itemId, catalogId, segPath)
+                            .map(geom -> new ItemLocationCollection(itemId, catalogId, segPath, geom))
                             .ifPresent(accumulator::add);
                 } else {
-                    walkJsonTree(itemId, entry.getValue(), segPath, depth + 1, accumulator);
+                    walkJsonTree(itemId, catalogId, entry.getValue(), segPath, depth + 1, accumulator);
                 }
             });
         }
         if (node.isArray()) {
             // Always use [*] so stored paths match the discovery API's JSONPath wildcard queries.
             for (int i = 0; i < node.size(); i++)
-                walkJsonTree(itemId, node.get(i), path + "[*]", depth + 1, accumulator);
+                walkJsonTree(itemId, catalogId, node.get(i), path + "[*]", depth + 1, accumulator);
         }
     }
 

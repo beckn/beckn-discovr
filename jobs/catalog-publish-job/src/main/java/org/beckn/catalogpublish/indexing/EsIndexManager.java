@@ -196,8 +196,6 @@ public class EsIndexManager {
                         "resource_id":                 { "type": "keyword" },
                         "resource_context":            { "type": "keyword" },
                         "resource_type":               { "type": "keyword" },
-                        "bpp_id":                  { "type": "keyword" },
-                        "bpp_uri":                 { "type": "keyword" },
                         "network_id":              { "type": "keyword" },
                         "schema_type":             { "type": "keyword" },
                         "resource_name":               { "type": "text", "fields": { "raw": { "type": "keyword" } } },
@@ -240,7 +238,6 @@ public class EsIndexManager {
                             "name":  { "type": "keyword" }
                           }
                         },
-                        "schema_version":          { "type": "keyword" },
                         "offers":                  { "type": "nested" },
                         "full_text_blob":          { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
                         "indexed_at":              { "type": "date" },

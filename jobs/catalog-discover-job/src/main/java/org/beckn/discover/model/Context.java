@@ -1,6 +1,5 @@
 package org.beckn.discover.model;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
@@ -15,26 +14,21 @@ import java.util.List;
  *
  * Represents the context information from Beckn Discovery requests including
  * message identification, transaction details, and timestamps.
- * Based on Beckn Protocol v2.0 Context schema (camelCase field names).
- *
- * @version 2.0.0
+ * Based on Beckn Protocol v2.1 Context schema (camelCase field names only).
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Context {
 
     @NotBlank(message = "Message ID is required")
     @JsonProperty(BecknFields.MESSAGE_ID)
-    @JsonAlias(BecknFields.MESSAGE_ID_V1)
     private String messageId;
 
     @NotBlank(message = "BAP ID is required")
     @JsonProperty(BecknFields.BAP_ID)
-    @JsonAlias(BecknFields.BAP_ID_V1)
     private String bapId;
 
     @NotBlank(message = "Transaction ID is required")
     @JsonProperty(BecknFields.TRANSACTION_ID)
-    @JsonAlias(BecknFields.TRANSACTION_ID_V1)
     private String transactionId;
 
     @NotNull(message = "Timestamp is required")
@@ -51,11 +45,9 @@ public class Context {
     private String version;
 
     @JsonProperty(BecknFields.BPP_ID)
-    @JsonAlias(BecknFields.BPP_ID_V1)
     private String bppId;
 
     @JsonProperty(BecknFields.BPP_URI)
-    @JsonAlias(BecknFields.BPP_URI_V1)
     private String bppUri;
 
     @JsonProperty(BecknFields.COUNTRY)
@@ -68,7 +60,6 @@ public class Context {
     private String ttl;
 
     @JsonProperty(BecknFields.BAP_URI)
-    @JsonAlias(BecknFields.BAP_URI_V1)
     private String bapUri;
 
     @JsonProperty(BecknFields.NETWORK_ID)

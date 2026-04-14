@@ -39,8 +39,8 @@ class OfferOnlyPublishIntegrationTest extends BaseIntegrationTest {
                 }""";
         orchestrator.processPublish(bppAPublish);
         assertThat(itemRepository.count()).isEqualTo(1);
-        var itemAfterA = itemRepository.findById(new ItemId("item-ev-1", "bpp-a")).orElseThrow();
-        assertThat(itemAfterA.getBppId()).isEqualTo("bpp-a");
+        var itemAfterA = itemRepository.findById(new ItemId("item-ev-1", "cat-a")).orElseThrow();
+        assertThat(itemAfterA.getCatalogId()).isEqualTo("cat-a");
         assertThat(itemAfterA.getPayload()).doesNotContain("offer-discount-10");
 
         // Step 2: BPP-B publishes offer-only catalog referencing BPP-A's resource
@@ -62,12 +62,11 @@ class OfferOnlyPublishIntegrationTest extends BaseIntegrationTest {
         assertThat(itemRepository.count()).isEqualTo(1);
         assertThat(results).hasSize(1);
 
-        // BPP-A's item must now carry the offer, but retain its original BPP identity
-        var itemAfterB = itemRepository.findById(new ItemId("item-ev-1", "bpp-a")).orElseThrow();
-        assertThat(itemAfterB.getBppId())
-                .as("Item must retain BPP-A's identity — never overwritten by BPP-B")
-                .isEqualTo("bpp-a");
-        assertThat(itemAfterB.getBppUri()).isEqualTo("http://bpp-a.example.com");
+        // BPP-A's item must now carry the offer, but retain its original catalog identity
+        var itemAfterB = itemRepository.findById(new ItemId("item-ev-1", "cat-a")).orElseThrow();
+        assertThat(itemAfterB.getCatalogId())
+                .as("Item must retain catalog-A's identity — never overwritten by catalog-B")
+                .isEqualTo("cat-a");
         assertThat(itemAfterB.getPayload())
                 .as("Offer must be merged into the payload")
                 .contains("offer-discount-10")
@@ -108,8 +107,8 @@ class OfferOnlyPublishIntegrationTest extends BaseIntegrationTest {
                       "discount": "10"}]}]}
                 }""";
         orchestrator.processPublish(bppBOffer10);
-        var afterOffer10 = itemRepository.findById(new ItemId("item-ev-1", "bpp-a")).orElseThrow();
-        assertThat(afterOffer10.getPayload()).contains("\"discount\":\"10\"");
+        var afterOffer10 = itemRepository.findById(new ItemId("item-ev-1", "cat-a")).orElseThrow();
+        assertThat(afterOffer10.getPayload()).contains("\"discount\"").contains("\"10\"");
 
         // Step 3: BPP-B updates offer to discount=20
         String bppBOffer20 = """
@@ -126,13 +125,15 @@ class OfferOnlyPublishIntegrationTest extends BaseIntegrationTest {
         orchestrator.processPublish(bppBOffer20);
 
         assertThat(itemRepository.count()).isEqualTo(1);
-        var afterOffer20 = itemRepository.findById(new ItemId("item-ev-1", "bpp-a")).orElseThrow();
+        var afterOffer20 = itemRepository.findById(new ItemId("item-ev-1", "cat-a")).orElseThrow();
 
         // Offer must be updated (not duplicated) — RFC 7396 merge
         assertThat(afterOffer20.getPayload())
                 .as("Offer must be updated to discount=20 via RFC 7396 merge")
-                .contains("\"discount\":\"20\"")
-                .doesNotContain("\"discount\":\"10\"");
+                .contains("\"discount\"").contains("\"20\"");
+        assertThat(afterOffer20.getPayload())
+                .as("Old discount value 10 must be gone after RFC 7396 merge")
+                .doesNotContain("\"10\"");
         assertThat(afterOffer20.getOfferIds()).contains("offer-discount");
 
         // Only one offer entry in the payload — not duplicated
@@ -214,14 +215,14 @@ class OfferOnlyPublishIntegrationTest extends BaseIntegrationTest {
                 .isEqualTo(2);
 
         // item-real-b created by BPP-B
-        var itemRealB = itemRepository.findById(new ItemId("item-real-b", "bpp-b")).orElseThrow();
-        assertThat(itemRealB.getName()).isEqualTo("Real Resource from BPP-B");
+        var itemRealB = itemRepository.findById(new ItemId("item-real-b", "cat-b")).orElseThrow();
+        assertThat(itemRealB.getPayload()).contains("Real Resource from BPP-B");
 
         // item-minimal must NOT exist
-        assertThat(itemRepository.findById(new ItemId("item-minimal", "bpp-b"))).isEmpty();
+        assertThat(itemRepository.findById(new ItemId("item-minimal", "cat-b"))).isEmpty();
 
         // item-real-a from BPP-A must have cross-BPP offer attached
-        var itemRealA = itemRepository.findById(new ItemId("item-real-a", "bpp-a")).orElseThrow();
+        var itemRealA = itemRepository.findById(new ItemId("item-real-a", "cat-a")).orElseThrow();
         assertThat(itemRealA.getPayload())
                 .as("Cross-BPP offer must be merged into BPP-A's item")
                 .contains("offer-cross").contains("Cross-BPP Offer");
@@ -247,8 +248,8 @@ class OfferOnlyPublishIntegrationTest extends BaseIntegrationTest {
         assertThat(itemRepository.count()).isEqualTo(1);
         var item = itemRepository.findAll().get(0);
         assertThat(item.getId()).isEqualTo("item-1");
-        assertThat(item.getBppId()).isEqualTo("bpp-1");
-        assertThat(item.getName()).isEqualTo("EV Station");
+        assertThat(item.getCatalogId()).isEqualTo("cat-1");
+        assertThat(item.getPayload()).contains("EV Station");
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
