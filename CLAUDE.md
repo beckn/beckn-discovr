@@ -46,9 +46,11 @@ BAPs send `discover` requests → Discovr queries the catalog index → delivers
 |------|------|
 | Kafka consumer | `consumer/CatalogPublishConsumer.java` |
 | Pipeline steps | `step/ParseStep.java`, `step/ValidateStep.java`, `step/PersistenceStep.java` |
+| Cross-catalog offer resolution (Phase 3) | `step/OfferResolutionStep.java` |
 | Context field extraction | `util/FieldExtractor.java` |
 | HTTP push controller | `controller/CatalogPushController.java` |
 | Elasticsearch doc assembler | `indexing/document/CatalogDocumentAssembler.java` |
+| Item domain model (PK = `id` + `catalog_id`) | `model/Item.java`, `model/ItemId.java` |
 | Config | `config/AppProperties.java` · `src/main/resources/application.yml` |
 
 ### Response Dispatcher (`jobs/response-dispatcher/src/main/java/org/beckn/seeker/`)
@@ -71,7 +73,7 @@ All three jobs are fully migrated to Beckn Protocol v2.1. **No legacy v2.0/v1.0 
 `action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId` (uuid), `networkId` (String), `timestamp` (date-time), `transactionId` (uuid), `version` (const `"2.0.0"`), `ttl`, `try`, `lineage`. **No `domain`, `schemaContext`, `country`, `city` in context** — `schemaContext` moved to `message.intent`.
 
 ### Resource fields (v2.1 — no `beckn:` prefix, no `items`)
-`@context`, `@type` (`"beckn:Resource"`), `id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`, `rating`, `category`. **No `items` array — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.** **No `networkId` on resources — only on context.**
+`id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`, `rating`, `category`. **No `@context`/`@type` on Resource itself — those belong only on `resourceAttributes`.** **No `items` array — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.** **No `networkId` on resources — only on context.**
 
 ### Offer fields
 `@type` (`"beckn:Offer"`), `id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`
@@ -208,11 +210,19 @@ Critical rules:
 - **No `Thread.sleep()` in tests** — use deadline-based poll loops from `BaseIntegrationTest`
 - **Validate callback URLs before HTTP POST** — SSRF risk
 - **No `new ObjectMapper()`** — inject Spring Boot's auto-configured bean
-- **Beckn v2.1 field names only** — `resources` not `items`, `resourceAttributes` not `itemAttributes`, `resourceIds` not `items` in offers, `@type: "beckn:Resource"`, `networkId` only on context
+- **Beckn v2.1 field names only** — `resources` not `items`, `resourceAttributes` not `itemAttributes`, `resourceIds` not `items` in offers, `networkId` only on context
 - **No fabricated defaults** — don't default `@context`/`@type` on resourceAttributes; they're required publisher fields
 - **Topic names from `@ConfigurationProperties`** — never hardcoded string literals
 - **Kafka publish**: `kafkaTemplate.send().whenComplete(...)` — never `.get()`
 - **Per-job Gradle wrappers**: run `./gradlew` from the specific job directory
+- **Item PK is `(id, catalog_id)`** — never use `bpp_id` as part of the item key; `Item.from()` takes `catalogId` and `subscriberId`, not `bppId`
+- **No `catalog`, `provider`, `networks`, `subscribers` tables** — these do not exist in Discovr DB; only `item` and `item_location_collection`
+- **ES document ID = `catalogId:resourceId`** — format enforced in `CatalogDocumentAssembler`; never `bppId:resourceId`
+- **FULL replace scoped to `catalog_id` only** — `DELETE WHERE catalog_id = :catalogId`; no `bpp_id` predicate in any delete query
+- **No v1 backward compatibility** — `ContextNormalizer` deleted; `@JsonAlias` for snake_case `bpp_id`/`bap_id` removed; camelCase only
+- **DefaultErrorHandler on Kafka consumer** — do not ack on transient failures; let `DefaultErrorHandler` retry; ack only after successful processing
+- **`subscriberId` as Kafka message key on push path** — `CatalogPushService` sets key = `subscriberId` from `context.subscriberId` when publishing to internal Kafka topic
+- **`created_by` is immutable** — `Item` has `@Column(updatable = false)` on `createdBy`; upsert logic must not overwrite it
 
 ---
 
