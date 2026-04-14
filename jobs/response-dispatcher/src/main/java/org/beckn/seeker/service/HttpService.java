@@ -104,7 +104,12 @@ public class HttpService {
 
             // SSRF guard — validate before any outbound HTTP call
             if (httpClientProperties.urlValidationEnabled()) {
-                validateCallbackUrl(targetUrl);
+                try {
+                    validateCallbackUrl(targetUrl);
+                } catch (IllegalArgumentException ssrfEx) {
+                    dispatcherMetrics.recordSsrfBlocked();
+                    throw ssrfEx;
+                }
             }
 
             log.info("{}", value("event", LogEvent.CALLBACK_RESOLVED),

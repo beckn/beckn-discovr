@@ -1,5 +1,6 @@
 package org.beckn.discover.config;
 
+import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -44,18 +45,18 @@ public class QueryExecutorConfig {
     @Bean("discoveryQueryExecutor")
     public ExecutorService discoveryQueryExecutor(DiscoveryProperties properties) {
         int workers = workers(properties);
-        log.info("queryExecutor.init workers={}", workers);
+        log.info("event={} workers={}", LogEvent.QUERY_EXECUTOR_INIT, workers);
 
         ThreadFactory factory = new NamedDaemonThreadFactory("discovery-query");
         ExecutorService executor = Executors.newFixedThreadPool(workers, factory);
 
         // Register shutdown hook so the pool drains gracefully on context close
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            log.info("queryExecutor.shutdown initiating");
+            log.info("event={}", LogEvent.QUERY_EXECUTOR_SHUTDOWN);
             executor.shutdown();
             try {
                 if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
-                    log.warn("queryExecutor.shutdown timed out — forcing shutdown");
+                    log.warn("event={}", LogEvent.QUERY_EXECUTOR_SHUTDOWN_TIMEOUT);
                     executor.shutdownNow();
                 }
             } catch (InterruptedException ie) {

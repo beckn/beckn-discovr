@@ -1,5 +1,6 @@
 package org.beckn.discover.service.response;
 
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverResponse;
@@ -43,7 +44,7 @@ public class ResponseProcessor {
     public Context createMinimalContext() {
         Context ctx = new Context();
         ctx.setMessageId("msg-" + System.currentTimeMillis());
-        ctx.setBapId("unknown");
+        ctx.setBapId(null);
         ctx.setTransactionId("txn-" + System.currentTimeMillis());
         ctx.setTimestamp(OffsetDateTime.now());
         ctx.setAction("on_discover");
@@ -66,8 +67,7 @@ public class ResponseProcessor {
         Context ctx = context != null ? context : createMinimalContext();
 
         if (catalogs == null || catalogs.isEmpty()) {
-            log.debug("response.build.empty transactionId={}",
-                    ctx.getTransactionId());
+            log.debug(LogEvent.RESPONSE_BUILD_EMPTY);
             return buildEmptyResponse(ctx);
         }
 
@@ -79,7 +79,7 @@ public class ResponseProcessor {
         response.setMessage(new DiscoverResponse.ResponseMessage(catalogs, requestDigest));
 
         if (!validateResponse(response)) {
-            log.warn("response.build.validationFailed transactionId={}", ctx.getTransactionId());
+            log.warn(LogEvent.RESPONSE_BUILD_VALIDATION_FAILED);
             return buildEmptyResponse(ctx);
         }
 
@@ -108,9 +108,7 @@ public class ResponseProcessor {
 
     /** Logs the error and returns an empty response. */
     public DiscoverResponse handleProcessingError(Exception error, Context context) {
-        log.error("response.error transactionId={} error={}",
-                context != null ? context.getTransactionId() : "unknown",
-                error.getMessage(), error);
+        log.error(LogEvent.RESPONSE_ERROR, error.getMessage(), error);
         return buildEmptyResponse(context);
     }
 }

@@ -116,7 +116,7 @@ public class PersistenceStep {
             try {
                 pairs.add(new IdAndNode(extractItemId(itemNode), itemNode));
             } catch (Exception e) {
-                errors.add(new ProcessingError("unknown", ProcessingErrorCode.NET_INTERNAL_ERROR,
+                errors.add(new ProcessingError(null, ProcessingErrorCode.NET_INTERNAL_ERROR,
                         ErrorSanitizer.sanitize(e)));
             }
         }

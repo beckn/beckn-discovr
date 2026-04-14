@@ -28,10 +28,10 @@ public class CorrelationContext {
     public void populate(CatalogContext ctx, String messageId) {
         String mid = (messageId != null && !messageId.isBlank()) ? messageId : null;
         String txnId = ctx.contextNode() != null
-                ? ctx.contextNode().path("transactionId").asText("unknown")
-                : "unknown";
-        MDC.put(MdcField.MESSAGE_ID, mid != null ? mid : "unknown");
-        MDC.put(MdcField.TRANSACTION_ID, txnId);
+                ? ctx.contextNode().path("transactionId").asText(null)
+                : null;
+        if (mid != null) MDC.put(MdcField.MESSAGE_ID, mid); else MDC.remove(MdcField.MESSAGE_ID);
+        if (txnId != null) MDC.put(MdcField.TRANSACTION_ID, txnId); else MDC.remove(MdcField.TRANSACTION_ID);
         MDC.put(MdcField.CORRELATION_ID, mid != null ? mid : UUID.randomUUID().toString());
         List<String> networkIds = ctx.networkIds();
         if (networkIds != null && !networkIds.isEmpty()) {
@@ -69,8 +69,8 @@ public class CorrelationContext {
      * parse.
      */
     public void populateFallback() {
-        MDC.put(MdcField.MESSAGE_ID, "unknown");
-        MDC.put(MdcField.TRANSACTION_ID, "unknown");
+        MDC.remove(MdcField.MESSAGE_ID);
+        MDC.remove(MdcField.TRANSACTION_ID);
         MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
         MDC.remove(MdcField.BPP_ID);
         MDC.remove(MdcField.CATALOG_ID);

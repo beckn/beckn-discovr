@@ -117,12 +117,7 @@ public class DiscoveryEventConsumer {
             // 3. Process
             DiscoverRequest discoverRequest = objectMapper.treeToValue(requestNode, DiscoverRequest.class);
 
-            if (discoverRequest.getContext() != null) {
-                logger.info(LogEvent.CONSUMER_RECEIVED + ".processing",
-                        value("messageId", discoverRequest.getContext().getMessageId()),
-                        value("bapId", discoverRequest.getContext().getBapId()),
-                        value("transactionId", discoverRequest.getContext().getTransactionId()));
-            }
+            // context-level MDC fields (messageId, bapId, transactionId) already set by BecknMdcContext.populate above
 
             DiscoverResponse response = discoveryService.processDiscoveryRequest(discoverRequest);
 
@@ -174,19 +169,16 @@ public class DiscoveryEventConsumer {
             // before the inbound offset is acknowledged.
             kafkaTemplate.send(responseTopic, transactionId, responseJson).get();
             logger.info(LogEvent.RESPONSE_PUBLISHED,
-                    value("topic", responseTopic),
-                    value("transactionId", transactionId));
+                    value("topic", responseTopic));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),
-                    value("transactionId", transactionId),
                     e);
             throw new RuntimeException("Interrupted while publishing response", e);
         } catch (Exception e) {
             logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),
-                    value("transactionId", transactionId),
                     e);
             throw new RuntimeException("Failed to publish on_discover response", e);
         }

@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.service.geometry;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.model.ItemLocationCollection;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -65,7 +66,7 @@ public class GeometryExtractor {
             walkJsonTree(itemId, catalogId, payloadRoot, "$", 0, result);
             return List.copyOf(result);
         } catch (Exception e) {
-            log.warn("geometry.extract.failed itemId={}", itemId);
+            log.warn("event={} itemId={}", LogEvent.GEO_EXTRACT_FAILED, itemId);
             return List.of();
         }
     }
@@ -75,7 +76,7 @@ public class GeometryExtractor {
         try {
             return extractLocations(itemId, catalogId, objectMapper.readTree(payloadJson));
         } catch (Exception e) {
-            log.warn("geometry.extract.parse-failed itemId={}: {}", itemId, e.getMessage());
+            log.warn("event={} itemId={} error={}", LogEvent.GEO_EXTRACT_PARSE_FAILED, itemId, e.getMessage());
             return List.of();
         }
     }
@@ -84,7 +85,7 @@ public class GeometryExtractor {
             List<ItemLocationCollection> accumulator) {
         if (node == null || node.isMissingNode()) return;
         if (depth > MAX_DEPTH) {
-            log.warn("geometry.max-depth-exceeded itemId={} path={}", itemId, path);
+            log.warn("event={} itemId={} path={}", LogEvent.GEO_MAX_DEPTH_EXCEEDED, itemId, path);
             return;
         }
         if (node.isObject()) {
@@ -126,12 +127,12 @@ public class GeometryExtractor {
             double lat = Double.parseDouble(parts[0].strip());
             double lon = Double.parseDouble(parts[1].strip());
             if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-                log.warn("geometry.gps.out-of-range itemId={} path={} gps={}", itemId, path, truncate(gps, TRUNCATE_LEN));
+                log.warn("event={} itemId={} path={} gps={}", LogEvent.GEO_GPS_OUT_OF_RANGE, itemId, path, truncate(gps, TRUNCATE_LEN));
                 return Optional.empty();
             }
             return Optional.of(GEOMETRY_FACTORY.createPoint(new Coordinate(lon, lat)));
         } catch (NumberFormatException e) {
-            log.warn("geometry.gps.parse-failed itemId={} path={} gps={}", itemId, path, truncate(gps, TRUNCATE_LEN));
+            log.warn("event={} itemId={} path={} gps={}", LogEvent.GEO_GPS_PARSE_FAILED, itemId, path, truncate(gps, TRUNCATE_LEN));
             return Optional.empty();
         }
     }
@@ -154,12 +155,12 @@ public class GeometryExtractor {
                         ? ringToPolygon(coords.get(0))
                         : Optional.empty();
                 default        -> {
-                    log.debug("geometry.geojson.unsupported-type itemId={} path={} type={}", itemId, path, type);
+                    log.debug("event={} itemId={} path={} type={}", LogEvent.GEO_GEOJSON_UNSUPPORTED_TYPE, itemId, path, type);
                     yield Optional.empty();
                 }
             };
         } catch (Exception e) {
-            log.warn("geometry.geojson.parse-failed itemId={} path={}: {}", itemId, path, e.getMessage());
+            log.warn("event={} itemId={} path={} error={}", LogEvent.GEO_GEOJSON_PARSE_FAILED, itemId, path, e.getMessage());
             return Optional.empty();
         }
     }
@@ -169,7 +170,7 @@ public class GeometryExtractor {
         double lon = coordinates.get(0).asDouble();
         double lat = coordinates.get(1).asDouble();
         if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-            log.warn("geometry.geojson.point.out-of-range itemId={} path={} lon={} lat={}", itemId, path, lon, lat);
+            log.warn("event={} itemId={} path={} lon={} lat={}", LogEvent.GEO_GEOJSON_POINT_OUT_OF_RANGE, itemId, path, lon, lat);
             return Optional.empty();
         }
         return Optional.of(GEOMETRY_FACTORY.createPoint(new Coordinate(lon, lat)));
@@ -194,7 +195,7 @@ public class GeometryExtractor {
         try {
             return ringToPolygon(polygonNode);
         } catch (Exception e) {
-            log.warn("geometry.polygon.parse-failed itemId={} path={}: {}", itemId, path, e.getMessage());
+            log.warn("event={} itemId={} path={} error={}", LogEvent.GEO_POLYGON_PARSE_FAILED, itemId, path, e.getMessage());
             return Optional.empty();
         }
     }

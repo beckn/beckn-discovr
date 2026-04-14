@@ -1,5 +1,6 @@
 package org.beckn.discover.service.response;
 
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.slf4j.Logger;
@@ -92,7 +93,7 @@ public class CatalogPipeline {
      */
     public List<Catalog> process(List<Catalog> catalogs, QueryRequest request, boolean schemaPreFiltered) {
         if (catalogs == null || catalogs.isEmpty()) {
-            log.debug("pipeline.empty transactionId={}", request.transactionId());
+            log.debug("event={}", LogEvent.PIPELINE_EMPTY);
             return List.of();
         }
 
@@ -105,8 +106,7 @@ public class CatalogPipeline {
         if (!schemaPreFiltered) {
             step1FilterBySchemaContext(work, request);
         } else {
-            log.debug("pipeline.step1.skipped reason=schema-pre-filtered transactionId={}",
-                    request.transactionId());
+            log.debug("event={} reason=schema-pre-filtered", LogEvent.PIPELINE_STEP1_SKIPPED);
         }
         step2DeduplicateOffers(work);
         step3FilterItemsByOfferReferences(work);
@@ -114,13 +114,11 @@ public class CatalogPipeline {
         step5RemoveEmptyCatalogs(work, request.transactionId());
 
         long ms = (System.nanoTime() - t0) / 1_000_000;
-        log.info("pipeline.done input={} output={} resources={} durationMs={} schemaPreFiltered={} transactionId={}",
-                inputSize,
+        log.info("event={} input={} output={} resources={} durationMs={} schemaPreFiltered={}",
+                LogEvent.PIPELINE_COMPLETED, inputSize,
                 work.size(),
                 work.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
-                ms,
-                schemaPreFiltered,
-                request.transactionId());
+                ms, schemaPreFiltered);
 
         return work;
     }
@@ -139,8 +137,7 @@ public class CatalogPipeline {
         int afterItems = totalItems(catalogs);
 
         if (beforeItems != afterItems) {
-            log.debug("pipeline.step1.schemaFilter removed={} transactionId={}",
-                    beforeItems - afterItems, request.transactionId());
+            log.debug("event={} removed={}", LogEvent.PIPELINE_STEP1_SCHEMA_FILTER, beforeItems - afterItems);
         }
     }
 
@@ -176,14 +173,12 @@ public class CatalogPipeline {
         catalogs.removeIf(c -> {
             boolean empty = c.getResources() == null || c.getResources().isEmpty();
             if (empty) {
-                log.debug("pipeline.step5.removedEmptyCatalog id={} transactionId={}",
-                        c.getId(), transactionId);
+                log.debug("event={} id={}", LogEvent.PIPELINE_STEP5_REMOVED_EMPTY, c.getId());
             }
             return empty;
         });
         if (catalogs.size() < before) {
-            log.info("pipeline.step5.removed count={} transactionId={}",
-                    before - catalogs.size(), transactionId);
+            log.debug("event={} count={}", LogEvent.PIPELINE_STEP5_REMOVED, before - catalogs.size());
         }
     }
 
