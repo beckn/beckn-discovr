@@ -93,7 +93,12 @@ public class ElasticIndexStep {
         // that compares PG item_ids with ES doc_ids per catalog and removes orphans.
         if (batch.fullReplace()) {
             try {
-                long esDeleted = bulkIndexService.deleteByCatalog(batch.catalogId());
+                // Collect schema types from items to target specific indices (no wildcard)
+                var schemaTypes = batch.savedItems().stream()
+                        .map(Item::getType)
+                        .filter(t -> t != null && !t.isBlank())
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                long esDeleted = bulkIndexService.deleteByCatalog(batch.catalogId(), schemaTypes);
                 publishMetrics.recordFullReplaceEsDeleted(esDeleted);
             } catch (Exception e) {
                 log.error("event={} reason=es-delete-failed catalogId={} error={}",
@@ -115,10 +120,13 @@ public class ElasticIndexStep {
             }
             List<String> networkIds = item.getNetworkIds();
             Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkIds);
+            // TODO (M8): Embedding currently serializes the full denormalized payload (catalog
+            // envelope + item). For better search quality, extract only the resource node:
+            //   payloadNode.path("catalogs").path(0).path("resources").path(0)
+            // This avoids diluting the embedding with shared catalog metadata.
             embeddingClient.ifPresent(client -> {
                 try {
-                    JsonNode catalogNode = payloadNode.path("catalogs").path(0);
-                    String itemJson = mapper.writeValueAsString(catalogNode);
+                    String itemJson = mapper.writeValueAsString(payloadNode);
                     client.embed(itemJson).ifPresent(vec -> doc.put("resource_vector", vec));
                 } catch (Exception e) {
                     log.warn("event={} reason=embedding-serialize-failed itemId={} error={}", LogEvent.ES_FAILED, item.getId(), e.getMessage());

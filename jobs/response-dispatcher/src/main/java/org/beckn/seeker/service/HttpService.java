@@ -204,6 +204,12 @@ public class HttpService {
             throw new IllegalArgumentException("Invalid callback URL: no host");
         }
 
+        // TODO (DNS TOCTOU): this DNS resolution is for SSRF validation only. The HTTP
+        //  client resolves the hostname again at connection time, so a DNS rebinding
+        //  attack could swap a public IP for a private one between these two calls.
+        //  A production-grade fix requires a custom ClientHttpRequestFactory that pins
+        //  the resolved IP into the socket connection (i.e., resolve-once and connect
+        //  to the IP directly).
         try {
             InetAddress addr = InetAddress.getByName(host);
             if (addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress()) {
@@ -211,9 +217,13 @@ public class HttpService {
                         "Callback URL points to private/loopback address: " + host);
             }
         } catch (java.net.UnknownHostException e) {
-            log.warn("{}", value("event", LogEvent.CALLBACK_ERROR),
-                    value("reason", "callback URL host unresolvable during SSRF check — proceeding"),
+            // Fail-closed: if the host cannot be resolved we cannot verify it is safe.
+            // Proceeding would allow an attacker to register an unresolvable hostname
+            // that bypasses the SSRF guard.
+            log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                    value("reason", "callback URL host unresolvable — rejecting request"),
                     value("host", host));
+            throw new IllegalArgumentException("Callback URL host cannot be resolved: " + host, e);
         }
     }
 

@@ -22,6 +22,7 @@ import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @ConditionalOnProperty(name = "app.catalog.elasticsearch.enabled", havingValue = "true")
@@ -32,39 +33,54 @@ public class BulkIndexService {
     private final ElasticsearchClient esClient;
     private final EsIndexManager      indexManager;
     private final EsIndexerMetrics    metrics;
-    private final String              indexPatternForDelete;
 
     public BulkIndexService(ElasticsearchClient esClient,
                             EsIndexManager indexManager,
                             EsIndexerMetrics metrics,
                             AppProperties props) {
-        this.esClient              = esClient;
-        this.indexManager          = indexManager;
-        this.metrics               = metrics;
-        this.indexPatternForDelete = props.catalog().elasticsearch().indexPrefix() + "-*";
+        this.esClient     = esClient;
+        this.indexManager = indexManager;
+        this.metrics      = metrics;
     }
 
     /**
-     * Deletes all ES documents matching the given catalogId across all index patterns.
-     * Used by FULL replace mode.
+     * Deletes all ES documents matching the given catalogId from each of the specific
+     * per-schema-type indices. Used by FULL replace mode.
      *
-     * @return number of documents deleted
+     * <p>Deletes are scoped to exact index names derived from {@code schemaTypes} via
+     * {@link EsIndexManager#resolveIndexName(String)} — never a wildcard — to avoid
+     * accidentally touching archive or replica indices that share the same prefix.
+     *
+     * @param catalogId   the catalog whose documents should be removed
+     * @param schemaTypes distinct schema types for this catalog (derived from saved items)
+     * @return total number of documents deleted across all targeted indices
      */
-    public long deleteByCatalog(String catalogId) {
-        try {
-            var response = esClient.deleteByQuery(d -> d
-                    .index(indexPatternForDelete)
-                    .query(q -> q.term(t -> t.field("catalog_id").value(catalogId)))
-            );
-            long deleted = response.deleted() != null ? response.deleted() : 0;
-            log.info("event={} catalogId={} deletedDocs={}",
-                    LogEvent.FULL_REPLACE_ES_DELETED, catalogId, deleted);
-            return deleted;
-        } catch (Exception e) {
-            log.error("event={} catalogId={} error={}",
-                    LogEvent.ES_FAILED, catalogId, ErrorSanitizer.sanitize(e));
-            throw new RuntimeException("ES deleteByQuery failed for FULL replace: " + catalogId, e);
+    public long deleteByCatalog(String catalogId, Set<String> schemaTypes) {
+        if (schemaTypes.isEmpty()) {
+            log.warn("event={} catalogId={} reason=no-schema-types-provided skipping ES delete",
+                    LogEvent.FULL_REPLACE_ES_DELETED, catalogId);
+            return 0L;
         }
+        long totalDeleted = 0L;
+        for (String schemaType : schemaTypes) {
+            String indexName = indexManager.resolveIndexName(schemaType);
+            try {
+                var response = esClient.deleteByQuery(d -> d
+                        .index(indexName)
+                        .query(q -> q.term(t -> t.field("catalog_id").value(catalogId)))
+                );
+                long deleted = response.deleted() != null ? response.deleted() : 0;
+                totalDeleted += deleted;
+                log.info("event={} catalogId={} index={} deletedDocs={}",
+                        LogEvent.FULL_REPLACE_ES_DELETED, catalogId, indexName, deleted);
+            } catch (Exception e) {
+                log.error("event={} catalogId={} index={} error={}",
+                        LogEvent.ES_FAILED, catalogId, indexName, ErrorSanitizer.sanitize(e));
+                throw new RuntimeException(
+                        "ES deleteByQuery failed for FULL replace: catalogId=" + catalogId + " index=" + indexName, e);
+            }
+        }
+        return totalDeleted;
     }
 
     @Retryable(

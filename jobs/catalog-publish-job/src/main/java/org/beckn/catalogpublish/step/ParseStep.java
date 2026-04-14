@@ -36,7 +36,7 @@ public class ParseStep {
 
     public String extractCatalogIdSafe(JsonNode catalogNode) {
         return FieldExtractor.extractString(catalogNode, BecknFields.ID)
-                .orElse("unknown");
+                .orElse(null);
     }
 
     private Optional<JsonNode> tryParse(String raw) {
