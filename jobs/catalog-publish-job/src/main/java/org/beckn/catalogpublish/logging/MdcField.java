@@ -9,4 +9,5 @@ public final class MdcField {
     public static final String NETWORK_ID     = "networkId";
     public static final String CATALOG_ID     = "catalogId";
     public static final String BAP_ID         = "bapId";
+    public static final String TAGS           = "tags";
 }

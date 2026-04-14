@@ -73,6 +73,33 @@ public class CorrelationContext {
         MDC.remove(MdcField.BAP_ID);
     }
 
+    /**
+     * Sets the {@code tags} MDC field from a raw Kafka header byte array.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader raw bytes from the {@code tags} Kafka record header
+     */
+    public void setTags(byte[] tagsHeader) {
+        if (tagsHeader != null && tagsHeader.length > 0) {
+            var tags = new String(tagsHeader, java.nio.charset.StandardCharsets.UTF_8);
+            if (!tags.isBlank()) {
+                MDC.put(MdcField.TAGS, tags);
+            }
+        }
+    }
+
+    /**
+     * Sets the {@code tags} MDC field from an HTTP header string value.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader value of the {@code X-Tags} HTTP request header
+     */
+    public void setTagsFromHttp(String tagsHeader) {
+        if (tagsHeader != null && !tagsHeader.isBlank()) {
+            MDC.put(MdcField.TAGS, tagsHeader);
+        }
+    }
+
     public void clear() {
         MDC.clear();
     }

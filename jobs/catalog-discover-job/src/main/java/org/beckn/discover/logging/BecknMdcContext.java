@@ -57,6 +57,33 @@ public final class BecknMdcContext {
     }
 
     /**
+     * Sets the {@code tags} MDC field from a raw Kafka header byte array.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader raw bytes from the {@code tags} Kafka record header
+     */
+    public static void setTags(byte[] tagsHeader) {
+        if (tagsHeader != null && tagsHeader.length > 0) {
+            var tags = new String(tagsHeader, java.nio.charset.StandardCharsets.UTF_8);
+            if (!tags.isBlank()) {
+                MDC.put(MdcField.TAGS, tags);
+            }
+        }
+    }
+
+    /**
+     * Sets the {@code tags} MDC field from an HTTP header string value.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader value of the {@code X-Tags} HTTP request header
+     */
+    public static void setTagsFromHttp(String tagsHeader) {
+        if (tagsHeader != null && !tagsHeader.isBlank()) {
+            MDC.put(MdcField.TAGS, tagsHeader);
+        }
+    }
+
+    /**
      * Clears all Beckn MDC keys set by this class.
      * Must be called in a {@code finally} block after each request or message.
      */
@@ -70,6 +97,7 @@ public final class BecknMdcContext {
         MDC.remove(MdcField.NETWORK_ID);
         MDC.remove(MdcField.ACTION);
         MDC.remove(MdcField.VERSION);
+        MDC.remove(MdcField.TAGS);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

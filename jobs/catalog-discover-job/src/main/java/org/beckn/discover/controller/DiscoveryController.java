@@ -114,7 +114,7 @@ public class DiscoveryController {
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
 
-
+        BecknMdcContext.setTagsFromHttp(httpRequest.getHeader("X-Tags"));
         JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
         BecknMdcContext.populate(contextNode);
 
@@ -148,7 +148,7 @@ public class DiscoveryController {
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
 
-
+        BecknMdcContext.setTagsFromHttp(httpRequest.getHeader("X-Tags"));
         JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
         BecknMdcContext.populate(contextNode);
 
