@@ -72,24 +72,23 @@ public class PersistenceStep {
 
     /**
      * Persists all items from a catalog node using an upsert strategy.
+     *
+     * @param catalogNode  the individual catalog node from {@code message.catalogs[i]}
+     * @param ctx          parsed catalog context (network IDs, subscriber, etc.)
+     * @param op           operation type (PUBLISH, etc.)
+     * @param messageNode  the full {@code message} node — used to read message-level
+     *                     {@code publishDirectives} array introduced in the directive-map pattern
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public CatalogBatch persistItemsAndLocations(JsonNode catalogNode, CatalogContext ctx, CatalogOperation op) {
+    public CatalogBatch persistItemsAndLocations(JsonNode catalogNode, CatalogContext ctx,
+            CatalogOperation op, JsonNode messageNode) {
         String catalogId = FieldExtractor.requireString(catalogNode, "id");
         JsonNode allOffers = FieldExtractor.extractOffersOrEmpty(catalogNode);
         String schemaType = FieldExtractor.extractSchemaType(catalogNode, ctx.contextNode());
 
-        var publishDirectives = catalogNode.path(BecknFields.PUBLISH_DIRECTIVES);
-        var updateMode = publishDirectives.path(BecknFields.UPDATE_MODE).asText("MERGE");
+        // Read updateMode from message-level publishDirectives array (keyed by catalogId).
+        var updateMode = extractUpdateMode(messageNode, catalogId);
         boolean isFullReplace = "FULL".equalsIgnoreCase(updateMode);
-
-        // Deep-copy before mutating — the input node may be shared across parallel catalog
-        // processing threads (CompletableFuture fan-out in CatalogPublishOrchestrator).
-        // ObjectNode is NOT thread-safe; mutating the original would cause data races.
-        if (catalogNode.isObject() && catalogNode.has(BecknFields.PUBLISH_DIRECTIVES)) {
-            catalogNode = catalogNode.deepCopy();
-            ((com.fasterxml.jackson.databind.node.ObjectNode) catalogNode).remove(BecknFields.PUBLISH_DIRECTIVES);
-        }
 
         if (isFullReplace) {
             // Delete locations BEFORE items — location subquery references item table
@@ -246,6 +245,28 @@ public class PersistenceStep {
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────────
+
+    /**
+     * Reads {@code updateMode} from the message-level {@code publishDirectives} array by matching
+     * on {@code catalogId}. Returns {@code "MERGE"} when no matching directive is found.
+     *
+     * <p>This is the directive-map pattern: {@code message.publishDirectives[]} is an array
+     * of {@code { catalogId, catalogType, updateMode, ... }} objects, keyed by {@code catalogId}.
+     */
+    private String extractUpdateMode(JsonNode messageNode, String catalogId) {
+        if (messageNode == null || messageNode.isMissingNode() || messageNode.isNull()) {
+            return "MERGE";
+        }
+        var directives = messageNode.path(BecknFields.PUBLISH_DIRECTIVES);
+        if (directives.isArray()) {
+            for (var d : directives) {
+                if (catalogId.equals(d.path("catalogId").asText(null))) {
+                    return d.path(BecknFields.UPDATE_MODE).asText("MERGE");
+                }
+            }
+        }
+        return "MERGE";
+    }
 
     private String extractItemId(JsonNode itemNode) {
         return FieldExtractor.extractString(itemNode, BecknFields.ID)

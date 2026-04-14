@@ -81,6 +81,14 @@ public final class BecknFields {
     public static final String LINEAGE          = "lineage";
     public static final String SUBSCRIBER_ID    = "subscriberId";
 
+    // ── Auth / ownership (MDC keys) ──────────────────────────────────────────
+    /** MDC key: org-level identity from auth header keyId first segment. */
+    public static final String AUTH_SUBSCRIBER_ID = "auth.subscriberId";
+    /** MDC key: key-level identity from auth header keyId second segment. */
+    public static final String AUTH_RECORD_ID     = "auth.recordId";
+    /** Epoch millis when the catalog was published — carried in distribution envelope. */
+    public static final String PUBLISH_TIMESTAMP  = "publishTimestamp";
+
     // ── Catalog validity field ────────────────────────────────────────────────
     public static final String VALIDITY          = "validity";
 

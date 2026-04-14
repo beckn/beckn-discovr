@@ -69,4 +69,9 @@ public final class BecknFields {
     public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
     public static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
 
+    // ── Auth / ownership (MDC keys) ──────────────────────────────────────────
+    /** MDC key: org-level identity from auth header keyId first segment. */
+    public static final String AUTH_SUBSCRIBER_ID = "auth.subscriberId";
+    /** MDC key: key-level identity from auth header keyId second segment. */
+    public static final String AUTH_RECORD_ID     = "auth.recordId";
 }
