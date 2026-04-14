@@ -6,11 +6,9 @@ import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.UUID;
 
 /**
- * MDC population and clear for trace context (messageId, bppId, transactionId,
- * correlationId, networkId).
+ * MDC population and clear for trace context (messageId, bppId, transactionId, networkId).
  * MDC is populated once from the parsed context so no double-parse occurs.
  */
 @Component
@@ -32,7 +30,6 @@ public class CorrelationContext {
                 : null;
         if (mid != null) MDC.put(MdcField.MESSAGE_ID, mid); else MDC.remove(MdcField.MESSAGE_ID);
         if (txnId != null) MDC.put(MdcField.TRANSACTION_ID, txnId); else MDC.remove(MdcField.TRANSACTION_ID);
-        MDC.put(MdcField.CORRELATION_ID, mid != null ? mid : UUID.randomUUID().toString());
         List<String> networkIds = ctx.networkIds();
         if (networkIds != null && !networkIds.isEmpty()) {
             MDC.put(MdcField.NETWORK_ID, networkIds.get(0));
@@ -71,7 +68,6 @@ public class CorrelationContext {
     public void populateFallback() {
         MDC.remove(MdcField.MESSAGE_ID);
         MDC.remove(MdcField.TRANSACTION_ID);
-        MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
         MDC.remove(MdcField.BPP_ID);
         MDC.remove(MdcField.CATALOG_ID);
         MDC.remove(MdcField.BAP_ID);

@@ -5,7 +5,6 @@ import org.beckn.discover.model.Context;
 import org.slf4j.MDC;
 
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Static utility for populating SLF4J MDC with Beckn context fields.
@@ -24,12 +23,10 @@ public final class BecknMdcContext {
 
     /**
      * Populates MDC from a {@code context} JSON node.
-     * A new {@code correlationId} UUID is generated for every call.
      *
      * @param contextNode the {@code context} object from the Beckn request
      */
     public static void populate(JsonNode contextNode) {
-        MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
         putIfPresent(contextNode, "transactionId",  MdcField.TRANSACTION_ID);
         putIfPresent(contextNode, "messageId",      MdcField.MESSAGE_ID);
         putIfPresent(contextNode, "bapId",          MdcField.BAP_ID);
@@ -43,13 +40,11 @@ public final class BecknMdcContext {
 
     /**
      * Populates MDC from a deserialized {@link Context} model object.
-     * A new {@code correlationId} UUID is generated for every call.
      *
      * @param context the Beckn {@link Context} POJO
      */
     public static void populate(Context context) {
         if (context == null) return;
-        MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
         putIfNotBlank(MdcField.TRANSACTION_ID, context.getTransactionId());
         putIfNotBlank(MdcField.MESSAGE_ID,     context.getMessageId());
         putIfNotBlank(MdcField.BAP_ID,         context.getBapId());
@@ -66,7 +61,6 @@ public final class BecknMdcContext {
      * Must be called in a {@code finally} block after each request or message.
      */
     public static void clear() {
-        MDC.remove(MdcField.CORRELATION_ID);
         MDC.remove(MdcField.TRANSACTION_ID);
         MDC.remove(MdcField.MESSAGE_ID);
         MDC.remove(MdcField.BAP_ID);

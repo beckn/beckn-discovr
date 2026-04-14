@@ -1,6 +1,6 @@
 spring:
   application:
-    name: seeker-notifier
+    name: response-dispatcher
 
   kafka:
     bootstrap-servers: localhost:9092
