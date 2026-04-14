@@ -223,6 +223,7 @@ Critical rules:
 - **DefaultErrorHandler on Kafka consumer** — do not ack on transient failures; let `DefaultErrorHandler` retry; ack only after successful processing
 - **`subscriberId` as Kafka message key on push path** — `CatalogPushService` sets key = `subscriberId` from `context.subscriberId` when publishing to internal Kafka topic
 - **`created_by` is immutable** — `Item` has `@Column(updatable = false)` on `createdBy`; upsert logic must not overwrite it
+- **`item` table stores both `created_by` and `subscriber_id`** — `created_by` = record_id (second `|`-segment of keyId, immutable ownership key); `subscriber_id` = org identity (first segment of keyId); these are two distinct columns: `created_by` for ownership checks, `subscriber_id` for org-level grouping. Never conflate them.
 
 ---
 
