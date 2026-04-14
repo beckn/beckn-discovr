@@ -42,9 +42,6 @@ public final class BecknFields {
     // ── Catalog / Item fields (v2.0 — no beckn: prefix) ─────────────────────
     public static final String ID              = "id";
     public static final String TYPE            = "type";
-    /** @deprecated Retained only for excluding legacy field from copies. All new writes use RESOURCES. */
-    @Deprecated
-    public static final String ITEMS           = "items";
     public static final String OFFERS          = "offers";
     public static final String DESCRIPTOR      = "descriptor";
     public static final String PROVIDER        = "provider";
