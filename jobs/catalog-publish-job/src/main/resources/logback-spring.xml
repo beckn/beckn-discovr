@@ -2,12 +2,9 @@
 <configuration>
 
     <springProfile name="!test">
+        <!-- JSON encoder — all MDC fields automatically promoted to top-level JSON keys -->
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-                <includeMdcKeyName>messageId</includeMdcKeyName>
-                <includeMdcKeyName>bppId</includeMdcKeyName>
-                <includeMdcKeyName>transactionId</includeMdcKeyName>
-            </encoder>
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
         </appender>
         <root level="INFO">
             <appender-ref ref="CONSOLE" />

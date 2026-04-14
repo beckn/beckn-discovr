@@ -60,7 +60,9 @@ public class CatalogPublishConsumer {
             @Payload String raw,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.OFFSET) long offset,
+            @Header(value = "tags", required = false) byte[] tagsHeader,
             Acknowledgment ack) {
+        correlationContext.setTags(tagsHeader);
         metrics.recordProcessingTime(PUBLISH,
                 () -> dispatch(raw, topic, offset, ack, PUBLISH, orchestrator::processPublish));
     }

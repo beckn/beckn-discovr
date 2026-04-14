@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.logging.LogEvent;
+import org.beckn.catalogpublish.util.CorrelationContext;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,12 +40,15 @@ public class CatalogPushController {
 
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
+    private final CorrelationContext correlationContext;
     private final long maxPayloadSize;
 
-    public CatalogPushController(CatalogPushService pushService, AppProperties props, ObjectMapper objectMapper) {
+    public CatalogPushController(CatalogPushService pushService, AppProperties props,
+            ObjectMapper objectMapper, CorrelationContext correlationContext) {
         this.pushService = pushService;
         this.maxPayloadSize = props.catalog().maxPayloadSize();
         this.objectMapper = objectMapper;
+        this.correlationContext = correlationContext;
     }
 
     @PostMapping("/catalog/push")
@@ -58,6 +62,8 @@ public class CatalogPushController {
         }
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
+
+        correlationContext.setTagsFromHttp(request.getHeader("X-Tags"));
 
         // Validate required context fields — reject with NACK if missing
         if (!hasRequiredContext(rawBody)) {

@@ -4,6 +4,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.beckn.discover.util.TagsProducerInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -82,6 +83,8 @@ public class KafkaConfig {
         props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, maxBlockMs);
         props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, requestTimeoutMs);
         props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, deliveryTimeoutMs);
+        // Forward tags MDC field as Kafka header on every outbound message.
+        props.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, TagsProducerInterceptor.class.getName());
         return new DefaultKafkaProducerFactory<>(props);
     }
 

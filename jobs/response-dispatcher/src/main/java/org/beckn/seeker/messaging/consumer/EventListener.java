@@ -34,6 +34,10 @@ public class EventListener {
         String rawValue = record.value();
         String key = record.key();
 
+        // Extract tags header first so it is set for all subsequent log lines
+        org.apache.kafka.common.header.Header tagsHeader = record.headers().lastHeader("tags");
+        BecknMdcContext.setTags(tagsHeader != null ? tagsHeader.value() : null);
+
         // Populate MDC from Beckn context if the message is parseable JSON
         try {
             if (rawValue != null) {

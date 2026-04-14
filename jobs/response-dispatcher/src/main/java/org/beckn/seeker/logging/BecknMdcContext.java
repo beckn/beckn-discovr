@@ -24,6 +24,21 @@ public final class BecknMdcContext {
         putIfPresent(contextNode, BecknFields.ACTION,         MdcField.ACTION);
     }
 
+    /**
+     * Sets the {@code tags} MDC field from a raw Kafka header byte array.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader raw bytes from the {@code tags} Kafka record header
+     */
+    public static void setTags(byte[] tagsHeader) {
+        if (tagsHeader != null && tagsHeader.length > 0) {
+            var tags = new String(tagsHeader, java.nio.charset.StandardCharsets.UTF_8);
+            if (!tags.isBlank()) {
+                MDC.put(MdcField.TAGS, tags);
+            }
+        }
+    }
+
     public static void clear() {
         MDC.clear();
     }

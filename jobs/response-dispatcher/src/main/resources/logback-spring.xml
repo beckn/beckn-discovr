@@ -7,17 +7,10 @@
   <!-- Production: structured JSON with MDC fields as top-level keys -->
   <springProfile name="!test">
 
+    <!-- JSON encoder — all MDC fields automatically promoted to top-level JSON keys -->
     <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
       <encoder class="net.logstash.logback.encoder.LogstashEncoder">
         <includeContext>false</includeContext>
-        <includeMdcKeyName>transactionId</includeMdcKeyName>
-        <includeMdcKeyName>messageId</includeMdcKeyName>
-        <includeMdcKeyName>bapId</includeMdcKeyName>
-        <includeMdcKeyName>bapUri</includeMdcKeyName>
-        <includeMdcKeyName>bppId</includeMdcKeyName>
-        <includeMdcKeyName>bppUri</includeMdcKeyName>
-        <includeMdcKeyName>networkId</includeMdcKeyName>
-        <includeMdcKeyName>action</includeMdcKeyName>
         <customFields>{"service":"${appName}"}</customFields>
         <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSZ</timestampPattern>
       </encoder>

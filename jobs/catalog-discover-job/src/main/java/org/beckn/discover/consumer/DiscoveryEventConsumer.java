@@ -77,7 +77,10 @@ public class DiscoveryEventConsumer {
             Acknowledgment acknowledgment,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset,
-            @Header(KafkaHeaders.RECEIVED_TIMESTAMP) long timestamp) {
+            @Header(KafkaHeaders.RECEIVED_TIMESTAMP) long timestamp,
+            @Header(value = "tags", required = false) byte[] tagsHeader) {
+
+        BecknMdcContext.setTags(tagsHeader);
 
         logger.info(LogEvent.CONSUMER_RECEIVED,
                 value("partition", partition),

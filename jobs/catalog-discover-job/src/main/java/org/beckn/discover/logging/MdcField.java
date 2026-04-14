@@ -20,4 +20,5 @@ public final class MdcField {
     public static final String NETWORK_ID      = "networkId";
     public static final String ACTION          = "action";
     public static final String VERSION         = "version";
+    public static final String TAGS            = "tags";
 }
