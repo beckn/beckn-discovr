@@ -1,5 +1,6 @@
 package org.beckn.catalogpublish.config;
 
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,7 +34,7 @@ public class AsyncConfig {
         // CallerRunsPolicy would block the DB transaction-commit thread when the queue
         // is full, holding open the DB connection and starving the connection pool.
         exec.setRejectedExecutionHandler((r, executor) -> {
-            log.error("event=ES_INDEX_REJECTED reason=executor-queue-full — ES indexing task dropped; item will be retried via EsFailureConsumer");
+            log.error("event={} reason=executor-queue-full", LogEvent.ES_INDEX_REJECTED);
             throw new RejectedExecutionException("esIndexExecutor queue full — ES indexing task dropped");
         });
         exec.setWaitForTasksToCompleteOnShutdown(true);

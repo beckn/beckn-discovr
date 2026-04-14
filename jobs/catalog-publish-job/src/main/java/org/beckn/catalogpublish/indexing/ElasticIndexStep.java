@@ -129,7 +129,7 @@ public class ElasticIndexStep {
                     String itemJson = mapper.writeValueAsString(payloadNode);
                     client.embed(itemJson).ifPresent(vec -> doc.put("resource_vector", vec));
                 } catch (Exception e) {
-                    log.warn("event={} reason=embedding-serialize-failed itemId={} error={}", LogEvent.ES_FAILED, item.getId(), e.getMessage());
+                    log.warn("event={} itemId={} error={}", LogEvent.EMBEDDING_SERIALIZE_FAILED, item.getId(), e.getMessage());
                 }
             });
             bySchemaType.computeIfAbsent(schemaType, k -> new ArrayList<>()).add(doc);

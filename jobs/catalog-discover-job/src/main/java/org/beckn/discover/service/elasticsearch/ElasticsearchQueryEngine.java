@@ -83,11 +83,11 @@ public class ElasticsearchQueryEngine implements QueryEngine {
     @SuppressWarnings("unchecked")
     public List<Catalog> executeSpatialQuery(QueryRequest req) throws Exception {
         Instant start = Instant.now();
-        log.debug("es.engine.spatial.start transactionId={}", req.transactionId());
+        log.debug("event={}", LogEvent.ES_ENGINE_SPATIAL_START);
 
         Optional<List<Query>> queriesOpt = spatialBuilder.buildGeoShapeQueries(req.spatial());
         if (queriesOpt.isEmpty()) {
-            log.info("es.engine.spatial.skip reason=no-valid-queries transactionId={}", req.transactionId());
+            log.debug("event={} reason=no-valid-queries", LogEvent.ES_ENGINE_SPATIAL_SKIP);
             return List.of();
         }
 
@@ -103,19 +103,18 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             String enriched = queryEnricher.isPresent() ? queryEnricher.get().enrich(text) : text;
             Optional<List<Float>> vecOpt = embeddingClient.get().embed(enriched);
             if (vecOpt.isEmpty()) {
-                log.warn("es.engine.spatial+semantic.empty-vector transactionId={} — returning empty", req.transactionId());
+                log.warn("event={} reason=empty-vector", LogEvent.ES_ENGINE_SPATIAL_EMPTY_VECTOR);
                 return List.of();
             }
             List<Float> vec = vecOpt.get();
             double minScore = props.getElasticsearch().getMinScore();
             List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(req);
-            log.info("es.engine.spatial+semantic.request txId={} alias={} k={} numCandidates={} geoFilters={} schemaFilters={}",
-                    req.transactionId(), alias, limit, knnCandidates, geoQueries.size(), schemaFilters.size());
+            log.debug("event={} alias={} k={} numCandidates={} geoFilters={} schemaFilters={}",
+                    LogEvent.ES_ENGINE_SPATIAL_REQUEST, alias, limit, knnCandidates, geoQueries.size(), schemaFilters.size());
             if (!schemaFilters.isEmpty()) {
                 log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
                         value("path", "spatial+semantic"),
-                        value("schemaFilters", schemaFilters.size()),
-                        value("transactionId", req.transactionId()));
+                        value("schemaFilters", schemaFilters.size()));
             }
             try {
                 SearchResponse<Map> response = esClient.search(s -> s
@@ -137,8 +136,8 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .filter(Objects::nonNull)
                         .toList();
                 List<Catalog> catalogs = assembler.assemble(hits, req.transactionId());
-                log.info("es.engine.spatial+semantic.done catalogs={} durationMs={} transactionId={}",
-                        catalogs.size(), elapsed(start), req.transactionId());
+                log.info("event={} catalogs={} durationMs={}",
+                        LogEvent.ES_ENGINE_SPATIAL_DONE, catalogs.size(), elapsed(start));
                 return catalogs;
             } catch (ElasticsearchException e) {
                 return handleEsException(e, alias, req.transactionId());
@@ -158,20 +157,15 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                     .type(TextQueryType.BestFields)
                     .fuzziness("AUTO"))));
             applyMinScore = props.getElasticsearch().getMinScore();
-            log.info("es.spatial+text.request txId={} schemaFilters={} {}", req.transactionId(),
-                    spatialSchemaFilters.size(),
-                    spatialBuilder.buildCombinedRequestJson(req.spatial(), text, alias, limit, applyMinScore));
+            log.debug("event={} schemaFilters={}", LogEvent.ES_ENGINE_SPATIAL_REQUEST, spatialSchemaFilters.size());
         } else {
-            log.info("es.spatial.request txId={} schemaFilters={} {}", req.transactionId(),
-                    spatialSchemaFilters.size(),
-                    spatialBuilder.buildRequestJson(req.spatial(), alias, limit));
+            log.debug("event={} schemaFilters={}", LogEvent.ES_ENGINE_SPATIAL_REQUEST, spatialSchemaFilters.size());
         }
 
         if (!spatialSchemaFilters.isEmpty()) {
             log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
                     value("path", hasText ? "spatial+text" : "spatial"),
-                    value("schemaFilters", spatialSchemaFilters.size()),
-                    value("transactionId", req.transactionId()));
+                    value("schemaFilters", spatialSchemaFilters.size()));
         }
 
         final List<Query> finalQueries = mustQueries;
@@ -196,8 +190,8 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                     .toList();
 
             List<Catalog> catalogs = assembler.assemble(hits, req.transactionId());
-            log.info("es.engine.spatial{}.done catalogs={} durationMs={} transactionId={}",
-                    hasText ? "+text" : "", catalogs.size(), elapsed(start), req.transactionId());
+            log.info("event={} catalogs={} durationMs={}",
+                    LogEvent.ES_ENGINE_SPATIAL_DONE, catalogs.size(), elapsed(start));
             return catalogs;
 
         } catch (ElasticsearchException e) {
@@ -216,15 +210,15 @@ public class ElasticsearchQueryEngine implements QueryEngine {
 
     private List<Catalog> handleEsException(ElasticsearchException e, String alias, String transactionId) {
         if ("index_not_found_exception".equals(e.error().type())) {
-            log.warn("es.engine.spatial.index-not-found alias={} transactionId={}", alias, transactionId);
+            log.warn("event={} alias={}", LogEvent.ES_ENGINE_SPATIAL_INDEX_NOT_FOUND, alias);
             return List.of();
         }
         if ("search_phase_execution_exception".equals(e.error().type())
                 && e.error().rootCause().stream().anyMatch(rc ->
                         rc.reason() != null && rc.reason().contains("failed to find type for field"))) {
             String fieldHint = e.error().rootCause().get(0).reason();
-            log.warn("es.engine.spatial.unknown-field hint='{}' transactionId={} — targets path not indexed; returning empty",
-                    fieldHint, transactionId);
+            log.warn("event={} reason=targets-path-not-indexed hint='{}'",
+                    LogEvent.ES_ENGINE_SPATIAL_UNKNOWN_FIELD, fieldHint);
             return List.of();
         }
         throw e;

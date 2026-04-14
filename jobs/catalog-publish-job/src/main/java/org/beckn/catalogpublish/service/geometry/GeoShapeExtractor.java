@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.service.geometry;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -56,7 +57,7 @@ public class GeoShapeExtractor {
                               Map<String, List<Object>> accumulator) {
         if (node == null || node.isMissingNode()) return;
         if (depth > MAX_DEPTH) {
-            log.warn("geo-shape.max-depth-exceeded path={}", path);
+            log.warn("event={} path={}", LogEvent.GEO_MAX_DEPTH_EXCEEDED, path);
             return;
         }
         if (node.isObject()) {
@@ -120,7 +121,7 @@ public class GeoShapeExtractor {
             double lat = Double.parseDouble(parts[0].strip());
             double lon = Double.parseDouble(parts[1].strip());
             if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-                log.warn("geo-shape.gps.out-of-range path={} gps={}", path, gps);
+                log.warn("event={} path={} gps={}", LogEvent.GEO_GPS_OUT_OF_RANGE, path, gps);
                 return Optional.empty();
             }
             Map<String, Object> point = new LinkedHashMap<>();
@@ -128,7 +129,7 @@ public class GeoShapeExtractor {
             point.put("coordinates", List.of(lon, lat));
             return Optional.of(point);
         } catch (NumberFormatException e) {
-            log.warn("geo-shape.gps.parse-failed path={} gps={}", path, gps);
+            log.warn("event={} path={} gps={}", LogEvent.GEO_GPS_PARSE_FAILED, path, gps);
             return Optional.empty();
         }
     }
@@ -149,7 +150,7 @@ public class GeoShapeExtractor {
             result.put("coordinates", List.of(ring));
             return Optional.of(result);
         } catch (Exception e) {
-            log.warn("geo-shape.polygon.parse-failed path={}: {}", path, e.getMessage());
+            log.warn("event={} path={} error={}", LogEvent.GEO_POLYGON_PARSE_FAILED, path, e.getMessage());
             return Optional.empty();
         }
     }

@@ -32,8 +32,9 @@ public class BecknAuthFilter extends OncePerRequestFilter {
         this.becknAuth = becknAuth;
         this.authProperties = authProperties;
         this.objectMapper = objectMapper;
-        log.info("beckn.auth.verification {} | whitelistedEndpoints={}",
-                authProperties.enabled() ? "ENABLED" : "DISABLED",
+        log.info("event={} enabled={} whitelistedEndpoints={}",
+                LogEvent.AUTH_INIT,
+                authProperties.enabled(),
                 authProperties.whitelistedEndpoints());
     }
 

@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.indexing;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import org.beckn.catalogpublish.config.AppProperties;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,7 +86,7 @@ public class EsIndexManager {
         esClient.indices().create(r -> r.index(indexName));
         ensureAlias(indexName);
         metrics.incrementIndexCreated();
-        log.info("es.index.created name={} alias={}", indexName, aliasName);
+        log.info("event={} name={} alias={}", LogEvent.ES_INDEX_CREATED, indexName, aliasName);
     }
 
     // ── Private ──────────────────────────────────────────────────────────────
@@ -95,10 +96,10 @@ public class EsIndexManager {
         try {
             String json = resolveTemplateJson();
             esClient.indices().putIndexTemplate(t -> t.name(TEMPLATE_NAME).withJson(new StringReader(json)));
-            log.info("es.template.created name={}", TEMPLATE_NAME);
+            log.info("event={} name={}", LogEvent.ES_TEMPLATE_CREATED, TEMPLATE_NAME);
             templateCreated.set(true);
         } catch (Exception e) {
-            log.warn("es.template.ensure.failed error={}", ErrorSanitizer.sanitize(e));
+            log.warn("event={} error={}", LogEvent.ES_TEMPLATE_ENSURE_FAILED, ErrorSanitizer.sanitize(e));
         }
     }
 
@@ -123,11 +124,11 @@ public class EsIndexManager {
         try {
             String content = Files.readString(Path.of(templateFile));
             String resolved = content.replace("${INDEX_PREFIX}", indexPrefix);
-            log.info("es.template.loaded-from-file path={}", templateFile);
+            log.info("event={} path={}", LogEvent.ES_TEMPLATE_LOADED, templateFile);
             return resolved;
         } catch (IOException e) {
-            log.warn("es.template.file-load-failed path={} error={}, falling back to default",
-                    templateFile, e.getMessage());
+            log.warn("event={} path={} error={} reason=falling-back-to-default",
+                    LogEvent.ES_TEMPLATE_LOAD_FAILED, templateFile, e.getMessage());
             return defaultTemplateJson();
         }
     }
