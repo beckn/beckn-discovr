@@ -18,9 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * v2.0 (beckn: prefixed) payloads before they reach the pipeline.
  *
  * Tests verify that:
- * 1. v2.1 items are persisted with schema_version = "2.1".
- * 2. Field extraction (name, type, provider) works correctly.
- * 3. schema_version is stored in the DB column but never appears in the payload JSON.
+ * 1. v2.1 items are persisted correctly (no schema_version/name/provider_id columns).
+ * 2. Descriptor name is present in the stored payload JSON.
+ * 3. schema_version does not appear in the payload JSON.
  */
 class SchemaVersionIntegrationTest extends BaseIntegrationTest {
 
@@ -31,7 +31,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void publishV21Catalog_itemPersistedWithSchemaVersion21() throws Exception {
+    void publishV21Catalog_itemPersistedWithCorrectPayload() throws Exception {
         String message = """
                 {
                   "context": {
@@ -86,25 +86,22 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
 
         Item item = items.get(0);
         assertThat(item.getId()).isEqualTo("item-v21-001");
-        assertThat(item.getSchemaVersion())
-                .as("v2.1 item must have schema_version = '2.1'")
-                .isEqualTo("2.1");
-        assertThat(item.getName())
-                .as("Name must be extracted from v2.1 descriptor")
-                .isEqualTo("Smart EV Charger v2.1");
+        assertThat(item.getCatalogId()).isEqualTo("cat-v21-001");
+        assertThat(item.getPayload())
+                .as("Name must be present in payload")
+                .contains("Smart EV Charger v2.1");
 
         JsonNode payload = objectMapper.readTree(item.getPayload());
         JsonNode itemNode = payload.path("catalogs").path(0).path("resources").path(0);
         assertThat(itemNode.isMissingNode()).isFalse();
 
-        String payloadStr = item.getPayload();
-        assertThat(payloadStr)
+        assertThat(item.getPayload())
                 .as("schema_version must not be stored in the payload JSON")
                 .doesNotContain("\"schema_version\"");
     }
 
     @Test
-    void publishV21CatalogWithConstraintsAndPolicies_nameExtractedCorrectly() throws Exception {
+    void publishV21CatalogWithConstraintsAndPolicies_nameInPayload() throws Exception {
         String message = """
                 {
                   "context": {
@@ -154,12 +151,12 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
         assertThat(items).hasSize(1);
         Item item = items.get(0);
 
-        assertThat(item.getName()).isEqualTo("Slot Booking Service");
-        assertThat(item.getSchemaVersion()).isEqualTo("2.1");
+        assertThat(item.getPayload()).contains("Slot Booking Service");
+        assertThat(item.getPayload()).doesNotContain("\"schema_version\"");
     }
 
     @Test
-    void publishMultipleV21Items_allPersistedWithSchemaVersion21() throws Exception {
+    void publishMultipleV21Items_allPersistedWithCorrectPayload() throws Exception {
         String message = """
                 {
                   "context": {
@@ -220,11 +217,15 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("item-multi-002 not found"));
 
-        assertThat(item1.getSchemaVersion()).isEqualTo("2.1");
-        assertThat(item1.getName()).isEqualTo("CCS2 Charger");
+        assertThat(item1.getPayload())
+                .as("item1 payload must contain descriptor name")
+                .contains("CCS2 Charger");
+        assertThat(item1.getCatalogId()).isEqualTo("cat-multi-001");
 
-        assertThat(item2.getSchemaVersion()).isEqualTo("2.1");
-        assertThat(item2.getName()).isEqualTo("Type2 Charger");
+        assertThat(item2.getPayload())
+                .as("item2 payload must contain descriptor name")
+                .contains("Type2 Charger");
+        assertThat(item2.getCatalogId()).isEqualTo("cat-multi-001");
     }
 
     @Test
@@ -266,7 +267,7 @@ class SchemaVersionIntegrationTest extends BaseIntegrationTest {
         assertThat(items).hasSize(1);
         Item item = items.get(0);
 
-        assertThat(item.getSchemaVersion()).isEqualTo("2.1");
+        assertThat(item.getCatalogId()).isEqualTo("cat-clean-001");
         assertThat(item.getPayload())
                 .as("schema_version must not be stored in the payload JSON")
                 .doesNotContain("\"schema_version\"");

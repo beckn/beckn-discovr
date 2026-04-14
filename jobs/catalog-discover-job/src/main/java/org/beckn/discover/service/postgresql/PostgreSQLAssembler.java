@@ -36,8 +36,8 @@ import java.util.stream.StreamSupport;
  *
  * <h3>Grouping strategy</h3>
  * Items are grouped by {@code catalog_id}.  The catalog-level metadata
- * (context, type, descriptor, validity, bppId, bppUri, providerId) is
- * extracted from the first row that carries a catalog payload inside
+ * (context, type, descriptor, validity, providerId) is extracted from the
+ * first row that carries a catalog payload inside
  * {@code item_payload.catalogs[0]}.  All subsequent rows for the same
  * {@code catalog_id} only contribute items / offers — the catalog metadata
  * is not re-parsed.
@@ -183,8 +183,6 @@ public class PostgreSQLAssembler {
         try {
             setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_ID,          catalog::setId);
             setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_PROVIDER_ID,  catalog::setProviderId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_ID,       catalog::setBppId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_URI,      catalog::setBppUri);
             parseIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_DESCRIPTOR, Descriptor.class, catalog::setDescriptor);
             parseIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_VALIDITY,   TimePeriod.class,  catalog::setValidity);
             // Note: offers are NOT merged here — they are merged exactly once per catalog

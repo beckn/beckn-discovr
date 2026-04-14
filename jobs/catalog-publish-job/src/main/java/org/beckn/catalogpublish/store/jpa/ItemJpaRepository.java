@@ -11,21 +11,21 @@ import java.util.List;
 
 public interface ItemJpaRepository extends JpaRepository<Item, ItemId> {
 
-    List<Item> findAllByIdInAndBppId(List<String> ids, String bppId);
+    List<Item> findAllByIdInAndCatalogId(List<String> ids, String catalogId);
 
     @Query(value = """
         SELECT DISTINCT i.* FROM item i, unnest(i.offer_ids) AS oid
-        WHERE i.bpp_id = :bppId AND oid IN (:offerIds)
+        WHERE i.catalog_id = :catalogId AND oid IN (:offerIds)
         """, nativeQuery = true)
-    List<Item> findAllByBppIdAndAnyOfferId(
-            @Param("bppId") String bppId,
+    List<Item> findAllByCatalogIdAndAnyOfferId(
+            @Param("catalogId") String catalogId,
             @Param("offerIds") List<String> offerIds);
 
-    /** Cross-BPP lookup by resource ID only — no BPP filter. Spring Data auto-derives the query. */
+    /** Cross-catalog lookup by resource ID only. Spring Data auto-derives the query. */
     List<Item> findAllByIdIn(List<String> ids);
 
-    /** Deletes all items for the given catalog and BPP. Used by FULL replace mode. Returns count of deleted rows. */
+    /** Deletes all items for the given catalog. Used by FULL replace mode. Returns count of deleted rows. */
     @Modifying
-    @Query("DELETE FROM Item i WHERE i.catalogId = :catalogId AND i.bppId = :bppId")
-    int deleteByCatalogIdAndBppId(@Param("catalogId") String catalogId, @Param("bppId") String bppId);
+    @Query("DELETE FROM Item i WHERE i.catalogId = :catalogId")
+    int deleteByCatalogId(@Param("catalogId") String catalogId);
 }

@@ -8,7 +8,6 @@ import co.elastic.clients.elasticsearch.core.SearchResponse;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
-import org.beckn.discover.service.DiscoveryMetrics;
 import org.beckn.discover.service.engine.QueryEngine;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.postgresql.PostgreSQLQueryEngine;
@@ -50,7 +49,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
     private final ElasticsearchClient       esClient;
     private final EsSearchAssembler         assembler;
     private final DiscoveryProperties       props;
-    private final DiscoveryMetrics          metrics;
     private final Optional<EmbeddingClient> embeddingClient;
     private final Optional<QueryEnricher>   queryEnricher;
     private final int                       knnCandidates;
@@ -60,7 +58,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                                     ElasticsearchClient esClient,
                                     EsSearchAssembler assembler,
                                     DiscoveryProperties props,
-                                    DiscoveryMetrics metrics,
                                     Optional<EmbeddingClient> embeddingClient,
                                     Optional<QueryEnricher> queryEnricher) {
         this.pgEngine        = pgEngine;
@@ -68,7 +65,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
         this.esClient        = esClient;
         this.assembler       = assembler;
         this.props           = props;
-        this.metrics         = metrics;
         this.embeddingClient = embeddingClient;
         this.queryEnricher   = queryEnricher;
         this.knnCandidates   = Math.max(
@@ -116,7 +112,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             log.info("es.engine.spatial+semantic.request txId={} alias={} k={} numCandidates={} geoFilters={} schemaFilters={}",
                     req.transactionId(), alias, limit, knnCandidates, geoQueries.size(), schemaFilters.size());
             if (!schemaFilters.isEmpty()) {
-                metrics.incrementSchemaFilterApplied();
                 log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
                         value("path", "spatial+semantic"),
                         value("schemaFilters", schemaFilters.size()),
@@ -173,7 +168,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
         }
 
         if (!spatialSchemaFilters.isEmpty()) {
-            metrics.incrementSchemaFilterApplied();
             log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
                     value("path", hasText ? "spatial+text" : "spatial"),
                     value("schemaFilters", spatialSchemaFilters.size()),

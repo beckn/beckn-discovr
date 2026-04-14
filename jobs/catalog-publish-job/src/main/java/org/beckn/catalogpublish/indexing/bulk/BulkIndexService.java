@@ -12,6 +12,9 @@ import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
 import java.net.ConnectException;
@@ -29,53 +32,50 @@ public class BulkIndexService {
     private final ElasticsearchClient esClient;
     private final EsIndexManager      indexManager;
     private final EsIndexerMetrics    metrics;
-    private final int                 retryAttempts;
-    private final long                retryInitialDelayMs;
+    private final String              indexPatternForDelete;
 
     public BulkIndexService(ElasticsearchClient esClient,
                             EsIndexManager indexManager,
                             EsIndexerMetrics metrics,
                             AppProperties props) {
-        this.esClient            = esClient;
-        this.indexManager        = indexManager;
-        this.metrics             = metrics;
-        this.retryAttempts       = props.catalog().elasticsearch().retryAttempts();
-        this.retryInitialDelayMs = props.catalog().elasticsearch().retryInitialDelayMs();
+        this.esClient              = esClient;
+        this.indexManager          = indexManager;
+        this.metrics               = metrics;
+        this.indexPatternForDelete = props.catalog().elasticsearch().indexPrefix() + "-*";
     }
 
     /**
-     * Deletes all ES documents matching the given catalogId and bppId across all index patterns.
-     * Used by FULL replace mode to remove stale documents before re-indexing.
+     * Deletes all ES documents matching the given catalogId across all index patterns.
+     * Used by FULL replace mode.
      *
      * @return number of documents deleted
-     * @throws RuntimeException if the delete fails — caller must handle (FULL replace cannot proceed with stale docs)
      */
-    public long deleteByCatalogAndBpp(String catalogId, String bppId) {
+    public long deleteByCatalog(String catalogId) {
         try {
             var response = esClient.deleteByQuery(d -> d
-                    .index("beckn-catalog-*")
-                    .query(q -> q.bool(b -> b
-                            .must(m -> m.term(t -> t.field("catalog_id").value(catalogId)))
-                            .must(m -> m.term(t -> t.field("bpp_id").value(bppId)))
-                    ))
+                    .index(indexPatternForDelete)
+                    .query(q -> q.term(t -> t.field("catalog_id").value(catalogId)))
             );
             long deleted = response.deleted() != null ? response.deleted() : 0;
-            log.info("event={} catalogId={} bppId={} deletedDocs={}",
-                    LogEvent.FULL_REPLACE_ES_DELETED, catalogId, bppId, deleted);
+            log.info("event={} catalogId={} deletedDocs={}",
+                    LogEvent.FULL_REPLACE_ES_DELETED, catalogId, deleted);
             return deleted;
         } catch (Exception e) {
-            log.error("event={} catalogId={} bppId={} error={}",
-                    LogEvent.ES_FAILED, catalogId, bppId, ErrorSanitizer.sanitize(e));
+            log.error("event={} catalogId={} error={}",
+                    LogEvent.ES_FAILED, catalogId, ErrorSanitizer.sanitize(e));
             throw new RuntimeException("ES deleteByQuery failed for FULL replace: " + catalogId, e);
         }
     }
 
-    public BulkIndexResult index(String indexKey, List<Map<String, Object>> docs) {
+    @Retryable(
+        retryFor = { ConnectException.class, SocketTimeoutException.class },
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2, maxDelay = 30000)
+    )
+    public BulkIndexResult index(String indexKey, List<Map<String, Object>> docs) throws ConnectException, SocketTimeoutException {
         if (docs.isEmpty()) return new BulkIndexResult(List.of(), List.of());
 
         String indexName = indexManager.resolveIndexName(indexKey);
-        Exception last   = null;
-        long delay       = retryInitialDelayMs;
 
         try {
             indexManager.ensureIndex(indexName);
@@ -84,24 +84,31 @@ public class BulkIndexService {
             return BulkIndexResult.allFailed(toFailedDocs(docs, "index ensure failed: " + e.getMessage()));
         }
 
-        for (int attempt = 1; attempt <= retryAttempts; attempt++) {
-            try {
-                return executeBulk(indexName, docs);
-            } catch (ConnectException | SocketTimeoutException e) {
-                last = e;
-                metrics.incrementRetried();
-                log.warn("event={} attempt={}/{} index={} error={}", LogEvent.ES_FAILED, attempt, retryAttempts, indexName, e.getMessage());
-                if (attempt < retryAttempts) sleep(delay);
-                delay *= 2;
-            } catch (Exception e) {
-                // Non-transient (mapping conflict, auth) — don't retry
-                log.error("event={} reason=non-retryable index={} error={}", LogEvent.ES_FAILED, indexName, ErrorSanitizer.sanitize(e));
-                return BulkIndexResult.allFailed(toFailedDocs(docs, e.getMessage()));
-            }
+        try {
+            return executeBulk(indexName, docs);
+        } catch (ConnectException | SocketTimeoutException e) {
+            metrics.incrementRetried();
+            log.warn("event={} index={} error={}", LogEvent.ES_FAILED, indexName, e.getMessage());
+            throw e; // let @Retryable handle retry
+        } catch (Exception e) {
+            // Non-transient (mapping conflict, auth) — don't retry
+            log.error("event={} reason=non-retryable index={} error={}", LogEvent.ES_FAILED, indexName, ErrorSanitizer.sanitize(e));
+            return BulkIndexResult.allFailed(toFailedDocs(docs, e.getMessage()));
         }
-        log.error("event={} reason=retries-exhausted index={}", LogEvent.ES_FAILED, indexName);
+    }
+
+    @Recover
+    public BulkIndexResult recoverIndex(ConnectException e, String indexKey, List<Map<String, Object>> docs) {
+        log.error("event={} reason=retries-exhausted index={}", LogEvent.ES_FAILED, indexKey);
         metrics.incrementBatchFailure();
-        return BulkIndexResult.allFailed(toFailedDocs(docs, last != null ? last.getMessage() : "retries exhausted"));
+        return BulkIndexResult.allFailed(toFailedDocs(docs, e.getMessage()));
+    }
+
+    @Recover
+    public BulkIndexResult recoverIndex(SocketTimeoutException e, String indexKey, List<Map<String, Object>> docs) {
+        log.error("event={} reason=retries-exhausted index={}", LogEvent.ES_FAILED, indexKey);
+        metrics.incrementBatchFailure();
+        return BulkIndexResult.allFailed(toFailedDocs(docs, e.getMessage()));
     }
 
     // ── Private ──────────────────────────────────────────────────────────────
@@ -109,7 +116,8 @@ public class BulkIndexService {
     private BulkIndexResult executeBulk(String indexName, List<Map<String, Object>> docs) throws Exception {
         BulkRequest.Builder bulk = new BulkRequest.Builder();
         for (Map<String, Object> doc : docs) {
-            String id = doc.get("bpp_id") + ":" + doc.get("resource_id");
+            // ES doc ID: catalogId:resourceId — unique, content-addressable
+            String id = doc.get("catalog_id") + ":" + doc.get("resource_id");
             bulk.operations(op -> op.index(i -> i.index(indexName).id(id).document(doc)));
         }
 
@@ -120,7 +128,7 @@ public class BulkIndexService {
         for (BulkResponseItem item : response.items()) {
             if (item.error() != null) {
                 failed.add(new BulkIndexResult.FailedDoc(
-                        extractItemId(item.id()), extractBppId(item.id()), item.error().reason()));
+                        extractResourceId(item.id()), extractCatalogId(item.id()), item.error().reason()));
                 metrics.incrementItemFailure();
                 log.error("event={} docId={} reason={}", LogEvent.ES_FAILED, item.id(), item.error().reason());
             } else {
@@ -134,16 +142,12 @@ public class BulkIndexService {
     private List<BulkIndexResult.FailedDoc> toFailedDocs(List<Map<String, Object>> docs, String reason) {
         return docs.stream()
                 .map(d -> new BulkIndexResult.FailedDoc(
-                        (String) d.get("resource_id"), (String) d.get("bpp_id"), reason))
+                        (String) d.get("resource_id"), (String) d.get("catalog_id"), reason))
                 .peek(d -> metrics.incrementItemFailure())
                 .toList();
     }
 
-    // docId format: "bppId:itemId"
-    private String extractBppId(String docId) { int i = docId.indexOf(':'); return i > 0 ? docId.substring(0, i) : ""; }
-    private String extractItemId(String docId) { int i = docId.indexOf(':'); return i > 0 ? docId.substring(i + 1) : docId; }
-
-    private void sleep(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-    }
+    // docId format: "catalogId:resourceId"
+    private String extractCatalogId(String docId) { int i = docId.indexOf(':'); return i > 0 ? docId.substring(0, i) : ""; }
+    private String extractResourceId(String docId) { int i = docId.indexOf(':'); return i > 0 ? docId.substring(i + 1) : docId; }
 }

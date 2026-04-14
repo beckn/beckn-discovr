@@ -35,7 +35,7 @@ public class EsFailurePublisher {
     public void publishFailures(String indexKey, String payloadJson,
                                 List<BulkIndexResult.FailedDoc> failed) {
         for (BulkIndexResult.FailedDoc doc : failed) {
-            publish(new EsFailureMessage(doc.itemId(), doc.bppId(), indexKey,
+            publish(new EsFailureMessage(doc.itemId(), doc.catalogId(), indexKey,
                     payloadJson, doc.reason(), Instant.now(), 1));
         }
     }
@@ -49,7 +49,7 @@ public class EsFailurePublisher {
     private void publish(EsFailureMessage msg) {
         try {
             String json = mapper.writeValueAsString(msg);
-            kafka.send(failureTopic, msg.bppId(), json)
+            kafka.send(failureTopic, msg.catalogId(), json)
                  .whenComplete((r, ex) -> {
                      if (ex != null)
                          log.error("event={} itemId={} error={}",

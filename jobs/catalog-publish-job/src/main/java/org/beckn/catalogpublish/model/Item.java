@@ -5,13 +5,13 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
-import org.beckn.catalogpublish.dto.CatalogContext;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
 
 @Entity
@@ -24,26 +24,14 @@ public class Item {
     private String id;
 
     @Id
-    @Column(name = "bpp_id", nullable = false)
-    private String bppId;
-
-    @Column(name = "bpp_uri")
-    private String bppUri;
-
-    @Column(name = "name")
-    private String name;
+    @Column(name = "catalog_id", nullable = false)
+    private String catalogId;
 
     @Column(name = "context_url")
     private String contextUrl;
 
     @Column(name = "type")
     private String type;
-
-    @Column(name = "provider_id")
-    private String providerId;
-
-    @Column(name = "catalog_id")
-    private String catalogId;
 
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "network_id", columnDefinition = "TEXT[]")
@@ -57,8 +45,11 @@ public class Item {
     @Column(name = "offer_ids", columnDefinition = "text[]")
     private String[] offerIds;
 
-    @Column(name = "schema_version", nullable = false)
-    private String schemaVersion;
+    @Column(name = "created_by", updatable = false)
+    private String createdBy;
+
+    @Column(name = "updated_by")
+    private String updatedBy;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -71,94 +62,62 @@ public class Item {
     protected Item() {
     }
 
-    public static Item from(String id, String payload, String[] offerIds, CatalogContext ctx,
-            String catalogId, String name, String type, String providerId, String contextUrl,
-            String schemaVersion) {
-        Item item = new Item();
+    public static Item from(String id, String payload, String[] offerIds,
+            String subscriberId, String catalogId, String type, String contextUrl,
+            String[] networkIds) {
+        var item = new Item();
         item.id = id;
-        item.bppId = ctx.bppId();
-        item.bppUri = ctx.bppUri();
-        item.name = name;
+        item.catalogId = catalogId;
         item.contextUrl = contextUrl;
         item.type = type;
-        item.providerId = providerId;
-        item.catalogId = catalogId;
-        item.networkIds = ctx.networkIds() != null ? ctx.networkIds() : new String[0];
+        item.networkIds = networkIds != null ? networkIds : new String[0];
         item.payload = payload;
         item.offerIds = offerIds != null ? offerIds : new String[0];
-        item.schemaVersion = schemaVersion != null ? schemaVersion : "2.0";
+        item.createdBy = subscriberId;
+        item.updatedBy = subscriberId;
         return item;
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o)
-            return true;
-        if (!(o instanceof Item other))
-            return false;
-        return Objects.equals(id, other.id) && Objects.equals(bppId, other.bppId);
+        if (this == o) return true;
+        if (!(o instanceof Item other)) return false;
+        return Objects.equals(id, other.id) && Objects.equals(catalogId, other.catalogId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, bppId);
+        return Objects.hash(id, catalogId);
     }
 
-    public String getId() {
-        return id;
+    public String getId() { return id; }
+
+    public String getCatalogId() { return catalogId; }
+
+    public String getContextUrl() { return contextUrl; }
+
+    public String getType() { return type; }
+
+    /** Returns an immutable view. */
+    public List<String> getNetworkIds() {
+        return networkIds != null ? List.of(networkIds) : List.of();
     }
 
-    public String getBppId() {
-        return bppId;
+    public String getPayload() { return payload; }
+
+    /** Returns an immutable view. */
+    public List<String> getOfferIds() {
+        return offerIds != null ? List.of(offerIds) : List.of();
     }
 
-    public String getBppUri() {
-        return bppUri;
-    }
+    /** Raw array accessor for JPA / JdbcTypeCode — do not expose to callers. */
+    String[] getOfferIdsArray() { return offerIds; }
 
-    public String getName() {
-        return name;
-    }
+    public String getCreatedBy() { return createdBy; }
 
-    public String getContextUrl() {
-        return contextUrl;
-    }
+    public String getUpdatedBy() { return updatedBy; }
 
-    public String getType() {
-        return type;
-    }
+    public LocalDateTime getCreatedAt() { return createdAt; }
 
-    public String getProviderId() {
-        return providerId;
-    }
-
-    public String getCatalogId() {
-        return catalogId;
-    }
-
-    /** Returns a defensive copy; callers must not mutate the returned array. */
-    public String[] getNetworkIds() {
-        return networkIds != null ? networkIds.clone() : new String[0];
-    }
-
-    public String getPayload() {
-        return payload;
-    }
-
-    /** Returns a defensive copy; callers must not mutate the returned array. */
-    public String[] getOfferIds() {
-        return offerIds != null ? offerIds.clone() : new String[0];
-    }
-
-    public String getSchemaVersion() {
-        return schemaVersion;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

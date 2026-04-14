@@ -7,7 +7,7 @@ import java.time.Instant;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record EsFailureMessage(
         String itemId,
-        String bppId,
+        String catalogId,
         String indexKey,
         String payload,
         String errorReason,
@@ -15,6 +15,6 @@ public record EsFailureMessage(
         int attempt) {
 
     public EsFailureMessage withNextAttempt() {
-        return new EsFailureMessage(itemId, bppId, indexKey, payload, errorReason, Instant.now(), attempt + 1);
+        return new EsFailureMessage(itemId, catalogId, indexKey, payload, errorReason, Instant.now(), attempt + 1);
     }
 }

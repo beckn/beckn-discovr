@@ -5,6 +5,7 @@ import org.beckn.catalogpublish.logging.MdcField;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -30,14 +31,19 @@ public class CorrelationContext {
                 ? ctx.contextNode().path("transactionId").asText("unknown")
                 : "unknown";
         MDC.put(MdcField.MESSAGE_ID, mid != null ? mid : "unknown");
-        MDC.put(MdcField.BPP_ID, ctx.bppId() != null ? ctx.bppId() : "unknown");
-        MDC.put(MdcField.BPP_URI, ctx.bppUri() != null ? ctx.bppUri() : "unknown");
         MDC.put(MdcField.TRANSACTION_ID, txnId);
         MDC.put(MdcField.CORRELATION_ID, mid != null ? mid : UUID.randomUUID().toString());
-        if (ctx.networkIds() != null && ctx.networkIds().length > 0) {
-            MDC.put(MdcField.NETWORK_ID, ctx.networkIds()[0]);
+        List<String> networkIds = ctx.networkIds();
+        if (networkIds != null && !networkIds.isEmpty()) {
+            MDC.put(MdcField.NETWORK_ID, networkIds.get(0));
         }
         if (ctx.contextNode() != null) {
+            String bppId = ctx.contextNode().path("bppId").asText(null);
+            if (bppId != null && !bppId.isBlank()) {
+                MDC.put(MdcField.BPP_ID, bppId);
+            } else {
+                MDC.remove(MdcField.BPP_ID);
+            }
             String catalogId = ctx.contextNode().path("catalogId").asText(null);
             if (catalogId != null && !catalogId.isBlank()) {
                 MDC.put(MdcField.CATALOG_ID, catalogId);
@@ -51,6 +57,7 @@ public class CorrelationContext {
                 MDC.remove(MdcField.BAP_ID);
             }
         } else {
+            MDC.remove(MdcField.BPP_ID);
             MDC.remove(MdcField.CATALOG_ID);
             MDC.remove(MdcField.BAP_ID);
         }
@@ -63,10 +70,9 @@ public class CorrelationContext {
      */
     public void populateFallback() {
         MDC.put(MdcField.MESSAGE_ID, "unknown");
-        MDC.put(MdcField.BPP_ID, "unknown");
-        MDC.put(MdcField.BPP_URI, "unknown");
         MDC.put(MdcField.TRANSACTION_ID, "unknown");
         MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
+        MDC.remove(MdcField.BPP_ID);
         MDC.remove(MdcField.CATALOG_ID);
         MDC.remove(MdcField.BAP_ID);
     }

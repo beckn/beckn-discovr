@@ -8,6 +8,8 @@ import org.beckn.catalogpublish.dto.CatalogContext;
 import org.beckn.catalogpublish.dto.OfferIndex;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ItemPayloadBuilderTest {
@@ -16,15 +18,33 @@ class ItemPayloadBuilderTest {
     private final ItemPayloadBuilder builder = new ItemPayloadBuilder(mapper);
 
     @Test
-    void buildCatalogMetadataSlice_removesItemsAndOffers() {
+    void buildCatalogMetadataSlice_removesItemsOffersAndBppFields() {
         ObjectNode catalog = mapper.createObjectNode();
         catalog.put("id", "c1");
         catalog.putArray("resources").add(mapper.createObjectNode());
-        CatalogContext ctx = new CatalogContext("b1", "http://b1", new String[0], null);
+        CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null);
         JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
         assertThat(slice.has("resources")).isFalse();
         assertThat(slice.has("offers")).isFalse();
-        assertThat(slice.path("bppId").asText()).isEqualTo("b1");
+        assertThat(slice.has("bppId")).isFalse();
+        assertThat(slice.has("bppUri")).isFalse();
+        assertThat(slice.path("id").asText()).isEqualTo("c1");
+    }
+
+    @Test
+    void buildCatalogMetadataSlice_stripsBppIdAndBppUriFromCatalog() {
+        // bppId/bppUri in the catalog body must be stripped — never stored per the schema redesign
+        ObjectNode catalog = mapper.createObjectNode();
+        catalog.put("id", "c1");
+        catalog.put("bppId", "catalog-bpp");
+        catalog.put("bppUri", "http://catalog-bpp");
+        catalog.putArray("resources").add(mapper.createObjectNode());
+        CatalogContext ctx = new CatalogContext(List.of(), "sub-ctx", null);
+        JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
+        // bppId/bppUri must NOT appear in the stored payload
+        assertThat(slice.has("bppId")).isFalse();
+        assertThat(slice.has("bppUri")).isFalse();
+        assertThat(slice.path("id").asText()).isEqualTo("c1");
     }
 
     @Test

@@ -10,7 +10,7 @@ import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
-import org.beckn.discover.util.ContextNormalizer;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -94,11 +94,10 @@ public class DiscoveryEventConsumer {
                     value("offset", offset),
                     value("rawMessage", truncate(message, 2000)),
                     e);
-            return; // no ack → Kafka retries
+            throw new RuntimeException("Failed to parse discovery event", e); // triggers DefaultErrorHandler retry / DLT
         }
 
-        // Normalize and populate MDC as early as possible
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
+        // Populate MDC as early as possible
         BecknMdcContext.populate(requestNode.path(BecknFields.CONTEXT));
 
         try {
@@ -138,7 +137,7 @@ public class DiscoveryEventConsumer {
                     value("partition", partition),
                     value("offset", offset),
                     e);
-            acknowledgment.acknowledge();
+            throw new RuntimeException("Discovery processing failed", e); // triggers DefaultErrorHandler retry / DLT
         } finally {
             BecknMdcContext.clear();
         }

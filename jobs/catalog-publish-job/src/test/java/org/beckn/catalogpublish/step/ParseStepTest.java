@@ -25,7 +25,7 @@ class ParseStepTest {
 
     @Test
     void parse_throwsWhenNoCatalogs() {
-        String msg = "{\"context\":{\"bppId\":\"b1\",\"bppUri\":\"http://b1\"},\"message\":{\"catalogs\":[]}}";
+        String msg = "{\"context\":{\"networkId\":\"net-1\"},\"message\":{\"catalogs\":[]}}";
         assertThatThrownBy(() -> parseStep.parse(msg))
                 .isInstanceOf(PayloadParseException.class)
                 .hasMessageContaining("No catalogs");
@@ -34,11 +34,11 @@ class ParseStepTest {
     @Test
     void parse_extractsContextAndCatalogs() {
         String msg = """
-                {"context":{"bppId":"b1","bppUri":"http://b1"},"message":{"catalogs":[{"id":"c1","resources":[]}]}}
+                {"context":{"networkId":"net-1","subscriberId":"sub-1"},"message":{"catalogs":[{"id":"c1","resources":[]}]}}
                 """;
         var parsed = parseStep.parse(msg);
-        assertThat(parsed.context().bppId()).isEqualTo("b1");
-        assertThat(parsed.context().bppUri()).isEqualTo("http://b1");
+        assertThat(parsed.context().subscriberId()).isEqualTo("sub-1");
+        assertThat(parsed.context().networkIds()).containsExactly("net-1");
         assertThat(parsed.catalogs()).hasSize(1);
         assertThat(parsed.catalogs().get(0).path("id").asText()).isEqualTo("c1");
     }

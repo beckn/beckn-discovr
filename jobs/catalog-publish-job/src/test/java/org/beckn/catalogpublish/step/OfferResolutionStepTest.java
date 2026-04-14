@@ -51,15 +51,12 @@ class OfferResolutionStepTest {
     }
 
     private CatalogContext testCtx() {
-        return new CatalogContext("bpp-b", "http://bpp-b.example.com",
-                new String[]{"net-1"}, objectMapper.createObjectNode());
+        return new CatalogContext(List.of("net-1"), "sub-b", objectMapper.createObjectNode());
     }
 
     private Item buildStoredItem(String id, String bppId, String catalogId, String payloadJson) {
-        var ctx = new CatalogContext(bppId, "http://" + bppId + ".example.com",
-                new String[]{"net-1"}, objectMapper.createObjectNode());
-        return Item.from(id, payloadJson, new String[0], ctx, catalogId, "Test Item",
-                "TestType", "prov-1", null, "2.0");
+        return Item.from(id, payloadJson, new String[0], bppId,
+                catalogId, "TestType", null, new String[]{"net-1"});
     }
 
     // ── Happy path ─────────────────────────────────────────────────────────────
@@ -84,9 +81,7 @@ class OfferResolutionStepTest {
 
         assertThat(results).hasSize(1);
         var resolved = results.get(0);
-        // BPP identity must be preserved from the original item, NOT from the publishing BPP
-        assertThat(resolved.item().getBppId()).isEqualTo("bpp-a");
-        assertThat(resolved.item().getBppUri()).isEqualTo("http://bpp-a.example.com");
+        // Catalog identity must be preserved from the original item, NOT from the publishing catalog
         assertThat(resolved.item().getCatalogId()).isEqualTo("cat-a");
         assertThat(resolved.item().getId()).isEqualTo("item-a");
         // Offer must be merged into the payload
@@ -191,10 +186,8 @@ class OfferResolutionStepTest {
                     "offers":[{"id":"offer-old","descriptor":{"name":"Old Offer"}}]}]}
                 """));
         // Item already has offer-old in the DB
-        var ctx = new CatalogContext("bpp-a", "http://bpp-a.example.com",
-                new String[]{"net-1"}, objectMapper.createObjectNode());
-        Item storedItem = Item.from("item-a", existingPayload, new String[]{"offer-old"}, ctx,
-                "cat-a", "Station", "TestType", "prov-1", null, "2.0");
+        Item storedItem = Item.from("item-a", existingPayload, new String[]{"offer-old"}, "sub-a",
+                "cat-a", "TestType", null, new String[]{"net-1"});
         when(itemStore.findAllByIdIn(anyList())).thenReturn(List.of(storedItem));
 
         JsonNode newOffer = objectMapper.readTree("""

@@ -2,25 +2,27 @@ package org.beckn.catalogpublish.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import java.util.List;
+
 /**
  * Extracted from the Kafka message context node; immutable, thread-safe.
  *
- * <p>
- * {@code contextNode} is the original, unmodified context {@link JsonNode} from
+ * <p>{@code contextNode} is the original, unmodified context {@link JsonNode} from
  * the inbound Kafka message. It is carried through to the outbound event so the
- * full context (messageId, transactionId, networkId, etc.) is forwarded as-is —
- * no fields are lost.
+ * full context (messageId, transactionId, networkId, bppId, bppUri, etc.) is
+ * forwarded as-is — no fields are lost.</p>
+ *
+ * <p>{@code subscriberId} is extracted from {@code context.subscriberId} (injected
+ * by the Catalg API layer from auth). Used for {@code created_by}/{@code updated_by}
+ * ownership tracking. Defaults to {@code "anonymous"} when auth is disabled.</p>
  */
-public record CatalogContext(String bppId, String bppUri, String[] networkIds, JsonNode contextNode) {
+public record CatalogContext(
+        List<String> networkIds,
+        String subscriberId,
+        JsonNode contextNode) {
 
-    /** Defensive copy of mutable array to guarantee thread safety. */
     public CatalogContext {
-        networkIds = networkIds != null ? networkIds.clone() : new String[0];
-    }
-
-    /** Returns a defensive copy — callers cannot mutate the internal array. */
-    @Override
-    public String[] networkIds() {
-        return networkIds.clone();
+        networkIds = networkIds != null ? List.copyOf(networkIds) : List.of();
+        subscriberId = (subscriberId != null && !subscriberId.isBlank()) ? subscriberId : "anonymous";
     }
 }

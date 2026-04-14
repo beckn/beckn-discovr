@@ -26,7 +26,6 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import io.micrometer.core.instrument.Timer;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,11 +85,17 @@ public class ElasticIndexStep {
         if (!batch.hasItems())
             return;
 
-        // FULL replace: delete all existing ES documents for this catalog+bpp before indexing fresh ones.
+        // FULL replace: delete all existing ES documents for this catalog before indexing fresh ones.
         // This runs after the DB transaction has committed, so the DB is already clean.
+        // Failure is non-fatal: stale docs will remain until the next FULL replace; new docs are still indexed.
         if (batch.fullReplace()) {
-            long esDeleted = bulkIndexService.deleteByCatalogAndBpp(batch.catalogId(), batch.context().bppId());
-            publishMetrics.recordFullReplaceEsDeleted(esDeleted);
+            try {
+                long esDeleted = bulkIndexService.deleteByCatalog(batch.catalogId());
+                publishMetrics.recordFullReplaceEsDeleted(esDeleted);
+            } catch (Exception e) {
+                log.error("event={} reason=es-delete-failed catalogId={} error={}",
+                        LogEvent.ES_FAILED, batch.catalogId(), ErrorSanitizer.sanitize(e));
+            }
         }
 
         Map<String, List<Map<String, Object>>> bySchemaType = new LinkedHashMap<>();
@@ -105,8 +110,7 @@ public class ElasticIndexStep {
                 log.warn("event={} reason=schema-type-missing itemId={}", LogEvent.ES_FAILED, item.getId());
                 continue;
             }
-            String[] networkIdsArr = item.getNetworkIds();
-            List<String> networkIds = networkIdsArr.length > 0 ? Arrays.asList(networkIdsArr) : List.of();
+            List<String> networkIds = item.getNetworkIds();
             Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkIds);
             embeddingClient.ifPresent(client -> {
                 try {
