@@ -173,13 +173,13 @@ All three jobs use **LogstashEncoder** (structured JSON) with unified MDC fields
 
 | MDC Field | Set by | Description |
 |-----------|--------|-------------|
-| `correlationId` | BecknMdcContext | UUID per processing unit |
 | `transactionId` | BecknMdcContext | From Beckn context |
 | `messageId` | BecknMdcContext | From Beckn context |
 | `bapId`, `bapUri` | BecknMdcContext | BAP identifiers |
 | `bppId`, `bppUri` | BecknMdcContext | BPP identifiers |
 | `networkId` | BecknMdcContext | From context.networkId |
 | `action` | BecknMdcContext | Beckn action value |
+| `subscriberId` | BecknMdcContext | From context.subscriberId |
 
 - **LogEvent constants** in `logging/LogEvent.java` — no hardcoded log strings
 - **Log levels**: DEBUG=internal steps, INFO=milestones, WARN=validation failures/NACK, ERROR=unrecoverable
