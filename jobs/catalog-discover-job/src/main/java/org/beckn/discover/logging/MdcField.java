@@ -11,7 +11,6 @@ public final class MdcField {
 
     private MdcField() {}
 
-    public static final String CORRELATION_ID  = "correlationId";
     public static final String TRANSACTION_ID  = "transactionId";
     public static final String MESSAGE_ID      = "messageId";
     public static final String BAP_ID          = "bapId";

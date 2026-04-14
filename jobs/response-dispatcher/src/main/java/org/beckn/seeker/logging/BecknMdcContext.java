@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.beckn.seeker.common.BecknFields;
 import org.slf4j.MDC;
 
-import java.util.UUID;
-
 /**
  * Populates and clears SLF4J MDC from a Beckn v2.0 context node.
  * Call {@link #populate(JsonNode)} at the start of each Kafka message handler
@@ -16,7 +14,6 @@ public final class BecknMdcContext {
     private BecknMdcContext() {}
 
     public static void populate(JsonNode contextNode) {
-        MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
         putIfPresent(contextNode, BecknFields.TRANSACTION_ID, MdcField.TRANSACTION_ID);
         putIfPresent(contextNode, BecknFields.MESSAGE_ID,     MdcField.MESSAGE_ID);
         putIfPresent(contextNode, BecknFields.BAP_ID,         MdcField.BAP_ID);

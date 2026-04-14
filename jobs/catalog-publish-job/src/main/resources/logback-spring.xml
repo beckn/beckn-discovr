@@ -4,7 +4,6 @@
     <springProfile name="!test">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-                <includeMdcKeyName>correlationId</includeMdcKeyName>
                 <includeMdcKeyName>messageId</includeMdcKeyName>
                 <includeMdcKeyName>bppId</includeMdcKeyName>
                 <includeMdcKeyName>transactionId</includeMdcKeyName>

@@ -11,7 +11,6 @@
     <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
       <encoder class="net.logstash.logback.encoder.LogstashEncoder">
         <includeContext>false</includeContext>
-        <includeMdcKeyName>correlationId</includeMdcKeyName>
         <includeMdcKeyName>transactionId</includeMdcKeyName>
         <includeMdcKeyName>messageId</includeMdcKeyName>
         <includeMdcKeyName>bapId</includeMdcKeyName>
