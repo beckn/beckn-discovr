@@ -10,10 +10,12 @@ CREATE TABLE IF NOT EXISTS item (
     payload             JSONB,
     created_by          VARCHAR(255),
     updated_by          VARCHAR(255),
+    subscriber_id       VARCHAR(255),
     created_at          TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id, catalog_id)
 );
+CREATE INDEX idx_item_subscriber ON item(subscriber_id);
 CREATE INDEX idx_item_context_url ON item(context_url);
 CREATE INDEX idx_item_type ON item(type);
 CREATE INDEX idx_item_updated_at ON item(updated_at DESC);

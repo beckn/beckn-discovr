@@ -21,8 +21,8 @@ class ResultStepTest {
 
     @Test
     void buildResult_successWhenItemsSaved() {
-        CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null);
-        Item item = Item.from("i1", "{}", new String[0], "sub-1", "c1", null, null, new String[0]);
+        CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null, null);
+        Item item = Item.from("i1", "{}", new String[0], null, "sub-1", "c1", null, null, new String[0]);
         CatalogBatch batch = new CatalogBatch("c1", ctx, null, CatalogOperation.PUBLISH, List.of(item), List.of(),
                 Map.of(), false);
         ProcessingResult result = resultStep.buildResult(batch);
@@ -32,7 +32,7 @@ class ResultStepTest {
 
     @Test
     void buildResult_rejectedWhenNoItemsSavedAndHasErrors() {
-        CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null);
+        CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null, null);
         CatalogBatch batch = new CatalogBatch("c1", ctx, null, CatalogOperation.PUBLISH, List.of(),
                 List.of(new ProcessingError("i1", ProcessingErrorCode.NET_INTERNAL_ERROR, "err")), Map.of(), false);
         ProcessingResult result = resultStep.buildResult(batch);

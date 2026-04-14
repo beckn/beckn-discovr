@@ -145,7 +145,8 @@ public class PersistenceStep {
                         ? attrsContextUrl
                         : (itemContextUrl != null ? itemContextUrl : catalogContextUrl);
                 built.add(new ItemWithNode(
-                        Item.from(itemId, payload.toString(), offerIds, ctx.subscriberId(), catalogId,
+                        Item.from(itemId, payload.toString(), offerIds,
+                                ctx.recordId(), ctx.subscriberId(), catalogId,
                                 type, contextUrl, ctx.networkIds().toArray(new String[0])),
                         payload));
             } catch (Exception e) {
@@ -182,7 +183,8 @@ public class PersistenceStep {
                         String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
                         built.add(new ItemWithNode(
                                 Item.from(linkedItem.getId(), payload.toString(), offerIds,
-                                        linkedItem.getUpdatedBy(), linkedItem.getCatalogId(),
+                                        linkedItem.getCreatedBy(), linkedItem.getSubscriberId(),
+                                        linkedItem.getCatalogId(),
                                         linkedItem.getType(), linkedItem.getContextUrl(),
                                         linkedItem.getNetworkIds().toArray(new String[0])),
                                 payload));
