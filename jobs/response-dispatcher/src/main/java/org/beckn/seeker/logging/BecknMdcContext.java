@@ -22,6 +22,24 @@ public final class BecknMdcContext {
         putIfPresent(contextNode, BecknFields.BPP_URI,        MdcField.BPP_URI);
         putIfPresent(contextNode, BecknFields.NETWORK_ID,     MdcField.NETWORK_ID);
         putIfPresent(contextNode, BecknFields.ACTION,         MdcField.ACTION);
+        // auth identity fields — set by Catalg API from auth header keyId
+        putIfPresent(contextNode, BecknFields.AUTH_SUBSCRIBER_ID, MdcField.AUTH_SUBSCRIBER_ID);
+        putIfPresent(contextNode, BecknFields.AUTH_RECORD_ID,     MdcField.AUTH_RECORD_ID);
+    }
+
+    /**
+     * Sets auth identity fields explicitly (e.g. when parsed from a separate auth object).
+     *
+     * @param subscriberId org-level identity (keyId first segment); may be null
+     * @param recordId     key-level identity (keyId second segment); may be null
+     */
+    public static void setAuthFields(String subscriberId, String recordId) {
+        if (subscriberId != null && !subscriberId.isBlank()) {
+            MDC.put(MdcField.AUTH_SUBSCRIBER_ID, subscriberId);
+        }
+        if (recordId != null && !recordId.isBlank()) {
+            MDC.put(MdcField.AUTH_RECORD_ID, recordId);
+        }
     }
 
     /**

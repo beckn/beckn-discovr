@@ -57,6 +57,21 @@ public final class BecknMdcContext {
     }
 
     /**
+     * Sets auth identity fields from a parsed auth principal.
+     *
+     * @param subscriberId org-level identity (keyId first segment); may be null
+     * @param recordId     key-level identity (keyId second segment); may be null
+     */
+    public static void setAuthFields(String subscriberId, String recordId) {
+        if (subscriberId != null && !subscriberId.isBlank()) {
+            MDC.put(MdcField.AUTH_SUBSCRIBER_ID, subscriberId);
+        }
+        if (recordId != null && !recordId.isBlank()) {
+            MDC.put(MdcField.AUTH_RECORD_ID, recordId);
+        }
+    }
+
+    /**
      * Sets the {@code tags} MDC field from a raw Kafka header byte array.
      * No-op when {@code tagsHeader} is null or blank.
      *
@@ -97,6 +112,8 @@ public final class BecknMdcContext {
         MDC.remove(MdcField.NETWORK_ID);
         MDC.remove(MdcField.ACTION);
         MDC.remove(MdcField.VERSION);
+        MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
+        MDC.remove(MdcField.AUTH_RECORD_ID);
         MDC.remove(MdcField.TAGS);
     }
 

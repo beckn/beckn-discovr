@@ -169,17 +169,33 @@ docker compose up -d
 
 ## Structured Logging
 
-All three jobs use **LogstashEncoder** (structured JSON) with unified MDC fields:
+All three jobs use **LogstashEncoder** (structured JSON) with unified MDC fields.
+Every `MdcField.java` across all 6 Java jobs (Catalg + Discovr) declares ALL constants for consistency.
 
-| MDC Field | Set by | Description |
-|-----------|--------|-------------|
-| `transactionId` | BecknMdcContext | From Beckn context |
-| `messageId` | BecknMdcContext | From Beckn context |
-| `bapId`, `bapUri` | BecknMdcContext | BAP identifiers |
-| `bppId`, `bppUri` | BecknMdcContext | BPP identifiers |
-| `networkId` | BecknMdcContext | From context.networkId |
-| `action` | BecknMdcContext | Beckn action value |
-| `subscriberId` | BecknMdcContext | From context.subscriberId |
+### MDC Field Standard
+
+| MDC Field | Description | Set by |
+|-----------|-------------|--------|
+| `transactionId` | Beckn protocol end-to-end trace ID | ALL |
+| `messageId` | Beckn protocol request/response correlation | ALL |
+| `catalogId` | Which catalog is being processed | Discovr Publish |
+| `networkId` | Which network | ALL |
+| `bppId` | Publisher identity from Beckn context | Discovr Publish, Dispatcher |
+| `bapId` | Requester identity (BAP) | Discover |
+| `auth.subscriberId` | Org identity from auth header keyId first segment | ALL |
+| `auth.recordId` | Key identity from auth header keyId second segment | ALL |
+| `schemaType` | Resource `@type` | Discovr Publish |
+| `publishTimestamp` | Epoch millis when catalog was published | Discovr Publish |
+| `subscriptionId` | Matched subscription UUID | (not set in Discovr — declared for cross-service consistency) |
+| `taskId` | Delivery task UUID | (not set in Discovr — declared for cross-service consistency) |
+| `tags` | X-Tags header for origin tracking | ALL |
+
+**Rules:**
+- ALL `MdcField.java` files declare ALL constants (even if not set by that job)
+- Fields not available at a stage are simply not set (absent from log output, not "unknown")
+- Never add a field to individual log statements if it belongs in MDC — MDC auto-includes
+- `auth.subscriberId` is set by `AuthorizationService` after `verifySignature()` for HTTP entry points
+- `auth.subscriberId` is set by `CorrelationContext` from `context.subscriberId` in Kafka consumers
 
 - **LogEvent constants** in `logging/LogEvent.java` — no hardcoded log strings
 - **Log levels**: DEBUG=internal steps, INFO=milestones, WARN=validation failures/NACK, ERROR=unrecoverable

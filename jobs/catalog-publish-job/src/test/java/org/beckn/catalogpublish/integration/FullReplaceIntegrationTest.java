@@ -48,14 +48,16 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
-                  "message": {"catalogs": [{
-                    "id": "cat-1",
-                    "publishDirectives": {"updateMode": "FULL"},
-                    "resources": [
-                      {"id": "item-new", "descriptor": {"name": "New Item"}}
-                    ],
-                    "offers": []
-                  }]}
+                  "message": {
+                    "publishDirectives": [{"catalogId":"cat-1","catalogType":"regular","updateMode":"FULL"}],
+                    "catalogs": [{
+                      "id": "cat-1",
+                      "resources": [
+                        {"id": "item-new", "descriptor": {"name": "New Item"}}
+                      ],
+                      "offers": []
+                    }]
+                  }
                 }""";
         var results = orchestrator.processPublish(round2).results();
         assertThat(results).hasSize(1);
@@ -98,14 +100,16 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
-                  "message": {"catalogs": [{
-                    "id": "cat-1",
-                    "publishDirectives": {"updateMode": "FULL"},
-                    "resources": [
-                      {"id": "cat1-item-new", "descriptor": {"name": "Cat1 New Item"}}
-                    ],
-                    "offers": []
-                  }]}
+                  "message": {
+                    "publishDirectives": [{"catalogId":"cat-1","catalogType":"regular","updateMode":"FULL"}],
+                    "catalogs": [{
+                      "id": "cat-1",
+                      "resources": [
+                        {"id": "cat1-item-new", "descriptor": {"name": "Cat1 New Item"}}
+                      ],
+                      "offers": []
+                    }]
+                  }
                 }""";
         orchestrator.processPublish(round2);
 
@@ -125,14 +129,16 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m1","transactionId":"t1"},
-                  "message": {"catalogs": [{
-                    "id": "cat-1",
-                    "publishDirectives": {"updateMode": "FULL"},
-                    "resources": [
-                      {"id": "item-a", "descriptor": {"name": "Item A"}}
-                    ],
-                    "offers": []
-                  }]}
+                  "message": {
+                    "publishDirectives": [{"catalogId":"cat-1","catalogType":"regular","updateMode":"FULL"}],
+                    "catalogs": [{
+                      "id": "cat-1",
+                      "resources": [
+                        {"id": "item-a", "descriptor": {"name": "Item A"}}
+                      ],
+                      "offers": []
+                    }]
+                  }
                 }""";
         orchestrator.processPublish(payload);
         orchestrator.processPublish(payload);
@@ -280,15 +286,17 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m3","transactionId":"t3"},
-                  "message": {"catalogs": [{
-                    "id": "cat-loc-A",
-                    "publishDirectives": {"updateMode": "FULL"},
-                    "resources": [{
-                      "id": "res-new",
-                      "descriptor": {"name": "New Resource A"}
-                    }],
-                    "offers": []
-                  }]}
+                  "message": {
+                    "publishDirectives": [{"catalogId":"cat-loc-A","catalogType":"regular","updateMode":"FULL"}],
+                    "catalogs": [{
+                      "id": "cat-loc-A",
+                      "resources": [{
+                        "id": "res-new",
+                        "descriptor": {"name": "New Resource A"}
+                      }],
+                      "offers": []
+                    }]
+                  }
                 }""";
         orchestrator.processPublish(fullReplaceA);
 
