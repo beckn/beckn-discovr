@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.ResourceAccessException;
@@ -21,12 +22,17 @@ import java.time.Duration;
  * <p>Integrates with the NLWeb natural language querying engine using
  * {@link RestClient} (synchronous, non-reactive).</p>
  *
+ * <p>Only created when {@code discovery.text-search.engine=nlweb}.
+ * When a different engine is configured, this bean is not instantiated
+ * and no connection to the NLWeb service is attempted.</p>
+ *
  * <p>{@code @Retryable} retries on I/O errors and 5xx responses.
  * Callers (e.g. {@code DiscoveryService.pathD}) must submit this call to a
  * bounded I/O executor ({@code discoveryQueryExecutor}) so servlet threads
  * are not blocked during the HTTP round-trip.</p>
  */
 @Service
+@ConditionalOnProperty(name = "discovery.text-search.engine", havingValue = "nlweb")
 public class NLWebService {
 
     private static final Logger logger = LoggerFactory.getLogger(NLWebService.class);
