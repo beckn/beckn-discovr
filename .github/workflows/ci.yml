@@ -1,8 +1,7 @@
-name: CI
+name: Code Quality & Security Tests
 
 on:
   pull_request:
-    branches: [main]
 
 jobs:
   gradle-tests:
@@ -91,7 +90,7 @@ jobs:
           done
 
       - name: Run Trivy filesystem scan (HIGH,CRITICAL, vuln-only)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -108,7 +107,7 @@ jobs:
             **/node_modules
 
       - name: Install Trivy CLI (for SBOM scanning)
-        uses: aquasecurity/setup-trivy@v0.2.5
+        uses: aquasecurity/setup-trivy@v0.2.6
 
       - name: Scan SBOMs (Java jobs) with Trivy (HIGH,CRITICAL)
         run: |
