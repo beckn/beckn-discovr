@@ -1,6 +1,7 @@
 package org.beckn.discover.service.response;
 
 import org.beckn.discover.common.BecknFields;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Attributes;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
@@ -61,7 +62,7 @@ public class CatalogProcessor {
             return null;
 
         if (DiscoveryServiceUtil.isBlank(catalog.getId())) {
-            log.warn("catalog.process.skip reason=missing-id");
+            log.warn("event={} reason=missing-id", LogEvent.CATALOG_PROCESS_SKIP);
             return null;
         }
 
@@ -98,7 +99,7 @@ public class CatalogProcessor {
             return null;
 
         if (DiscoveryServiceUtil.isBlank(resource.getId())) {
-            log.warn("resource.process.skip reason=missing-id");
+            log.warn("event={} reason=missing-id", LogEvent.RESOURCE_PROCESS_SKIP);
             return null;
         }
 
@@ -119,7 +120,7 @@ public class CatalogProcessor {
 
     private void normalizeProvider(Provider provider) {
         if (DiscoveryServiceUtil.isBlank(provider.getId())) {
-            log.warn("provider.process.skip reason=missing-id");
+            log.warn("event={} reason=missing-id", LogEvent.PROVIDER_PROCESS_SKIP);
             return;
         }
         if (provider.getDescriptor() != null)
@@ -157,7 +158,7 @@ public class CatalogProcessor {
                     merged.put(key, catalog);
                 }
             } catch (Exception e) {
-                log.warn("catalog.merge.error id={} error={}", catalog.getId(), e.getMessage());
+                log.warn("event={} id={} error={}", LogEvent.CATALOG_MERGE_ERROR, catalog.getId(), e.getMessage());
                 merged.put(catalog.getId() + "_" + UUID.randomUUID(), catalog);
             }
         }
@@ -165,7 +166,7 @@ public class CatalogProcessor {
         List<Catalog> result = new ArrayList<>(merged.values());
         result.forEach(this::applyPostMergeDefaults);
 
-        log.debug("catalog.merge.done input={} output={}", catalogs.size(), result.size());
+        log.debug("event={} input={} output={}", LogEvent.CATALOG_MERGE_DONE, catalogs.size(), result.size());
         return result;
     }
 
@@ -265,8 +266,8 @@ public class CatalogProcessor {
                 .filter(r -> referencedIds.contains(r.getId()))
                 .toList());
 
-        log.debug("catalog.offerFilter id={} resources.before={} resources.after={}",
-                catalog.getId(), before, catalog.getResources().size());
+        log.debug("event={} id={} resources.before={} resources.after={}",
+                LogEvent.CATALOG_OFFER_FILTER, catalog.getId(), before, catalog.getResources().size());
     }
 
     /**
@@ -351,15 +352,15 @@ public class CatalogProcessor {
     /** Validates a catalog before including it in a response. */
     public boolean validateCatalog(Catalog catalog) {
         if (catalog == null) {
-            log.warn("catalog.validate.fail reason=null");
+            log.warn("event={} reason=null", LogEvent.CATALOG_VALIDATE_FAIL);
             return false;
         }
         if (DiscoveryServiceUtil.isBlank(catalog.getId())) {
-            log.warn("catalog.validate.fail reason=missing-id");
+            log.warn("event={} reason=missing-id", LogEvent.CATALOG_VALIDATE_FAIL);
             return false;
         }
         if (catalog.getResources() == null || catalog.getResources().isEmpty()) {
-            log.warn("catalog.validate.fail reason=no-resources id={}", catalog.getId());
+            log.warn("event={} reason=no-resources id={}", LogEvent.CATALOG_VALIDATE_FAIL, catalog.getId());
             return false;
         }
         return catalog.getResources().stream().allMatch(this::validateResource);
@@ -368,11 +369,11 @@ public class CatalogProcessor {
     /** Validates an individual resource. */
     public boolean validateResource(Resource resource) {
         if (resource == null) {
-            log.warn("resource.validate.fail reason=null");
+            log.warn("event={} reason=null", LogEvent.RESOURCE_VALIDATE_FAIL);
             return false;
         }
         if (DiscoveryServiceUtil.isBlank(resource.getId())) {
-            log.warn("resource.validate.fail reason=missing-id");
+            log.warn("event={} reason=missing-id", LogEvent.RESOURCE_VALIDATE_FAIL);
             return false;
         }
         return true;

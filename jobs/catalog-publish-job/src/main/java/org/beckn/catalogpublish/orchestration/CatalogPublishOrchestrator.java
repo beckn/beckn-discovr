@@ -77,9 +77,12 @@ public class CatalogPublishOrchestrator {
         String messageId = parsed.context().contextNode().path(BecknFields.MESSAGE_ID).asText(null);
         correlationContext.populate(parsed.context(), messageId);
         validateStep.validate(parsed);
+        // Pass the message node so PersistenceStep can read message-level publishDirectives array.
+        JsonNode messageNode = parsed.rootNode().path(BecknFields.MESSAGE);
         List<ProcessingResult> results = processInParallel(parsed.catalogs(), parsed.context(),
                 (node, ctx) -> executeInTransaction(node, ctx,
-                        (n, c) -> persistenceStep.persistItemsAndLocations(n, c, PUBLISH), "catalog.publish"));
+                        (n, c) -> persistenceStep.persistItemsAndLocations(n, c, PUBLISH, messageNode),
+                        "catalog.publish"));
         return new PublishOutcome(parsed.context(), results);
     }
 

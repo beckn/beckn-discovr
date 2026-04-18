@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.exception.SemanticSearchException;
+import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -57,7 +58,7 @@ public class QueryEnricher {
         this.temperature  = cfg.getTemperature();
         this.systemPrompt = cfg.getSystemPrompt();
         this.httpClient   = HttpClient.newBuilder().connectTimeout(this.timeout).build();
-        log.info("query-enricher.init url={} model={}", this.chatUrl, this.model);
+        log.info("event={} url={} model={}", LogEvent.QUERY_ENRICHER_INIT, this.chatUrl, this.model);
     }
 
     /**
@@ -68,7 +69,7 @@ public class QueryEnricher {
      * @throws SemanticSearchException if the provider is unreachable or returns a non-200 status
      */
     public String enrich(String rawQuery) {
-        log.info("query-enricher.raw rawQuery='{}'", rawQuery);
+        log.debug("event={}", LogEvent.QUERY_ENRICHER_RAW);
 
         String requestBody;
         try {
@@ -95,12 +96,12 @@ public class QueryEnricher {
                 builder.header("Authorization", "Bearer " + apiKey);
             response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         } catch (Exception e) {
-            log.error("query-enricher.failed model={} error={}", model, e.getMessage());
+            log.error("event={} model={} error={}", LogEvent.QUERY_ENRICHER_FAILED, model, e.getMessage());
             throw new SemanticSearchException("Query enricher provider unavailable or timed out", e);
         }
 
         if (response.statusCode() != 200) {
-            log.error("query-enricher.http-error status={} body={}", response.statusCode(), response.body());
+            log.error("event={} status={} body={}", LogEvent.QUERY_ENRICHER_HTTP_ERROR, response.statusCode(), response.body());
             throw new SemanticSearchException("Query enricher provider returned HTTP " + response.statusCode());
         }
 
@@ -117,14 +118,14 @@ public class QueryEnricher {
                 content = content.replaceAll("^```(?:\\w+)?\\s*", "").replaceAll("```\\s*$", "").strip();
 
             if (content.isBlank()) {
-                log.warn("query-enricher.empty-response model={} — using raw query", model);
+                log.warn("event={} model={} reason=using-raw-query", LogEvent.QUERY_ENRICHER_EMPTY_RESPONSE, model);
                 return rawQuery;
             }
 
-            log.info("query-enricher.enriched enrichedQuery='{}'", content);
+            log.info("event={}", LogEvent.QUERY_ENRICHER_ENRICHED);
             return content;
         } catch (Exception e) {
-            log.error("query-enricher.parse-failed rawQuery='{}' error={}", rawQuery, e.getMessage());
+            log.error("event={} error={}", LogEvent.QUERY_ENRICHER_PARSE_FAILED, e.getMessage());
             throw new SemanticSearchException("Failed to parse query enricher response", e);
         }
     }

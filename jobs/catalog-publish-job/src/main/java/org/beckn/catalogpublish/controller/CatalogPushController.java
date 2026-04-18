@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.logging.LogEvent;
+import org.beckn.catalogpublish.util.CorrelationContext;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,16 +36,19 @@ public class CatalogPushController {
             Map.of("status", "ACK");
     private static final Map<String, Object> NACK_MISSING_CONTEXT = Map.of(
             "status", "NACK",
-            "error", Map.of("errorCode", "INVALID_REQUEST", "errorMessage", "Missing or incomplete context: bppId and bppUri are required"));
+            "error", Map.of("errorCode", "INVALID_REQUEST", "errorMessage", "Missing or invalid context object"));
 
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
+    private final CorrelationContext correlationContext;
     private final long maxPayloadSize;
 
-    public CatalogPushController(CatalogPushService pushService, AppProperties props, ObjectMapper objectMapper) {
+    public CatalogPushController(CatalogPushService pushService, AppProperties props,
+            ObjectMapper objectMapper, CorrelationContext correlationContext) {
         this.pushService = pushService;
         this.maxPayloadSize = props.catalog().maxPayloadSize();
         this.objectMapper = objectMapper;
+        this.correlationContext = correlationContext;
     }
 
     @PostMapping("/catalog/push")
@@ -59,6 +63,8 @@ public class CatalogPushController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
 
+        correlationContext.setTagsFromHttp(request.getHeader("X-Tags"));
+
         // Validate required context fields — reject with NACK if missing
         if (!hasRequiredContext(rawBody)) {
             return ResponseEntity.badRequest().body(NACK_MISSING_CONTEXT);
@@ -71,7 +77,8 @@ public class CatalogPushController {
     }
 
     /**
-     * Validates that the payload has context.bppId and context.bppUri.
+     * Validates that the payload has a valid context object with at least one
+     * mandatory Beckn correlation field (messageId or transactionId).
      * No enrichment or fallback — callers must send a complete Beckn context.
      */
     private boolean hasRequiredContext(String rawBody) {
@@ -82,10 +89,12 @@ public class CatalogPushController {
                 log.warn("event={} reason=missing-context", LogEvent.PUSH_REJECTED);
                 return false;
             }
-            String bppId = ctx.path(BecknFields.BPP_ID).asText(null);
-            String bppUri = ctx.path(BecknFields.BPP_URI).asText(null);
-            if (bppId == null || bppId.isBlank() || bppUri == null || bppUri.isBlank()) {
-                log.warn("event={} reason=missing-bppId-or-bppUri", LogEvent.PUSH_REJECTED);
+            boolean hasMessageId = !ctx.path(BecknFields.MESSAGE_ID).isMissingNode()
+                    && !ctx.path(BecknFields.MESSAGE_ID).asText("").isBlank();
+            boolean hasTransactionId = !ctx.path(BecknFields.TRANSACTION_ID).isMissingNode()
+                    && !ctx.path(BecknFields.TRANSACTION_ID).asText("").isBlank();
+            if (!hasMessageId && !hasTransactionId) {
+                log.warn("event={} reason=missing-correlation-id", LogEvent.PUSH_REJECTED);
                 return false;
             }
             return true;

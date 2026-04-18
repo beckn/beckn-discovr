@@ -3,6 +3,7 @@ package org.beckn.discover.service.elasticsearch;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.exception.SemanticSearchException;
+import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -59,7 +60,7 @@ public class EmbeddingClient {
         this.retries      = Math.max(0, cfg.getRetries());
         this.retryDelayMs = cfg.getRetryDelayMs();
         this.httpClient   = HttpClient.newBuilder().connectTimeout(this.timeout).build();
-        log.info("embedding-client.init url={} model={} retries={}", this.embedUrl, this.model, this.retries);
+        log.info("event={} url={} model={} retries={}", LogEvent.EMBEDDING_CLIENT_INIT, this.embedUrl, this.model, this.retries);
     }
 
     /**
@@ -77,7 +78,7 @@ public class EmbeddingClient {
                     Thread.currentThread().interrupt();
                     break;
                 }
-                log.warn("embedding.retry attempt={}/{} model={}", attempt, retries, model);
+                log.warn("event={} attempt={}/{} model={}", LogEvent.EMBEDDING_RETRY, attempt, retries, model);
             }
             try {
                 return doEmbed(text);
@@ -86,11 +87,11 @@ public class EmbeddingClient {
                 throw e;
             } catch (Exception e) {
                 lastError = e;
-                log.warn("embedding.attempt.failed attempt={}/{} model={} error={}", attempt, retries, model, e.getMessage());
+                log.warn("event={} attempt={}/{} model={} error={}", LogEvent.EMBEDDING_ATTEMPT_FAILED, attempt, retries, model, e.getMessage());
             }
         }
-        log.error("embedding.failed.all-attempts model={} retries={} error={}", model, retries,
-                lastError != null ? lastError.getMessage() : "unknown");
+        log.error("event={} model={} retries={} error={}", LogEvent.EMBEDDING_FAILED, model, retries,
+                lastError != null ? lastError.getMessage() : null);
         throw new SemanticSearchException("Embedding provider unavailable after " + retries + " retries", lastError);
     }
 
@@ -119,13 +120,13 @@ public class EmbeddingClient {
         Map<String, Object> result = objectMapper.readValue(response.body(), Map.class);
         List<Map<String, Object>> data = (List<Map<String, Object>>) result.get("data");
         if (data == null || data.isEmpty()) {
-            log.warn("embedding.empty model={} reason=empty-data-array", model);
+            log.warn("event={} model={} reason=empty-data-array", LogEvent.EMBEDDING_EMPTY, model);
             // Throw SemanticSearchException to stop retrying — empty response won't improve
             throw new SemanticSearchException("Embedding provider returned empty data array");
         }
         List<Double> embedding = (List<Double>) data.get(0).get("embedding");
         if (embedding == null || embedding.isEmpty()) {
-            log.warn("embedding.empty model={} reason=empty-embedding-vector", model);
+            log.warn("event={} model={} reason=empty-embedding-vector", LogEvent.EMBEDDING_EMPTY, model);
             throw new SemanticSearchException("Embedding provider returned empty vector");
         }
         return Optional.of(embedding.stream().map(Double::floatValue).toList());

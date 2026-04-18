@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.config;
 
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.beckn.catalogpublish.util.TagsProducerInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
@@ -43,6 +44,9 @@ public class KafkaProducerConfig {
         // long enough to exceed max.poll.interval.ms and trigger group eviction.
         map.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30_000);
         map.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 10_000);
+
+        // Forward tags MDC field as Kafka header on every outbound message.
+        map.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, TagsProducerInterceptor.class.getName());
 
         return new DefaultKafkaProducerFactory<>(map);
     }

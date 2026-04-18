@@ -1,5 +1,6 @@
 package org.beckn.discover.service.postgresql;
 
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.postgresql.jsonpath.JsonPathQueryBuilder;
 import org.beckn.discover.service.postgresql.spatial.SpatialQueryBuilder;
@@ -97,7 +98,7 @@ public class PostgreSQLService {
         if (!request.hasFilters()) {
             throw new IllegalArgumentException("Filter expression cannot be null or empty");
         }
-        log.debug("jsonpath.query.start transactionId={}", request.transactionId());
+        log.debug("event={}", LogEvent.JSONPATH_QUERY_START);
         QueryBuilderHelper.QuerySpec query = jsonPathQueryBuilder.build(
                 request.filters(),
                 request.schemaTypes(),
@@ -119,14 +120,14 @@ public class PostgreSQLService {
      *         constraints were present or matched
      */
     public List<Map<String, Object>> executeSpatialQuery(QueryRequest request) throws Exception {
-        log.info("spatial.query.start transactionId={}", request.transactionId());
+        log.debug("event={}", LogEvent.SPATIAL_QUERY_START);
         Optional<QueryBuilderHelper.QuerySpec> queryOpt = spatialQueryBuilder.build(
                 request.spatial(),
                 request.schemaTypes(),
                 request.schemaContextUrls(),
                 resultLimit());
         if (queryOpt.isEmpty()) {
-            log.debug("spatial.query.skip reason=no-conditions transactionId={}", request.transactionId());
+            log.debug("event={} reason=no-conditions", LogEvent.SPATIAL_QUERY_SKIP);
             return new ArrayList<>();
         }
         return executeQuery(queryOpt.get(), "spatial", request.transactionId(), "Spatial query failed");
@@ -146,7 +147,7 @@ public class PostgreSQLService {
      * </ul>
      */
     public Optional<List<Map<String, Object>>> executeCombinedQuery(QueryRequest request) throws Exception {
-        log.info("combined.query.start transactionId={}", request.transactionId());
+        log.debug("event={}", LogEvent.COMBINED_QUERY_START);
         Optional<QueryBuilderHelper.QuerySpec> queryOpt = spatialQueryBuilder.buildCombined(
                 request.spatial(),
                 request.filters(),
@@ -154,8 +155,7 @@ public class PostgreSQLService {
                 request.schemaContextUrls(),
                 resultLimit());
         if (queryOpt.isEmpty()) {
-            log.debug("combined.query.skip reason=no-spatial-conditions transactionId={}",
-                    request.transactionId());
+            log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP);
             return Optional.empty(); // ← caller must fall back to parallel
         }
         List<Map<String, Object>> rows = executeQuery(queryOpt.get(), "combined", request.transactionId(),

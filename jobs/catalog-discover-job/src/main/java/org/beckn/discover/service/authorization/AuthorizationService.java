@@ -3,6 +3,7 @@ package org.beckn.discover.service.authorization;
 import org.beckn.auth.BecknAuth;
 import org.beckn.auth.exception.BecknAuthException;
 import org.beckn.discover.config.AuthProperties;
+import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,6 +78,7 @@ public class AuthorizationService {
         try {
             var parsed = becknAuth.verifySignature(authHeader, rawBody);
             logger.info("{} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, parsed.subscriberId());
+            BecknMdcContext.setAuthFields(parsed.subscriberId(), parsed.uniqueKeyId());
         } catch (BecknAuthException e) {
             logger.error("{} code={} message={} authHeader={}",
                     LogEvent.AUTH_FAILED, e.getCode(), e.getMessage(), authHeader);

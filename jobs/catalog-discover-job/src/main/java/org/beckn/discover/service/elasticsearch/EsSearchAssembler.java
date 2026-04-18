@@ -103,8 +103,6 @@ public class EsSearchAssembler {
     private static Catalog buildCatalog(String catalogId, Map<String, Object> doc) {
         Catalog catalog = new Catalog();
         catalog.setId(catalogId);
-        catalog.setBppId(str(doc, "bpp_id"));
-        catalog.setBppUri(str(doc, "bpp_uri"));
         catalog.setDescriptor(buildCatalogDescriptor(doc));
         catalog.setProviderId(str(doc, "catalog_provider_id"));
         catalog.setResources(new ArrayList<>());

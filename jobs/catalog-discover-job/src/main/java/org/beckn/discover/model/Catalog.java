@@ -11,10 +11,13 @@ import org.beckn.discover.common.BecknFields;
 import java.util.List;
 
 /**
- * Catalog DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
+ * Catalog DTO — Beckn Protocol v2.1 (no bppId/bppUri at catalog level).
+ *
+ * <p>bppId and bppUri exist only in the Beckn Context and are never stored
+ * at the catalog body level. They must not appear in on_discover responses.</p>
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonIgnoreProperties("items")
+@JsonIgnoreProperties({"items", "bppId", "bppUri"})
 public class Catalog {
 
     @NotBlank(message = "id is required")
@@ -28,12 +31,6 @@ public class Catalog {
 
     @JsonProperty(BecknFields.PROVIDER_ID)
     private String providerId;
-
-    @JsonProperty(BecknFields.BPP_ID)
-    private String bppId;
-
-    @JsonProperty(BecknFields.BPP_URI)
-    private String bppUri;
 
     @JsonProperty("validity")
     private TimePeriod validity;
@@ -58,12 +55,6 @@ public class Catalog {
     public String getProviderId() { return providerId; }
     public void setProviderId(String providerId) { this.providerId = providerId; }
 
-    public String getBppId() { return bppId; }
-    public void setBppId(String bppId) { this.bppId = bppId; }
-
-    public String getBppUri() { return bppUri; }
-    public void setBppUri(String bppUri) { this.bppUri = bppUri; }
-
     public TimePeriod getValidity() { return validity; }
     public void setValidity(TimePeriod validity) { this.validity = validity; }
 
@@ -75,6 +66,6 @@ public class Catalog {
 
     @Override
     public String toString() {
-        return "Catalog{id='" + id + "', bppId='" + bppId + "', resources=" + resources + '}';
+        return "Catalog{id='" + id + "', resources=" + resources + '}';
     }
 }
