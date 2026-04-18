@@ -25,15 +25,15 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Phase 3 of the persistence pipeline: cross-BPP offer resolution.
+ * Phase 3 of the persistence pipeline: cross-catalog offer resolution.
  *
  * <p>When a BPP publishes offers whose {@code resourceIds} reference resources
- * owned by a different BPP, this step fetches those items from the DB (by ID only,
- * no BPP filter) and merges the applicable offers into their denormalised payloads
- * using RFC 7396 merge-patch — exactly as Phase 1/2 do for same-BPP items.
+ * owned by a different catalog, this step fetches those items from the DB (by ID only,
+ * no catalog filter) and merges the applicable offers into their denormalised payloads
+ * using RFC 7396 merge-patch — exactly as Phase 1/2 do for same-catalog items.
  *
- * <p>The updated item retains its original BPP identity ({@code bpp_id}/{@code bpp_uri});
- * the publishing BPP's identity is never written onto another BPP's item.
+ * <p>The updated item retains its original catalog identity ({@code catalog_id});
+ * the publishing catalog's identity is never written onto another catalog's item.
  */
 @Service
 public class OfferResolutionStep {
@@ -57,18 +57,6 @@ public class OfferResolutionStep {
         this.metrics = metrics;
     }
 
-    /**
-     * Resolves cross-BPP offer attachment.
-     *
-     * <p>For each offer's {@code resourceIds}, finds items in the DB by ID
-     * (no BPP filter), skipping items already handled by Phase 1/2. Merges
-     * applicable offers into each found item's payload using RFC 7396 merge-patch.
-     *
-     * @param incomingOfferById   map of offerId → offer JsonNode from the incoming catalog
-     * @param alreadyHandledIds   item IDs already processed in Phase 1 and Phase 2
-     * @param ctx                 the publishing BPP's catalog context (NOT used for item BPP identity)
-     * @return list of resolved items with their updated payloads; never null
-     */
     @Transactional(propagation = Propagation.MANDATORY)
     public List<ResolvedItem> resolveCrossBppOffers(
             Map<String, JsonNode> incomingOfferById,
@@ -89,11 +77,11 @@ public class OfferResolutionStep {
             }
         }
 
-        // 2. Remove IDs already handled by Phase 1/2 — they've already had offers merged
+        // 2. Remove IDs already handled by Phase 1/2
         allResourceIds.removeAll(alreadyHandledIds);
         if (allResourceIds.isEmpty()) return List.of();
 
-        // 3. Find existing items by resource IDs across all BPPs
+        // 3. Find existing items by resource IDs across all catalogs
         List<Item> existingItems = itemStore.findAllByIdIn(new ArrayList<>(allResourceIds));
         if (existingItems.isEmpty()) {
             log.warn("event={} resourceIdCount={}", LogEvent.OFFER_RESOLVE_SKIPPED, allResourceIds.size());
@@ -135,8 +123,7 @@ public class OfferResolutionStep {
                     if (!referencesThisItem) continue;
 
                     if (payloadOfferIndex == null) payloadOfferIndex = mergeService.buildOfferIndex(payload);
-                    mergeService.mergeOfferIntoPayload(
-                            payload, offer, offerId, payloadOfferIndex);
+                    mergeService.mergeOfferIntoPayload(payload, offer, offerId, payloadOfferIndex);
                     changed = true;
                 }
 
@@ -146,36 +133,27 @@ public class OfferResolutionStep {
 
                 // Merge new offer IDs with previously stored offer IDs — preserves history
                 Set<String> mergedOfferIds = new LinkedHashSet<>();
-                String[] existing = existingItem.getOfferIds();
-                if (existing != null) mergedOfferIds.addAll(Arrays.asList(existing));
+                mergedOfferIds.addAll(existingItem.getOfferIds());
                 if (newOfferIds != null) mergedOfferIds.addAll(Arrays.asList(newOfferIds));
 
-                // Preserve the original item's BPP identity — never overwrite with the publishing BPP.
-                // contextNode is null: the publishing BPP's context must not leak into another BPP's item.
-                var originalCtx = new CatalogContext(
-                        existingItem.getBppId(),
-                        existingItem.getBppUri(),
-                        existingItem.getNetworkIds(),
-                        null);
-
+                // Preserve the original item's catalog identity — never overwrite with the publishing catalog.
                 Item updatedItem = Item.from(
                         existingItem.getId(),
                         payload.toString(),
                         mergedOfferIds.toArray(new String[0]),
-                        originalCtx,
+                        existingItem.getCreatedBy(),
+                        existingItem.getSubscriberId(),
                         existingItem.getCatalogId(),
-                        existingItem.getName(),
                         existingItem.getType(),
-                        existingItem.getProviderId(),
                         existingItem.getContextUrl(),
-                        existingItem.getSchemaVersion());
+                        existingItem.getNetworkIds().toArray(new String[0]));
 
                 results.add(new ResolvedItem(updatedItem, payload));
 
-                log.info("event={} itemId={} bppId={} offersAttached={}",
+                log.info("event={} itemId={} catalogId={} offersAttached={}",
                         LogEvent.OFFER_RESOLVE_COMPLETED,
                         existingItem.getId(),
-                        existingItem.getBppId(),
+                        existingItem.getCatalogId(),
                         newOfferIds != null ? newOfferIds.length : 0);
                 metrics.recordOfferResolveSuccess();
 

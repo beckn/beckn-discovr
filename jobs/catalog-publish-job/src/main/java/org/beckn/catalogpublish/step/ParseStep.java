@@ -9,6 +9,7 @@ import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.util.FieldExtractor;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
@@ -35,7 +36,7 @@ public class ParseStep {
 
     public String extractCatalogIdSafe(JsonNode catalogNode) {
         return FieldExtractor.extractString(catalogNode, BecknFields.ID)
-                .orElse("unknown");
+                .orElse(null);
     }
 
     private Optional<JsonNode> tryParse(String raw) {
@@ -48,10 +49,13 @@ public class ParseStep {
 
     private CatalogContext extractContext(JsonNode root) {
         JsonNode ctx = FieldExtractor.requireNode(root, BecknFields.CONTEXT);
-        String bppId = FieldExtractor.requireString(ctx, BecknFields.BPP_ID);
-        String bppUri = FieldExtractor.requireString(ctx, BecknFields.BPP_URI);
-        String[] netIds = FieldExtractor.extractNetworkIds(ctx);
-        return new CatalogContext(bppId, bppUri, netIds, ctx);
+        // Extract networkIds (may be string or array)
+        var networkIds = Arrays.asList(FieldExtractor.extractNetworkIds(ctx));
+        // Extract subscriberId — org-level identity injected by Catalg API from auth; defaults to "anonymous"
+        var subscriberId = FieldExtractor.extractString(ctx, "subscriberId").orElse("anonymous");
+        // Extract recordId — specific key holder (second segment of Beckn keyId); null when absent
+        var recordId = FieldExtractor.extractString(ctx, "recordId").orElse(null);
+        return new CatalogContext(networkIds, subscriberId, recordId, ctx);
     }
 
     private List<JsonNode> extractCatalogs(JsonNode root) {

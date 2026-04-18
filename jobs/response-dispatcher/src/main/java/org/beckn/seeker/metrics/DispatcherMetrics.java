@@ -22,6 +22,7 @@ public class DispatcherMetrics {
 
     private static final String METRIC_MESSAGES_TOTAL    = "discovr.dispatcher.messages.total";
     private static final String METRIC_CALLBACK_DURATION = "discovr.dispatcher.callback.duration";
+    private static final String METRIC_SSRF_BLOCKED      = "discovr.dispatcher.callback.ssrf_blocked";
 
     private static final String TAG_STATUS       = "status";
     private static final String TAG_OUTCOME      = "outcome";
@@ -33,6 +34,7 @@ public class DispatcherMetrics {
 
     private final Counter successCounter;
     private final Counter failureCounter;
+    private final Counter ssrfBlockedCounter;
 
     private final Timer callbackTimerSuccess;
     private final Timer callbackTimerClientError;
@@ -47,6 +49,10 @@ public class DispatcherMetrics {
         this.failureCounter = Counter.builder(METRIC_MESSAGES_TOTAL)
                 .description("Number of callback deliveries, tagged by outcome")
                 .tag(TAG_STATUS, STATUS_FAILURE)
+                .register(registry);
+
+        this.ssrfBlockedCounter = Counter.builder(METRIC_SSRF_BLOCKED)
+                .description("Callbacks blocked by SSRF validation")
                 .register(registry);
 
         this.callbackTimerSuccess = Timer.builder(METRIC_CALLBACK_DURATION)
@@ -73,6 +79,11 @@ public class DispatcherMetrics {
     /** Increments the failure delivery counter. */
     public void incrementFailure() {
         failureCounter.increment();
+    }
+
+    /** Increments the SSRF blocked counter when a callback URL is rejected by the SSRF guard. */
+    public void recordSsrfBlocked() {
+        ssrfBlockedCounter.increment();
     }
 
     /** Returns the pre-registered callback timer for the {@code success} outcome. */

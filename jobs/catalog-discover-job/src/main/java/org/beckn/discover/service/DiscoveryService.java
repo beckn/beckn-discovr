@@ -115,9 +115,7 @@ public class DiscoveryService {
         LatencyTracker tracker = properties.isLatencyTrackingEnabled() ? new LatencyTracker() : null;
 
         try {
-            log.info(LogEvent.QUERY_STARTED,
-                    value("transactionId", request.getContext().getTransactionId()),
-                    value("messageId", request.getContext().getMessageId()));
+            log.info(LogEvent.QUERY_STARTED);
 
             QueryRequest qr = QueryRequest.from(request);
 
@@ -131,11 +129,9 @@ public class DiscoveryService {
             long ms = Duration.between(start, Instant.now()).toMillis();
             metrics.recordSuccess(start);
             log.info(LogEvent.QUERY_COMPLETED,
-                    value("durationMs", ms),
-                    value("transactionId", qr.transactionId()));
+                    value("durationMs", ms));
             perfLog.info(LogEvent.QUERY_COMPLETED,
-                    value("durationMs", ms),
-                    value("transactionId", qr.transactionId()));
+                    value("durationMs", ms));
 
             return response;
 
@@ -146,14 +142,15 @@ public class DiscoveryService {
         } catch (Exception e) {
             metrics.recordFailure(start, e, request.getContext().getTransactionId());
             log.error(LogEvent.QUERY_FAILED,
-                    value("transactionId", request.getContext().getTransactionId()),
                     value("error", e.getMessage()),
                     e);
             throw new RuntimeException("Failed to process discovery request", e);
         } finally {
             if (tracker != null) tracker.logSummary(request.getContext().getTransactionId(),
                     metrics.getProcessingStats().successfulRequests() > 0);
-            clearMDC();
+            // MDC lifecycle is owned by the caller (controller finally-block or consumer
+            // finally-block). The service must not clear MDC here — doing so would erase
+            // correlation fields before the caller's own cleanup and logging run.
         }
     }
 
@@ -179,18 +176,18 @@ public class DiscoveryService {
             throws Exception {
 
         if (qr.hasFilters() && qr.hasSpatial()) {
-            log.info(LogEvent.QUERY_STARTED + ".path-A", value("transactionId", qr.transactionId()));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "A"));
             return pathA(qr, context, tracker);
         }
         if (qr.hasFilters()) {
-            log.info(LogEvent.QUERY_STARTED + ".path-B", value("transactionId", qr.transactionId()));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "B"));
             return pathB(qr, context, tracker);
         }
         if (qr.hasSpatial()) {
-            log.info(LogEvent.QUERY_STARTED + ".path-C", value("transactionId", qr.transactionId()));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "C"));
             return pathC(qr, context, tracker);
         }
-        log.info(LogEvent.QUERY_STARTED + ".path-D", value("transactionId", qr.transactionId()));
+        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "D"));
         return pathD(qr, context, tracker);
     }
 
@@ -220,9 +217,7 @@ public class DiscoveryService {
 
         if (combined.isEmpty()) {
             // Engine could not build spatial conditions → fall back to parallel
-            log.info(LogEvent.QUERY_STARTED + ".path-A-fallback",
-                    value("reason", "no-spatial-conditions"),
-                    value("transactionId", qr.transactionId()));
+            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", "no-spatial-conditions"));
             return pathAParallel(qr, context, tracker);
         }
 
@@ -259,10 +254,14 @@ public class DiscoveryService {
 
         try {
             CompletableFuture.allOf(filterFuture, spatialFuture).get(timeoutSec, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            filterFuture.cancel(true);
+            spatialFuture.cancel(true);
+            throw new RuntimeException("Interrupted during parallel query", e);
         } catch (Exception e) {
             log.error(LogEvent.QUERY_TIMEOUT,
                     value("path", "A-parallel"),
-                    value("transactionId", qr.transactionId()),
                     value("timeoutSec", timeoutSec),
                     e);
             filterFuture.cancel(true);
@@ -274,12 +273,11 @@ public class DiscoveryService {
         List<Catalog> spatialResult = spatialFuture.join();
         recordStep(tracker, "path-a.parallel.queries");
 
-        log.info(LogEvent.QUERY_COMPLETED + ".path-A-parallel",
+        log.debug(LogEvent.QUERY_PARALLEL_DONE,
                 value("filterCatalogs", filterResult.size()),
-                value("spatialCatalogs", spatialResult.size()),
-                value("transactionId", qr.transactionId()));
+                value("spatialCatalogs", spatialResult.size()));
 
-        List<Catalog> intersected = intersectByItemId(filterResult, spatialResult, qr.transactionId());
+        List<Catalog> intersected = intersectByItemId(filterResult, spatialResult);
         recordStep(tracker, "path-a.parallel.intersect");
 
         if (intersected.isEmpty()) {
@@ -348,7 +346,6 @@ public class DiscoveryService {
             searchFuture.cancel(true);
             log.error(LogEvent.QUERY_TIMEOUT,
                     value("path", "D"),
-                    value("transactionId", qr.transactionId()),
                     value("timeoutSec", timeoutSec),
                     e);
             throw new Exception("Text search timed out after " + timeoutSec + "s", e);
@@ -384,12 +381,10 @@ public class DiscoveryService {
      */
     private List<Catalog> intersectByItemId(
             List<Catalog> filterResult,
-            List<Catalog> spatialResult,
-            String transactionId) {
+            List<Catalog> spatialResult) {
 
         if (filterResult.isEmpty() || spatialResult.isEmpty()) {
-            log.info(LogEvent.QUERY_COMPLETED + ".intersect-empty",
-                    value("transactionId", transactionId));
+            log.debug(LogEvent.QUERY_INTERSECT_EMPTY);
             return List.of();
         }
 
@@ -417,11 +412,10 @@ public class DiscoveryService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        log.info(LogEvent.QUERY_COMPLETED + ".intersect-done",
+        log.debug(LogEvent.QUERY_INTERSECT_DONE,
                 value("filterCatalogs", filterResult.size()),
                 value("spatialResourceIds", spatialResourceIds.size()),
-                value("intersectedCatalogs", intersected.size()),
-                value("transactionId", transactionId));
+                value("intersectedCatalogs", intersected.size()));
         return intersected;
     }
 
@@ -434,8 +428,6 @@ public class DiscoveryService {
         copy.setId(src.getId());
         copy.setDescriptor(src.getDescriptor());
         copy.setProviderId(src.getProviderId());
-        copy.setBppId(src.getBppId());
-        copy.setBppUri(src.getBppUri());
         copy.setValidity(src.getValidity());
         copy.setOffers(src.getOffers() != null ? new java.util.ArrayList<>(src.getOffers()) : new java.util.ArrayList<>());
         copy.setResources(new java.util.ArrayList<>());
@@ -445,6 +437,7 @@ public class DiscoveryService {
     // ── Response building ─────────────────────────────────────────────────────
 
     private DiscoverResponse buildResponse(List<Catalog> processed, Context context) {
+        metrics.recordResultCount(processed.size());
         if (processed.isEmpty()) {
             return responseProcessor.buildEmptyResponse(context);
         }
@@ -481,10 +474,6 @@ public class DiscoveryService {
 
     private static void restoreMDC(Map<String, String> snapshot) {
         if (snapshot != null) MDC.setContextMap(snapshot);
-    }
-
-    private static void clearMDC() {
-        BecknMdcContext.clear();
     }
 
     // ── Latency tracking ──────────────────────────────────────────────────────

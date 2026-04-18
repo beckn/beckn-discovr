@@ -2,6 +2,7 @@ package org.beckn.discover.service.postgresql;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
 import org.beckn.discover.model.Resource;
@@ -36,8 +37,8 @@ import java.util.stream.StreamSupport;
  *
  * <h3>Grouping strategy</h3>
  * Items are grouped by {@code catalog_id}.  The catalog-level metadata
- * (context, type, descriptor, validity, bppId, bppUri, providerId) is
- * extracted from the first row that carries a catalog payload inside
+ * (context, type, descriptor, validity, providerId) is extracted from the
+ * first row that carries a catalog payload inside
  * {@code item_payload.catalogs[0]}.  All subsequent rows for the same
  * {@code catalog_id} only contribute items / offers — the catalog metadata
  * is not re-parsed.
@@ -81,11 +82,11 @@ public class PostgreSQLAssembler {
      */
     public List<Catalog> assemble(List<Map<String, Object>> rows, QueryRequest request) {
         if (rows == null || rows.isEmpty()) {
-            log.debug("assembler.empty transactionId={}", request.transactionId());
+            log.debug("event={}", LogEvent.ASSEMBLER_EMPTY);
             return List.of();
         }
 
-        log.debug("assembler.start rows={} transactionId={}", rows.size(), request.transactionId());
+        log.debug("event={} rows={}", LogEvent.ASSEMBLER_START, rows.size());
         long t0 = System.nanoTime();
 
         Map<String, Catalog> catalogMap = new HashMap<>(16);
@@ -95,7 +96,7 @@ public class PostgreSQLAssembler {
             try {
                 if (!processRow(row, catalogMap)) skipped++;
             } catch (Exception e) {
-                log.warn("assembler.row.error transactionId={} error={}", request.transactionId(), e.getMessage(), e);
+                log.warn("event={} error={}", LogEvent.ASSEMBLER_ROW_ERROR, e.getMessage(), e);
                 skipped++;
             }
         }
@@ -103,10 +104,10 @@ public class PostgreSQLAssembler {
         List<Catalog> catalogs = new ArrayList<>(catalogMap.values());
         long elapsedMs = (System.nanoTime() - t0) / 1_000_000;
 
-        log.info("assembler.done catalogs={} resources={} skippedRows={} durationMs={} transactionId={}",
-                catalogs.size(),
+        log.debug("event={} catalogs={} resources={} skippedRows={} durationMs={}",
+                LogEvent.ASSEMBLER_DONE, catalogs.size(),
                 catalogs.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
-                skipped, elapsedMs, request.transactionId());
+                skipped, elapsedMs);
 
         return catalogs;
     }
@@ -122,26 +123,26 @@ public class PostgreSQLAssembler {
     private boolean processRow(Map<String, Object> row, Map<String, Catalog> catalogMap) throws Exception {
         String catalogId = (String) row.get("catalog_id");
         if (catalogId == null || catalogId.isBlank()) {
-            log.warn("assembler.row.skip reason=missing-catalog-id");
+            log.warn("event={} reason=missing-catalog-id", LogEvent.ASSEMBLER_ROW_SKIP);
             return false;
         }
 
         String itemId = (String) row.get("id");
         JsonNode itemPayload = toJsonNode(row.get("item_payload"));
         if (itemPayload == null) {
-            log.warn("assembler.row.skip reason=null-payload itemId={}", itemId);
+            log.warn("event={} reason=null-payload itemId={}", LogEvent.ASSEMBLER_ROW_SKIP, itemId);
             return false;
         }
 
         JsonNode itemNode = extractItemNode(itemId, itemPayload);
         if (itemNode == null) {
-            log.warn("assembler.row.skip reason=item-not-found itemId={}", itemId);
+            log.warn("event={} reason=item-not-found itemId={}", LogEvent.ASSEMBLER_ROW_SKIP, itemId);
             return false;
         }
 
         Resource resource = objectMapper.treeToValue(itemNode, Resource.class);
         if (resource == null) {
-            log.warn("assembler.row.skip reason=resource-deserialise-failed itemId={}", itemId);
+            log.warn("event={} reason=resource-deserialise-failed itemId={}", LogEvent.ASSEMBLER_ROW_SKIP, itemId);
             return false;
         }
 
@@ -183,14 +184,12 @@ public class PostgreSQLAssembler {
         try {
             setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_ID,          catalog::setId);
             setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_PROVIDER_ID,  catalog::setProviderId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_ID,       catalog::setBppId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_URI,      catalog::setBppUri);
             parseIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_DESCRIPTOR, Descriptor.class, catalog::setDescriptor);
             parseIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_VALIDITY,   TimePeriod.class,  catalog::setValidity);
             // Note: offers are NOT merged here — they are merged exactly once per catalog
             // in mergeOffersFromRow (first row guard) to avoid N-row duplication.
         } catch (Exception e) {
-            log.warn("assembler.catalog.attributes.error catalogId={} error={}", catalog.getId(), e.getMessage());
+            log.warn("event={} catalogId={} error={}", LogEvent.ASSEMBLER_CATALOG_ATTR_ERROR, catalog.getId(), e.getMessage());
         }
     }
 
@@ -239,7 +238,7 @@ public class PostgreSQLAssembler {
         try {
             catalog.getOffers().add(objectMapper.convertValue(offerNode, Object.class));
         } catch (Exception e) {
-            log.debug("assembler.offer.skip error={}", e.getMessage());
+            log.debug("event={} error={}", LogEvent.ASSEMBLER_OFFER_SKIP, e.getMessage());
         }
     }
 
@@ -299,7 +298,7 @@ public class PostgreSQLAssembler {
         try {
             return objectMapper.readTree(value.toString());
         } catch (Exception e) {
-            log.debug("assembler.json.parse.failed type={} error={}", value.getClass().getSimpleName(), e.getMessage());
+            log.debug("event={} type={} error={}", LogEvent.ASSEMBLER_JSON_PARSE_FAILED, value.getClass().getSimpleName(), e.getMessage());
             return null;
         }
     }
@@ -315,7 +314,7 @@ public class PostgreSQLAssembler {
         try {
             setter.accept(objectMapper.treeToValue(node.get(field), type));
         } catch (Exception e) {
-            log.debug("assembler.field.parse.failed field={} error={}", field, e.getMessage());
+            log.debug("event={} field={} error={}", LogEvent.ASSEMBLER_FIELD_PARSE_FAILED, field, e.getMessage());
         }
     }
 }

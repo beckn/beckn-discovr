@@ -49,4 +49,36 @@ public final class LogEvent {
 
     // Merge mode
     public static final String MERGE_COMPLETED = "merge.completed";
+
+    // Embedding
+    public static final String EMBEDDING_CLIENT_INIT     = "embedding.client.init";
+    public static final String EMBEDDING_RETRY           = "embedding.retry";
+    public static final String EMBEDDING_ATTEMPT_FAILED  = "embedding.attempt.failed";
+    public static final String EMBEDDING_FAILED          = "embedding.failed";
+    public static final String EMBEDDING_EMPTY           = "embedding.empty";
+    public static final String EMBEDDING_SERIALIZE_FAILED = "embedding.serialize.failed";
+
+    // ES index management
+    public static final String ES_INDEX_CREATED         = "es.index.created";
+    public static final String ES_TEMPLATE_CREATED      = "es.template.created";
+    public static final String ES_TEMPLATE_ENSURE_FAILED = "es.template.ensure.failed";
+    public static final String ES_TEMPLATE_LOADED       = "es.template.loaded";
+    public static final String ES_TEMPLATE_LOAD_FAILED  = "es.template.load.failed";
+
+    // ES executor
+    public static final String ES_INDEX_REJECTED        = "es.index.rejected";
+
+    // Auth filter init
+    public static final String AUTH_INIT                = "auth.init";
+
+    // Geometry extraction
+    public static final String GEO_MAX_DEPTH_EXCEEDED   = "geo.max-depth-exceeded";
+    public static final String GEO_GPS_OUT_OF_RANGE     = "geo.gps.out-of-range";
+    public static final String GEO_GPS_PARSE_FAILED     = "geo.gps.parse-failed";
+    public static final String GEO_POLYGON_PARSE_FAILED = "geo.polygon.parse-failed";
+    public static final String GEO_GEOJSON_UNSUPPORTED_TYPE  = "geo.geojson.unsupported-type";
+    public static final String GEO_GEOJSON_PARSE_FAILED      = "geo.geojson.parse-failed";
+    public static final String GEO_GEOJSON_POINT_OUT_OF_RANGE = "geo.geojson.point.out-of-range";
+    public static final String GEO_EXTRACT_FAILED       = "geo.extract.failed";
+    public static final String GEO_EXTRACT_PARSE_FAILED = "geo.extract.parse-failed";
 }

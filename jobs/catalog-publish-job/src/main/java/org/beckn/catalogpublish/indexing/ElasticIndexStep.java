@@ -26,7 +26,6 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import io.micrometer.core.instrument.Timer;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,11 +85,25 @@ public class ElasticIndexStep {
         if (!batch.hasItems())
             return;
 
-        // FULL replace: delete all existing ES documents for this catalog+bpp before indexing fresh ones.
+        // FULL replace: delete all existing ES documents for this catalog before indexing fresh ones.
         // This runs after the DB transaction has committed, so the DB is already clean.
+        // Failure is non-fatal: stale docs will remain until the next FULL replace; new docs are still indexed.
+        // TODO: PG + ES are NOT transactional. If ES delete/index fails, PG and ES diverge.
+        // Consider: (1) retry ES delete via EsFailureConsumer, (2) periodic reconciliation job
+        // that compares PG item_ids with ES doc_ids per catalog and removes orphans.
         if (batch.fullReplace()) {
-            long esDeleted = bulkIndexService.deleteByCatalogAndBpp(batch.catalogId(), batch.context().bppId());
-            publishMetrics.recordFullReplaceEsDeleted(esDeleted);
+            try {
+                // Collect schema types from items to target specific indices (no wildcard)
+                var schemaTypes = batch.savedItems().stream()
+                        .map(Item::getType)
+                        .filter(t -> t != null && !t.isBlank())
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                long esDeleted = bulkIndexService.deleteByCatalog(batch.catalogId(), schemaTypes);
+                publishMetrics.recordFullReplaceEsDeleted(esDeleted);
+            } catch (Exception e) {
+                log.error("event={} reason=es-delete-failed catalogId={} error={}",
+                        LogEvent.ES_FAILED, batch.catalogId(), ErrorSanitizer.sanitize(e));
+            }
         }
 
         Map<String, List<Map<String, Object>>> bySchemaType = new LinkedHashMap<>();
@@ -105,16 +118,18 @@ public class ElasticIndexStep {
                 log.warn("event={} reason=schema-type-missing itemId={}", LogEvent.ES_FAILED, item.getId());
                 continue;
             }
-            String[] networkIdsArr = item.getNetworkIds();
-            List<String> networkIds = networkIdsArr.length > 0 ? Arrays.asList(networkIdsArr) : List.of();
+            List<String> networkIds = item.getNetworkIds();
             Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkIds);
+            // TODO (M8): Embedding currently serializes the full denormalized payload (catalog
+            // envelope + item). For better search quality, extract only the resource node:
+            //   payloadNode.path("catalogs").path(0).path("resources").path(0)
+            // This avoids diluting the embedding with shared catalog metadata.
             embeddingClient.ifPresent(client -> {
                 try {
-                    JsonNode catalogNode = payloadNode.path("catalogs").path(0);
-                    String itemJson = mapper.writeValueAsString(catalogNode);
+                    String itemJson = mapper.writeValueAsString(payloadNode);
                     client.embed(itemJson).ifPresent(vec -> doc.put("resource_vector", vec));
                 } catch (Exception e) {
-                    log.warn("event={} reason=embedding-serialize-failed itemId={} error={}", LogEvent.ES_FAILED, item.getId(), e.getMessage());
+                    log.warn("event={} itemId={} error={}", LogEvent.EMBEDDING_SERIALIZE_FAILED, item.getId(), e.getMessage());
                 }
             });
             bySchemaType.computeIfAbsent(schemaType, k -> new ArrayList<>()).add(doc);

@@ -28,7 +28,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.beckn.discover.util.ContextNormalizer;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
@@ -114,8 +113,8 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
 
+        BecknMdcContext.setTagsFromHttp(httpRequest.getHeader("X-Tags"));
         JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
         BecknMdcContext.populate(contextNode);
 
@@ -126,7 +125,7 @@ public class DiscoveryController {
             }
 
             logger.info(LogEvent.REQUEST_RECEIVED,
-                    value("method", "GET"),
+                    value("method", httpRequest.getMethod()),
                     value("transactionId", txnNode.asText("")));
 
             authorizationService.authorizeRequest(rawBody, headers);
@@ -148,8 +147,8 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
 
+        BecknMdcContext.setTagsFromHttp(httpRequest.getHeader("X-Tags"));
         JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
         BecknMdcContext.populate(contextNode);
 

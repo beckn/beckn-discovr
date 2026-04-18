@@ -1,19 +1,13 @@
 [
   {
     "id": "ev-charger-ccs2-001",
-    "name": "DC Fast Charger - CCS2 (60kW)",
+    "catalog_id": "catalog-ev-charging-001",
     "context_url": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
     "type": "ChargingService",
-    "bpp_id": "bpp.example.com",
-    "bpp_uri": "https://bpp.example.com",
-    "network_id": "bap.net/ev-charging",
-    "provider_id": "ecopower-charging",
-    "catalog_id": "catalog-ev-charging-001",
+    "offer_ids": [],
     "payload": {
       "catalogs": [
         {
-          "@type": "Catalog",
-          "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
           "id": "catalog-ev-charging-001",
           "offers": [
             {
@@ -30,7 +24,6 @@
                   "unitQuantity": 1
                 }
               },
-              "provider": "ecopower-charging",
               "validity": {
                 "endDate": "2026-03-31T23:59:59Z",
                 "startDate": "2025-10-01T00:00:00Z"
@@ -41,7 +34,7 @@
               "offerAttributes": {
                 "@type": "ChargingOffer",
                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingOffer/v1/context.jsonld",
-                "idleFeePolicy": "₹2/min after 10 min post-charge",
+                "idleFeePolicy": "2/min after 10 min post-charge",
                 "buyerFinderFee": {
                   "feeType": "PERCENTAGE",
                   "feeValue": 2.5
@@ -51,82 +44,6 @@
                 "UPI",
                 "CREDIT_CARD",
                 "WALLET"
-              ]
-            },
-            {
-              "id": "offer-ccs2-120kw-kwh",
-              "resourceIds": [
-                "ev-charger-ccs2-002"
-              ],
-              "price": {
-                "value": 22,
-                "currency": "INR",
-                "applicableQuantity": {
-                  "unitCode": "KWH",
-                  "unitText": "Kilowatt Hour",
-                  "unitQuantity": 1
-                }
-              },
-              "provider": "greencharge-koramangala",
-              "validity": {
-                "endDate": "2026-04-15T23:59:59Z",
-                "startDate": "2025-10-15T00:00:00Z"
-              },
-              "descriptor": {
-                "name": "Per-kWh Tariff - CCS2 120kW"
-              },
-              "offerAttributes": {
-                "@type": "ChargingOffer",
-                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingOffer/v1/context.jsonld",
-                "idleFeePolicy": "₹3/min after 15 min post-charge",
-                "buyerFinderFee": {
-                  "feeType": "PERCENTAGE",
-                  "feeValue": 2
-                }
-              },
-              "acceptedPaymentMethod": [
-                "UPI",
-                "CREDIT_CARD",
-                "WALLET",
-                "BANK_TRANSFER"
-              ]
-            },
-            {
-              "id": "offer-type2-22kw-kwh",
-              "resourceIds": [
-                "ev-charger-type2-001"
-              ],
-              "price": {
-                "value": 15,
-                "currency": "INR",
-                "applicableQuantity": {
-                  "unitCode": "KWH",
-                  "unitText": "Kilowatt Hour",
-                  "unitQuantity": 1
-                }
-              },
-              "provider": "powergrid-indiranagar",
-              "validity": {
-                "endDate": "2026-04-20T23:59:59Z",
-                "startDate": "2025-10-20T00:00:00Z"
-              },
-              "descriptor": {
-                "name": "Per-kWh Tariff - Type 2 22kW"
-              },
-              "offerAttributes": {
-                "@type": "ChargingOffer",
-                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingOffer/v1/context.jsonld",
-                "idleFeePolicy": "₹1/min after 30 min post-charge",
-                "buyerFinderFee": {
-                  "feeType": "PERCENTAGE",
-                  "feeValue": 1.5
-                }
-              },
-              "acceptedPaymentMethod": [
-                "UPI",
-                "CREDIT_CARD",
-                "WALLET",
-                "BANK_TRANSFER"
               ]
             }
           ],
@@ -146,12 +63,10 @@
             {
               "id": "ev-charger-ccs2-001",
               "rating": {
-                "@type": "Rating",
                 "ratingCount": 128,
                 "ratingValue": 4.5
               },
               "category": {
-                "@type": "schema:CategoryCode",
                 "name": "EV Charging",
                 "codeValue": "ev-charging"
               },
@@ -165,7 +80,6 @@
               "rateable": true,
               "descriptor": {
                 "name": "DC Fast Charger - CCS2 (60kW)",
-                "longDesc": "Ultra-fast DC charging station supporting CCS2 connector type with 60kW maximum power output. Features advanced thermal management and smart charging capabilities.",
                 "shortDesc": "High-speed DC charging station with CCS2 connector",
                 "images": [
                   "https://example.com/images/ev-charger-ccs2-60kw.jpg",
@@ -193,50 +107,13 @@
               "resourceAttributes": {
                 "@type": "ChargingService",
                 "evseId": "IN*ECO*BTM*01*CCS2*A",
-                "ocppId": "IN-ECO-BTM-01",
                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
                 "powerType": "DC",
                 "maxPowerKW": 60,
-                "minPowerKW": 5,
-                "connectorId": "CCS2-A",
-                "parkingType": "Mall",
-                "socketCount": 2,
-                "chargingSpeed": "FAST",
                 "connectorType": "CCS2",
                 "stationStatus": "Available",
-                "amenityFeature": [
-                  "RESTAURANT",
-                  "RESTROOM",
-                  "WI-FI"
-                ],
-                "roamingNetwork": "GreenRoam",
-                "connectorFormat": "CABLE",
-                "serviceLocation": {
-                  "geo": {
-                    "type": "Point",
-                    "coordinates": [
-                      77.5946,
-                      12.9716
-                    ]
-                  },
-                  "@type": "Location",
-                  "address": {
-                    "postalCode": "560076",
-                    "addressRegion": "Karnataka",
-                    "streetAddress": "EcoPower BTM Hub, 100 Ft Rd",
-                    "addressCountry": "IN",
-                    "addressLocality": "Bengaluru"
-                  }
-                },
-                "reservationSupported": true
-              },
-              "availabilityWindow": [
-                {
-                  "@type": "TimePeriod",
-                  "endTime": "22:00:00Z",
-                  "startTime": "06:00:00Z"
-                }
-              ]
+                "amenityFeature": ["WI-FI", "RESTROOM", "PARKING"]
+              }
             }
           ]
         }
@@ -249,58 +126,15 @@
   },
   {
     "id": "ev-charger-ccs2-002",
-    "name": "DC Fast Charger - CCS2 (120kW)",
+    "catalog_id": "catalog-ev-charging-001",
     "context_url": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
     "type": "ChargingService",
-    "bpp_id": "bpp.example.com",
-    "bpp_uri": "https://bpp.example.com",
-    "network_id": "bap.net/ev-charging",
-    "provider_id": "greencharge-koramangala",
-    "catalog_id": "catalog-ev-charging-001",
+    "offer_ids": [],
     "payload": {
       "catalogs": [
         {
-          "@type": "Catalog",
-          "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
           "id": "catalog-ev-charging-001",
           "offers": [
-            {
-              "id": "offer-ccs2-60kw-kwh",
-              "resourceIds": [
-                "ev-charger-ccs2-001"
-              ],
-              "price": {
-                "value": 18,
-                "currency": "INR",
-                "applicableQuantity": {
-                  "unitCode": "KWH",
-                  "unitText": "Kilowatt Hour",
-                  "unitQuantity": 1
-                }
-              },
-              "provider": "ecopower-charging",
-              "validity": {
-                "endDate": "2026-03-31T23:59:59Z",
-                "startDate": "2025-10-01T00:00:00Z"
-              },
-              "descriptor": {
-                "name": "Per-kWh Tariff - CCS2 60kW"
-              },
-              "offerAttributes": {
-                "@type": "ChargingOffer",
-                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingOffer/v1/context.jsonld",
-                "idleFeePolicy": "₹2/min after 10 min post-charge",
-                "buyerFinderFee": {
-                  "feeType": "PERCENTAGE",
-                  "feeValue": 2.5
-                }
-              },
-              "acceptedPaymentMethod": [
-                "UPI",
-                "CREDIT_CARD",
-                "WALLET"
-              ]
-            },
             {
               "id": "offer-ccs2-120kw-kwh",
               "resourceIds": [
@@ -315,7 +149,6 @@
                   "unitQuantity": 1
                 }
               },
-              "provider": "greencharge-koramangala",
               "validity": {
                 "endDate": "2026-04-15T23:59:59Z",
                 "startDate": "2025-10-15T00:00:00Z"
@@ -326,48 +159,10 @@
               "offerAttributes": {
                 "@type": "ChargingOffer",
                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingOffer/v1/context.jsonld",
-                "idleFeePolicy": "₹3/min after 15 min post-charge",
+                "idleFeePolicy": "3/min after 15 min post-charge",
                 "buyerFinderFee": {
                   "feeType": "PERCENTAGE",
                   "feeValue": 2
-                }
-              },
-              "acceptedPaymentMethod": [
-                "UPI",
-                "CREDIT_CARD",
-                "WALLET",
-                "BANK_TRANSFER"
-              ]
-            },
-            {
-              "id": "offer-type2-22kw-kwh",
-              "resourceIds": [
-                "ev-charger-type2-001"
-              ],
-              "price": {
-                "value": 15,
-                "currency": "INR",
-                "applicableQuantity": {
-                  "unitCode": "KWH",
-                  "unitText": "Kilowatt Hour",
-                  "unitQuantity": 1
-                }
-              },
-              "provider": "powergrid-indiranagar",
-              "validity": {
-                "endDate": "2026-04-20T23:59:59Z",
-                "startDate": "2025-10-20T00:00:00Z"
-              },
-              "descriptor": {
-                "name": "Per-kWh Tariff - Type 2 22kW"
-              },
-              "offerAttributes": {
-                "@type": "ChargingOffer",
-                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingOffer/v1/context.jsonld",
-                "idleFeePolicy": "₹1/min after 30 min post-charge",
-                "buyerFinderFee": {
-                  "feeType": "PERCENTAGE",
-                  "feeValue": 1.5
                 }
               },
               "acceptedPaymentMethod": [
@@ -394,12 +189,10 @@
             {
               "id": "ev-charger-ccs2-002",
               "rating": {
-                "@type": "Rating",
                 "ratingCount": 89,
                 "ratingValue": 4.7
               },
               "category": {
-                "@type": "schema:CategoryCode",
                 "name": "EV Charging",
                 "codeValue": "ev-charging"
               },
@@ -413,20 +206,15 @@
               "rateable": true,
               "descriptor": {
                 "name": "DC Fast Charger - CCS2 (120kW)",
-                "longDesc": "Ultra-fast DC charging station supporting CCS2 connector type with 120kW maximum power output. Features liquid cooling and advanced power management.",
-                "shortDesc": "Ultra-fast DC charging station with CCS2 connector",
-                "images": [
-                  "https://example.com/images/ev-charger-ccs2-120kw.jpg",
-                  "https://example.com/images/ultra-fast-charger.png"
-                ]
+                "shortDesc": "Ultra-fast DC charging station with CCS2 connector"
               },
               "availableAt": [
                 {
                   "geo": {
                     "type": "Point",
                     "coordinates": [
-                      77.6104,
-                      12.9153
+                      77.5700,
+                      12.9800
                     ]
                   },
                   "address": {
@@ -441,51 +229,12 @@
               "resourceAttributes": {
                 "@type": "ChargingService",
                 "evseId": "IN*GC*KOR*01*CCS2*A",
-                "ocppId": "IN-GC-KOR-01",
                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
                 "powerType": "DC",
                 "maxPowerKW": 120,
-                "minPowerKW": 10,
-                "connectorId": "CCS2-B",
-                "parkingType": "OffStreet",
-                "socketCount": 1,
-                "chargingSpeed": "ULTRAFAST",
                 "connectorType": "CCS2",
-                "stationStatus": "Available",
-                "amenityFeature": [
-                  "RESTAURANT",
-                  "RESTROOM",
-                  "WI-FI",
-                  "PARKING"
-                ],
-                "roamingNetwork": "GreenRoam",
-                "connectorFormat": "CABLE",
-                "serviceLocation": {
-                  "geo": {
-                    "type": "Point",
-                    "coordinates": [
-                      77.6104,
-                      12.9153
-                    ]
-                  },
-                  "@type": "Location",
-                  "address": {
-                    "postalCode": "560034",
-                    "addressRegion": "Karnataka",
-                    "streetAddress": "GreenCharge Koramangala, 80 Ft Rd",
-                    "addressCountry": "IN",
-                    "addressLocality": "Bengaluru"
-                  }
-                },
-                "reservationSupported": true
-              },
-              "availabilityWindow": [
-                {
-                  "@type": "TimePeriod",
-                  "endTime": "23:59:59Z",
-                  "startTime": "00:00:00Z"
-                }
-              ]
+                "stationStatus": "Available"
+              }
             }
           ]
         }
@@ -498,96 +247,15 @@
   },
   {
     "id": "ev-charger-type2-001",
-    "name": "AC Fast Charger - Type 2 (22kW)",
+    "catalog_id": "catalog-ev-charging-001",
     "context_url": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
     "type": "ChargingService",
-    "bpp_id": "bpp.example.com",
-    "bpp_uri": "https://bpp.example.com",
-    "network_id": "bap.net/ev-charging",
-    "provider_id": "powergrid-indiranagar",
-    "catalog_id": "catalog-ev-charging-001",
+    "offer_ids": [],
     "payload": {
       "catalogs": [
         {
-          "@type": "Catalog",
-          "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",
           "id": "catalog-ev-charging-001",
           "offers": [
-            {
-              "id": "offer-ccs2-60kw-kwh",
-              "resourceIds": [
-                "ev-charger-ccs2-001"
-              ],
-              "price": {
-                "value": 18,
-                "currency": "INR",
-                "applicableQuantity": {
-                  "unitCode": "KWH",
-                  "unitText": "Kilowatt Hour",
-                  "unitQuantity": 1
-                }
-              },
-              "provider": "ecopower-charging",
-              "validity": {
-                "endDate": "2026-03-31T23:59:59Z",
-                "startDate": "2025-10-01T00:00:00Z"
-              },
-              "descriptor": {
-                "name": "Per-kWh Tariff - CCS2 60kW"
-              },
-              "offerAttributes": {
-                "@type": "ChargingOffer",
-                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingOffer/v1/context.jsonld",
-                "idleFeePolicy": "₹2/min after 10 min post-charge",
-                "buyerFinderFee": {
-                  "feeType": "PERCENTAGE",
-                  "feeValue": 2.5
-                }
-              },
-              "acceptedPaymentMethod": [
-                "UPI",
-                "CREDIT_CARD",
-                "WALLET"
-              ]
-            },
-            {
-              "id": "offer-ccs2-120kw-kwh",
-              "resourceIds": [
-                "ev-charger-ccs2-002"
-              ],
-              "price": {
-                "value": 22,
-                "currency": "INR",
-                "applicableQuantity": {
-                  "unitCode": "KWH",
-                  "unitText": "Kilowatt Hour",
-                  "unitQuantity": 1
-                }
-              },
-              "provider": "greencharge-koramangala",
-              "validity": {
-                "endDate": "2026-04-15T23:59:59Z",
-                "startDate": "2025-10-15T00:00:00Z"
-              },
-              "descriptor": {
-                "name": "Per-kWh Tariff - CCS2 120kW"
-              },
-              "offerAttributes": {
-                "@type": "ChargingOffer",
-                "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingOffer/v1/context.jsonld",
-                "idleFeePolicy": "₹3/min after 15 min post-charge",
-                "buyerFinderFee": {
-                  "feeType": "PERCENTAGE",
-                  "feeValue": 2
-                }
-              },
-              "acceptedPaymentMethod": [
-                "UPI",
-                "CREDIT_CARD",
-                "WALLET",
-                "BANK_TRANSFER"
-              ]
-            },
             {
               "id": "offer-type2-22kw-kwh",
               "resourceIds": [
@@ -602,7 +270,6 @@
                   "unitQuantity": 1
                 }
               },
-              "provider": "powergrid-indiranagar",
               "validity": {
                 "endDate": "2026-04-20T23:59:59Z",
                 "startDate": "2025-10-20T00:00:00Z"
@@ -613,7 +280,7 @@
               "offerAttributes": {
                 "@type": "ChargingOffer",
                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingOffer/v1/context.jsonld",
-                "idleFeePolicy": "₹1/min after 30 min post-charge",
+                "idleFeePolicy": "1/min after 30 min post-charge",
                 "buyerFinderFee": {
                   "feeType": "PERCENTAGE",
                   "feeValue": 1.5
@@ -643,12 +310,10 @@
             {
               "id": "ev-charger-type2-001",
               "rating": {
-                "@type": "Rating",
                 "ratingCount": 156,
                 "ratingValue": 4.3
               },
               "category": {
-                "@type": "schema:CategoryCode",
                 "name": "EV Charging",
                 "codeValue": "ev-charging"
               },
@@ -662,12 +327,7 @@
               "rateable": true,
               "descriptor": {
                 "name": "AC Fast Charger - Type 2 (22kW)",
-                "longDesc": "AC fast charging station supporting Type 2 connector type with 22kW maximum power output. Ideal for overnight charging and workplace charging.",
-                "shortDesc": "AC fast charging station with Type 2 connector",
-                "images": [
-                  "https://example.com/images/ev-charger-type2-22kw.jpg",
-                  "https://example.com/images/ac-charger-station.png"
-                ]
+                "shortDesc": "AC fast charging station with Type 2 connector"
               },
               "availableAt": [
                 {
@@ -690,50 +350,12 @@
               "resourceAttributes": {
                 "@type": "ChargingService",
                 "evseId": "IN*PG*IND*01*TYPE2*A",
-                "ocppId": "IN-PG-IND-01",
                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/EvChargingService/v1/context.jsonld",
                 "powerType": "AC_3_PHASE",
                 "maxPowerKW": 22,
-                "minPowerKW": 3,
-                "connectorId": "TYPE2-A",
-                "parkingType": "Office",
-                "socketCount": 4,
-                "chargingSpeed": "NORMAL",
                 "connectorType": "Type2",
-                "stationStatus": "Available",
-                "amenityFeature": [
-                  "RESTROOM",
-                  "WI-FI",
-                  "PARKING"
-                ],
-                "roamingNetwork": "GreenRoam",
-                "connectorFormat": "SOCKET",
-                "serviceLocation": {
-                  "geo": {
-                    "type": "Point",
-                    "coordinates": [
-                      77.6254,
-                      12.9716
-                    ]
-                  },
-                  "@type": "Location",
-                  "address": {
-                    "postalCode": "560008",
-                    "addressRegion": "Karnataka",
-                    "streetAddress": "PowerGrid Indiranagar, 100 Ft Rd",
-                    "addressCountry": "IN",
-                    "addressLocality": "Bengaluru"
-                  }
-                },
-                "reservationSupported": true
-              },
-              "availabilityWindow": [
-                {
-                  "@type": "TimePeriod",
-                  "endTime": "20:00:00Z",
-                  "startTime": "08:00:00Z"
-                }
-              ]
+                "stationStatus": "Available"
+              }
             }
           ]
         }

@@ -1,18 +1,21 @@
 [
   {
     "item_id": "ev-charger-ccs2-001",
+    "catalog_id": "catalog-ev-charging-001",
     "path": "$.catalogs[*].resources[*].availableAt[*].geo",
     "lon": 77.5946,
     "lat": 12.9716
   },
   {
     "item_id": "ev-charger-ccs2-001",
+    "catalog_id": "catalog-ev-charging-001",
     "path": "$.catalogs[*].resources[*].resourceAttributes.serviceArea.geo",
     "lon": 70.0,
     "lat": 10.0
   },
   {
     "item_id": "ev-charger-ccs2-002",
+    "catalog_id": "catalog-ev-charging-001",
     "path": "$.catalogs[*].resources[*].availableAt[*].geo",
     "lon": 77.5700,
     "lat": 12.9800

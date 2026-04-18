@@ -11,15 +11,12 @@ public interface ItemLocationCollectionJpaRepository
         extends JpaRepository<ItemLocationCollection, ItemLocationId> {
 
     /**
-     * Deletes all location rows whose item belongs to the given catalog and BPP.
-     * Uses a subquery because item_location_collection has no direct catalog_id/bpp_id columns.
+     * Deletes all location rows that belong to the given catalog.
+     * The {@code catalog_id} column on {@code item_location_collection} makes this
+     * a direct, catalog-scoped DELETE — no JOIN required, no cross-catalog contamination.
      */
     @Modifying
-    @Query(value = """
-        DELETE FROM item_location_collection
-        WHERE item_id IN (
-            SELECT id FROM item WHERE catalog_id = :catalogId AND bpp_id = :bppId
-        )
-        """, nativeQuery = true)
-    int deleteByCatalogIdAndBppId(@Param("catalogId") String catalogId, @Param("bppId") String bppId);
+    @Query(value = "DELETE FROM item_location_collection WHERE catalog_id = :catalogId",
+            nativeQuery = true)
+    int deleteByCatalogId(@Param("catalogId") String catalogId);
 }

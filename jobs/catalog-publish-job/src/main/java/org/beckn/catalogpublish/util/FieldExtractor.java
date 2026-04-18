@@ -96,7 +96,7 @@ public final class FieldExtractor {
      *
      * <p>
      * All items in a well-formed catalog share the same schema type, so the first
-     * hit is sufficient. Returns {@code "unknown"} when no item carries the field.
+     * hit is sufficient. Returns {@code null} when no item carries the field.
      */
     public static String extractSchemaTypeFromItems(JsonNode catalogNode) {
         return extractSchemaType(catalogNode, null);
@@ -142,7 +142,7 @@ public final class FieldExtractor {
                 }
             }
         }
-        return "unknown";
+        return null;
     }
 
     /**
@@ -152,9 +152,9 @@ public final class FieldExtractor {
     @Deprecated
     public static String extractSchemaType(JsonNode itemNode) {
         if (itemNode == null || itemNode.isMissingNode())
-            return "unknown";
+            return null;
         JsonNode n = itemNode.path("schemaType"); // legacy field, not a BecknFields constant
-        return (n.isMissingNode() || !n.isTextual()) ? "unknown" : n.asText("unknown");
+        return (n.isMissingNode() || !n.isTextual()) ? null : n.asText(null);
     }
 
     /**

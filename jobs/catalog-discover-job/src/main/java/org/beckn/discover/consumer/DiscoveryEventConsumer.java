@@ -10,7 +10,7 @@ import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
-import org.beckn.discover.util.ContextNormalizer;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -77,7 +77,10 @@ public class DiscoveryEventConsumer {
             Acknowledgment acknowledgment,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset,
-            @Header(KafkaHeaders.RECEIVED_TIMESTAMP) long timestamp) {
+            @Header(KafkaHeaders.RECEIVED_TIMESTAMP) long timestamp,
+            @Header(value = "tags", required = false) byte[] tagsHeader) {
+
+        BecknMdcContext.setTags(tagsHeader);
 
         logger.info(LogEvent.CONSUMER_RECEIVED,
                 value("partition", partition),
@@ -94,11 +97,10 @@ public class DiscoveryEventConsumer {
                     value("offset", offset),
                     value("rawMessage", truncate(message, 2000)),
                     e);
-            return; // no ack → Kafka retries
+            throw new RuntimeException("Failed to parse discovery event", e); // triggers DefaultErrorHandler retry / DLT
         }
 
-        // Normalize and populate MDC as early as possible
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
+        // Populate MDC as early as possible
         BecknMdcContext.populate(requestNode.path(BecknFields.CONTEXT));
 
         try {
@@ -118,27 +120,26 @@ public class DiscoveryEventConsumer {
             // 3. Process
             DiscoverRequest discoverRequest = objectMapper.treeToValue(requestNode, DiscoverRequest.class);
 
-            if (discoverRequest.getContext() != null) {
-                logger.info(LogEvent.CONSUMER_RECEIVED + ".processing",
-                        value("messageId", discoverRequest.getContext().getMessageId()),
-                        value("bapId", discoverRequest.getContext().getBapId()),
-                        value("transactionId", discoverRequest.getContext().getTransactionId()));
-            }
+            // context-level MDC fields (messageId, bapId, transactionId) already set by BecknMdcContext.populate above
 
             DiscoverResponse response = discoveryService.processDiscoveryRequest(discoverRequest);
+
+            // Publish the response BEFORE acknowledging so that a publish failure keeps
+            // the message un-acked and allows the container error handler to retry/DLT it.
+            // If we ack first and publish fails, the BAP never receives its callback.
+            publishResponse(response, discoverRequest);
+
             acknowledgment.acknowledge();
             logger.info(LogEvent.QUERY_COMPLETED,
                     value("partition", partition),
                     value("offset", offset));
-
-            publishResponse(response, discoverRequest);
 
         } catch (Exception e) {
             logger.error(LogEvent.QUERY_FAILED,
                     value("partition", partition),
                     value("offset", offset),
                     e);
-            acknowledgment.acknowledge();
+            throw new RuntimeException("Discovery processing failed", e); // triggers DefaultErrorHandler retry / DLT
         } finally {
             BecknMdcContext.clear();
         }
@@ -147,10 +148,15 @@ public class DiscoveryEventConsumer {
     /**
      * Publishes the discovery response to the Kafka response topic.
      *
-     * <p>Publish failures are logged and swallowed: the Kafka request message has already been
-     * acknowledged and cannot be retried here.  A lost response means the BAP will not receive
-     * its callback; this is a known trade-off of the async approach and should be monitored
-     * via metrics/alerts on the response topic lag.</p>
+     * <p>This method blocks until the send completes so that the caller can decide
+     * whether to acknowledge the inbound message.  If the send fails, a
+     * {@link RuntimeException} is thrown — the caller's catch block will
+     * rethrow it, keeping the inbound message un-acked so the container
+     * error handler can retry or route it to the DLT.</p>
+     *
+     * <p>If the response topic is not configured, the failure is logged as a
+     * warning and the method returns normally (misconfiguration is an ops issue,
+     * not a message-level retry candidate).</p>
      */
     private void publishResponse(DiscoverResponse response, DiscoverRequest request) {
         String responseTopic = discoveryProperties.getKafka().getResponseTopic();
@@ -159,26 +165,25 @@ public class DiscoveryEventConsumer {
                     value("reason", "response-topic-not-configured"));
             return;
         }
+        String transactionId = request.getContext() != null ? request.getContext().getTransactionId() : null;
         try {
             String responseJson = objectMapper.writeValueAsString(response);
-            String transactionId = request.getContext() != null ? request.getContext().getTransactionId() : null;
-            kafkaTemplate.send(responseTopic, transactionId, responseJson)
-                    .whenComplete((result, ex) -> {
-                        if (ex != null) {
-                            logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
-                                    value("topic", responseTopic),
-                                    value("transactionId", transactionId),
-                                    ex);
-                        } else {
-                            logger.info(LogEvent.RESPONSE_PUBLISHED,
-                                    value("topic", responseTopic),
-                                    value("transactionId", transactionId));
-                        }
-                    });
+            // Block until Kafka broker confirms receipt so that any send failure propagates
+            // before the inbound offset is acknowledged.
+            kafkaTemplate.send(responseTopic, transactionId, responseJson).get();
+            logger.info(LogEvent.RESPONSE_PUBLISHED,
+                    value("topic", responseTopic));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
+                    value("topic", responseTopic),
+                    e);
+            throw new RuntimeException("Interrupted while publishing response", e);
         } catch (Exception e) {
             logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),
                     e);
+            throw new RuntimeException("Failed to publish on_discover response", e);
         }
     }
 

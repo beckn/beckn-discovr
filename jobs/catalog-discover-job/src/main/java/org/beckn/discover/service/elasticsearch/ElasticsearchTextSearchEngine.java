@@ -13,6 +13,7 @@ import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.engine.TextSearchEngine;
+import org.beckn.discover.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Conditional;
@@ -172,7 +173,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         log.info(LogEvent.ES_SEARCH_STARTED + ".keyword",
                 value("transactionId", txId),
                 value("schemaFilters", keywordSchemaFilters.size()),
-                value("query", buildTextSearchJson(sanitizeForLog(text))));
+                value("query", buildTextSearchJson(ErrorSanitizer.sanitize(text))));
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                     .index(aliasName)
@@ -264,12 +265,6 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                     value("transactionId", txId));
         }
         return filtered;
-    }
-
-    /** Strips control characters and newlines from user input before logging. */
-    private static String sanitizeForLog(String input) {
-        if (input == null) return null;
-        return input.replaceAll("[\\r\\n\\t]", " ").replaceAll("[\\p{Cntrl}]", "");
     }
 
     private String buildTextSearchJson(String text) {
