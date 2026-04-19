@@ -36,11 +36,10 @@ Read first. Read every file you will touch or depend on. Find how similar things
 - `var` where type is obvious.
 - Text blocks for multiline SQL/JSON.
 
-### 3. Beckn Protocol v2.0
+### 3. Beckn Protocol v2.0 (v2.1 field naming)
 - **Schema reference**: https://github.com/beckn/protocol-specifications-v2/blob/main/api/v2.0.0/beckn.yaml — read this for the authoritative field definitions of Catalog, Resource, Offer, Provider, Descriptor, Location, TimePeriod, Attributes, Context.
 - **NO `@context`/`@type` on core objects** (Resource, Offer, Descriptor, Location, TimePeriod, Catalog, Provider). Only on `resourceAttributes`, `offerAttributes`, `providerAttributes` (Attributes schema — `@context` + `@type` required there).
-- Context fields: `action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId`, `networkId` (String), `timestamp`, `transactionId`, `version` (const `"2.0.0"`), `ttl`, `try`, `lineage`.
-- Discover context also requires: `networkId`, `schemaContext: []`.
+- Context fields: `action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId`, `networkId` (String), `timestamp`, `transactionId`, `version` (const `"2.0.0"`).
 - Resource fields: `id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`. **No `items` — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.**
 - Offer fields: `id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`. Provider on offers MUST include both `id` and `descriptor`.
 - Provider: requires `id` + `descriptor`. `additionalProperties: false`.

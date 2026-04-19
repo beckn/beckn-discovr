@@ -38,7 +38,7 @@ You are a **debugging specialist** for Beckn Discovr (Java 17 / Spring Boot 3.x)
 - Common patterns for this project:
   - Fixture uses `"items"` → change to `"resources"` (v2.1).
   - Fixture uses `"itemAttributes"` → change to `"resourceAttributes"`.
-  - Fixture uses `"@type": "Item"` → change to `"@type": "beckn:Resource"`.
+  - Fixture has `"@type"` on Resource/Offer/Descriptor → remove it (only belongs on `resourceAttributes`/`offerAttributes`).
   - Offer uses `"items"` for refs → change to `"resourceIds"`.
   - Context has `domain`, `schemaContext` → remove (not v2.1 Context fields).
   - Fixture uses `"action": "beckn/discover"` → check spec for correct const (`"discover"`).
