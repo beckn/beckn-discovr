@@ -65,10 +65,13 @@ public final class BecknMdcContext {
      *
      * @param tagsHeader raw bytes from the {@code tags} Kafka record header
      */
+    private static final int MAX_TAGS_LENGTH = 256;
+
     public static void setTags(byte[] tagsHeader) {
         if (tagsHeader != null && tagsHeader.length > 0) {
-            var tags = new String(tagsHeader, java.nio.charset.StandardCharsets.UTF_8);
-            if (!tags.isBlank()) {
+            var raw = new String(tagsHeader, java.nio.charset.StandardCharsets.UTF_8);
+            var tags = raw.replaceAll("[\\r\\n\\t]", "").strip();
+            if (!tags.isBlank() && tags.length() <= MAX_TAGS_LENGTH) {
                 MDC.put(MdcField.TAGS, tags);
             }
         }
@@ -82,7 +85,10 @@ public final class BecknMdcContext {
      */
     public static void setTagsFromHttp(String tagsHeader) {
         if (tagsHeader != null && !tagsHeader.isBlank()) {
-            MDC.put(MdcField.TAGS, tagsHeader);
+            var tags = tagsHeader.replaceAll("[\\r\\n\\t]", "").strip();
+            if (!tags.isBlank() && tags.length() <= MAX_TAGS_LENGTH) {
+                MDC.put(MdcField.TAGS, tags);
+            }
         }
     }
 
