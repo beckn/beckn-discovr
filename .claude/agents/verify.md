@@ -87,7 +87,7 @@ curl -s http://localhost:9200/_cat/indices?v | grep beckn-catalog
 - **NO `@context`/`@type`** on Resource, Descriptor, Offer — ONLY on `resourceAttributes`/`offerAttributes`
 - **publishDirectives** — read for `updateMode` (FULL/MERGE), stripped before DB/ES persist
 - **Default mode is MERGE** — upserts incoming resources; existing preserved
-- **FULL mode** — deletes all existing items+locations+ES docs for catalog+bpp, then inserts fresh
+- **FULL mode** — deletes all existing items+locations+ES docs for catalog, then inserts fresh
 
 ## Test Data
 
@@ -136,8 +136,6 @@ Use `uuidgen | tr '[:upper:]' '[:lower:]'` for all messageId/transactionId value
     "catalogs": [{
       "id": "DSC-VERIFY-<TS>",
       "descriptor": { "name": "Discovr Verify Catalog" },
-      "bppId": "<BPP_ID>",
-      "bppUri": "https://<BPP_ID>",
       "resources": [
         {
           "id": "R1-<TS>",
@@ -175,7 +173,7 @@ Use `uuidgen | tr '[:upper:]' '[:lower:]'` for all messageId/transactionId value
 | SC-01 | Push catalog to Discovr | POST `http://localhost:8085/catalog/push` | HTTP 202 `{"status":"ACK"}` |
 | SC-02 | Push with missing bppId | POST without `bppId` in context | HTTP 400 NACK with `errorCode = "INVALID_REQUEST"`, `errorMessage` mentions bppId |
 | SC-03 | Push with missing bppUri | POST without `bppUri` in context | HTTP 400 NACK |
-| SC-04 | Items indexed in Discovr postgres | DB query on discovery-service-postgres | `SELECT id, catalog_id, bpp_id FROM item WHERE catalog_id = 'DSC-VERIFY-<TS>'` → 3 rows |
+| SC-04 | Items indexed in Discovr postgres | DB query on discovery-service-postgres | `SELECT id, catalog_id FROM item WHERE catalog_id = 'DSC-VERIFY-<TS>'` → 3 rows |
 | SC-05 | Elasticsearch document created | `curl -s 'http://localhost:9200/beckn-catalog-*/_search?q=catalog_id:DSC-VERIFY-<TS>'` | `hits.total.value` >= 3 |
 
 ### 2. Discover API — Synchronous (GET)
@@ -190,7 +188,7 @@ docker inspect catalog-discover-job --format '{{range .Config.Env}}{{println .}}
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
 | SC-06 | Text search (matching) | GET `http://localhost:8082/beckn/discover` with `textSearch: "Verify Coffee"` | `context.action = "on_discover"`, `message.catalogs` array with >=1 catalog, uses `resources` field |
-| SC-07 | Text search — response field validation | Same response as SC-06 | Each catalog has `id`, `descriptor.name`, `bppId`, `resources[].id`, `resources[].descriptor`. No `rateable: false` or `ratingValue: 0` on items without ratings |
+| SC-07 | Text search — response field validation | Same response as SC-06 | Each catalog has `id`, `descriptor.name`, `resources[].id`, `resources[].descriptor`. No `rateable: false` or `ratingValue: 0` on items without ratings |
 | SC-08 | Spatial search (s_dwithin near Bengaluru) | GET with spatial near [77.5946, 12.9716], distanceMeters 5000 | `context.action = "on_discover"`, `message.catalogs` may include test item |
 | SC-09 | Spatial search (far away — no results) | GET with coordinates [0.0, 0.0], distanceMeters 1000 | `message.catalogs` = empty array |
 | SC-10 | Wrong action | GET with `"action": "wrong"` | `{"status":"NACK","error":{"errorCode":"SCHEMA_VALIDATION_FAILED",...}}` |
@@ -223,7 +221,7 @@ docker inspect catalog-discover-job --format '{{range .Config.Env}}{{println .}}
 
 ### 5. FULL Replace Mode
 
-**Purpose:** Verify `updateMode: "FULL"` deletes all existing items+locations+ES docs for the catalog+bpp, then inserts fresh.
+**Purpose:** Verify `updateMode: "FULL"` deletes all existing items+locations+ES docs for the catalog, then inserts fresh.
 
 ```bash
 FULL_CAT_ID="DSC-FULL-<TS>"
@@ -252,7 +250,7 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
 | SC-26 | Push offer-only catalog (0 resources, 2 offers referencing R1-<TS> and R2-<TS>) | POST push with `OFFER_BPP_ID` | HTTP 202 ACK |
 | SC-27 | No stub rows created | `SELECT count(*) FROM item WHERE id = 'R1-<TS>'` on discovery-service-postgres | Exactly 1 row (the real resource from SC-01), NOT 2 |
 | SC-28 | Offer attached to existing item | `SELECT payload FROM item WHERE id = 'R1-<TS>'` | Payload JSON contains the cross-BPP offer |
-| SC-29 | BPP identity preserved | `SELECT bpp_id FROM item WHERE id = 'R1-<TS>'` | `bpp_id = '<BPP_ID>'` (original publisher, NOT `OFFER_BPP_ID`) |
+| SC-29 | Catalog identity preserved | `SELECT catalog_id FROM item WHERE id = 'R1-<TS>'` | `catalog_id = 'DSC-VERIFY-<TS>'` (original catalog, NOT offer catalog) |
 | SC-30 | ES re-indexed with attached offer | `curl -s 'http://localhost:9200/beckn-catalog-*/_search?q=resource_id:R1-<TS>'` | `_source.offers` contains the cross-BPP offer |
 | SC-31 | Discover API returns resource with offer | GET discover with textSearch matching R1 name | Response catalog's `offers` array contains the offer |
 
@@ -325,9 +323,9 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
 2. **Discovr DB**:
    ```bash
    docker exec discovery-service-postgres psql -U catalog_user -d catalog_db -t -c \
-     "SELECT id, catalog_id, bpp_id, name FROM item WHERE catalog_id = '${CAT_ID}';"
+     "SELECT id, catalog_id, context_url, type FROM item WHERE catalog_id = '${CAT_ID}';"
    ```
-   Assert: rows exist, correct `bpp_id`, correct `name`
+   Assert: rows exist, correct `catalog_id`, correct `context_url` and `type`
 3. **Elasticsearch**:
    ```bash
    curl -s "http://localhost:9200/beckn-catalog-*/_search?q=catalog_id:${CAT_ID}" | jq '.hits.total.value'
@@ -355,7 +353,7 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
 ### After Offer-Only Push (cross-BPP):
 1. **No stub rows**: exactly 1 row per resource ID (not 2)
 2. **Offer attached**: payload JSON contains the offer
-3. **BPP identity preserved**: `bpp_id` = original publisher, NOT offer publisher
+3. **Catalog identity preserved**: `catalog_id` = original catalog, NOT offer publisher's catalog
 4. **ES re-indexed**: document `_source.offers` contains the offer
 
 ### After Discover (GET/POST):
