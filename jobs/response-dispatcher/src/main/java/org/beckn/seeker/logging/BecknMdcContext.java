@@ -16,12 +16,7 @@ public final class BecknMdcContext {
     public static void populate(JsonNode contextNode) {
         putIfPresent(contextNode, BecknFields.TRANSACTION_ID, MdcField.TRANSACTION_ID);
         putIfPresent(contextNode, BecknFields.MESSAGE_ID,     MdcField.MESSAGE_ID);
-        putIfPresent(contextNode, BecknFields.BAP_ID,         MdcField.BAP_ID);
-        putIfPresent(contextNode, BecknFields.BAP_URI,        MdcField.BAP_URI);
-        putIfPresent(contextNode, BecknFields.BPP_ID,         MdcField.BPP_ID);
-        putIfPresent(contextNode, BecknFields.BPP_URI,        MdcField.BPP_URI);
         putIfPresent(contextNode, BecknFields.NETWORK_ID,     MdcField.NETWORK_ID);
-        putIfPresent(contextNode, BecknFields.ACTION,         MdcField.ACTION);
         // auth identity fields — set by Catalg API from auth header keyId
         putIfPresent(contextNode, BecknFields.AUTH_SUBSCRIBER_ID, MdcField.AUTH_SUBSCRIBER_ID);
         putIfPresent(contextNode, BecknFields.AUTH_RECORD_ID,     MdcField.AUTH_RECORD_ID);
