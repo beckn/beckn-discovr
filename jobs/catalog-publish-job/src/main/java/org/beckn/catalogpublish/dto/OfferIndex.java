@@ -15,22 +15,27 @@ import java.util.Map;
 
 /**
  * O(1) per-item offer lookup; built once per catalog.
+ *
+ * <p>2-way classification:
+ * <ul>
+ *   <li>{@code offersByItemId} — offers with {@code resourceIds} (keyed by resource ID)</li>
+ *   <li>{@code providerOffers} — offers without {@code resourceIds} (provider-level)</li>
+ * </ul>
  */
 public record OfferIndex(
-    List<JsonNode> catalogWideOffers,
+    List<JsonNode> providerOffers,
     Map<String, List<JsonNode>> offersByItemId
 ) {
     public static OfferIndex build(JsonNode allOffers, ObjectMapper objectMapper) {
         if (allOffers == null || !allOffers.isArray() || allOffers.isEmpty()) {
             return new OfferIndex(List.of(), Map.of());
         }
-        List<JsonNode> catalogWide = new ArrayList<>();
+        List<JsonNode> providerLevel = new ArrayList<>();
         Map<String, List<JsonNode>> byItemId = new HashMap<>();
         for (JsonNode offer : allOffers) {
-            // Offers reference resources via "resourceIds"
             JsonNode offerItems = offer.path(BecknFields.RESOURCE_IDS);
-            if (offerItems.isMissingNode() || !offerItems.isArray()) {
-                catalogWide.add(offer);
+            if (offerItems.isMissingNode() || !offerItems.isArray() || offerItems.isEmpty()) {
+                providerLevel.add(offer);
             } else {
                 for (JsonNode idNode : offerItems) {
                     byItemId.computeIfAbsent(idNode.asText(), k -> new ArrayList<>()).add(offer);
@@ -38,13 +43,16 @@ public record OfferIndex(
             }
         }
         return new OfferIndex(
-                Collections.unmodifiableList(catalogWide),
+                Collections.unmodifiableList(providerLevel),
                 Collections.unmodifiableMap(byItemId));
     }
 
+    /**
+     * Returns ONLY item-specific offers for the given item ID.
+     * Provider-level offers are NOT included — they are resolved at search time.
+     */
     public ArrayNode getOffersForItem(String itemId, ObjectMapper mapper) {
         ArrayNode result = mapper.createArrayNode();
-        catalogWideOffers.forEach(o -> result.add(stripNulls(o, mapper)));
         offersByItemId.getOrDefault(itemId, List.of()).forEach(o -> result.add(stripNulls(o, mapper)));
         return result;
     }

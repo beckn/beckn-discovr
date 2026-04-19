@@ -11,6 +11,7 @@ import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.engine.QueryEngine;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.engine.TextSearchEngine;
+import org.beckn.discover.service.postgresql.ProviderOfferEnricher;
 import org.beckn.discover.service.response.CatalogPipeline;
 import org.beckn.discover.service.response.ResponseProcessor;
 import org.beckn.discover.util.LatencyTracker;
@@ -79,6 +80,7 @@ public class DiscoveryService {
     private final TextSearchEngine   textSearchEngine;
     private final CatalogPipeline    catalogPipeline;
     private final ResponseProcessor  responseProcessor;
+    private final ProviderOfferEnricher providerOfferEnricher;
     private final DiscoveryMetrics   metrics;
     private final DiscoveryProperties properties;
     private final ExecutorService    queryExecutor;
@@ -88,6 +90,7 @@ public class DiscoveryService {
             TextSearchEngine                       textSearchEngine,
             CatalogPipeline                        catalogPipeline,
             ResponseProcessor                      responseProcessor,
+            ProviderOfferEnricher                   providerOfferEnricher,
             DiscoveryMetrics                       metrics,
             DiscoveryProperties                    properties,
             @Qualifier("discoveryQueryExecutor") ExecutorService queryExecutor) {
@@ -95,6 +98,7 @@ public class DiscoveryService {
         this.textSearchEngine = textSearchEngine;
         this.catalogPipeline  = catalogPipeline;
         this.responseProcessor = responseProcessor;
+        this.providerOfferEnricher = providerOfferEnricher;
         this.metrics           = metrics;
         this.properties        = properties;
         this.queryExecutor     = queryExecutor;
@@ -437,6 +441,8 @@ public class DiscoveryService {
     // ── Response building ─────────────────────────────────────────────────────
 
     private DiscoverResponse buildResponse(List<Catalog> processed, Context context) {
+        // Provider-level offers: enrich AFTER pipeline so filterOffersByItemIds never sees them
+        providerOfferEnricher.enrich(processed);
         metrics.recordResultCount(processed.size());
         if (processed.isEmpty()) {
             return responseProcessor.buildEmptyResponse(context);

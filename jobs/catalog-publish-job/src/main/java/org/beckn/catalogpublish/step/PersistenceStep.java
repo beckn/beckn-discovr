@@ -12,12 +12,14 @@ import org.beckn.catalogpublish.dto.ProcessingErrorCode;
 import org.beckn.catalogpublish.exception.FieldExtractionException;
 import org.beckn.catalogpublish.model.Item;
 import org.beckn.catalogpublish.model.ItemLocationCollection;
+import org.beckn.catalogpublish.model.ProviderOffer;
 import org.beckn.catalogpublish.service.geometry.GeometryExtractor;
 import org.beckn.catalogpublish.service.payload.ItemPayloadBuilder;
 import org.beckn.catalogpublish.service.payload.PayloadMergeService;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.store.ItemLocationCollectionStore;
 import org.beckn.catalogpublish.store.ItemStore;
+import org.beckn.catalogpublish.store.ProviderOfferStore;
 import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
@@ -45,6 +47,7 @@ public class PersistenceStep {
 
     private final ItemStore itemStore;
     private final ItemLocationCollectionStore locationStore;
+    private final ProviderOfferStore providerOfferStore;
     private final ItemPayloadBuilder payloadBuilder;
     private final PayloadMergeService mergeService;
     private final GeometryExtractor geometryExtractor;
@@ -54,6 +57,7 @@ public class PersistenceStep {
 
     public PersistenceStep(ItemStore itemStore,
             ItemLocationCollectionStore locationStore,
+            ProviderOfferStore providerOfferStore,
             ItemPayloadBuilder payloadBuilder,
             PayloadMergeService mergeService,
             GeometryExtractor geometryExtractor,
@@ -62,6 +66,7 @@ public class PersistenceStep {
             CatalogPublishMetrics metrics) {
         this.itemStore = itemStore;
         this.locationStore = locationStore;
+        this.providerOfferStore = providerOfferStore;
         this.payloadBuilder = payloadBuilder;
         this.mergeService = mergeService;
         this.geometryExtractor = geometryExtractor;
@@ -212,6 +217,10 @@ public class PersistenceStep {
             }
         }
 
+        // Phase 4: Persist provider-level offers (no resourceIds) to provider_offer table.
+        // Runs BEFORE built.isEmpty() so offer-only catalogs still persist provider offers.
+        persistProviderOffers(offerIndex, catalogId, catalogNode, ctx, isFullReplace);
+
         if (built.isEmpty()) {
             return new CatalogBatch(catalogId, ctx, schemaType, op, List.of(), List.copyOf(errors), Map.of(), isFullReplace);
         }
@@ -284,5 +293,61 @@ public class PersistenceStep {
                 map.put(offerId, offer);
         }
         return map;
+    }
+
+    /**
+     * Phase 4: Persists provider-level offers (offers without {@code resourceIds}) to
+     * the {@code provider_offer} table. Provider ID is always extracted from
+     * {@code catalog.provider.id}.
+     *
+     * <p>FULL mode: deletes all existing provider offers for this catalog first.
+     * MERGE mode: upserts by (offer_id, catalog_id).</p>
+     */
+    private void persistProviderOffers(OfferIndex offerIndex, String catalogId,
+            JsonNode catalogNode, CatalogContext ctx, boolean isFullReplace) {
+
+        if (isFullReplace) {
+            int deleted = providerOfferStore.deleteByCatalogId(catalogId);
+            if (deleted > 0) {
+                log.info("event={} catalogId={} deleted={}", LogEvent.PROVIDER_OFFER_DELETED, catalogId, deleted);
+            }
+        }
+
+        List<JsonNode> providerOffers = offerIndex.providerOffers();
+        if (providerOffers.isEmpty()) return;
+
+        String providerId = extractProviderId(catalogNode);
+        if (providerId == null || providerId.isBlank()) {
+            log.warn("event={} catalogId={} reason=missing-provider-id",
+                    LogEvent.PROVIDER_OFFER_SKIPPED, catalogId);
+            return;
+        }
+
+        List<ProviderOffer> entities = new ArrayList<>();
+        for (JsonNode offerNode : providerOffers) {
+            String offerId = FieldExtractor.extractString(offerNode, BecknFields.ID).orElse(null);
+            if (offerId == null || offerId.isBlank()) continue;
+            try {
+                String payload = objectMapper.writeValueAsString(offerNode);
+                entities.add(ProviderOffer.from(offerId, catalogId, providerId,
+                        payload, ctx.recordId(), ctx.subscriberId()));
+            } catch (Exception e) {
+                log.warn("event={} offerId={} catalogId={} error={}",
+                        LogEvent.PERSIST_FAILED, offerId, catalogId, ErrorSanitizer.sanitize(e));
+            }
+        }
+
+        if (!entities.isEmpty()) {
+            providerOfferStore.saveAll(entities);
+            log.info("event={} catalogId={} providerId={} count={}",
+                    LogEvent.PROVIDER_OFFER_PERSISTED, catalogId, providerId, entities.size());
+        }
+    }
+
+    private String extractProviderId(JsonNode catalogNode) {
+        if (catalogNode == null) return null;
+        JsonNode provider = catalogNode.path(BecknFields.PROVIDER);
+        if (provider.isMissingNode() || provider.isNull()) return null;
+        return FieldExtractor.extractString(provider, BecknFields.ID).orElse(null);
     }
 }

@@ -12,6 +12,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.beckn.catalogpublish.store.jpa.ItemJpaRepository;
 import org.beckn.catalogpublish.store.jpa.ItemLocationCollectionJpaRepository;
+import org.beckn.catalogpublish.store.jpa.ProviderOfferJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -85,12 +86,16 @@ public abstract class BaseIntegrationTest {
     protected ItemLocationCollectionJpaRepository locationRepository;
 
     @Autowired
+    protected ProviderOfferJpaRepository providerOfferRepository;
+
+    @Autowired
     protected JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void clearDatabase() {
         locationRepository.deleteAll();
         itemRepository.deleteAll();
+        providerOfferRepository.deleteAll();
     }
 
     protected String readFixture(String relativePath) {

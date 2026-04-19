@@ -71,6 +71,11 @@ public final class LogEvent {
     // Auth filter init
     public static final String AUTH_INIT                = "auth.init";
 
+    // Provider-level offers
+    public static final String PROVIDER_OFFER_PERSISTED = "provider.offer.persisted";
+    public static final String PROVIDER_OFFER_DELETED   = "provider.offer.deleted";
+    public static final String PROVIDER_OFFER_SKIPPED   = "provider.offer.skipped";
+
     // Geometry extraction
     public static final String GEO_MAX_DEPTH_EXCEEDED   = "geo.max-depth-exceeded";
     public static final String GEO_GPS_OUT_OF_RANGE     = "geo.gps.out-of-range";
