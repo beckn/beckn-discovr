@@ -29,13 +29,7 @@ public final class BecknMdcContext {
     public static void populate(JsonNode contextNode) {
         putIfPresent(contextNode, "transactionId",  MdcField.TRANSACTION_ID);
         putIfPresent(contextNode, "messageId",      MdcField.MESSAGE_ID);
-        putIfPresent(contextNode, "bapId",          MdcField.BAP_ID);
-        putIfPresent(contextNode, "bapUri",         MdcField.BAP_URI);
-        putIfPresent(contextNode, "bppId",          MdcField.BPP_ID);
-        putIfPresent(contextNode, "bppUri",         MdcField.BPP_URI);
         putIfPresent(contextNode, "networkId",      MdcField.NETWORK_ID);
-        putIfPresent(contextNode, "action",         MdcField.ACTION);
-        putIfPresent(contextNode, "version",        MdcField.VERSION);
     }
 
     /**
@@ -47,13 +41,7 @@ public final class BecknMdcContext {
         if (context == null) return;
         putIfNotBlank(MdcField.TRANSACTION_ID, context.getTransactionId());
         putIfNotBlank(MdcField.MESSAGE_ID,     context.getMessageId());
-        putIfNotBlank(MdcField.BAP_ID,         context.getBapId());
-        putIfNotBlank(MdcField.BAP_URI,        context.getBapUri());
-        putIfNotBlank(MdcField.BPP_ID,         context.getBppId());
-        putIfNotBlank(MdcField.BPP_URI,        context.getBppUri());
         putIfNotBlank(MdcField.NETWORK_ID,     context.getNetworkId());
-        putIfNotBlank(MdcField.ACTION,         context.getAction());
-        putIfNotBlank(MdcField.VERSION,        context.getVersion());
     }
 
     /**
@@ -105,13 +93,7 @@ public final class BecknMdcContext {
     public static void clear() {
         MDC.remove(MdcField.TRANSACTION_ID);
         MDC.remove(MdcField.MESSAGE_ID);
-        MDC.remove(MdcField.BAP_ID);
-        MDC.remove(MdcField.BAP_URI);
-        MDC.remove(MdcField.BPP_ID);
-        MDC.remove(MdcField.BPP_URI);
         MDC.remove(MdcField.NETWORK_ID);
-        MDC.remove(MdcField.ACTION);
-        MDC.remove(MdcField.VERSION);
         MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
         MDC.remove(MdcField.AUTH_RECORD_ID);
         MDC.remove(MdcField.TAGS);

@@ -120,7 +120,7 @@ public class DiscoveryEventConsumer {
             // 3. Process
             DiscoverRequest discoverRequest = objectMapper.treeToValue(requestNode, DiscoverRequest.class);
 
-            // context-level MDC fields (messageId, bapId, transactionId) already set by BecknMdcContext.populate above
+            // context-level MDC fields (transactionId, messageId, networkId) already set by BecknMdcContext.populate above
 
             DiscoverResponse response = discoveryService.processDiscoveryRequest(discoverRequest);
 
