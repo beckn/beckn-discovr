@@ -18,7 +18,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -49,7 +48,6 @@ import static net.logstash.logback.argument.StructuredArguments.value;
  * NACK responses even when an exception is thrown before the request is parsed
  * into a {@link DiscoverRequest}.</p>
  */
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 @RestController
 @RequestMapping("/beckn")
 public class DiscoveryController {

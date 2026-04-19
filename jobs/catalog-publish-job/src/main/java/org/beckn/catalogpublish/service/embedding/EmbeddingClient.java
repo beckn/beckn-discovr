@@ -8,6 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -43,8 +46,6 @@ public class EmbeddingClient {
     private final String       model;
     private final String       apiKey;
     private final Duration     timeout;
-    private final int          retries;
-    private final long         retryDelayMs;
 
     public EmbeddingClient(ObjectMapper objectMapper, AppProperties props) {
         this.objectMapper = objectMapper;
@@ -53,10 +54,8 @@ public class EmbeddingClient {
         this.model        = emb.name();
         this.apiKey       = emb.apiKey();
         this.timeout      = Duration.ofMillis(emb.timeoutMs());
-        this.retries      = Math.max(0, emb.retries());
-        this.retryDelayMs = emb.retryDelayMs();
         this.httpClient   = HttpClient.newBuilder().connectTimeout(this.timeout).build();
-        log.info("event={} url={} model={} retries={}", LogEvent.EMBEDDING_CLIENT_INIT, this.embedUrl, this.model, this.retries);
+        log.info("event={} url={} model={}", LogEvent.EMBEDDING_CLIENT_INIT, this.embedUrl, this.model);
     }
 
     /**
@@ -67,25 +66,27 @@ public class EmbeddingClient {
      * @param text text to embed (typically {@code full_text_blob})
      * @return embedding as {@code List<Float>}, or empty if all attempts fail
      */
+    @Retryable(
+        retryFor = RuntimeException.class,
+        maxAttemptsExpression = "${app.catalog.text-search.embedding-model.retries:3}",
+        backoff = @Backoff(
+            delayExpression = "${app.catalog.text-search.embedding-model.retry-delay-ms:1000}",
+            multiplier = 2),
+        recover = "embedRecover"
+    )
     public Optional<List<Float>> embed(String text) {
-        Exception lastError = null;
-        for (int attempt = 0; attempt <= retries; attempt++) {
-            if (attempt > 0) {
-                try { Thread.sleep(retryDelayMs); } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-                log.warn("event={} attempt={}/{} model={}", LogEvent.EMBEDDING_RETRY, attempt, retries, model);
-            }
-            try {
-                return doEmbed(text);
-            } catch (Exception e) {
-                lastError = e;
-                log.warn("event={} attempt={}/{} model={} error={}", LogEvent.EMBEDDING_ATTEMPT_FAILED, attempt, retries, model, e.getMessage());
-            }
+        try {
+            return doEmbed(text);
+        } catch (Exception e) {
+            log.warn("event={} model={} error={}", LogEvent.EMBEDDING_ATTEMPT_FAILED, model, e.getMessage());
+            throw new RuntimeException("Embedding provider unavailable: " + e.getMessage(), e);
         }
-        log.error("event={} model={} retries={} error={} — item will be indexed without vector",
-                LogEvent.EMBEDDING_FAILED, model, retries, lastError != null ? lastError.getMessage() : null);
+    }
+
+    @org.springframework.retry.annotation.Recover
+    public Optional<List<Float>> embedRecover(RuntimeException e, String text) {
+        log.error("event={} model={} error={} — item will be indexed without vector",
+                LogEvent.EMBEDDING_FAILED, model, e.getMessage(), e);
         return Optional.empty();
     }
 
