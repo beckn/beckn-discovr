@@ -82,7 +82,7 @@ public class ElasticIndexStep {
     }
 
     private void doIndex(CatalogBatch batch) {
-        if (!batch.hasItems())
+        if (!batch.hasResources())
             return;
 
         // FULL replace: delete all existing ES documents for this catalog before indexing fresh ones.
@@ -94,7 +94,7 @@ public class ElasticIndexStep {
         if (batch.fullReplace()) {
             try {
                 // Collect schema types from items to target specific indices (no wildcard)
-                var schemaTypes = batch.savedItems().stream()
+                var schemaTypes = batch.savedResources().stream()
                         .map(Item::getType)
                         .filter(t -> t != null && !t.isBlank())
                         .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -107,7 +107,7 @@ public class ElasticIndexStep {
         }
 
         Map<String, List<Map<String, Object>>> bySchemaType = new LinkedHashMap<>();
-        for (Item item : batch.savedItems()) {
+        for (Item item : batch.savedResources()) {
             JsonNode payloadNode = batch.payloadNodes().get(item.getId());
             if (payloadNode == null) {
                 log.warn("event={} reason=payload-missing itemId={}", LogEvent.ES_FAILED, item.getId());
@@ -162,10 +162,10 @@ public class ElasticIndexStep {
 
     private void publishFailures(String schemaType, BulkIndexResult result, CatalogBatch batch) {
         // O(1) lookup per failure instead of O(n) linear scan
-        Map<String, Item> itemById = batch.savedItems().stream()
+        Map<String, Item> itemById = batch.savedResources().stream()
                 .collect(java.util.stream.Collectors.toMap(Item::getId, i -> i, (a, b) -> a));
         result.failed().forEach(failedDoc -> {
-            Item item = itemById.get(failedDoc.itemId());
+            Item item = itemById.get(failedDoc.resourceId());
             JsonNode payloadNode = item != null ? batch.payloadNodes().get(item.getId()) : null;
             String payloadJson = toJson(payloadNode);
             failurePublisher.publishFailures(schemaType, payloadJson, List.of(failedDoc));

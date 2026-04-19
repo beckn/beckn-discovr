@@ -95,7 +95,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                         JsonNode res = r.path("message").path("results");
                         return res.size() == 1
                                 && "catalog-ev-charging-001".equals(res.get(0).path("catalogId").asText())
-                                && res.get(0).path("itemCount").asInt() == 3;
+                                && res.get(0).path("resourceCount").asInt() == 3;
                     } catch (Exception e) { return false; }
                 });
         assertThat(responseRecord).as("Expected on_catalog_publish response on %s", responseTopic).isNotNull();
@@ -106,7 +106,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         assertThat(results.isArray()).isTrue();
         assertThat(results.size()).isEqualTo(1);
         assertThat(results.get(0).path("catalogId").asText()).isEqualTo("catalog-ev-charging-001");
-        assertThat(results.get(0).path("itemCount").asInt()).isEqualTo(3);
+        assertThat(results.get(0).path("resourceCount").asInt()).isEqualTo(3);
     }
 
     @Test
@@ -160,7 +160,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                     try {
                         JsonNode r = objectMapper.readTree(v);
                         JsonNode res = r.path("message").path("results");
-                        return res.size() == 1 && res.get(0).path("itemCount").asInt() == 1
+                        return res.size() == 1 && res.get(0).path("resourceCount").asInt() == 1
                                 && "catalog-ev-charging-001".equals(res.get(0).path("catalogId").asText());
                     } catch (Exception e) { return false; }
                 });
@@ -169,7 +169,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         JsonNode results = response.path("message").path("results");
         assertThat(results.size()).isEqualTo(1);
         assertThat(results.get(0).path("catalogId").asText()).isEqualTo("catalog-ev-charging-001");
-        assertThat(results.get(0).path("itemCount").asInt()).isEqualTo(1);
+        assertThat(results.get(0).path("resourceCount").asInt()).isEqualTo(1);
     }
 
     // --- Multi-catalog: array of catalogs → all catalogs, items, and geo updated; solid assertions ---
@@ -243,8 +243,8 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
 
         JsonNode cat1Result = r0.path("catalogId").asText().equals("cat-1") ? r0 : r1;
         JsonNode cat2Result = r0.path("catalogId").asText().equals("cat-2") ? r0 : r1;
-        assertThat(cat1Result.path("itemCount").asInt()).as("cat-1 must have 3 items").isEqualTo(3);
-        assertThat(cat2Result.path("itemCount").asInt()).as("cat-2 must have 2 items").isEqualTo(2);
+        assertThat(cat1Result.path("resourceCount").asInt()).as("cat-1 must have 3 items").isEqualTo(3);
+        assertThat(cat2Result.path("resourceCount").asInt()).as("cat-2 must have 2 items").isEqualTo(2);
     }
 
     @Test
@@ -287,7 +287,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                         JsonNode r = objectMapper.readTree(v);
                         JsonNode res = r.path("message").path("results");
                         return res.size() == 1 && "cat-1".equals(res.get(0).path("catalogId").asText())
-                                && res.get(0).path("itemCount").asInt() == 1;
+                                && res.get(0).path("resourceCount").asInt() == 1;
                     } catch (Exception e) { return false; }
                 });
         assertThat(responseRecord).as("Expected on_catalog_publish response on %s", responseTopic).isNotNull();
@@ -295,6 +295,6 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         JsonNode results = response.path("message").path("results");
         assertThat(results.size()).isEqualTo(1);
         assertThat(results.get(0).path("catalogId").asText()).isEqualTo("cat-1");
-        assertThat(results.get(0).path("itemCount").asInt()).isEqualTo(1);
+        assertThat(results.get(0).path("resourceCount").asInt()).isEqualTo(1);
     }
 }

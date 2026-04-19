@@ -1,7 +1,7 @@
 package org.beckn.catalogpublish.common;
 
 /**
- * Beckn Protocol v2.0 field name constants.
+ * Beckn Protocol v2.1 field name constants.
  * Single source of truth for all JSON field names used across the job.
  */
 public final class BecknFields {
@@ -11,7 +11,7 @@ public final class BecknFields {
     public static final String CONTEXT         = "context";
     public static final String MESSAGE         = "message";
 
-    // ── Context fields (Beckn Protocol v2.0 camelCase) ───────────────────────
+    // ── Context fields (Beckn Protocol v2.1 camelCase) ───────────────────────
     public static final String DOMAIN          = "domain";
     public static final String ACTION          = "action";
     public static final String VERSION         = "version";
@@ -38,7 +38,7 @@ public final class BecknFields {
     public static final String JSON_LD_TYPE    = "@type";
     public static final String JSON_LD_CONTEXT = "@context";
 
-    // ── Catalog / Item fields ─────────────────────────────────────────────────
+    // ── Catalog / Resource fields ──────────────────────────────────────────────
     public static final String ID              = "id";
     public static final String OFFERS          = "offers";
     public static final String DESCRIPTOR      = "descriptor";
@@ -50,13 +50,13 @@ public final class BecknFields {
     public static final String PROVIDER_ID     = "providerId";
     public static final String CATALOG_ID      = "catalogId";
 
-    // ── v2.0 Resource fields (alias for Item with resourceAttributes) ─────────
+    // ── v2.1 Resource fields ───────────────────────────────────────────────────
     public static final String RESOURCES           = "resources";
     public static final String RESOURCE_ATTRIBUTES = "resourceAttributes";
-    /** v2.0 Offer field: IDs of resources this offer applies to (replaces {@code items} in offers). */
+    /** v2.1 Offer field: IDs of resources this offer applies to. */
     public static final String RESOURCE_IDS        = "resourceIds";
 
-    // ── v2.1 Item fields ─────────────────────────────────────────────────────
+    // ── v2.1 Resource constraint/policy fields ─────────────────────────────────
     public static final String CONSTRAINTS     = "constraints";
     public static final String POLICIES        = "policies";
 
@@ -71,12 +71,12 @@ public final class BecknFields {
     public static final String CURRENCY        = "currency";
     public static final String VALUE           = "value";
 
-    // ── Action values (v2.0 slash notation) ─────────────────────────────────
+    // ── Action values (v2.1 slash notation) ─────────────────────────────────
     public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
     public static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
 
 
-    // ── Context V2.0 new fields ───────────────────────────────────────────────
+    // ── Context v2.1 fields ───────────────────────────────────────────────────
     public static final String TRY              = "try";
     public static final String LINEAGE          = "lineage";
     public static final String SUBSCRIBER_ID    = "subscriberId";

@@ -46,7 +46,7 @@ import static net.logstash.logback.argument.StructuredArguments.value;
 @ConditionalOnProperty(name = "discovery.kafka.request-topic")
 public class DiscoveryEventConsumer {
 
-    private static final Logger logger = LoggerFactory.getLogger(DiscoveryEventConsumer.class);
+    private static final Logger log = LoggerFactory.getLogger(DiscoveryEventConsumer.class);
 
     private final ObjectMapper objectMapper;
     private final DiscoveryService discoveryService;
@@ -82,7 +82,7 @@ public class DiscoveryEventConsumer {
 
         BecknMdcContext.setTags(tagsHeader);
 
-        logger.info(LogEvent.CONSUMER_RECEIVED,
+        log.info(LogEvent.CONSUMER_RECEIVED,
                 value("partition", partition),
                 value("offset", offset),
                 value("timestamp", timestamp));
@@ -92,7 +92,7 @@ public class DiscoveryEventConsumer {
         try {
             requestNode = objectMapper.readTree(message);
         } catch (Exception e) {
-            logger.error(LogEvent.CONSUMER_PARSE_FAILED,
+            log.error(LogEvent.CONSUMER_PARSE_FAILED,
                     value("partition", partition),
                     value("offset", offset),
                     value("rawMessage", truncate(message, 2000)),
@@ -108,7 +108,7 @@ public class DiscoveryEventConsumer {
             DiscoveryValidationService.ValidationResult validation =
                     validationService.validateDiscoverRequest(requestNode);
             if (!validation.isValid()) {
-                logger.error(LogEvent.CONSUMER_VALIDATE_FAILED,
+                log.error(LogEvent.CONSUMER_VALIDATE_FAILED,
                         value("partition", partition),
                         value("offset", offset),
                         value("errors", validation.getErrors()),
@@ -130,12 +130,12 @@ public class DiscoveryEventConsumer {
             publishResponse(response, discoverRequest);
 
             acknowledgment.acknowledge();
-            logger.info(LogEvent.QUERY_COMPLETED,
+            log.info(LogEvent.QUERY_COMPLETED,
                     value("partition", partition),
                     value("offset", offset));
 
         } catch (Exception e) {
-            logger.error(LogEvent.QUERY_FAILED,
+            log.error(LogEvent.QUERY_FAILED,
                     value("partition", partition),
                     value("offset", offset),
                     e);
@@ -161,7 +161,7 @@ public class DiscoveryEventConsumer {
     private void publishResponse(DiscoverResponse response, DiscoverRequest request) {
         String responseTopic = discoveryProperties.getKafka().getResponseTopic();
         if (responseTopic == null || responseTopic.isBlank()) {
-            logger.warn(LogEvent.RESPONSE_PUBLISH_FAILED,
+            log.warn(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("reason", "response-topic-not-configured"));
             return;
         }
@@ -171,16 +171,16 @@ public class DiscoveryEventConsumer {
             // Block until Kafka broker confirms receipt so that any send failure propagates
             // before the inbound offset is acknowledged.
             kafkaTemplate.send(responseTopic, transactionId, responseJson).get();
-            logger.info(LogEvent.RESPONSE_PUBLISHED,
+            log.info(LogEvent.RESPONSE_PUBLISHED,
                     value("topic", responseTopic));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
+            log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),
                     e);
             throw new RuntimeException("Interrupted while publishing response", e);
         } catch (Exception e) {
-            logger.error(LogEvent.RESPONSE_PUBLISH_FAILED,
+            log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),
                     e);
             throw new RuntimeException("Failed to publish on_discover response", e);

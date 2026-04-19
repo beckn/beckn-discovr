@@ -64,26 +64,26 @@ public class CatalogPublishMetrics {
                 .register(registry);
 
         offerResolveSuccess = Counter.builder("discovr.publish.offer.resolve.success")
-                .description("Items updated via cross-BPP offer resolution (Phase 3)")
+                .description("Resources updated via cross-BPP offer resolution (Phase 3)")
                 .register(registry);
         offerResolveMissing = Counter.builder("discovr.publish.offer.resolve.missing")
                 .description("Resource IDs referenced by offers but not found in DB")
                 .register(registry);
         offerResolveFailed = Counter.builder("discovr.publish.offer.resolve.failed")
-                .description("Items that failed during cross-BPP offer merge (Phase 3)")
+                .description("Resources that failed during cross-BPP offer merge (Phase 3)")
                 .register(registry);
 
         // FULL replace
-        fullReplaceCount = Counter.builder("discovr.publish.full_replace")
+        fullReplaceCount = Counter.builder("discovr.publish.full.replace")
                 .description("Number of FULL replace operations executed")
                 .register(registry);
-        fullReplaceDeletedItems = Counter.builder("discovr.publish.full_replace.deleted.items")
-                .description("Items deleted during FULL replace")
+        fullReplaceDeletedItems = Counter.builder("discovr.publish.full.replace.deleted.resources")
+                .description("Resources deleted during FULL replace")
                 .register(registry);
-        fullReplaceDeletedLocations = Counter.builder("discovr.publish.full_replace.deleted.locations")
+        fullReplaceDeletedLocations = Counter.builder("discovr.publish.full.replace.deleted.locations")
                 .description("Locations deleted during FULL replace")
                 .register(registry);
-        fullReplaceDeletedEsDocs = Counter.builder("discovr.publish.full_replace.deleted.es_docs")
+        fullReplaceDeletedEsDocs = Counter.builder("discovr.publish.full.replace.deleted.es.docs")
                 .description("ES documents deleted during FULL replace deleteByQuery")
                 .register(registry);
 
@@ -92,10 +92,10 @@ public class CatalogPublishMetrics {
                 .description("Number of MERGE operations executed")
                 .register(registry);
         persistInserted = Counter.builder("discovr.publish.persist.inserted")
-                .description("New items inserted during persist")
+                .description("New resources inserted during persist")
                 .register(registry);
         persistUpdated = Counter.builder("discovr.publish.persist.updated")
-                .description("Existing items updated during persist")
+                .description("Existing resources updated during persist")
                 .register(registry);
     }
 

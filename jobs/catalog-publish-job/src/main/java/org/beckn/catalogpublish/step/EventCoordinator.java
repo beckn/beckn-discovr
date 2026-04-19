@@ -15,7 +15,7 @@ public class EventCoordinator {
     }
 
     /** Always publishes — each listener decides independently whether to act. */
-    public void schedulePostCommitPublish(CatalogBatch batch) {
+    public void publishPersistedEvent(CatalogBatch batch) {
         springEvents.publishEvent(new CatalogPersistedEvent(this, batch));
     }
 }

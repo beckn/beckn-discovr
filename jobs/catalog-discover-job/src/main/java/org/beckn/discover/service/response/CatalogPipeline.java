@@ -25,12 +25,12 @@ import java.util.Objects;
  *       and is the <em>primary</em> filter for NLWeb / Elasticsearch.</li>
  *   <li><b>deduplicateOffers</b> — removes duplicate offers within each
  *       catalog (by {@code id}).</li>
- *   <li><b>filterItemsByOfferReferences</b> — when an offer-scoped query
- *       has populated offers, restricts items to only those referenced by
+ *   <li><b>filterResourcesByOfferReferences</b> — when an offer-scoped query
+ *       has populated offers, restricts resources to only those referenced by
  *       at least one offer.</li>
- *   <li><b>filterOffersByItemIds</b> — removes offers that reference none
- *       of the catalog's items (cross-filter in the opposite direction).</li>
- *   <li><b>removeEmptyCatalogs</b> — discards catalogs that have no items
+ *   <li><b>filterOffersByResourceIds</b> — removes offers that reference none
+ *       of the catalog's resources (cross-filter in the opposite direction).</li>
+ *   <li><b>removeEmptyCatalogs</b> — discards catalogs that have no resources
  *       after the preceding steps.</li>
  * </ol>
  *
@@ -97,78 +97,78 @@ public class CatalogPipeline {
             return List.of();
         }
 
-        long t0 = System.nanoTime();
+        long startNanos = System.nanoTime();
         int inputSize = catalogs.size();
 
         // Work on a mutable copy so we can remove empty catalogs at the end
-        List<Catalog> work = new ArrayList<>(catalogs);
+        List<Catalog> mutableCatalogs = new ArrayList<>(catalogs);
 
         if (!schemaPreFiltered) {
-            step1FilterBySchemaContext(work, request);
+            filterResourcesBySchemaContext(mutableCatalogs, request);
         } else {
             log.debug("event={} reason=schema-pre-filtered", LogEvent.PIPELINE_STEP1_SKIPPED);
         }
-        step2DeduplicateOffers(work);
-        step3FilterItemsByOfferReferences(work);
-        step4FilterOffersByItemIds(work);
-        step5RemoveEmptyCatalogs(work, request.transactionId());
+        deduplicateOffersInCatalogs(mutableCatalogs);
+        filterResourcesByOfferReferences(mutableCatalogs);
+        filterOffersByResourceIds(mutableCatalogs);
+        removeEmptyCatalogs(mutableCatalogs, request.transactionId());
 
-        long ms = (System.nanoTime() - t0) / 1_000_000;
+        long ms = (System.nanoTime() - startNanos) / 1_000_000;
         log.info("event={} input={} output={} resources={} durationMs={} schemaPreFiltered={}",
                 LogEvent.PIPELINE_COMPLETED, inputSize,
-                work.size(),
-                work.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
+                mutableCatalogs.size(),
+                mutableCatalogs.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
                 ms, schemaPreFiltered);
 
-        return work;
+        return mutableCatalogs;
     }
 
     // ── Pipeline steps ────────────────────────────────────────────────────────
 
     /**
-     * Step 1 — Filter items by schema context URL.
+     * Filter resources by schema context URL.
      * No-op when the request has no schema context filter.
      */
-    private void step1FilterBySchemaContext(List<Catalog> catalogs, QueryRequest request) {
+    private void filterResourcesBySchemaContext(List<Catalog> catalogs, QueryRequest request) {
         if (request.schemaContextUrls().isEmpty()) return;
 
-        int beforeItems = totalItems(catalogs);
+        int beforeCount = totalResourceCount(catalogs);
         processor.filterCatalogsBySchemaContext(catalogs, request.schemaContextUrls());
-        int afterItems = totalItems(catalogs);
+        int afterCount = totalResourceCount(catalogs);
 
-        if (beforeItems != afterItems) {
-            log.debug("event={} removed={}", LogEvent.PIPELINE_STEP1_SCHEMA_FILTER, beforeItems - afterItems);
+        if (beforeCount != afterCount) {
+            log.debug("event={} removed={}", LogEvent.PIPELINE_STEP1_SCHEMA_FILTER, beforeCount - afterCount);
         }
     }
 
     /**
-     * Step 2 — Remove duplicate offers within each catalog.
+     * Remove duplicate offers within each catalog.
      * No-op when a catalog has ≤1 offer.
      */
-    private void step2DeduplicateOffers(List<Catalog> catalogs) {
+    private void deduplicateOffersInCatalogs(List<Catalog> catalogs) {
         catalogs.forEach(processor::deduplicateOffers);
     }
 
     /**
-     * Step 3 — Restrict items to those referenced by offers.
+     * Restrict resources to those referenced by offers.
      * Applies only when offers are present; otherwise a no-op.
      */
-    private void step3FilterItemsByOfferReferences(List<Catalog> catalogs) {
-        catalogs.forEach(processor::filterItemsByOfferReferences);
+    private void filterResourcesByOfferReferences(List<Catalog> catalogs) {
+        catalogs.forEach(processor::filterResourcesByOfferReferences);
     }
 
     /**
-     * Step 4 — Remove offers that reference none of the catalog's items.
+     * Remove offers that reference none of the catalog's resources.
      * Always safe; no-op when no offers are present.
      */
-    private void step4FilterOffersByItemIds(List<Catalog> catalogs) {
-        catalogs.forEach(processor::filterOffersByItemIds);
+    private void filterOffersByResourceIds(List<Catalog> catalogs) {
+        catalogs.forEach(processor::filterOffersByResourceIds);
     }
 
     /**
-     * Step 5 — Remove catalogs that have no items after the preceding steps.
+     * Remove catalogs that have no resources after the preceding steps.
      */
-    private void step5RemoveEmptyCatalogs(List<Catalog> catalogs, String transactionId) {
+    private void removeEmptyCatalogs(List<Catalog> catalogs, String transactionId) {
         int before = catalogs.size();
         catalogs.removeIf(c -> {
             boolean empty = c.getResources() == null || c.getResources().isEmpty();
@@ -184,7 +184,7 @@ public class CatalogPipeline {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static int totalItems(List<Catalog> catalogs) {
+    private static int totalResourceCount(List<Catalog> catalogs) {
         return catalogs.stream()
                 .map(Catalog::getResources)
                 .filter(Objects::nonNull)

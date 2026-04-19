@@ -37,7 +37,7 @@ public class CatalogDocumentAssembler {
     /** Called from EsFailureConsumer — all fields extracted from stored payload. */
     public Map<String, Object> assemble(JsonNode payloadNode, String indexKey) {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
-        JsonNode itemNode = catalog.path(BecknFields.RESOURCES).path(0);
+        JsonNode resourceNode = catalog.path(BecknFields.RESOURCES).path(0);
         JsonNode netNode = payloadNode.path(BecknFields.CONTEXT).path(BecknFields.NETWORK_ID);
         if (netNode.isMissingNode()) netNode = catalog.path(BecknFields.NETWORK_ID);
         List<String> networkIds;
@@ -51,16 +51,16 @@ public class CatalogDocumentAssembler {
             String single = netNode.asText(null);
             networkIds = (single != null && !single.isBlank()) ? List.of(single) : List.of();
         }
-        return build(payloadNode, indexKey, networkIds, text(itemNode, BecknFields.ID));
+        return build(payloadNode, indexKey, networkIds, text(resourceNode, BecknFields.ID));
     }
 
     // ── Core builder ─────────────────────────────────────────────────────────
 
     private Map<String, Object> build(JsonNode payloadNode, String schemaType, List<String> networkIds,
-            String itemId) {
+            String resourceId) {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
-        JsonNode itemNode = catalog.path(BecknFields.RESOURCES).path(0);
-        JsonNode desc = itemNode.path(BecknFields.DESCRIPTOR);
+        JsonNode resourceNode = catalog.path(BecknFields.RESOURCES).path(0);
+        JsonNode desc = resourceNode.path(BecknFields.DESCRIPTOR);
 
         Map<String, Object> doc = new LinkedHashMap<>();
         doc.put("catalog_id", text(catalog, BecknFields.ID));
@@ -83,42 +83,42 @@ public class CatalogDocumentAssembler {
             doc.put("catalog_validity", objectMapper.convertValue(validityNode, Map.class));
         }
         doc.put("schema_type", schemaType);
-        doc.put("resource_context", text(itemNode, BecknFields.JSON_LD_CONTEXT));
-        doc.put("resource_type", text(itemNode, BecknFields.JSON_LD_TYPE));
-        doc.put("resource_id", itemId);
+        doc.put("resource_context", text(resourceNode, BecknFields.JSON_LD_CONTEXT));
+        doc.put("resource_type", text(resourceNode, BecknFields.JSON_LD_TYPE));
+        doc.put("resource_id", resourceId);
         doc.put("resource_name", text(desc, BecknFields.NAME));
         doc.put("resource_short_desc", text(desc, BecknFields.SHORT_DESC));
         doc.put("resource_long_desc", text(desc, BecknFields.LONG_DESC));
-        doc.put("resource_category_code", text(itemNode.path("category"), "codeValue"));
-        doc.put("resource_category_name", text(itemNode.path("category"), BecknFields.NAME));
-        putIfPresent(doc, "resource_rateable", boolOrNull(itemNode, "rateable"));
-        putIfPresent(doc, "resource_is_active", boolOrNull(itemNode, "isActive"));
-        JsonNode ratingNode = itemNode.path("rating");
+        doc.put("resource_category_code", text(resourceNode.path("category"), "codeValue"));
+        doc.put("resource_category_name", text(resourceNode.path("category"), BecknFields.NAME));
+        putIfPresent(doc, "resource_rateable", boolOrNull(resourceNode, "rateable"));
+        putIfPresent(doc, "resource_is_active", boolOrNull(resourceNode, "isActive"));
+        JsonNode ratingNode = resourceNode.path("rating");
         putIfPresent(doc, "resource_rating_value", dblOrNull(ratingNode, "ratingValue"));
         putIfPresent(doc, "resource_rating_count", intOrNull(ratingNode, "ratingCount"));
-        doc.put("resource_provider_id", text(itemNode.path(BecknFields.PROVIDER), BecknFields.ID));
+        doc.put("resource_provider_id", text(resourceNode.path(BecknFields.PROVIDER), BecknFields.ID));
         doc.put("resource_provider_name",
-                text(itemNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+                text(resourceNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
         doc.put("resource_descriptor_thumbnail_image", text(desc, "thumbnailImage"));
         doc.put("resource_descriptor_docs", convertToList(desc.path("docs")));
         doc.put("resource_descriptor_media_file", convertToList(desc.path("mediaFile")));
-        doc.put("resource_rating_review_text", text(itemNode.path("rating"), "reviewText"));
+        doc.put("resource_rating_review_text", text(resourceNode.path("rating"), "reviewText"));
         doc.put("indexed_at", Instant.now().toString());
 
         geoShapeExtractor.extractGeoShapes(payloadNode).forEach(doc::put);
 
-        JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+        JsonNode attrs = resourceNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         if (!attrs.isMissingNode() && attrs.isObject()) {
             doc.put("resource_attributes", flattenJsonLd(attrs));
             doc.put("resource_attributes_type", text(attrs, BecknFields.JSON_LD_TYPE));
             doc.put("resource_attributes_context", text(attrs, BecknFields.JSON_LD_CONTEXT));
         }
 
-        JsonNode constraintsNode = itemNode.path(BecknFields.CONSTRAINTS);
+        JsonNode constraintsNode = resourceNode.path(BecknFields.CONSTRAINTS);
         if (!constraintsNode.isMissingNode() && constraintsNode.isArray()) {
             doc.put("constraints", objectMapper.convertValue(constraintsNode, List.class));
         }
-        JsonNode policiesNode = itemNode.path(BecknFields.POLICIES);
+        JsonNode policiesNode = resourceNode.path(BecknFields.POLICIES);
         if (!policiesNode.isMissingNode() && policiesNode.isArray()) {
             doc.put("policies", objectMapper.convertValue(policiesNode, List.class));
         }
@@ -126,7 +126,7 @@ public class CatalogDocumentAssembler {
         JsonNode offersNode = catalog.path(BecknFields.OFFERS);
         List<Map<String, Object>> offers = buildOffers(offersNode);
         doc.put("offers", offers);
-        doc.put("full_text_blob", buildTextBlob(doc, offersNode, itemNode));
+        doc.put("full_text_blob", buildTextBlob(doc, offersNode, resourceNode));
         return doc;
     }
 
@@ -149,20 +149,20 @@ public class CatalogDocumentAssembler {
         return result;
     }
 
-    private String buildTextBlob(Map<String, Object> doc, JsonNode offersNode, JsonNode itemNode) {
+    private String buildTextBlob(Map<String, Object> doc, JsonNode offersNode, JsonNode resourceNode) {
         Set<String> parts = new LinkedHashSet<>();
         for (String key : List.of("resource_name", "resource_short_desc", "resource_long_desc",
                 "resource_category_name", "resource_provider_name")) {
             if (doc.get(key) instanceof String s && !s.isBlank())
                 parts.add(s);
         }
-        collectLocationText(itemNode, parts);
-        JsonNode attrsForText = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+        collectLocationText(resourceNode, parts);
+        JsonNode attrsForText = resourceNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         collectStrings(attrsForText, parts);
-        collectStrings(itemNode.path(BecknFields.CONSTRAINTS), parts);
-        collectStrings(itemNode.path(BecknFields.POLICIES), parts);
-        collectStrings(itemNode.path(BecknFields.DESCRIPTOR).path("docs"), parts);
-        collectStrings(itemNode.path(BecknFields.DESCRIPTOR).path("mediaFile"), parts);
+        collectStrings(resourceNode.path(BecknFields.CONSTRAINTS), parts);
+        collectStrings(resourceNode.path(BecknFields.POLICIES), parts);
+        collectStrings(resourceNode.path(BecknFields.DESCRIPTOR).path("docs"), parts);
+        collectStrings(resourceNode.path(BecknFields.DESCRIPTOR).path("mediaFile"), parts);
         collectStrings(offersNode, parts);
         return String.join(" ", parts);
     }

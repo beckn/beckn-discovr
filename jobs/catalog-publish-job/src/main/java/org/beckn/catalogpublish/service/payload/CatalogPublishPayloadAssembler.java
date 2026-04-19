@@ -98,8 +98,8 @@ public class CatalogPublishPayloadAssembler {
 
             // When filtering, only include saved items whose id is in the set.
             List<Item> itemsToAssemble = itemIdsToInclude == null
-                    ? batch.savedItems()
-                    : batch.savedItems().stream()
+                    ? batch.savedResources()
+                    : batch.savedResources().stream()
                             .filter(i -> itemIdsToInclude.contains(i.getId()))
                             .toList();
 

@@ -22,7 +22,7 @@ public class DiscoveryConstants {
     public static class ColumnNames {
         public static final String ID = "id";
         public static final String CATALOG_ID = "catalog_id";
-        public static final String ITEM_PAYLOAD = "item_payload";
+        public static final String RESOURCE_PAYLOAD = "resource_payload";
         public static final String CATALOG_PAYLOAD = "catalog_payload";
         public static final String PAYLOAD = "payload"; // Legacy column name
     }
