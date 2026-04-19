@@ -202,7 +202,7 @@ public class NLWebAssembler {
         for (NLWebResponse.ContentItem item : items) {
             try {
                 for (Catalog raw : item.getSchemaObject().getCatalogs()) {
-                    Catalog processed = catalogProcessor.processCatalog(raw);
+                    Catalog processed = catalogProcessor.normalizeCatalog(raw);
                     if (processed != null) all.add(processed);
                 }
             } catch (Exception e) {

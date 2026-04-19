@@ -58,11 +58,11 @@ public class AsyncConfig {
         // is running on a pool thread (vs. CallerRunsPolicy inline on the consumer
         // thread).
         exec.setTaskDecorator(runnable -> () -> {
-            CatalogPublishOrchestrator.CATALOG_PROC_THREAD.set(Boolean.TRUE);
+            CatalogPublishOrchestrator.CATALOG_PROCESSING_THREAD.set(Boolean.TRUE);
             try {
                 runnable.run();
             } finally {
-                CatalogPublishOrchestrator.CATALOG_PROC_THREAD.remove();
+                CatalogPublishOrchestrator.CATALOG_PROCESSING_THREAD.remove();
             }
         });
         exec.initialize();

@@ -57,7 +57,7 @@ public class DiscoveryController {
     /** Request attribute key used to propagate the transaction ID to the exception handler. */
     public static final String TRANSACTION_ID_ATTR = "beckn.transactionId";
 
-    private static final Logger logger = LoggerFactory.getLogger(DiscoveryController.class);
+    private static final Logger log = LoggerFactory.getLogger(DiscoveryController.class);
 
     private final DiscoveryService discoveryService;
     private final ObjectMapper objectMapper;
@@ -124,12 +124,12 @@ public class DiscoveryController {
                 httpRequest.setAttribute(TRANSACTION_ID_ATTR, txnNode.asText());
             }
 
-            logger.info(LogEvent.REQUEST_RECEIVED,
+            log.info(LogEvent.REQUEST_RECEIVED,
                     value("method", httpRequest.getMethod()),
                     value("transactionId", txnNode.asText("")));
 
             authorizationService.authorizeRequest(rawBody, headers);
-            logger.info(LogEvent.AUTH_PASSED);
+            log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
 
@@ -160,12 +160,12 @@ public class DiscoveryController {
                 httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
             }
 
-            logger.info(LogEvent.REQUEST_RECEIVED,
+            log.info(LogEvent.REQUEST_RECEIVED,
                     value("method", "POST"),
                     value("transactionId", transactionId));
 
             authorizationService.authorizeRequest(rawBody, headers);
-            logger.info(LogEvent.AUTH_PASSED);
+            log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
 
@@ -182,13 +182,13 @@ public class DiscoveryController {
                 kafkaTemplate.send(requestTopic, kafkaKey, rawBody)
                         .whenComplete((result, ex) -> {
                             if (ex != null) {
-                                logger.error(LogEvent.KAFKA_QUEUE_FAILED,
+                                log.error(LogEvent.KAFKA_QUEUE_FAILED,
                                         value("transactionId", logTxnId),
                                         value("messageId", logMsgId),
                                         value("topic", requestTopic),
                                         ex);
                             } else {
-                                logger.debug(LogEvent.KAFKA_QUEUED,
+                                log.debug(LogEvent.KAFKA_QUEUED,
                                         value("transactionId", logTxnId),
                                         value("messageId", logMsgId),
                                         value("topic", requestTopic),
@@ -197,14 +197,14 @@ public class DiscoveryController {
                             }
                         });
             } catch (Exception kafkaEx) {
-                logger.error(LogEvent.KAFKA_QUEUE_FAILED,
+                log.error(LogEvent.KAFKA_QUEUE_FAILED,
                         value("transactionId", logTxnId),
                         value("messageId", logMsgId),
                         value("topic", requestTopic),
                         value("error", kafkaEx.getMessage()));
             }
 
-            logger.info(LogEvent.KAFKA_QUEUED,
+            log.info(LogEvent.KAFKA_QUEUED,
                     value("transactionId", transactionId),
                     value("messageId", messageId),
                     value("topic", requestTopic));
@@ -216,18 +216,18 @@ public class DiscoveryController {
     }
 
     private void validateSchema(JsonNode requestNode, String rawBody) {
-        logger.info(LogEvent.VALIDATE_PASSED + ".starting");
+        log.info(LogEvent.VALIDATE_PASSED + ".starting");
         DiscoveryValidationService.ValidationResult result = validationService.validateDiscoverRequest(requestNode);
         if (!result.isValid()) {
             String paths = result.getPaths().isEmpty() ? "root" : String.join(", ", result.getPaths());
             String msg = "Schema validation failed: " + String.join("; ", result.getErrors()) + " (paths: " + paths + ")";
-            logger.warn(LogEvent.VALIDATE_FAILED,
+            log.warn(LogEvent.VALIDATE_FAILED,
                     value("errors", result.getErrors()),
                     value("paths", result.getPaths()),
                     value("requestBody", truncate(rawBody, 2000)));
             throw new IllegalArgumentException(msg);
         }
-        logger.info(LogEvent.VALIDATE_PASSED);
+        log.info(LogEvent.VALIDATE_PASSED);
     }
 
     private static String truncate(String s, int maxLen) {

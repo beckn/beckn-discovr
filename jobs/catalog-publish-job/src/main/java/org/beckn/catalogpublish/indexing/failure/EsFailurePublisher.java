@@ -35,7 +35,7 @@ public class EsFailurePublisher {
     public void publishFailures(String indexKey, String payloadJson,
                                 List<BulkIndexResult.FailedDoc> failed) {
         for (BulkIndexResult.FailedDoc doc : failed) {
-            publish(new EsFailureMessage(doc.itemId(), doc.catalogId(), indexKey,
+            publish(new EsFailureMessage(doc.resourceId(), doc.catalogId(), indexKey,
                     payloadJson, doc.reason(), Instant.now(), 1));
         }
     }
@@ -52,12 +52,12 @@ public class EsFailurePublisher {
             kafka.send(failureTopic, msg.catalogId(), json)
                  .whenComplete((r, ex) -> {
                      if (ex != null)
-                         log.error("event={} itemId={} error={}",
-                                 LogEvent.KAFKA_FAILED, msg.itemId(), ErrorSanitizer.sanitize(ex));
+                         log.error("event={} resourceId={} error={}",
+                                 LogEvent.KAFKA_FAILED, msg.resourceId(), ErrorSanitizer.sanitize(ex));
                  });
         } catch (Exception e) {
-            log.error("event={} reason=serialize-failed itemId={} error={}",
-                    LogEvent.KAFKA_FAILED, msg.itemId(), ErrorSanitizer.sanitize(e));
+            log.error("event={} reason=serialize-failed resourceId={} error={}",
+                    LogEvent.KAFKA_FAILED, msg.resourceId(), ErrorSanitizer.sanitize(e));
         }
     }
 }

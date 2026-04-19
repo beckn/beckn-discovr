@@ -12,12 +12,14 @@ import org.beckn.catalogpublish.dto.ProcessingErrorCode;
 import org.beckn.catalogpublish.exception.FieldExtractionException;
 import org.beckn.catalogpublish.model.Item;
 import org.beckn.catalogpublish.model.ItemLocationCollection;
+import org.beckn.catalogpublish.model.ProviderOffer;
 import org.beckn.catalogpublish.service.geometry.GeometryExtractor;
 import org.beckn.catalogpublish.service.payload.ItemPayloadBuilder;
 import org.beckn.catalogpublish.service.payload.PayloadMergeService;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.store.ItemLocationCollectionStore;
 import org.beckn.catalogpublish.store.ItemStore;
+import org.beckn.catalogpublish.store.ProviderOfferStore;
 import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
@@ -45,6 +47,7 @@ public class PersistenceStep {
 
     private final ItemStore itemStore;
     private final ItemLocationCollectionStore locationStore;
+    private final ProviderOfferStore providerOfferStore;
     private final ItemPayloadBuilder payloadBuilder;
     private final PayloadMergeService mergeService;
     private final GeometryExtractor geometryExtractor;
@@ -54,6 +57,7 @@ public class PersistenceStep {
 
     public PersistenceStep(ItemStore itemStore,
             ItemLocationCollectionStore locationStore,
+            ProviderOfferStore providerOfferStore,
             ItemPayloadBuilder payloadBuilder,
             PayloadMergeService mergeService,
             GeometryExtractor geometryExtractor,
@@ -62,6 +66,7 @@ public class PersistenceStep {
             CatalogPublishMetrics metrics) {
         this.itemStore = itemStore;
         this.locationStore = locationStore;
+        this.providerOfferStore = providerOfferStore;
         this.payloadBuilder = payloadBuilder;
         this.mergeService = mergeService;
         this.geometryExtractor = geometryExtractor;
@@ -71,7 +76,7 @@ public class PersistenceStep {
     }
 
     /**
-     * Persists all items from a catalog node using an upsert strategy.
+     * Persists all resources from a catalog node using an upsert strategy.
      *
      * @param catalogNode  the individual catalog node from {@code message.catalogs[i]}
      * @param ctx          parsed catalog context (network IDs, subscriber, etc.)
@@ -80,7 +85,7 @@ public class PersistenceStep {
      *                     {@code publishDirectives} array introduced in the directive-map pattern
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public CatalogBatch persistItemsAndLocations(JsonNode catalogNode, CatalogContext ctx,
+    public CatalogBatch persistResourcesAndLocations(JsonNode catalogNode, CatalogContext ctx,
             CatalogOperation op, JsonNode messageNode) {
         String catalogId = FieldExtractor.requireString(catalogNode, "id");
         JsonNode allOffers = FieldExtractor.extractOffersOrEmpty(catalogNode);
@@ -106,58 +111,58 @@ public class PersistenceStep {
 
         Map<String, JsonNode> incomingOfferById = buildIncomingOfferMap(allOffers);
 
-        record IdAndNode(String itemId, JsonNode itemNode) {}
+        record IdAndNode(String resourceId, JsonNode resourceNode) {}
         List<IdAndNode> pairs = new ArrayList<>();
         List<ProcessingError> errors = new ArrayList<>();
         String catalogContextUrl = FieldExtractor.extractContextUrl(catalogNode);
-        for (JsonNode itemNode : FieldExtractor.iterableItems(catalogNode)) {
-            if (!FieldExtractor.isRealResource(itemNode)) continue;
+        for (JsonNode resourceNode : FieldExtractor.iterableResources(catalogNode)) {
+            if (!FieldExtractor.isRealResource(resourceNode)) continue;
             try {
-                pairs.add(new IdAndNode(extractItemId(itemNode), itemNode));
+                pairs.add(new IdAndNode(extractResourceId(resourceNode), resourceNode));
             } catch (Exception e) {
                 errors.add(new ProcessingError(null, ProcessingErrorCode.NET_INTERNAL_ERROR,
                         ErrorSanitizer.sanitize(e)));
             }
         }
 
-        List<String> allItemIds = pairs.stream().map(IdAndNode::itemId).toList();
-        Map<String, Item> existingById = allItemIds.isEmpty() ? Map.of()
-                : itemStore.findAllByIdInAndCatalogId(allItemIds, catalogId).stream()
+        List<String> allResourceIds = pairs.stream().map(IdAndNode::resourceId).toList();
+        Map<String, Item> existingById = allResourceIds.isEmpty() ? Map.of()
+                : itemStore.findAllByIdInAndCatalogId(allResourceIds, catalogId).stream()
                         .collect(Collectors.toMap(Item::getId, Function.identity()));
 
-        record ItemWithNode(Item item, JsonNode payloadNode) {}
-        List<ItemWithNode> built = new ArrayList<>();
+        record ResourceWithNode(Item item, JsonNode payloadNode) {}
+        List<ResourceWithNode> built = new ArrayList<>();
 
-        // Phase 1: process explicitly listed items (new or upsert).
+        // Phase 1: process explicitly listed resources (new or upsert).
         for (IdAndNode pair : pairs) {
-            String itemId = pair.itemId();
-            JsonNode itemNode = pair.itemNode();
+            String resourceId = pair.resourceId();
+            JsonNode resourceNode = pair.resourceNode();
             try {
                 // Catalg sends a fully resolved payload — always replace, never merge.
-                JsonNode payload = payloadBuilder.buildDenormalizedPayloadFromSlice(baseSlice, itemNode, offerIndex, itemId);
+                JsonNode payload = payloadBuilder.buildDenormalizedPayloadFromSlice(baseSlice, resourceNode, offerIndex, resourceId);
                 String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
-                String type = Optional.ofNullable(FieldExtractor.extractItemAttributesType(itemNode))
-                        .orElse(FieldExtractor.extractItemType(itemNode));
-                String attrsContextUrl = FieldExtractor.extractItemAttributesContextUrl(itemNode);
-                String itemContextUrl = FieldExtractor.extractContextUrl(itemNode);
+                String type = Optional.ofNullable(FieldExtractor.extractResourceAttributesType(resourceNode))
+                        .orElse(FieldExtractor.extractResourceType(resourceNode));
+                String attrsContextUrl = FieldExtractor.extractResourceAttributesContextUrl(resourceNode);
+                String resourceContextUrl = FieldExtractor.extractContextUrl(resourceNode);
                 String contextUrl = attrsContextUrl != null
                         ? attrsContextUrl
-                        : (itemContextUrl != null ? itemContextUrl : catalogContextUrl);
-                built.add(new ItemWithNode(
-                        Item.from(itemId, payload.toString(), offerIds,
+                        : (resourceContextUrl != null ? resourceContextUrl : catalogContextUrl);
+                built.add(new ResourceWithNode(
+                        Item.from(resourceId, payload.toString(), offerIds,
                                 ctx.recordId(), ctx.subscriberId(), catalogId,
                                 type, contextUrl, ctx.networkIds().toArray(new String[0])),
                         payload));
             } catch (Exception e) {
                 String sanitized = ErrorSanitizer.sanitize(e);
-                errors.add(new ProcessingError(itemId, ProcessingErrorCode.NET_INTERNAL_ERROR, sanitized));
-                log.warn("event={} itemId={} catalogId={} error={}", LogEvent.PERSIST_FAILED, itemId, catalogId, sanitized);
+                errors.add(new ProcessingError(resourceId, ProcessingErrorCode.NET_INTERNAL_ERROR, sanitized));
+                log.warn("event={} resourceId={} catalogId={} error={}", LogEvent.PERSIST_FAILED, resourceId, catalogId, sanitized);
             }
         }
 
-        // Phase 2: offer propagation — push updated offers to items NOT in the explicit payload.
+        // Phase 2: offer propagation — push updated offers to resources NOT in the explicit payload.
         if (!incomingOfferById.isEmpty()) {
-            Set<String> explicitIds = new HashSet<>(allItemIds);
+            Set<String> explicitIds = new HashSet<>(allResourceIds);
             List<Item> linkedItems = itemStore.findAllByCatalogIdAndAnyOfferId(
                     catalogId, new ArrayList<>(incomingOfferById.keySet()));
 
@@ -180,7 +185,7 @@ public class PersistenceStep {
                     }
                     if (changed) {
                         String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
-                        built.add(new ItemWithNode(
+                        built.add(new ResourceWithNode(
                                 Item.from(linkedItem.getId(), payload.toString(), offerIds,
                                         linkedItem.getCreatedBy(), linkedItem.getSubscriberId(),
                                         linkedItem.getCatalogId(),
@@ -199,18 +204,22 @@ public class PersistenceStep {
             }
         }
 
-        // Phase 3: Cross-catalog offer resolution — attach offers to items owned by other catalogs.
+        // Phase 3: Cross-catalog offer resolution — attach offers to resources owned by other catalogs.
         if (!incomingOfferById.isEmpty()) {
-            // Phase 2 items must be in handledIds to prevent Phase 3 (cross-BPP offers) from
-            // double-processing items that were already updated by Phase 2 (same-catalog offer propagation).
-            Set<String> handledIds = new HashSet<>(allItemIds);
-            built.forEach(iwn -> handledIds.add(iwn.item().getId()));
+            // Phase 2 resources must be in handledIds to prevent Phase 3 (cross-BPP offers) from
+            // double-processing resources that were already updated by Phase 2 (same-catalog offer propagation).
+            Set<String> handledIds = new HashSet<>(allResourceIds);
+            built.forEach(rwn -> handledIds.add(rwn.item().getId()));
 
             var resolved = offerResolutionStep.resolveCrossBppOffers(incomingOfferById, handledIds, ctx);
             for (var r : resolved) {
-                built.add(new ItemWithNode(r.item(), r.payloadNode()));
+                built.add(new ResourceWithNode(r.item(), r.payloadNode()));
             }
         }
+
+        // Phase 4: Persist provider-level offers (no resourceIds) to provider_offer table.
+        // Runs BEFORE built.isEmpty() so offer-only catalogs still persist provider offers.
+        persistProviderOffers(offerIndex, catalogId, catalogNode, ctx, isFullReplace);
 
         if (built.isEmpty()) {
             return new CatalogBatch(catalogId, ctx, schemaType, op, List.of(), List.copyOf(errors), Map.of(), isFullReplace);
@@ -224,8 +233,8 @@ public class PersistenceStep {
                 .count();
         int updateCount = built.size() - insertCount;
 
-        List<Item> savedItems = itemStore.saveAll(built.stream().map(ItemWithNode::item).toList());
-        List<ItemLocationCollection> allLocations = savedItems.stream()
+        List<Item> savedResources = itemStore.saveAll(built.stream().map(ResourceWithNode::item).toList());
+        List<ItemLocationCollection> allLocations = savedResources.stream()
                 .flatMap(item -> {
                     JsonNode node = payloadNodeById.get(item.getId());
                     return (node != null
@@ -237,11 +246,11 @@ public class PersistenceStep {
 
         metrics.recordPersistInserted(insertCount);
         metrics.recordPersistUpdated(updateCount);
-        log.info("event={} catalogId={} mode={} items={} inserted={} updated={} locations={} errors={}",
-                LogEvent.PERSIST_COMPLETED, catalogId, updateMode, savedItems.size(),
+        log.info("event={} catalogId={} mode={} resources={} inserted={} updated={} locations={} errors={}",
+                LogEvent.PERSIST_COMPLETED, catalogId, updateMode, savedResources.size(),
                 insertCount, updateCount, allLocations.size(), errors.size());
         return new CatalogBatch(catalogId, ctx, schemaType, op,
-                List.copyOf(savedItems), List.copyOf(errors), Map.copyOf(payloadNodeById), isFullReplace);
+                List.copyOf(savedResources), List.copyOf(errors), Map.copyOf(payloadNodeById), isFullReplace);
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────────
@@ -268,10 +277,10 @@ public class PersistenceStep {
         return "MERGE";
     }
 
-    private String extractItemId(JsonNode itemNode) {
-        return FieldExtractor.extractString(itemNode, BecknFields.ID)
+    private String extractResourceId(JsonNode resourceNode) {
+        return FieldExtractor.extractString(resourceNode, BecknFields.ID)
                 .filter(s -> !s.isBlank())
-                .orElseThrow(() -> new FieldExtractionException("Item missing id"));
+                .orElseThrow(() -> new FieldExtractionException("Resource missing id"));
     }
 
     private Map<String, JsonNode> buildIncomingOfferMap(JsonNode allOffers) {
@@ -284,5 +293,61 @@ public class PersistenceStep {
                 map.put(offerId, offer);
         }
         return map;
+    }
+
+    /**
+     * Phase 4: Persists provider-level offers (offers without {@code resourceIds}) to
+     * the {@code provider_offer} table. Provider ID is always extracted from
+     * {@code catalog.provider.id}.
+     *
+     * <p>FULL mode: deletes all existing provider offers for this catalog first.
+     * MERGE mode: upserts by (offer_id, catalog_id).</p>
+     */
+    private void persistProviderOffers(OfferIndex offerIndex, String catalogId,
+            JsonNode catalogNode, CatalogContext ctx, boolean isFullReplace) {
+
+        if (isFullReplace) {
+            int deleted = providerOfferStore.deleteByCatalogId(catalogId);
+            if (deleted > 0) {
+                log.info("event={} catalogId={} deleted={}", LogEvent.PROVIDER_OFFER_DELETED, catalogId, deleted);
+            }
+        }
+
+        List<JsonNode> providerOffers = offerIndex.providerOffers();
+        if (providerOffers.isEmpty()) return;
+
+        String providerId = extractProviderId(catalogNode);
+        if (providerId == null || providerId.isBlank()) {
+            log.warn("event={} catalogId={} reason=missing-provider-id",
+                    LogEvent.PROVIDER_OFFER_SKIPPED, catalogId);
+            return;
+        }
+
+        List<ProviderOffer> entities = new ArrayList<>();
+        for (JsonNode offerNode : providerOffers) {
+            String offerId = FieldExtractor.extractString(offerNode, BecknFields.ID).orElse(null);
+            if (offerId == null || offerId.isBlank()) continue;
+            try {
+                String payload = objectMapper.writeValueAsString(offerNode);
+                entities.add(ProviderOffer.from(offerId, catalogId, providerId,
+                        payload, ctx.recordId(), ctx.subscriberId()));
+            } catch (Exception e) {
+                log.warn("event={} offerId={} catalogId={} error={}",
+                        LogEvent.PERSIST_FAILED, offerId, catalogId, ErrorSanitizer.sanitize(e));
+            }
+        }
+
+        if (!entities.isEmpty()) {
+            providerOfferStore.saveAll(entities);
+            log.info("event={} catalogId={} providerId={} count={}",
+                    LogEvent.PROVIDER_OFFER_PERSISTED, catalogId, providerId, entities.size());
+        }
+    }
+
+    private String extractProviderId(JsonNode catalogNode) {
+        if (catalogNode == null) return null;
+        JsonNode provider = catalogNode.path(BecknFields.PROVIDER);
+        if (provider.isMissingNode() || provider.isNull()) return null;
+        return FieldExtractor.extractString(provider, BecknFields.ID).orElse(null);
     }
 }

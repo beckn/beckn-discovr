@@ -1,6 +1,7 @@
 package org.beckn.catalogpublish.integration;
 
 import org.beckn.catalogpublish.model.ItemId;
+import org.beckn.catalogpublish.model.ProviderOfferId;
 import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,19 +96,25 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
-     * RFC 7396 null-deletion in offers: an explicit {@code null} on {@code resourceIds}
-     * in the second publish deletes the resourceIds field from the stored offer.
-     * The offer-to-item link in the {@code offer_ids} DB column is maintained separately
-     * and survives the offer field deletion.
+     * Provider-level offer reclassification: when an offer is re-published with
+     * {@code "resourceIds": null}, the 2-way OfferIndex classification treats it as a
+     * provider-level offer (no resourceIds = provider-level). The offer is no longer
+     * stamped on the item payload and is instead persisted to the {@code provider_offer}
+     * table.
+     *
+     * <p>Round 1: offer-1 with {@code resourceIds: ["item-1"]} -- item-level, stamped on item.
+     * Round 2: same offer with {@code resourceIds: null} -- reclassified as provider-level,
+     * removed from item payload, persisted to provider_offer table.
      */
     @Test
-    void upsertPublish_nullResourceIdsInOffer_deletesResourceIdsFieldViaRfc7396() {
-        // Round 1: publish with an offer that links to item-1
+    void upsertPublish_nullResourceIdsInOffer_reclassifiedAsProviderLevel() {
+        // Round 1: publish with an offer that links to item-1 (item-level)
         String round1 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m1","transactionId":"t1"},
                   "message": {"catalogs": [{"id": "cat-1",
+                    "provider": {"id": "prov-1"},
                     "resources": [{"id": "item-1",
                       "descriptor": {"name": "EV Station"}}],
                     "offers": [{"id": "offer-1",
@@ -118,14 +125,17 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(itemRepository.count()).isEqualTo(1);
         var afterRound1 = itemRepository.findAll().get(0);
         assertThat(afterRound1.getPayload()).contains("offer-1").contains("Offer One");
+        // No provider offers in round 1 (offer-1 has resourceIds)
+        assertThat(providerOfferRepository.count()).isEqualTo(0);
 
-        // Round 2: explicit null on resourceIds → RFC 7396 deletes resourceIds from the stored offer.
-        // The offer_ids DB column is set from the new incoming offer and reflects the merged state.
+        // Round 2: explicit null on resourceIds → reclassified as provider-level offer.
+        // The offer is removed from the item payload and stored in provider_offer table.
         String round2 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
                   "message": {"catalogs": [{"id": "cat-1",
+                    "provider": {"id": "prov-1"},
                     "resources": [{"id": "item-1",
                       "descriptor": {"name": "EV Station"}}],
                     "offers": [{"id": "offer-1",
@@ -136,10 +146,16 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
 
         assertThat(itemRepository.count()).isEqualTo(1);
         var afterRound2 = itemRepository.findAll().get(0);
-        // Offer name must be updated
-        assertThat(afterRound2.getPayload()).contains("Offer One Updated");
-        // explicit null resourceIds → resourceIds field deleted from stored offer (RFC 7396)
-        assertThat(afterRound2.getPayload()).doesNotContain("\"resourceIds\"");
+        // Offer is no longer stamped on item payload (it is now provider-level)
+        assertThat(afterRound2.getPayload())
+                .as("Provider-level offer must NOT appear in item payload")
+                .doesNotContain("offer-1")
+                .doesNotContain("Offer One Updated");
+
+        // Provider-level offer persisted to provider_offer table
+        var provOffer = providerOfferRepository.findById(new ProviderOfferId("offer-1", "cat-1")).orElseThrow();
+        assertThat(provOffer.getProviderId()).isEqualTo("prov-1");
+        assertThat(provOffer.getPayload()).contains("Offer One Updated");
     }
 
     /**

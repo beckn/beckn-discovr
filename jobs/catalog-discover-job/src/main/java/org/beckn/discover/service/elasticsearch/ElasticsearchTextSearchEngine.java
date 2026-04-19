@@ -73,13 +73,13 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         this.objectMapper    = objectMapper;
         this.embeddingClient = embeddingClient;
         this.queryEnricher   = queryEnricher;
-        DiscoveryProperties.Elasticsearch es = props.getElasticsearch();
-        this.aliasName              = es.getAliasName();
-        this.resultLimit            = es.getResultLimit();
-        this.minScore               = es.getMinScore();
+        DiscoveryProperties.Elasticsearch esConfig = props.getElasticsearch();
+        this.aliasName              = esConfig.getAliasName();
+        this.resultLimit            = esConfig.getResultLimit();
+        this.minScore               = esConfig.getMinScore();
         this.knnCandidates          = Math.max(props.getTextSearch().getEmbeddingModel().getKnnCandidates(), this.resultLimit);
-        this.relativeScoreThreshold = es.getRelativeScoreThreshold();
-        List<String> fields = es.getMultiMatchFields();
+        this.relativeScoreThreshold = esConfig.getRelativeScoreThreshold();
+        List<String> fields = esConfig.getMultiMatchFields();
         if (fields == null || fields.isEmpty()) {
             throw new IllegalArgumentException(
                     "discovery.elasticsearch.multiMatchFields must not be empty");
@@ -100,11 +100,11 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
 
     @Override
     @SuppressWarnings({"rawtypes", "unchecked"})
-    public List<Catalog> search(String text, QueryRequest context) throws Exception {
+    public List<Catalog> search(String text, QueryRequest queryRequest) throws Exception {
         if (text == null || text.isBlank())
             throw new IllegalArgumentException("Text search query cannot be null or empty");
 
-        String txId  = context.transactionId();
+        String txId  = queryRequest.transactionId();
         Instant start = Instant.now();
 
         // ── Semantic search path (engine=els-semantic-search) ───────────────────────
@@ -126,7 +126,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
             }
 
             List<Float> vec = queryVector.get();
-            List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(context);
+            List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(queryRequest);
             log.debug(LogEvent.ES_SEARCH_STARTED + ".knn",
                     value("index", aliasName),
                     value("k", resultLimit),
@@ -169,7 +169,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         }
 
         // ── Keyword search path (engine=native-els only) ──────────────────────
-        List<Query> keywordSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(context);
+        List<Query> keywordSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(queryRequest);
         log.info(LogEvent.ES_SEARCH_STARTED + ".keyword",
                 value("transactionId", txId),
                 value("schemaFilters", keywordSchemaFilters.size()),

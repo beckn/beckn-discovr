@@ -140,6 +140,9 @@ public final class LogEvent {
     public static final String QUERY_ENRICHER_ENRICHED      = "query-enricher.enriched";
     public static final String QUERY_ENRICHER_PARSE_FAILED  = "query-enricher.parse-failed";
 
+    // ── Provider offer enrichment ────────────────────────────────────────────
+    public static final String PROVIDER_OFFER_ENRICHED = "provider.offer.enriched";
+
     // ── Elasticsearch query engine ────────────────────────────────────────────
     public static final String ES_ENGINE_SPATIAL_START          = "es.engine.spatial.start";
     public static final String ES_ENGINE_SPATIAL_SKIP           = "es.engine.spatial.skip";

@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 @Component
 public class JsonPathConverter {
 
-    private static final Logger logger = LoggerFactory.getLogger(JsonPathConverter.class);
+    private static final Logger log = LoggerFactory.getLogger(JsonPathConverter.class);
 
     private static final Pattern COLON_FIELD_PATTERN = Pattern
             .compile("(?<![\"'])\\b([a-zA-Z_][a-zA-Z0-9_]*:[a-zA-Z0-9_:]+)\\b");
@@ -23,9 +23,9 @@ public class JsonPathConverter {
             return "";
         }
         String trimmed = userFilter.trim();
-        logger.debug("Processing JSONPath: {}", trimmed);
+        log.debug("Processing JSONPath: {}", trimmed);
         String result = quoteColonFields(trimmed);
-        logger.debug("Final PostgreSQL JSONPath: {}", result);
+        log.debug("Final PostgreSQL JSONPath: {}", result);
         return result;
     }
 

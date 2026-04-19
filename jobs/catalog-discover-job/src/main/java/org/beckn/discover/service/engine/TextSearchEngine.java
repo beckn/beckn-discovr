@@ -29,13 +29,13 @@ public interface TextSearchEngine {
     /**
      * Path D: executes a text / semantic search and returns matching catalogs.
      *
-     * @param text    natural-language query string; must not be blank
-     * @param context surrounding query context for schema filtering and logging
+     * @param text         natural-language query string; must not be blank
+     * @param queryRequest surrounding query request for schema filtering and logging
      * @return matching catalogs; never {@code null}, may be empty
      * @throws IllegalArgumentException if {@code text} is blank
      * @throws Exception                on transient infrastructure failure (may be retried by caller)
      */
-    List<Catalog> search(String text, QueryRequest context) throws Exception;
+    List<Catalog> search(String text, QueryRequest queryRequest) throws Exception;
 
     /**
      * Returns {@code true} when this engine natively applies schema context

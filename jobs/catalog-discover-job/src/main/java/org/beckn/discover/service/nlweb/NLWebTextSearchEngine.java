@@ -71,12 +71,12 @@ public class NLWebTextSearchEngine implements TextSearchEngine {
      * @throws Exception                on NLWeb API or assembly failure
      */
     @Override
-    public List<Catalog> search(String text, QueryRequest context) throws Exception {
+    public List<Catalog> search(String text, QueryRequest queryRequest) throws Exception {
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("Text search query cannot be null or empty");
         }
 
-        String txId = context.transactionId();
+        String txId = queryRequest.transactionId();
         log.info(LogEvent.NLWEB_SEARCH_STARTED,
                 value("transactionId", txId),
                 value("query", text));

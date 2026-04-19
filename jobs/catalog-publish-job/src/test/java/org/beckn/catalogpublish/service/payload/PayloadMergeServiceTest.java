@@ -13,10 +13,10 @@ class PayloadMergeServiceTest {
     private final PayloadMergeService service = new PayloadMergeService(mapper);
 
     @Test
-    void mergeItemPayload_patchOverwritesField() throws Exception {
+    void mergeResourcePayload_patchOverwritesField() throws Exception {
         String existing = "{\"catalogs\":[{\"resources\":[{\"a\":1,\"b\":2}],\"offers\":[]}]}";
         JsonNode patch = mapper.createObjectNode().put("b", 99);
-        JsonNode result = service.mergeItemPayload(existing, patch);
+        JsonNode result = service.mergeResourcePayload(existing, patch);
         JsonNode item = result.path("catalogs").path(0).path("resources").path(0);
         assertThat(item.path("a").asInt()).isEqualTo(1);
         assertThat(item.path("b").asInt()).isEqualTo(99);
@@ -98,7 +98,7 @@ class PayloadMergeServiceTest {
     // ── null-safe merge behaviour (the core upsert guarantee) ────────────────
 
     @Test
-    void mergeItemPayload_nullFieldInPatch_doesNotDeleteExistingData() throws Exception {
+    void mergeResourcePayload_nullFieldInPatch_doesNotDeleteExistingData() throws Exception {
         // Stored item has id + descriptor with name + gps
         String existing = "{\"catalogs\":[{\"resources\":[{"
                 + "\"id\":\"item-1\","
@@ -110,7 +110,7 @@ class PayloadMergeServiceTest {
         JsonNode itemPatch = mapper.readTree(
                 "{\"id\":\"item-1\",\"descriptor\":{\"name\":null}}");
         JsonNode strippedPatch = service.stripNulls(itemPatch);
-        JsonNode result = service.mergeItemPayload(existing, strippedPatch);
+        JsonNode result = service.mergeResourcePayload(existing, strippedPatch);
 
         JsonNode mergedItem = result.path("catalogs").path(0).path("resources").path(0);
         // id must be preserved
