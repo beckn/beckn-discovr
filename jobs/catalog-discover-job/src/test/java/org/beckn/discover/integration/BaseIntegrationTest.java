@@ -152,6 +152,7 @@ public abstract class BaseIntegrationTest {
 
     private void createSchema() {
         jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS postgis");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS provider_offer CASCADE");
         jdbcTemplate.execute("DROP TABLE IF EXISTS item_location_collection CASCADE");
         jdbcTemplate.execute("DROP TABLE IF EXISTS item CASCADE");
 
