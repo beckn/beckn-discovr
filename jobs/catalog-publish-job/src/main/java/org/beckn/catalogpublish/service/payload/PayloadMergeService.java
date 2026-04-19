@@ -23,18 +23,18 @@ public class PayloadMergeService {
         this.objectMapper = objectMapper;
     }
 
-    public JsonNode mergeItemPayload(String denormPayloadJson, JsonNode itemPatch) {
+    public JsonNode mergeResourcePayload(String denormPayloadJson, JsonNode resourcePatch) {
         try {
             JsonNode denorm = parseOrEmpty(denormPayloadJson);
-            JsonNode itemNode = DenormalizedPayloadUtils.getFirstItemNode(denorm);
-            if (itemNode == null || itemNode.isMissingNode())
+            JsonNode resourceNode = DenormalizedPayloadUtils.getFirstResourceNode(denorm);
+            if (resourceNode == null || resourceNode.isMissingNode())
                 return denorm;
-            if (itemPatch == null || itemPatch.isNull())
-                return rewrapItemInDenormalized(denorm, itemNode);
-            JsonNode merged = JsonMergePatch.fromJson(itemPatch).apply(itemNode);
-            return rewrapItemInDenormalized(denorm, merged);
+            if (resourcePatch == null || resourcePatch.isNull())
+                return rewrapResourceInDenormalized(denorm, resourceNode);
+            JsonNode merged = JsonMergePatch.fromJson(resourcePatch).apply(resourceNode);
+            return rewrapResourceInDenormalized(denorm, merged);
         } catch (Exception e) {
-            throw new PayloadMergeException("Failed to merge item payload: " + e.getMessage(), e);
+            throw new PayloadMergeException("Failed to merge resource payload: " + e.getMessage(), e);
         }
     }
 
@@ -140,18 +140,18 @@ public class PayloadMergeService {
         }
     }
 
-    private JsonNode rewrapItemInDenormalized(JsonNode denorm, JsonNode mergedItem) {
-        // denorm is freshly parsed from the DB string inside mergeItemPayload — we own it.
+    private JsonNode rewrapResourceInDenormalized(JsonNode denorm, JsonNode mergedResource) {
+        // denorm is freshly parsed from the DB string inside mergeResourcePayload — we own it.
         // Mutate the resources array in-place; no deep copy of the catalog wrapper needed.
         JsonNode catalogsNode = denorm.path("catalogs");
         if (catalogsNode.isArray() && !catalogsNode.isEmpty()) {
             ObjectNode catalog = (ObjectNode) catalogsNode.get(0);
-            catalog.set(BecknFields.RESOURCES, objectMapper.createArrayNode().add(mergedItem));
+            catalog.set(BecknFields.RESOURCES, objectMapper.createArrayNode().add(mergedResource));
             return denorm;
         }
         // Fallback: malformed denorm — build minimal structure from scratch.
         ObjectNode catalog = objectMapper.createObjectNode();
-        catalog.set(BecknFields.RESOURCES, objectMapper.createArrayNode().add(mergedItem));
+        catalog.set(BecknFields.RESOURCES, objectMapper.createArrayNode().add(mergedResource));
         return objectMapper.createObjectNode()
                 .set("catalogs", objectMapper.createArrayNode().add(catalog));
     }

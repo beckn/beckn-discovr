@@ -40,7 +40,7 @@ public class KafkaResponsePublisher implements ResponsePublisher {
             ObjectNode contextCopy = contextNode.isObject()
                     ? (ObjectNode) contextNode.deepCopy()
                     : objectMapper.createObjectNode();
-            contextCopy.put(BecknFields.ACTION, "on_catalog_publish");
+            contextCopy.put(BecknFields.ACTION, BecknFields.ACTION_ON_CATALOG_PUBLISH);
             contextCopy.put(BecknFields.TIMESTAMP, Instant.now().toString());
             ObjectNode response = objectMapper.createObjectNode();
             response.set(BecknFields.CONTEXT, contextCopy);

@@ -60,27 +60,27 @@ class ItemPayloadBuilderTest {
     }
 
     @Test
-    void offerIndex_getOffersForItem_excludesProviderOffers() {
-        // Offer without resourceIds is a provider-level offer — NOT returned by getOffersForItem
+    void offerIndex_getOffersForResource_excludesProviderOffers() {
+        // Offer without resourceIds is a provider-level offer — NOT returned by getOffersForResource
         ArrayNode offers = mapper.createArrayNode();
         ObjectNode provOffer = mapper.createObjectNode();
         provOffer.put("id", "prov-off1");
         offers.add(provOffer);
         OfferIndex index = OfferIndex.build(offers, mapper);
-        assertThat(index.getOffersForItem("any", mapper)).isEmpty();
+        assertThat(index.getOffersForResource("any", mapper)).isEmpty();
         assertThat(index.providerOffers()).hasSize(1);
     }
 
     @Test
-    void offerIndex_getOffersForItem_returnsItemSpecificOffers() {
-        // Offer with resourceIds is item-level — returned by getOffersForItem
+    void offerIndex_getOffersForResource_returnsItemSpecificOffers() {
+        // Offer with resourceIds is item-level — returned by getOffersForResource
         ArrayNode offers = mapper.createArrayNode();
         ObjectNode itemOffer = mapper.createObjectNode();
         itemOffer.put("id", "item-off1");
         itemOffer.set("resourceIds", mapper.createArrayNode().add("item-123"));
         offers.add(itemOffer);
         OfferIndex index = OfferIndex.build(offers, mapper);
-        assertThat(index.getOffersForItem("item-123", mapper)).hasSize(1);
+        assertThat(index.getOffersForResource("item-123", mapper)).hasSize(1);
         assertThat(index.providerOffers()).isEmpty();
     }
 }

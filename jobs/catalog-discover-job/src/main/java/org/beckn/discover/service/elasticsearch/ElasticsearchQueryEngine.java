@@ -48,7 +48,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
     private final EsSpatialQueryBuilder     spatialBuilder;
     private final ElasticsearchClient       esClient;
     private final EsSearchAssembler         assembler;
-    private final DiscoveryProperties       props;
+    private final DiscoveryProperties       discoveryProperties;
     private final Optional<EmbeddingClient> embeddingClient;
     private final Optional<QueryEnricher>   queryEnricher;
     private final int                       knnCandidates;
@@ -57,49 +57,49 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                                     EsSpatialQueryBuilder spatialBuilder,
                                     ElasticsearchClient esClient,
                                     EsSearchAssembler assembler,
-                                    DiscoveryProperties props,
+                                    DiscoveryProperties discoveryProperties,
                                     Optional<EmbeddingClient> embeddingClient,
                                     Optional<QueryEnricher> queryEnricher) {
         this.pgEngine        = pgEngine;
         this.spatialBuilder  = spatialBuilder;
         this.esClient        = esClient;
         this.assembler       = assembler;
-        this.props           = props;
+        this.discoveryProperties = discoveryProperties;
         this.embeddingClient = embeddingClient;
         this.queryEnricher   = queryEnricher;
         this.knnCandidates   = Math.max(
-                props.getTextSearch().getEmbeddingModel().getKnnCandidates(),
-                props.getElasticsearch().getResultLimit());
+                discoveryProperties.getTextSearch().getEmbeddingModel().getKnnCandidates(),
+                discoveryProperties.getElasticsearch().getResultLimit());
     }
 
     /** Path B: always delegates to PostgreSQL filter query. */
     @Override
-    public List<Catalog> executeFilterQuery(QueryRequest req) throws Exception {
-        return pgEngine.executeFilterQuery(req);
+    public List<Catalog> executeFilterQuery(QueryRequest request) throws Exception {
+        return pgEngine.executeFilterQuery(request);
     }
 
     /** Path C: ES geo_shape spatial query on loc_{key}.geo fields. */
     @Override
     @SuppressWarnings("unchecked")
-    public List<Catalog> executeSpatialQuery(QueryRequest req) throws Exception {
+    public List<Catalog> executeSpatialQuery(QueryRequest request) throws Exception {
         Instant start = Instant.now();
         log.debug("event={}", LogEvent.ES_ENGINE_SPATIAL_START);
 
-        Optional<List<Query>> queriesOpt = spatialBuilder.buildGeoShapeQueries(req.spatial());
+        Optional<List<Query>> queriesOpt = spatialBuilder.buildGeoShapeQueries(request.spatial());
         if (queriesOpt.isEmpty()) {
             log.debug("event={} reason=no-valid-queries", LogEvent.ES_ENGINE_SPATIAL_SKIP);
             return List.of();
         }
 
-        String alias = props.getElasticsearch().getAliasName();
-        int limit    = props.getElasticsearch().getResultLimit();
+        String alias = discoveryProperties.getElasticsearch().getAliasName();
+        int limit    = discoveryProperties.getElasticsearch().getResultLimit();
 
-        boolean hasText = req.hasTextSearch();
+        boolean hasText = request.hasTextSearch();
         List<Query> geoQueries = queriesOpt.get();
 
         // ── Semantic search + spatial: KNN with geo_shape as knn.filter ──────
         if (hasText && embeddingClient.isPresent()) {
-            String text = req.textSearch();
+            String text = request.textSearch();
             String enriched = queryEnricher.isPresent() ? queryEnricher.get().enrich(text) : text;
             Optional<List<Float>> vecOpt = embeddingClient.get().embed(enriched);
             if (vecOpt.isEmpty()) {
@@ -107,8 +107,8 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                 return List.of();
             }
             List<Float> vec = vecOpt.get();
-            double minScore = props.getElasticsearch().getMinScore();
-            List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(req);
+            double minScore = discoveryProperties.getElasticsearch().getMinScore();
+            List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(request);
             log.debug("event={} alias={} k={} numCandidates={} geoFilters={} schemaFilters={}",
                     LogEvent.ES_ENGINE_SPATIAL_REQUEST, alias, limit, knnCandidates, geoQueries.size(), schemaFilters.size());
             if (!schemaFilters.isEmpty()) {
@@ -135,28 +135,28 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .map(h -> (Map<String, Object>) h.source())
                         .filter(Objects::nonNull)
                         .toList();
-                List<Catalog> catalogs = assembler.assemble(hits, req.transactionId());
+                List<Catalog> catalogs = assembler.assemble(hits, request.transactionId());
                 log.info("event={} catalogs={} durationMs={}",
                         LogEvent.ES_ENGINE_SPATIAL_DONE, catalogs.size(), elapsed(start));
                 return catalogs;
             } catch (ElasticsearchException e) {
-                return handleEsException(e, alias, req.transactionId());
+                return handleEsException(e, alias, request.transactionId());
             }
         }
 
         // ── BM25 text + spatial OR spatial only: geo_shape in bool.must ──────
         List<Query> mustQueries = new ArrayList<>(geoQueries);
-        List<Query> spatialSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(req);
+        List<Query> spatialSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(request);
         double applyMinScore = 0.0;
 
         if (hasText) {
-            String text = req.textSearch();
+            String text = request.textSearch();
             mustQueries.add(Query.of(q -> q.multiMatch(mm -> mm
                     .query(text)
                     .fields("full_text_blob", "resource_name^2")
                     .type(TextQueryType.BestFields)
                     .fuzziness("AUTO"))));
-            applyMinScore = props.getElasticsearch().getMinScore();
+            applyMinScore = discoveryProperties.getElasticsearch().getMinScore();
             log.debug("event={} schemaFilters={}", LogEvent.ES_ENGINE_SPATIAL_REQUEST, spatialSchemaFilters.size());
         } else {
             log.debug("event={} schemaFilters={}", LogEvent.ES_ENGINE_SPATIAL_REQUEST, spatialSchemaFilters.size());
@@ -189,13 +189,13 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                     .filter(Objects::nonNull)
                     .toList();
 
-            List<Catalog> catalogs = assembler.assemble(hits, req.transactionId());
+            List<Catalog> catalogs = assembler.assemble(hits, request.transactionId());
             log.info("event={} catalogs={} durationMs={}",
                     LogEvent.ES_ENGINE_SPATIAL_DONE, catalogs.size(), elapsed(start));
             return catalogs;
 
         } catch (ElasticsearchException e) {
-            return handleEsException(e, alias, req.transactionId());
+            return handleEsException(e, alias, request.transactionId());
         }
     }
 
@@ -204,7 +204,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
      * PG-filter ∥ ES-spatial fallback in {@code DiscoveryService}.
      */
     @Override
-    public Optional<List<Catalog>> executeCombinedQuery(QueryRequest req) throws Exception {
+    public Optional<List<Catalog>> executeCombinedQuery(QueryRequest request) throws Exception {
         return Optional.empty();
     }
 

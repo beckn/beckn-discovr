@@ -40,7 +40,7 @@ public class CatalogPushService {
      * FULL replace and MERGE operations are applied in arrival order.
      * The existing {@code CatalogPublishConsumer} consumes from this topic.
      */
-    public void processAsync(String rawBody) {
+    public void enqueueForProcessing(String rawBody) {
         String key = extractKafkaKey(rawBody);
         kafkaTemplate.send(ingestionTopic, key, rawBody).whenComplete((result, ex) -> {
             if (ex != null) {

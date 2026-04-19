@@ -145,7 +145,7 @@ public class BulkIndexService {
             if (item.error() != null) {
                 failed.add(new BulkIndexResult.FailedDoc(
                         extractResourceId(item.id()), extractCatalogId(item.id()), item.error().reason()));
-                metrics.incrementItemFailure();
+                metrics.incrementResourceFailure();
                 log.error("event={} docId={} reason={}", LogEvent.ES_FAILED, item.id(), item.error().reason());
             } else {
                 succeeded.add(item.id());
@@ -159,7 +159,7 @@ public class BulkIndexService {
         return docs.stream()
                 .map(d -> new BulkIndexResult.FailedDoc(
                         (String) d.get("resource_id"), (String) d.get("catalog_id"), reason))
-                .peek(d -> metrics.incrementItemFailure())
+                .peek(d -> metrics.incrementResourceFailure())
                 .toList();
     }
 

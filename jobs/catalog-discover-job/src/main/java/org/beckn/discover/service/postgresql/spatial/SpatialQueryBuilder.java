@@ -208,8 +208,8 @@ public class SpatialQueryBuilder {
     private int appendSpatialConditions(QueryTemplate template,
             List<DiscoverRequest.SpatialConstraint> constraints) {
         int added = 0;
-        for (DiscoverRequest.SpatialConstraint c : constraints) {
-            if (addCondition(template, c)) added++;
+        for (DiscoverRequest.SpatialConstraint constraint : constraints) {
+            if (addCondition(template, constraint)) added++;
         }
         return added;
     }

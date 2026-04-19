@@ -1,6 +1,6 @@
 package org.beckn.catalogpublish.dto;
 
 /**
- * Per-item processing error (itemId, code, sanitized message).
+ * Per-resource processing error (resourceId, code, sanitized message).
  */
-public record ProcessingError(String itemId, ProcessingErrorCode errorCode, String message) {}
+public record ProcessingError(@com.fasterxml.jackson.annotation.JsonAlias("itemId") String resourceId, ProcessingErrorCode errorCode, String message) {}

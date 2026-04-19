@@ -1,7 +1,7 @@
 package org.beckn.discover.common;
 
 /**
- * Beckn Protocol v2.0 field name constants.
+ * Beckn Protocol v2.1 field name constants.
  * Single source of truth for all JSON field names used across the job.
  * Use in @JsonProperty annotations, JsonNode path traversal, and test assertions.
  */
@@ -12,7 +12,7 @@ public final class BecknFields {
     public static final String CONTEXT         = "context";
     public static final String MESSAGE         = "message";
 
-    // ── Context fields (Beckn Protocol v2.0 camelCase) ───────────────────────
+    // ── Context fields (Beckn Protocol v2.1 camelCase) ───────────────────────
     public static final String DOMAIN          = "domain";
     public static final String ACTION          = "action";
     public static final String VERSION         = "version";
@@ -39,7 +39,7 @@ public final class BecknFields {
     public static final String AT_CONTEXT      = "@context";
     public static final String AT_TYPE         = "@type";
 
-    // ── Catalog / Item fields (v2.0 — no beckn: prefix) ─────────────────────
+    // ── Catalog / Resource fields (v2.1 — no beckn: prefix) ─────────────────
     public static final String ID              = "id";
     public static final String TYPE            = "type";
     public static final String OFFERS          = "offers";
@@ -51,7 +51,7 @@ public final class BecknFields {
     public static final String IMAGES          = "images";
     public static final String PROVIDER_ID     = "providerId";
 
-    // ── v2.0 Resource fields (alias for Item with resourceAttributes) ─────────
+    // ── v2.1 Resource fields ───────────────────────────────────────────────────
     public static final String RESOURCES           = "resources";
     public static final String RESOURCE_ATTRIBUTES = "resourceAttributes";
 
@@ -65,7 +65,7 @@ public final class BecknFields {
     public static final String SPATIAL         = "spatial";
     public static final String CATALOGS        = "catalogs";
 
-    // ── Action values (v2.0 slash notation) ─────────────────────────────────
+    // ── Action values (v2.1 slash notation) ─────────────────────────────────
     public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
     public static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
 

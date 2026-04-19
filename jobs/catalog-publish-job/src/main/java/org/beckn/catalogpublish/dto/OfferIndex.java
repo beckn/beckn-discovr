@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * O(1) per-item offer lookup; built once per catalog.
+ * O(1) per-resource offer lookup; built once per catalog.
  *
  * <p>2-way classification:
  * <ul>
@@ -33,11 +33,11 @@ public record OfferIndex(
         List<JsonNode> providerLevel = new ArrayList<>();
         Map<String, List<JsonNode>> byItemId = new HashMap<>();
         for (JsonNode offer : allOffers) {
-            JsonNode offerItems = offer.path(BecknFields.RESOURCE_IDS);
-            if (offerItems.isMissingNode() || !offerItems.isArray() || offerItems.isEmpty()) {
+            JsonNode resourceIdsNode = offer.path(BecknFields.RESOURCE_IDS);
+            if (resourceIdsNode.isMissingNode() || !resourceIdsNode.isArray() || resourceIdsNode.isEmpty()) {
                 providerLevel.add(offer);
             } else {
-                for (JsonNode idNode : offerItems) {
+                for (JsonNode idNode : resourceIdsNode) {
                     byItemId.computeIfAbsent(idNode.asText(), k -> new ArrayList<>()).add(offer);
                 }
             }
@@ -48,10 +48,10 @@ public record OfferIndex(
     }
 
     /**
-     * Returns ONLY item-specific offers for the given item ID.
+     * Returns ONLY resource-specific offers for the given resource ID.
      * Provider-level offers are NOT included — they are resolved at search time.
      */
-    public ArrayNode getOffersForItem(String itemId, ObjectMapper mapper) {
+    public ArrayNode getOffersForResource(String itemId, ObjectMapper mapper) {
         ArrayNode result = mapper.createArrayNode();
         offersByItemId.getOrDefault(itemId, List.of()).forEach(o -> result.add(stripNulls(o, mapper)));
         return result;

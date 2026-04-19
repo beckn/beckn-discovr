@@ -18,14 +18,14 @@ import static org.mockito.Mockito.verify;
 class EventCoordinatorTest {
 
     @Test
-    void schedulePostCommitPublish_alwaysPublishesCatalogPersistedEvent() {
+    void publishPersistedEvent_alwaysPublishesCatalogPersistedEvent() {
         ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
         EventCoordinator coordinator = new EventCoordinator(publisher);
         CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null, null);
         CatalogBatch batch = new CatalogBatch("c1", ctx, null, CatalogOperation.PUBLISH,
                 List.of(), List.of(), Map.of(), false);
 
-        coordinator.schedulePostCommitPublish(batch);
+        coordinator.publishPersistedEvent(batch);
 
         verify(publisher).publishEvent(any(CatalogPersistedEvent.class));
     }
