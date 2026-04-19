@@ -65,18 +65,18 @@ BAPs send `discover` requests → Discovr queries the catalog index → delivers
 
 ---
 
-## Beckn Protocol v2.1 — Applied (March 2026)
+## Beckn Protocol v2.0 — Applied
 
-All three jobs are fully migrated to Beckn Protocol v2.1. **No legacy v2.0/v1.0 support.**
+All three jobs are fully migrated to Beckn Protocol v2.0. **No legacy v1.0 support.**
 
 ### Context fields (camelCase, `additionalProperties: false`)
-`action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId` (uuid), `networkId` (String), `timestamp` (date-time), `transactionId` (uuid), `version` (const `"2.0.0"`), `ttl`, `try`, `lineage`. **No `domain`, `schemaContext`, `country`, `city` in context** — `schemaContext` moved to `message.intent`.
+`action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId` (uuid), `networkId` (String), `timestamp` (date-time), `transactionId` (uuid), `version` (const `"2.0.0"`). **No `domain`, `schemaContext`, `country`, `city` in context** — `schemaContext` moved to `message.intent`.
 
-### Resource fields (v2.1 — no `beckn:` prefix, no `items`)
+### Resource fields
 `id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`, `rating`, `category`. **No `@context`/`@type` on Resource itself — those belong only on `resourceAttributes`.** **No `items` array — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.** **No `networkId` on resources — only on context.**
 
 ### Offer fields
-`@type` (`"beckn:Offer"`), `id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`
+`id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`. **No `@context`/`@type` on Offer itself — those belong only on `offerAttributes`.**
 
 ### ACK/NACK format
 - ACK: `{"status":"ACK"}` — no transactionId, no timestamp
@@ -180,8 +180,6 @@ Every `MdcField.java` across all 6 Java jobs (Catalg + Discovr) declares ALL con
 | `messageId` | Beckn protocol request/response correlation | ALL |
 | `catalogId` | Which catalog is being processed | Discovr Publish |
 | `networkId` | Which network | ALL |
-| `bppId` | Publisher identity from Beckn context | Discovr Publish, Dispatcher |
-| `bapId` | Requester identity (BAP) | Discover |
 | `auth.subscriberId` | Org identity from auth header keyId first segment | ALL |
 | `auth.recordId` | Key identity from auth header keyId second segment | ALL |
 | `schemaType` | Resource `@type` | Discovr Publish |
@@ -226,7 +224,7 @@ Critical rules:
 - **No `Thread.sleep()` in tests** — use deadline-based poll loops from `BaseIntegrationTest`
 - **Validate callback URLs before HTTP POST** — SSRF risk
 - **No `new ObjectMapper()`** — inject Spring Boot's auto-configured bean
-- **Beckn v2.1 field names only** — `resources` not `items`, `resourceAttributes` not `itemAttributes`, `resourceIds` not `items` in offers, `networkId` only on context
+- **Beckn v2.0 field names only** — `resources` not `items`, `resourceAttributes` not `itemAttributes`, `resourceIds` not `items` in offers, `networkId` only on context
 - **No fabricated defaults** — don't default `@context`/`@type` on resourceAttributes; they're required publisher fields
 - **Topic names from `@ConfigurationProperties`** — never hardcoded string literals
 - **Kafka publish**: `kafkaTemplate.send().whenComplete(...)` — never `.get()`
