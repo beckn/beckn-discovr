@@ -123,6 +123,12 @@ public class HttpService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
+            // Propagate tags from MDC to outbound HTTP
+            String tags = org.slf4j.MDC.get("tags");
+            if (tags != null && !tags.isBlank()) {
+                headers.set("X-Tags", tags);
+            }
+
             // Add signature if enabled
             if (signingProperties.enabled()) {
                 log.info("{}", value("event", LogEvent.SIGNATURE_INIT),
@@ -233,7 +239,7 @@ public class HttpService {
     }
 
     /**
-     * Parses the Beckn v2.1 ACK/NACK response body.
+     * Parses the Beckn v2.0 ACK/NACK response body.
      */
     private void parseAckResponse(ResponseEntity<String> response, String targetUrl) {
         var statusCode = response.getStatusCode();

@@ -111,51 +111,6 @@ public class GeoShapeExtractor {
     }
 
     /**
-     * Converts "lat,lon" GPS string to GeoJSON Point.
-     */
-    private static Optional<Map<String, Object>> gpsToGeoJson(String gps, String path) {
-        try {
-            if (gps == null || gps.isBlank()) return Optional.empty();
-            String[] parts = gps.strip().split(",", 2);
-            if (parts.length != 2) return Optional.empty();
-            double lat = Double.parseDouble(parts[0].strip());
-            double lon = Double.parseDouble(parts[1].strip());
-            if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-                log.warn("event={} path={} gps={}", LogEvent.GEO_GPS_OUT_OF_RANGE, path, gps);
-                return Optional.empty();
-            }
-            Map<String, Object> point = new LinkedHashMap<>();
-            point.put("type", "Point");
-            point.put("coordinates", List.of(lon, lat));
-            return Optional.of(point);
-        } catch (NumberFormatException e) {
-            log.warn("event={} path={} gps={}", LogEvent.GEO_GPS_PARSE_FAILED, path, gps);
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * Converts polygon array ([[lon,lat],...]) to GeoJSON Polygon.
-     */
-    private static Optional<Map<String, Object>> polygonToGeoJson(JsonNode polygon, String path) {
-        try {
-            if (!polygon.isArray() || polygon.size() < 4) return Optional.empty();
-            List<List<Double>> ring = new ArrayList<>();
-            for (JsonNode point : polygon) {
-                if (!point.isArray() || point.size() < 2) return Optional.empty();
-                ring.add(List.of(point.get(0).asDouble(), point.get(1).asDouble()));
-            }
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("type", "Polygon");
-            result.put("coordinates", List.of(ring));
-            return Optional.of(result);
-        } catch (Exception e) {
-            log.warn("event={} path={} error={}", LogEvent.GEO_POLYGON_PARSE_FAILED, path, e.getMessage());
-            return Optional.empty();
-        }
-    }
-
-    /**
      * Normalizes a full JSON path to an ES field name.
      * Works for location fields anywhere in the payload — items, offers, or any custom field.
      *
