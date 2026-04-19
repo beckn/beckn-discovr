@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * MDC population and clear for trace context (messageId, bppId, transactionId, networkId).
+ * MDC population and clear for trace context (messageId, transactionId, networkId, catalogId).
  * MDC is populated once from the parsed context so no double-parse occurs.
  */
 @Component
@@ -35,23 +35,11 @@ public class CorrelationContext {
             MDC.put(MdcField.NETWORK_ID, networkIds.get(0));
         }
         if (ctx.contextNode() != null) {
-            String bppId = ctx.contextNode().path("bppId").asText(null);
-            if (bppId != null && !bppId.isBlank()) {
-                MDC.put(MdcField.BPP_ID, bppId);
-            } else {
-                MDC.remove(MdcField.BPP_ID);
-            }
             String catalogId = ctx.contextNode().path("catalogId").asText(null);
             if (catalogId != null && !catalogId.isBlank()) {
                 MDC.put(MdcField.CATALOG_ID, catalogId);
             } else {
                 MDC.remove(MdcField.CATALOG_ID);
-            }
-            String bapId = ctx.contextNode().path("bapId").asText(null);
-            if (bapId != null && !bapId.isBlank()) {
-                MDC.put(MdcField.BAP_ID, bapId);
-            } else {
-                MDC.remove(MdcField.BAP_ID);
             }
             // auth.subscriberId — org-level identity from auth header, injected by Catalg API
             String subscriberId = ctx.subscriberId();
@@ -75,9 +63,7 @@ public class CorrelationContext {
                 MDC.remove(MdcField.PUBLISH_TIMESTAMP);
             }
         } else {
-            MDC.remove(MdcField.BPP_ID);
             MDC.remove(MdcField.CATALOG_ID);
-            MDC.remove(MdcField.BAP_ID);
             MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
             MDC.remove(MdcField.AUTH_RECORD_ID);
             MDC.remove(MdcField.PUBLISH_TIMESTAMP);
@@ -92,9 +78,7 @@ public class CorrelationContext {
     public void populateFallback() {
         MDC.remove(MdcField.MESSAGE_ID);
         MDC.remove(MdcField.TRANSACTION_ID);
-        MDC.remove(MdcField.BPP_ID);
         MDC.remove(MdcField.CATALOG_ID);
-        MDC.remove(MdcField.BAP_ID);
         MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
         MDC.remove(MdcField.AUTH_RECORD_ID);
         MDC.remove(MdcField.PUBLISH_TIMESTAMP);
