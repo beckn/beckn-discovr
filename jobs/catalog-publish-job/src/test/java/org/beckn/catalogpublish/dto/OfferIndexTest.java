@@ -59,7 +59,7 @@ class OfferIndexTest {
     }
 
     @Test
-    void getOffersForItem_returnsOnlyItemSpecificOffers() throws Exception {
+    void getOffersForResource_returnsOnlyItemSpecificOffers() throws Exception {
         JsonNode offers = mapper.readTree("""
                 [
                   {"id": "o-item", "resourceIds": ["r1"]},
@@ -68,11 +68,11 @@ class OfferIndexTest {
                 """);
         var index = OfferIndex.build(offers, mapper);
 
-        ArrayNode forR1 = index.getOffersForItem("r1", mapper);
+        ArrayNode forR1 = index.getOffersForResource("r1", mapper);
         assertThat(forR1).hasSize(1);
         assertThat(forR1.get(0).path("id").asText()).isEqualTo("o-item");
 
-        ArrayNode forUnknown = index.getOffersForItem("unknown-item", mapper);
+        ArrayNode forUnknown = index.getOffersForResource("unknown-item", mapper);
         assertThat(forUnknown).isEmpty();
     }
 
@@ -107,14 +107,14 @@ class OfferIndexTest {
     }
 
     @Test
-    void getOffersForItem_stripsNullFields() throws Exception {
+    void getOffersForResource_stripsNullFields() throws Exception {
         JsonNode offers = mapper.readTree("""
                 [
                   {"id": "o1", "resourceIds": ["r1"], "discount": null, "name": "valid"}
                 ]
                 """);
         var index = OfferIndex.build(offers, mapper);
-        ArrayNode result = index.getOffersForItem("r1", mapper);
+        ArrayNode result = index.getOffersForResource("r1", mapper);
 
         assertThat(result).hasSize(1);
         JsonNode offer = result.get(0);

@@ -824,13 +824,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Map<String, Object> row1 = new HashMap<>();
         row1.put("id", "item-1");
         row1.put("catalog_id", catalogId);
-        row1.put("item_payload", objectMapper.readTree("{\"catalogs\": [" + item1Json + "]}"));
+        row1.put("resource_payload", objectMapper.readTree("{\"catalogs\": [" + item1Json + "]}"));
         rows.add(row1);
 
         Map<String, Object> row2 = new HashMap<>();
         row2.put("id", "item-2");
         row2.put("catalog_id", catalogId);
-        row2.put("item_payload", objectMapper.readTree("{\"catalogs\": [" + item2Json + "]}"));
+        row2.put("resource_payload", objectMapper.readTree("{\"catalogs\": [" + item2Json + "]}"));
         rows.add(row2);
 
         DiscoverRequest requestContext = new DiscoverRequest();
@@ -1363,18 +1363,18 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 String offerId = (String) offer.get("id");
 
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("resourceIds");
+                List<String> offerResourceIds = (List<String>) offer.get("resourceIds");
 
-                Assertions.assertThat(offerItemIds)
+                Assertions.assertThat(offerResourceIds)
                         .as("Offer %s must have resourceIds array", offerId)
                         .isNotNull()
                         .isNotEmpty();
 
-                // Assert: All offer item references are valid (exist in returned items)
-                for (String offerItemId : offerItemIds) {
+                // Assert: All offer resource references are valid (exist in returned resources)
+                for (String offerResourceId : offerResourceIds) {
                     Assertions.assertThat(returnedItemIds)
-                            .as("Offer %s references item %s which must be in catalog", offerId, offerItemId)
-                            .contains(offerItemId);
+                            .as("Offer %s references resource %s which must be in catalog", offerId, offerResourceId)
+                            .contains(offerResourceId);
                 }
             }
         }
@@ -1519,13 +1519,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
                 
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("resourceIds");
+                List<String> offerResourceIds = (List<String>) offer.get("resourceIds");
 
-                // Assert: Offer items belong to this catalog
-                for (String offerItemId : offerItemIds) {
+                // Assert: Offer resources belong to this catalog
+                for (String offerResourceId : offerResourceIds) {
                     Assertions.assertThat(catalogItemIds)
-                            .as("Offer item %s must belong to catalog %s", offerItemId, catalog.getId())
-                            .contains(offerItemId);
+                            .as("Offer resource %s must belong to catalog %s", offerResourceId, catalog.getId())
+                            .contains(offerResourceId);
                 }
             }
         }

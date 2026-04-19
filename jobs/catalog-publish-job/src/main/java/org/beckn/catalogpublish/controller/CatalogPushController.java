@@ -71,7 +71,7 @@ public class CatalogPushController {
         }
 
         log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
-        pushService.processAsync(rawBody);
+        pushService.enqueueForProcessing(rawBody);
 
         return ResponseEntity.accepted().body(ACK_RESPONSE);
     }

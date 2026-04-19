@@ -20,22 +20,22 @@ class ResultStepTest {
     private final ResultStep resultStep = new ResultStep();
 
     @Test
-    void buildResult_successWhenItemsSaved() {
+    void toProcessingResult_successWhenItemsSaved() {
         CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null, null);
         Item item = Item.from("i1", "{}", new String[0], null, "sub-1", "c1", null, null, new String[0]);
         CatalogBatch batch = new CatalogBatch("c1", ctx, null, CatalogOperation.PUBLISH, List.of(item), List.of(),
                 Map.of(), false);
-        ProcessingResult result = resultStep.buildResult(batch);
+        ProcessingResult result = resultStep.toProcessingResult(batch);
         assertThat(result).isInstanceOf(ProcessingResult.Success.class);
         assertThat(result.status()).isEqualTo(ProcessingStatus.ACCEPTED);
     }
 
     @Test
-    void buildResult_rejectedWhenNoItemsSavedAndHasErrors() {
+    void toProcessingResult_rejectedWhenNoItemsSavedAndHasErrors() {
         CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null, null);
         CatalogBatch batch = new CatalogBatch("c1", ctx, null, CatalogOperation.PUBLISH, List.of(),
                 List.of(new ProcessingError("i1", ProcessingErrorCode.NET_INTERNAL_ERROR, "err")), Map.of(), false);
-        ProcessingResult result = resultStep.buildResult(batch);
+        ProcessingResult result = resultStep.toProcessingResult(batch);
         assertThat(result).isInstanceOf(ProcessingResult.Rejected.class);
     }
 }

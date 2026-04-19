@@ -24,7 +24,7 @@ import java.util.Set;
  * (one row per offer, not stamped into each item) and resolved at search time.</p>
  *
  * <p>This enricher runs AFTER the {@link org.beckn.discover.service.response.CatalogPipeline}
- * so that {@code filterOffersByItemIds} never sees provider offers (they have no resourceIds
+ * so that {@code filterOffersByResourceIds} never sees provider offers (they have no resourceIds
  * and would be incorrectly filtered out).</p>
  */
 @Component
@@ -72,10 +72,13 @@ public class ProviderOfferEnricher {
             List<Object> providerOffers = offersByProviderId.get(providerId);
             if (providerOffers == null || providerOffers.isEmpty()) continue;
 
-            if (catalog.getOffers() == null) {
-                catalog.setOffers(new ArrayList<>());
-            }
-            catalog.getOffers().addAll(providerOffers);
+            // Build a mutable copy — catalog.getOffers() may be an immutable
+            // list produced by CatalogPipeline (Stream.toList()).
+            List<Object> merged = catalog.getOffers() != null
+                    ? new ArrayList<>(catalog.getOffers())
+                    : new ArrayList<>();
+            merged.addAll(providerOffers);
+            catalog.setOffers(merged);
             totalAppended += providerOffers.size();
         }
 

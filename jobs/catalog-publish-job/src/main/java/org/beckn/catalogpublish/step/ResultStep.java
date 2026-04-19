@@ -8,11 +8,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class ResultStep {
 
-    public ProcessingResult buildResult(CatalogBatch batch) {
-        if (batch.savedItems().isEmpty() && batch.hasErrors()) {
+    public ProcessingResult toProcessingResult(CatalogBatch batch) {
+        if (batch.savedResources().isEmpty() && batch.hasErrors()) {
             return ProcessingResult.rejected(
                     batch.catalogId(),
-                    new CatalogPublishException("All items failed: " + batch.errorCount() + " errors"));
+                    new CatalogPublishException("All resources failed: " + batch.errorCount() + " errors"));
         }
         return ProcessingResult.success(batch.catalogId(), batch);
     }

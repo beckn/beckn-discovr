@@ -18,7 +18,7 @@ import java.util.List;
 @Component
 public class JsonPathQueryBuilder {
 
-    private static final Logger logger = LoggerFactory.getLogger(JsonPathQueryBuilder.class);
+    private static final Logger log = LoggerFactory.getLogger(JsonPathQueryBuilder.class);
 
     private final JsonPathConverter jsonPathConverter;
 
@@ -43,7 +43,7 @@ public class JsonPathQueryBuilder {
                 .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
                 .schemaFilters(schemaTypes, schemaContextUrls)
                 .build(limit);
-        logger.debug("Built JSONPath query with {} parameters, limit {}", query.parameters().size(), limit);
+        log.debug("Built JSONPath query with {} parameters, limit {}", query.parameters().size(), limit);
         return query;
     }
 
@@ -59,15 +59,15 @@ public class JsonPathQueryBuilder {
     /** Wraps a processed JSONPath expression into PostgreSQL's exists() syntax (for non-selection filters). */
     private static String toPostgresFilter(String processedFilter) {
         if (processedFilter == null || processedFilter.trim().isEmpty()) {
-            logger.debug("No filter provided, using default exists path");
+            log.debug("No filter provided, using default exists path");
             return QueryBuilderHelper.JSONPATH_EXISTS_ALL;
         }
         if (processedFilter.trim().startsWith("$")) {
-            logger.debug("Using absolute PostgreSQL JSONPath: {}", processedFilter);
+            log.debug("Using absolute PostgreSQL JSONPath: {}", processedFilter);
             return String.format(QueryBuilderHelper.JSONPATH_EXISTS_PATH, processedFilter);
         }
         String fullPath = String.format(QueryBuilderHelper.JSONPATH_EXISTS_CONDITION, processedFilter);
-        logger.debug("Generated PostgreSQL JSONPath: {}", fullPath);
+        log.debug("Generated PostgreSQL JSONPath: {}", fullPath);
         return fullPath;
     }
 }

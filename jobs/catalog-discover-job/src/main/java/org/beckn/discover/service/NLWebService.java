@@ -27,7 +27,7 @@ import java.time.Duration;
  * and no connection to the NLWeb service is attempted.</p>
  *
  * <p>{@code @Retryable} retries on I/O errors and 5xx responses.
- * Callers (e.g. {@code DiscoveryService.pathD}) must submit this call to a
+ * Callers (e.g. {@code DiscoveryService.executeTextSearchQuery}) must submit this call to a
  * bounded I/O executor ({@code discoveryQueryExecutor}) so servlet threads
  * are not blocked during the HTTP round-trip.</p>
  */
@@ -35,7 +35,7 @@ import java.time.Duration;
 @ConditionalOnProperty(name = "discovery.text-search.engine", havingValue = "nlweb")
 public class NLWebService {
 
-    private static final Logger logger = LoggerFactory.getLogger(NLWebService.class);
+    private static final Logger log = LoggerFactory.getLogger(NLWebService.class);
     private static final int MAX_RETRIES = 3;
 
     private final DiscoveryProperties discoveryProperties;
@@ -56,7 +56,7 @@ public class NLWebService {
                 .requestFactory(factory)
                 .build();
 
-        logger.info("NLWeb RestClient initialised with baseUrl: {}", baseUrl);
+        log.info("NLWeb RestClient initialised with baseUrl: {}", baseUrl);
     }
 
     /**
@@ -78,13 +78,13 @@ public class NLWebService {
             throw new IllegalArgumentException("Text search query cannot be null or empty");
         }
 
-        logger.debug("Querying NLWeb service with query: {}", textSearch);
+        log.debug("Querying NLWeb service with query: {}", textSearch);
 
         NLWebRequest request = new NLWebRequest(textSearch);
         String askEndpoint = discoveryProperties.getNlweb().getAskEndpoint();
         boolean streaming  = discoveryProperties.getNlweb().isStreaming();
 
-        logger.debug("Making request to NLWeb path: {}, streaming: {}", askEndpoint, streaming);
+        log.debug("Making request to NLWeb path: {}, streaming: {}", askEndpoint, streaming);
 
         String response = nlWebClient.post()
                 .uri(uriBuilder -> uriBuilder
@@ -97,7 +97,7 @@ public class NLWebService {
                 .retrieve()
                 .body(String.class);
 
-        logger.info("Successfully received response from NLWeb service");
+        log.info("Successfully received response from NLWeb service");
         return response;
     }
 }

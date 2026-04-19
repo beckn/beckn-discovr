@@ -47,7 +47,7 @@ public class ItemPayloadBuilder {
 
     public JsonNode buildDenormalizedPayloadFromSlice(
             ObjectNode baseSlice, JsonNode itemNode, OfferIndex offerIndex, String itemId) {
-        ArrayNode itemOffers = offerIndex.getOffersForItem(itemId, objectMapper);
+        ArrayNode itemOffers = offerIndex.getOffersForResource(itemId, objectMapper);
         ObjectNode itemSlice = baseSlice.deepCopy();
         itemSlice.set(BecknFields.RESOURCES, wrapInArray(itemNode));
         itemSlice.set(BecknFields.OFFERS, itemOffers);

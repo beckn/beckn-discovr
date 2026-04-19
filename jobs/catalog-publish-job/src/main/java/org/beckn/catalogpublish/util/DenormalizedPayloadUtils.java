@@ -19,7 +19,7 @@ public final class DenormalizedPayloadUtils {
      * @param root denormalized payload root (has "catalogs" array)
      * @return first resource node, or null if missing or empty
      */
-    public static JsonNode getFirstItemNode(JsonNode root) {
+    public static JsonNode getFirstResourceNode(JsonNode root) {
         if (root == null || root.isMissingNode())
             return null;
         JsonNode catalogs = root.path(BecknFields.CATALOGS);
