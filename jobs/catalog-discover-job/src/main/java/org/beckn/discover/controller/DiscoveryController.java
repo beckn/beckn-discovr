@@ -3,10 +3,13 @@ package org.beckn.discover.controller;
 import java.nio.charset.StandardCharsets;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.logging.MdcField;
 import org.beckn.discover.model.AckResponse;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
@@ -15,6 +18,7 @@ import org.beckn.discover.service.validation.DiscoveryValidationService;
 import org.beckn.discover.service.authorization.AuthorizationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -177,7 +181,13 @@ public class DiscoveryController {
             final String logTxnId = transactionId;
             final String logMsgId = messageId;
             try {
-                kafkaTemplate.send(requestTopic, kafkaKey, rawBody)
+                var kafkaHeaders = new RecordHeaders();
+                addHeaderIfPresent(kafkaHeaders, "subscriber_id", MDC.get(MdcField.AUTH_SUBSCRIBER_ID));
+                addHeaderIfPresent(kafkaHeaders, "record_id", MDC.get(MdcField.AUTH_RECORD_ID));
+                addHeaderIfPresent(kafkaHeaders, "tags", MDC.get(MdcField.TAGS));
+
+                var record = new ProducerRecord<>(requestTopic, null, kafkaKey, rawBody, kafkaHeaders);
+                kafkaTemplate.send(record)
                         .whenComplete((result, ex) -> {
                             if (ex != null) {
                                 log.error(LogEvent.KAFKA_QUEUE_FAILED,
@@ -201,11 +211,6 @@ public class DiscoveryController {
                         value("topic", requestTopic),
                         value("error", kafkaEx.getMessage()));
             }
-
-            log.info(LogEvent.KAFKA_QUEUED,
-                    value("transactionId", transactionId),
-                    value("messageId", messageId),
-                    value("topic", requestTopic));
 
             return ResponseEntity.ok(AckResponse.ack());
         } finally {
@@ -231,5 +236,11 @@ public class DiscoveryController {
     private static String truncate(String s, int maxLen) {
         if (s == null) return null;
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...[truncated]";
+    }
+
+    private static void addHeaderIfPresent(RecordHeaders headers, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            headers.add(key, value.getBytes(StandardCharsets.UTF_8));
+        }
     }
 }

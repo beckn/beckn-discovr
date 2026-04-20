@@ -6,10 +6,12 @@ import org.beckn.auth.crypto.CryptoService;
 import org.beckn.auth.exception.BecknAuthException;
 import org.beckn.auth.logging.Logger;
 import org.beckn.auth.model.ParsedAuthHeader;
+import org.beckn.auth.model.VerificationResult;
 import org.beckn.auth.signing.SignatureHeaderBuilder;
 import org.beckn.auth.util.ErrorCodes;
 import org.beckn.auth.util.ErrorMessages;
 import org.beckn.auth.verification.AuthHeaderParser;
+import org.beckn.auth.verification.RegistryEntry;
 import org.beckn.auth.verification.RegistryService;
 
 import java.security.PrivateKey;
@@ -21,7 +23,7 @@ import java.time.Instant;
  * <p>
  * Provides two core operations:
  * <ul>
- * <li>{@link #generateAuthHeader(String)} — Signs an outgoing request body and
+ * <li>{@link #signPayload(String)} — Signs an outgoing request body and
  * returns the complete {@code Authorization} header value.</li>
  * <li>{@link #verifySignature(String, String)} — Verifies an incoming
  * request's {@code Authorization} or {@code X-Gateway-Authorization} header.</li>
@@ -50,7 +52,7 @@ import java.time.Instant;
  *     .privateKey("Base64EncodedKey")
  *     .build());
  *
- * String authHeader = auth.generateAuthHeader(rawJsonBody);
+ * String authHeader = auth.signPayload(rawJsonBody);
  * }</pre>
  *
  * <h3>Usage — Verification</h3>
@@ -146,7 +148,7 @@ public final class BecknAuth {
      * @throws BecknAuthException with {@code INTERNAL_ERROR} (500) if signing is
      *                            not configured or signing fails
      */
-    public String generateAuthHeader(String rawRequestBody) {
+    public String signPayload(String rawRequestBody) {
         BecknContext ctx = extractContext(rawRequestBody);
 
         logger.info("[SIGNING] STARTED | txnId: " + ctx.transactionId() + " | msgId: " + ctx.messageId());
@@ -215,8 +217,8 @@ public final class BecknAuth {
      *                            {@code X-Gateway-Authorization} header value
      * @param rawRequestBody      the exact unmodified raw request body received
      *                            over the wire
-     * @return the parsed header containing subscriberId, uniqueKeyId, algorithm,
-     *         timestamps
+     * @return a {@link VerificationResult} containing the parsed header and the
+     *         subscriber's canonical URL from the DeDi registry
      * @throws BecknAuthException with {@code INTERNAL_ERROR} (500) if verification
      *                            is not configured
      * @throws BecknAuthException with {@code SEC_SIGNATURE_MISSING} (400) if header
@@ -228,7 +230,7 @@ public final class BecknAuth {
      * @throws BecknAuthException with {@code SEC_KEY_EXPIRED_OR_REVOKED} (401) if
      *                            key state is not live
      */
-    public ParsedAuthHeader verifySignature(String authorizationHeader, String rawRequestBody) {
+    public VerificationResult verifySignature(String authorizationHeader, String rawRequestBody) {
         BecknContext ctx = extractContext(rawRequestBody);
 
         logger.info("[VERIFICATION] STARTED | txnId: " + ctx.transactionId() + " | msgId: " + ctx.messageId());
@@ -245,14 +247,20 @@ public final class BecknAuth {
 
         try {
             ParsedAuthHeader parsedHeader = parseAndValidateHeader(authorizationHeader, ctx);
-            PublicKey signerPublicKey = fetchSignerPublicKey(parsedHeader, ctx);
-            verifyBodySignature(parsedHeader, rawRequestBody, signerPublicKey, authorizationHeader, ctx);
+            var registryEntry = registryService.getRegistryEntry(
+                    parsedHeader.subscriberId(), parsedHeader.uniqueKeyId());
+            logger.info("[VERIFICATION] Public key resolved"
+                    + " | txnId: " + ctx.transactionId()
+                    + " | msgId: " + ctx.messageId()
+                    + " | subscriber: " + parsedHeader.subscriberId());
+            verifyBodySignature(parsedHeader, rawRequestBody, registryEntry.publicKey(), authorizationHeader, ctx);
 
             logger.info("[VERIFICATION] SUCCESS"
                     + " | txnId: " + ctx.transactionId()
                     + " | msgId: " + ctx.messageId()
-                    + " | subscriber: " + parsedHeader.subscriberId());
-            return parsedHeader;
+                    + " | subscriber: " + parsedHeader.subscriberId()
+                    + " | subscriberUrl: " + registryEntry.subscriberUrl());
+            return new VerificationResult(parsedHeader, registryEntry.subscriberUrl());
 
         } catch (BecknAuthException exception) {
             logger.error("[VERIFICATION] FAILED"
@@ -271,6 +279,29 @@ public final class BecknAuth {
                     + " | error: " + exception.getMessage(), exception);
             throw BecknAuthException.internalError(ErrorMessages.INTERNAL_SERVER_ERROR, exception);
         }
+    }
+
+    // ─── Registry Lookup ───────────────────────────────────────────────────────
+
+    /**
+     * Returns the cached {@link RegistryEntry} (public key + subscriber URL)
+     * for the given subscriber, fetching from the DeDi registry on cache miss.
+     * <p>
+     * Use this for direct lookups without verifying a signature — e.g. resolving
+     * a subscriber's callback URL when creating subscriptions or before delivery.
+     * </p>
+     *
+     * @param subscriberId the subscriber ID
+     * @param uniqueKeyId  the unique key ID
+     * @return the registry entry containing public key and subscriber URL
+     * @throws BecknAuthException if verification is not configured or registry lookup fails
+     */
+    public RegistryEntry getRegistryEntry(String subscriberId, String uniqueKeyId) {
+        if (registryService == null) {
+            throw BecknAuthException.internalError(
+                    "Registry lookup not configured: registryBaseUrl and registryName are required");
+        }
+        return registryService.getRegistryEntry(subscriberId, uniqueKeyId);
     }
 
     // ─── Lifecycle ──────────────────────────────────────────────────────────────
@@ -324,19 +355,6 @@ public final class BecknAuth {
                 + " | subscriber: " + parsedHeader.subscriberId()
                 + " | keyId: " + parsedHeader.uniqueKeyId());
         return parsedHeader;
-    }
-
-    /**
-     * Fetches the signer's Ed25519 public key from the registry (or cache).
-     */
-    private PublicKey fetchSignerPublicKey(ParsedAuthHeader parsedHeader, BecknContext ctx) {
-        PublicKey signerPublicKey = registryService.getPublicKey(
-                parsedHeader.subscriberId(), parsedHeader.uniqueKeyId());
-        logger.info("[VERIFICATION] Public key resolved"
-                + " | txnId: " + ctx.transactionId()
-                + " | msgId: " + ctx.messageId()
-                + " | subscriber: " + parsedHeader.subscriberId());
-        return signerPublicKey;
     }
 
     /**
