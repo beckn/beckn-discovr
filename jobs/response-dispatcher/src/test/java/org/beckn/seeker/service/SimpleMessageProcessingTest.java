@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,10 +45,10 @@ class SimpleMessageProcessingTest {
             """;
 
         // Mock successful HTTP call
-        when(httpService.sendCallback(anyString())).thenReturn(true);
+        when(httpService.sendCallback(anyString(), isNull(), isNull())).thenReturn(true);
 
         // When
-        String result = messageProcessingService.processMessage(discoveryResponse);
+        String result = messageProcessingService.processMessage(discoveryResponse, null, null);
 
         // Then
         assertThat(result).isEqualTo("SUCCESS");
@@ -70,10 +71,10 @@ class SimpleMessageProcessingTest {
             """;
 
         // Mock failed HTTP call
-        when(httpService.sendCallback(anyString())).thenReturn(false);
+        when(httpService.sendCallback(anyString(), isNull(), isNull())).thenReturn(false);
 
         // When & Then
-        assertThatThrownBy(() -> messageProcessingService.processMessage(discoveryResponse))
+        assertThatThrownBy(() -> messageProcessingService.processMessage(discoveryResponse, null, null))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("Failed to send callback response");
     }
@@ -81,7 +82,7 @@ class SimpleMessageProcessingTest {
     @Test
     void shouldThrowExceptionForNullMessage() {
         // When & Then
-        assertThatThrownBy(() -> messageProcessingService.processMessage(null))
+        assertThatThrownBy(() -> messageProcessingService.processMessage(null, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Message cannot be null");
     }
