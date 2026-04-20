@@ -22,6 +22,11 @@ public final class LogEvent {
     public static final String SIGNATURE_GENERATED = "signature.generated";
     public static final String SIGNATURE_FAILED    = "signature.failed";
 
+    // Registry resolution
+    public static final String REGISTRY_RESOLVED = "registry.resolved";
+    public static final String REGISTRY_FAILED   = "registry.failed";
+    public static final String SSRF_BLOCKED      = "ssrf.blocked";
+
     // Dead-letter topic
     public static final String DLT_SENT   = "dlt.sent";
     public static final String DLT_FAILED = "dlt.failed";

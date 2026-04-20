@@ -76,7 +76,8 @@ public class AuthorizationService {
         String authHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
         logger.info("{}", LogEvent.AUTH_VERIFY_START);
         try {
-            var parsed = becknAuth.verifySignature(authHeader, rawBody);
+            var result = becknAuth.verifySignature(authHeader, rawBody);
+            var parsed = result.parsedHeader();
             logger.info("{} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, parsed.subscriberId());
             BecknMdcContext.setAuthFields(parsed.subscriberId(), parsed.uniqueKeyId());
         } catch (BecknAuthException e) {

@@ -2,6 +2,8 @@ package org.beckn.discover.consumer;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.logging.BecknMdcContext;
@@ -10,6 +12,10 @@ import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
+
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,7 +84,9 @@ public class DiscoveryEventConsumer {
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             @Header(KafkaHeaders.RECEIVED_TIMESTAMP) long timestamp,
-            @Header(value = "tags", required = false) byte[] tagsHeader) {
+            @Header(value = "tags", required = false) byte[] tagsHeader,
+            @Header(value = "subscriber_id", required = false) byte[] subscriberIdHeader,
+            @Header(value = "record_id", required = false) byte[] recordIdHeader) {
 
         BecknMdcContext.setTags(tagsHeader);
 
@@ -127,7 +135,7 @@ public class DiscoveryEventConsumer {
             // Publish the response BEFORE acknowledging so that a publish failure keeps
             // the message un-acked and allows the container error handler to retry/DLT it.
             // If we ack first and publish fails, the BAP never receives its callback.
-            publishResponse(response, discoverRequest);
+            publishResponse(response, discoverRequest, subscriberIdHeader, recordIdHeader);
 
             acknowledgment.acknowledge();
             log.info(LogEvent.QUERY_COMPLETED,
@@ -158,7 +166,8 @@ public class DiscoveryEventConsumer {
      * warning and the method returns normally (misconfiguration is an ops issue,
      * not a message-level retry candidate).</p>
      */
-    private void publishResponse(DiscoverResponse response, DiscoverRequest request) {
+    private void publishResponse(DiscoverResponse response, DiscoverRequest request,
+                                  byte[] subscriberIdHeader, byte[] recordIdHeader) {
         String responseTopic = discoveryProperties.getKafka().getResponseTopic();
         if (responseTopic == null || responseTopic.isBlank()) {
             log.warn(LogEvent.RESPONSE_PUBLISH_FAILED,
@@ -168,9 +177,23 @@ public class DiscoveryEventConsumer {
         String transactionId = request.getContext() != null ? request.getContext().getTransactionId() : null;
         try {
             String responseJson = objectMapper.writeValueAsString(response);
+
+            var headers = new RecordHeaders();
+            if (subscriberIdHeader != null) {
+                headers.add("subscriber_id", subscriberIdHeader);
+            }
+            if (recordIdHeader != null) {
+                headers.add("record_id", recordIdHeader);
+            }
+            String tags = org.slf4j.MDC.get("tags");
+            if (tags != null && !tags.isBlank()) {
+                headers.add("tags", tags.getBytes(StandardCharsets.UTF_8));
+            }
+
+            var record = new ProducerRecord<>(responseTopic, null, transactionId, responseJson, headers);
             // Block until Kafka broker confirms receipt so that any send failure propagates
-            // before the inbound offset is acknowledged.
-            kafkaTemplate.send(responseTopic, transactionId, responseJson).get();
+            // before the inbound offset is acknowledged. Timeout prevents indefinite hang.
+            kafkaTemplate.send(record).get(30, TimeUnit.SECONDS);
             log.info(LogEvent.RESPONSE_PUBLISHED,
                     value("topic", responseTopic));
         } catch (InterruptedException e) {
@@ -179,6 +202,12 @@ public class DiscoveryEventConsumer {
                     value("topic", responseTopic),
                     e);
             throw new RuntimeException("Interrupted while publishing response", e);
+        } catch (TimeoutException e) {
+            log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
+                    value("topic", responseTopic),
+                    value("reason", "publish timed out after 30s"),
+                    e);
+            throw new RuntimeException("Kafka publish timed out", e);
         } catch (Exception e) {
             log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),

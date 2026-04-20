@@ -55,13 +55,13 @@ class EventListenerTest {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 "catalog.discovery.response", 0, 0L, "original-key", testMessage);
 
-        when(messageProcessingService.processMessage(testMessage)).thenReturn(processedResult);
+        when(messageProcessingService.processMessage(eq(testMessage), isNull(), isNull())).thenReturn(processedResult);
 
         // When
         eventListener.listen(record, acknowledgment);
 
         // Then
-        verify(messageProcessingService).processMessage(testMessage);
+        verify(messageProcessingService).processMessage(eq(testMessage), isNull(), isNull());
         verify(acknowledgment).acknowledge();
         verifyNoMoreInteractions(eventProducer);
     }
@@ -86,13 +86,13 @@ class EventListenerTest {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 "catalog.discovery.response", 0, 0L, null, testMessage);
 
-        when(messageProcessingService.processMessage(testMessage)).thenReturn(processedResult);
+        when(messageProcessingService.processMessage(eq(testMessage), isNull(), isNull())).thenReturn(processedResult);
 
         // When
         eventListener.listen(record, acknowledgment);
 
         // Then
-        verify(messageProcessingService).processMessage(testMessage);
+        verify(messageProcessingService).processMessage(eq(testMessage), isNull(), isNull());
         verify(acknowledgment).acknowledge();
     }
 
@@ -117,13 +117,13 @@ class EventListenerTest {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 "catalog.discovery.response", 1, 5L, "test-key", testMessage);
 
-        when(messageProcessingService.processMessage(testMessage)).thenThrow(processingException);
+        when(messageProcessingService.processMessage(eq(testMessage), isNull(), isNull())).thenThrow(processingException);
 
         // When
         eventListener.listen(record, acknowledgment);
 
         // Then
-        verify(messageProcessingService).processMessage(testMessage);
+        verify(messageProcessingService).processMessage(eq(testMessage), isNull(), isNull());
         verify(eventProducer).sendToDlt(
                 "test-key",
                 testMessage,
@@ -143,7 +143,7 @@ class EventListenerTest {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 "test-topic", 0, 0L, "test-key", null);
 
-        when(messageProcessingService.processMessage(null))
+        when(messageProcessingService.processMessage(isNull(), isNull(), isNull()))
                 .thenThrow(new IllegalArgumentException("Message cannot be null"));
 
         // When
