@@ -293,6 +293,9 @@ services:
       - TOPICS_DLT=discovr.dispatcher.dlt.responses
       - SPRING_KAFKA_CONSUMER_GROUP_ID=seeker-notifier-group
       - SPRING_KAFKA_LISTENER_CONCURRENCY=1
+      # DeDi Registry — callback URL resolution (resolves subscriber base URL at delivery time)
+      - REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - REGISTRY_NAME=subscribers.beckn.one
       # Beckn HTTP Signature — outgoing signing for on_discover callbacks to BAP
       # Set SIGNING_ENABLED=true and provide key details to sign outbound callbacks
       - SIGNING_ENABLED=false

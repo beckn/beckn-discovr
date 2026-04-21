@@ -33,9 +33,9 @@ import static net.logstash.logback.argument.StructuredArguments.value;
 /**
  * Service for sending HTTP requests to BAP/BPP endpoints.
  *
- * <p>Resolves callback URLs from the DeDi Registry via {@link BecknAuth#getRegistryEntry}
- * using subscriber identity propagated as Kafka headers. Falls back to context-based URL
- * resolution only when identity headers are absent (auth disabled).</p>
+ * <p>Resolves callback URLs exclusively from the DeDi Registry via
+ * {@link BecknAuth#getRegistryEntry} using subscriber identity propagated
+ * as Kafka headers. No context-based fallback — registry must be configured.</p>
  */
 @Slf4j
 @Service
@@ -61,9 +61,10 @@ public class HttpService {
      * This method is retryable based on configuration.
      *
      * @param eventJson    the full response event as a JSON string
-     * @param subscriberId org-level identity from Kafka header (null when auth disabled)
-     * @param recordId     key-level identity from Kafka header (null when auth disabled)
+     * @param subscriberId org-level identity from Kafka header; must not be null or blank
+     * @param recordId     key-level identity from Kafka header; must not be null or blank
      * @return true if the callback was successful, false otherwise
+     * @throws CallbackDeliveryException if subscriberId or recordId is null/blank, or delivery fails
      */
     @Retryable(
             value = { RestClientException.class },
@@ -87,7 +88,7 @@ public class HttpService {
             }
 
             String action = context.path(BecknFields.ACTION).asText();
-            String targetUrl = resolveTargetUrl(action, subscriberId, recordId, context);
+            String targetUrl = resolveTargetUrl(action, subscriberId, recordId);
 
             // SSRF guard — defense-in-depth even for registry-resolved URLs
             if (httpClientProperties.urlValidationEnabled()) {
@@ -99,6 +100,7 @@ public class HttpService {
                 }
             }
 
+            // Log after SSRF check passes — avoid leaking blocked URLs at INFO level
             log.info("{}", value("event", LogEvent.CALLBACK_RESOLVED),
                     value("action", action),
                     value("targetUrl", targetUrl),
@@ -195,42 +197,41 @@ public class HttpService {
     }
 
     /**
-     * Resolves the target callback URL.
+     * Resolves the target callback URL from the DeDi Registry.
      *
-     * <p>When subscriber identity is available (auth enabled), resolves the base URL from
-     * the DeDi Registry via {@code becknAuth.getRegistryEntry()}. When identity is absent
-     * (auth disabled / dev mode), falls back to reading {@code context.bapUri} or
-     * {@code context.bppUri}.</p>
+     * <p>Subscriber identity (subscriberId + recordId) must be present as Kafka headers.
+     * No context-based fallback — registry is the single source of truth for callback URLs.</p>
      */
-    private String resolveTargetUrl(String action, String subscriberId, String recordId,
-                                    JsonNode context) {
+    private String resolveTargetUrl(String action, String subscriberId, String recordId) {
         String endpoint = resolveEndpointPath(action);
 
-        // Registry resolution — preferred path when auth identity is available
-        if (subscriberId != null && !subscriberId.isBlank()
-                && recordId != null && !recordId.isBlank()) {
-            var entry = becknAuth.getRegistryEntry(subscriberId, recordId);
-            String baseUrl = entry.subscriberUrl();
-            if (baseUrl == null || baseUrl.isBlank()) {
-                log.error("{}", value("event", LogEvent.REGISTRY_FAILED),
-                        value("subscriberId", sanitize(subscriberId)),
-                        value("recordId", sanitize(recordId)),
-                        value("reason", "registry returned blank URL"));
-                throw new IllegalArgumentException(
-                        "Registry returned blank URL for subscriberId=" + subscriberId
-                        + " recordId=" + recordId);
-            }
-            log.info("{}", value("event", LogEvent.REGISTRY_RESOLVED),
+        if (subscriberId == null || subscriberId.isBlank()
+                || recordId == null || recordId.isBlank()) {
+            log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                    value("reason", "missing subscriber identity — cannot resolve callback URL"),
+                    value("action", action),
                     value("subscriberId", sanitize(subscriberId)),
                     value("recordId", sanitize(recordId)));
-            return normalizeBaseUrl(baseUrl) + endpoint;
+            throw new IllegalArgumentException(
+                    "Subscriber identity required for callback URL resolution: subscriberId="
+                    + sanitize(subscriberId) + " recordId=" + sanitize(recordId));
         }
 
-        // Fallback — context-based resolution (dev/auth-disabled mode only)
-        log.warn("{}", value("event", LogEvent.CALLBACK_RESOLVED),
-                value("reason", "no subscriber identity — falling back to context URL"),
-                value("action", action));
-        return resolveFromContext(action, context) + endpoint;
+        var entry = becknAuth.getRegistryEntry(subscriberId, recordId);
+        String baseUrl = entry.subscriberUrl();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            log.error("{}", value("event", LogEvent.REGISTRY_FAILED),
+                    value("subscriberId", sanitize(subscriberId)),
+                    value("recordId", sanitize(recordId)),
+                    value("reason", "registry returned blank URL"));
+            throw new IllegalArgumentException(
+                    "Registry returned blank URL for subscriberId=" + sanitize(subscriberId)
+                    + " recordId=" + sanitize(recordId));
+        }
+        log.info("{}", value("event", LogEvent.REGISTRY_RESOLVED),
+                value("subscriberId", sanitize(subscriberId)),
+                value("recordId", sanitize(recordId)));
+        return normalizeBaseUrl(baseUrl) + endpoint;
     }
 
     private String resolveEndpointPath(String action) {
@@ -238,23 +239,6 @@ public class HttpService {
             return ON_DISCOVER_ENDPOINT;
         } else if (ACTION_ON_CATALOG_PUBLISH.equals(action)) {
             return ON_PUBLISH_ENDPOINT;
-        }
-        throw new IllegalArgumentException("Unknown or unsupported action: " + action);
-    }
-
-    private String resolveFromContext(String action, JsonNode context) {
-        if (ACTION_ON_DISCOVER.equals(action)) {
-            JsonNode bapUriNode = context.path(BecknFields.BAP_URI);
-            if (bapUriNode.isMissingNode() || bapUriNode.asText().isEmpty()) {
-                throw new IllegalArgumentException("Action is " + action + " but bapUri is missing");
-            }
-            return normalizeBaseUrl(bapUriNode.asText());
-        } else if (ACTION_ON_CATALOG_PUBLISH.equals(action)) {
-            JsonNode bppUriNode = context.path(BecknFields.BPP_URI);
-            if (bppUriNode.isMissingNode() || bppUriNode.asText().isEmpty()) {
-                throw new IllegalArgumentException("Action is " + action + " but bppUri is missing");
-            }
-            return normalizeBaseUrl(bppUriNode.asText());
         }
         throw new IllegalArgumentException("Unknown or unsupported action: " + action);
     }
@@ -358,6 +342,6 @@ public class HttpService {
     /** Strips control characters to prevent log injection from user-supplied strings. */
     private static String sanitize(String s) {
         if (s == null) return null;
-        return s.replaceAll("[\\r\\n\\t]", "");
+        return s.replaceAll("[\\p{Cc}]", "");
     }
 }
