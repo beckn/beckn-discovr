@@ -12,6 +12,26 @@
                             "@type": "beckn:Descriptor",
                             "name": "Mixed Services Catalog"
                         },
+                        "offers": [
+                            {
+                                "id": "offer-ev-charging-001",
+                                "descriptor": {"name": "EV Charging Tariff"},
+                                "resourceIds": ["item-ev-charging"],
+                                "price": {"currency": "INR", "value": 15.0}
+                            },
+                            {
+                                "id": "offer-food-001",
+                                "descriptor": {"name": "Food Delivery Fee"},
+                                "resourceIds": ["item-food"],
+                                "price": {"currency": "INR", "value": 50.0}
+                            },
+                            {
+                                "id": "offer-ride-001",
+                                "descriptor": {"name": "Ride Fare"},
+                                "resourceIds": ["item-ride"],
+                                "price": {"currency": "INR", "value": 100.0}
+                            }
+                        ],
                         "resources": [
                             {
                                 "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/draft/schema/core/v2/context.jsonld",

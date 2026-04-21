@@ -143,6 +143,9 @@ public final class LogEvent {
     // ── Provider offer enrichment ────────────────────────────────────────────
     public static final String PROVIDER_OFFER_ENRICHED = "provider.offer.enriched";
 
+    // ── Post-enrichment filtering ──────────────────────────────────────────
+    public static final String CATALOG_DISCARDED_NO_OFFERS = "catalog.discarded.no-offers";
+
     // ── Elasticsearch query engine ────────────────────────────────────────────
     public static final String ES_ENGINE_SPATIAL_START          = "es.engine.spatial.start";
     public static final String ES_ENGINE_SPATIAL_SKIP           = "es.engine.spatial.skip";

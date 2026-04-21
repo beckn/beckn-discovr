@@ -18,6 +18,7 @@ import org.springframework.validation.annotation.Validated;
 public class DiscoveryProperties {
 
     private boolean latencyTrackingEnabled = true;
+    @Valid private Filter filter = new Filter();
     @Valid private Kafka kafka = new Kafka();
     @Valid private NLWeb nlweb = new NLWeb();
     @Valid private PostgreSQL postgresql = new PostgreSQL();
@@ -66,6 +67,14 @@ public class DiscoveryProperties {
         this.latencyTrackingEnabled = latencyTrackingEnabled;
     }
 
+    public Filter getFilter() {
+        return filter;
+    }
+
+    public void setFilter(Filter filter) {
+        this.filter = filter;
+    }
+
     public TextSearch getTextSearch() {
         return textSearch;
     }
@@ -88,6 +97,21 @@ public class DiscoveryProperties {
 
     public void setElasticsearch(Elasticsearch elasticsearch) {
         this.elasticsearch = elasticsearch;
+    }
+
+    /**
+     * Post-enrichment filtering configuration.
+     */
+    public static class Filter {
+        private boolean discardCatalogsWithoutOffers = true;
+
+        public boolean isDiscardCatalogsWithoutOffers() {
+            return discardCatalogsWithoutOffers;
+        }
+
+        public void setDiscardCatalogsWithoutOffers(boolean discardCatalogsWithoutOffers) {
+            this.discardCatalogsWithoutOffers = discardCatalogsWithoutOffers;
+        }
     }
 
     /**

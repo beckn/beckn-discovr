@@ -437,6 +437,23 @@ public class DiscoveryService {
     private DiscoverResponse buildResponse(List<Catalog> processed, Context context) {
         // Provider-level offers: enrich AFTER pipeline so filterOffersByResourceIds never sees them
         providerOfferEnricher.enrich(processed);
+
+        // Drop catalogs with no offers when require-offers flag is enabled
+        if (properties.getFilter().isDiscardCatalogsWithoutOffers()) {
+            var discarded = processed.stream()
+                    .filter(c -> c.getOffers() == null || c.getOffers().isEmpty())
+                    .toList();
+            if (!discarded.isEmpty()) {
+                processed.removeAll(discarded);
+                log.info(LogEvent.CATALOG_DISCARDED_NO_OFFERS,
+                        value("discardedCount", discarded.size()),
+                        value("discardedCatalogIds", discarded.stream()
+                                .map(Catalog::getId)
+                                .toList()),
+                        value("remainingCount", processed.size()));
+            }
+        }
+
         metrics.recordResultCount(processed.size());
         return processed.isEmpty()
                 ? responseProcessor.buildEmptyResponse(context)
