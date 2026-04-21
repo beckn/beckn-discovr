@@ -86,7 +86,14 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                     {
                       "id": "%s",
                       "descriptor": {"name": "Schema Test Catalog"},
-                      "offers": [],
+                      "offers": [
+                        {
+                          "id": "offer-%s",
+                          "descriptor": {"name": "Test Tariff"},
+                          "resourceIds": ["%s"],
+                          "price": {"currency": "INR", "value": 20.0}
+                        }
+                      ],
                       "resources": [
                         {
                           "id": "%s",
@@ -113,7 +120,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                     }
                   ]
                 }
-                """, CAT_ID, itemId, itemName, PROV_ID, CONTEXT_URL);
+                """, CAT_ID, itemId, itemId, itemId, itemName, PROV_ID, CONTEXT_URL);
     }
 
     private DiscoverRequest buildRequest(String transactionId, String schemaContextUrl) {

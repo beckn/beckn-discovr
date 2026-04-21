@@ -51,6 +51,8 @@ discovery:
     # Supports {param} and :param wildcards. Leave empty to protect all endpoints.
     whitelisted-endpoints: ${SIGNATURE_WHITELISTED_ENDPOINTS:}
   latency-tracking-enabled: ${DISCOVERY_LATENCY_TRACKING_ENABLED:true}
+  filter:
+    discard-catalogs-without-offers: ${DISCOVERY_FILTER_DISCARD_CATALOGS_WITHOUT_OFFERS:true}
   kafka:
     request-topic: ${KAFKA_REQUEST_TOPIC:discovr.discover.in.requests}
     response-topic: ${KAFKA_RESPONSE_TOPIC:discovr.discover.out.responses}
