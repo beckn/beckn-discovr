@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
@@ -77,6 +78,30 @@ class SimpleMessageProcessingTest {
         assertThatThrownBy(() -> messageProcessingService.processMessage(discoveryResponse, null, null))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("Failed to send callback response");
+    }
+
+    @Test
+    void shouldForwardIdentityToHttpService() {
+        // Given — non-null identity values
+        String discoveryResponse = """
+            {
+              "context": {
+                "messageId": "msg-789",
+                "action": "on_discover"
+              },
+              "catalog": {
+                "providers": []
+              }
+            }
+            """;
+
+        when(httpService.sendCallback(anyString(), eq("sub-1"), eq("rec-1"))).thenReturn(true);
+
+        // When
+        String result = messageProcessingService.processMessage(discoveryResponse, "sub-1", "rec-1");
+
+        // Then — identity forwarded through to HttpService
+        assertThat(result).isEqualTo("SUCCESS");
     }
 
     @Test

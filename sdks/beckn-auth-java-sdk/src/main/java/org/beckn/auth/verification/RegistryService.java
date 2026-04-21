@@ -180,6 +180,8 @@ public final class RegistryService {
      * @param uniqueKeyId  the unique key ID
      * @return cache key string
      */
+    // Safe without registry URL namespace: each BecknAuth instance creates its own
+    // RegistryService with its own Cache, so no cross-registry key collisions.
     private String buildCacheKey(String subscriberId, String uniqueKeyId) {
         return subscriberId + "|" + uniqueKeyId;
     }

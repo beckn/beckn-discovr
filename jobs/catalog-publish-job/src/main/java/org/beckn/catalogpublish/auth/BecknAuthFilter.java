@@ -83,7 +83,7 @@ public class BecknAuthFilter extends OncePerRequestFilter {
         log.info("{} path={}", LogEvent.AUTH_VERIFY_START, request.getServletPath());
         try {
             var parsed = becknAuth.verifySignature(authHeader, rawBody);
-            log.info("{} path={} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, request.getServletPath(), parsed.subscriberId());
+            log.info("{} path={} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, request.getServletPath(), parsed.parsedHeader().subscriberId());
         } catch (BecknAuthException e) {
             log.error("{} path={} code={} message={}",
                     LogEvent.AUTH_VERIFY_FAILED, request.getServletPath(), e.getCode(), e.getMessage());
