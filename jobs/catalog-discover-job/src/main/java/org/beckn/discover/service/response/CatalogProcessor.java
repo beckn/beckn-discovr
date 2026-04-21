@@ -74,15 +74,14 @@ public class CatalogProcessor {
                             .toList());
         }
 
-        // Back-fill providerId from the first resource that carries provider info
-        if (catalog.getProviderId() == null && catalog.getResources() != null) {
+        // Back-fill provider from the first resource that carries provider info
+        if (catalog.getProvider() == null && catalog.getResources() != null) {
             catalog.getResources().stream()
                     .map(Resource::getProvider)
                     .filter(Objects::nonNull)
-                    .map(Provider::getId)
-                    .filter(DiscoveryServiceUtil::isNotBlank)
+                    .filter(p -> DiscoveryServiceUtil.isNotBlank(p.getId()))
                     .findFirst()
-                    .ifPresent(catalog::setProviderId);
+                    .ifPresent(catalog::setProvider);
         }
 
         return catalog;
@@ -189,8 +188,8 @@ public class CatalogProcessor {
 
         if (target.getDescriptor() == null)
             target.setDescriptor(source.getDescriptor());
-        if (target.getProviderId() == null)
-            target.setProviderId(source.getProviderId());
+        if (target.getProvider() == null)
+            target.setProvider(source.getProvider());
     }
 
     // ── Offer operations ─────────────────────────────────────────────────────

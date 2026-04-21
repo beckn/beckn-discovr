@@ -1,14 +1,19 @@
 package org.beckn.discover.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * Location DTO
- * 
- * Represents a physical location per Beckn Core v2 schema.
- * Uses GeoJSON geometry (geo) and optional human-readable address.
+ * Location DTO — Beckn Protocol v2.0.
+ *
+ * <p>Aligned with {@code components/schemas/Location} in beckn.yaml:
+ * {@code geo} (GeoJSON, required), {@code address}.
+ * {@code additionalProperties: false} in the spec.</p>
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Location {
 
     @NotNull(message = "geo is required")

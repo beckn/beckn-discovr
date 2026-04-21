@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
+import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Resource;
 import org.beckn.discover.model.TimePeriod;
 import org.beckn.discover.service.engine.QueryRequest;
@@ -152,12 +153,12 @@ public class PostgreSQLAssembler {
         Catalog catalog = catalogMap.computeIfAbsent(catalogId, id -> buildCatalog(id, catalogPayload));
         catalog.getResources().add(resource);
 
-        // Back-fill providerId from resource when catalog payload lacks providerId
-        if (catalog.getProviderId() == null
+        // Back-fill provider from resource when catalog payload lacks provider
+        if (catalog.getProvider() == null
                 && resource.getProvider() != null
                 && resource.getProvider().getId() != null
                 && !resource.getProvider().getId().isBlank()) {
-            catalog.setProviderId(resource.getProvider().getId());
+            catalog.setProvider(resource.getProvider());
         }
 
         // Offer extraction — uses matching_offers when present, falls back to catalog payload
@@ -183,9 +184,10 @@ public class PostgreSQLAssembler {
     private void extractCatalogAttributes(Catalog catalog, JsonNode catalogPayload) {
         try {
             setTextIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_ID,          catalog::setId);
-            setTextIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_PROVIDER_ID,  catalog::setProviderId);
-            parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_DESCRIPTOR, Descriptor.class, catalog::setDescriptor);
+            parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_PROVIDER,   Provider.class,    catalog::setProvider);
+            parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_DESCRIPTOR, Descriptor.class,  catalog::setDescriptor);
             parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_VALIDITY,   TimePeriod.class,  catalog::setValidity);
+            setBooleanIfPresent(catalogPayload, "isActive", catalog::setIsActive);
             // Note: offers are NOT merged here — they are merged exactly once per catalog
             // in mergeOffersFromRow (first row guard) to avoid N-row duplication.
         } catch (Exception e) {
@@ -307,6 +309,10 @@ public class PostgreSQLAssembler {
 
     private void setTextIfPresent(JsonNode node, String field, Consumer<String> setter) {
         if (node.has(field)) setter.accept(node.get(field).asText());
+    }
+
+    private void setBooleanIfPresent(JsonNode node, String field, Consumer<Boolean> setter) {
+        if (node.has(field) && node.get(field).isBoolean()) setter.accept(node.get(field).asBoolean());
     }
 
     private <T> void parseIfPresent(JsonNode node, String field, Class<T> type, Consumer<T> setter) {

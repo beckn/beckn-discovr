@@ -425,7 +425,7 @@ public class DiscoveryService {
         Catalog copy = new Catalog();
         copy.setId(src.getId());
         copy.setDescriptor(src.getDescriptor());
-        copy.setProviderId(src.getProviderId());
+        copy.setProvider(src.getProvider());
         copy.setValidity(src.getValidity());
         copy.setOffers(src.getOffers() != null ? new java.util.ArrayList<>(src.getOffers()) : new java.util.ArrayList<>());
         copy.setResources(new java.util.ArrayList<>());

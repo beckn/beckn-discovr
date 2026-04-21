@@ -3,6 +3,7 @@ package org.beckn.discover.service.postgresql;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
+import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Resource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -147,7 +148,7 @@ class ProviderOfferEnricherTest {
     private Catalog buildCatalog(String id, String providerId) {
         var catalog = new Catalog();
         catalog.setId(id);
-        catalog.setProviderId(providerId);
+        catalog.setProvider(new Provider(providerId, null));
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         return catalog;

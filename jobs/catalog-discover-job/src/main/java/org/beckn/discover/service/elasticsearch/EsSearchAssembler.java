@@ -104,7 +104,13 @@ public class EsSearchAssembler {
         Catalog catalog = new Catalog();
         catalog.setId(catalogId);
         catalog.setDescriptor(buildCatalogDescriptor(doc));
-        catalog.setProviderId(extractString(doc,"catalog_provider_id"));
+        // Build catalog-level provider from ES doc fields
+        String catalogProviderId = extractString(doc, "catalog_provider_id");
+        if (catalogProviderId != null) {
+            Descriptor providerDesc = new Descriptor();
+            providerDesc.setName(extractString(doc, "catalog_provider_name"));
+            catalog.setProvider(new Provider(catalogProviderId, providerDesc));
+        }
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         Object validityRaw = doc.get("catalog_validity");
@@ -175,7 +181,7 @@ public class EsSearchAssembler {
         resource.setIsActive(extractBoolean(doc,"resource_is_active"));
         Provider provider = buildProvider(doc);
         if (provider != null) {
-            provider.setLocations(collectProviderLocations(doc));
+            provider.setAvailableAt(collectProviderLocations(doc));
         }
         resource.setProvider(provider);
         resource.setResourceAttributes(buildAttributes(doc));
@@ -226,7 +232,7 @@ public class EsSearchAssembler {
     /**
      * Collects provider-level location fields (e.g.
      * {@code loc_catalogs_resources_provider_locations})
-     * for {@link Provider#setLocations}.
+     * for {@link Provider#setAvailableAt}.
      */
     private static List<Location> collectProviderLocations(Map<String, Object> doc) {
         return collectLocFields(doc, key ->

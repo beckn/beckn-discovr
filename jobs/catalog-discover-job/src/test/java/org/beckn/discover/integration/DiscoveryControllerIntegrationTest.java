@@ -59,11 +59,11 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .andExpect(jsonPath("$.message.catalogs[0].id").exists())
                                 .andExpect(jsonPath("$.message.catalogs[0].descriptor.name")
                                                 .value("EV Charging Services Network"))
-                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.images",
+                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.mediaFile",
                                                 hasSize(2)))
-                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.images[0]")
+                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.mediaFile[0].uri")
                                                 .value("https://example.com/images/ev-charging-network.jpg"))
-                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.images[1]")
+                                .andExpect(jsonPath("$.message.catalogs[0].descriptor.mediaFile[1].uri")
                                                 .value("https://example.com/images/charging-station-banner.png"))
                                 // Validate resources
                                 .andExpect(jsonPath("$.message.catalogs[0].resources", hasSize(1)))
@@ -73,13 +73,13 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                                 "$.message.catalogs[0].resources[0].descriptor.name")
                                                 .value("DC Fast Charger - CCS2 (60kW)"))
                                 .andExpect(jsonPath(
-                                                "$.message.catalogs[0].resources[0].descriptor.images",
+                                                "$.message.catalogs[0].resources[0].descriptor.mediaFile",
                                                 hasSize(2)))
                                 .andExpect(jsonPath(
-                                                "$.message.catalogs[0].resources[0].descriptor.images[0]")
+                                                "$.message.catalogs[0].resources[0].descriptor.mediaFile[0].uri")
                                                 .value("https://example.com/images/ev-charger-ccs2-60kw.jpg"))
                                 .andExpect(jsonPath(
-                                                "$.message.catalogs[0].resources[0].descriptor.images[1]")
+                                                "$.message.catalogs[0].resources[0].descriptor.mediaFile[1].uri")
                                                 .value("https://example.com/images/charging-station-ccs2.png"))
                                 // Validate provider
                                 .andExpect(jsonPath(

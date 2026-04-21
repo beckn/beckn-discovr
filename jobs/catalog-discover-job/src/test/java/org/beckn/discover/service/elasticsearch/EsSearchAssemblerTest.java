@@ -273,9 +273,9 @@ class EsSearchAssemblerTest {
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-loc-7");
 
         Resource resource = catalogs.get(0).getResources().get(0);
-        assertThat(resource.getProvider().getLocations()).isNotNull().hasSize(1);
-        assertThat(resource.getProvider().getLocations().get(0).getGeo().getType()).isEqualTo("Point");
-        assertThat(resource.getProvider().getLocations().get(0).getAddress().getAddressLocality()).isEqualTo("Bengaluru");
+        assertThat(resource.getProvider().getAvailableAt()).isNotNull().hasSize(1);
+        assertThat(resource.getProvider().getAvailableAt().get(0).getGeo().getType()).isEqualTo("Point");
+        assertThat(resource.getProvider().getAvailableAt().get(0).getAddress().getAddressLocality()).isEqualTo("Bengaluru");
     }
 
     @Test
@@ -300,8 +300,8 @@ class EsSearchAssemblerTest {
         assertThat(resource.getAvailableAt()).isNotNull().hasSize(1);
         assertThat(resource.getAvailableAt().get(0).getGeo().getCoordinates())
                 .containsExactly(77.5, 12.9);
-        assertThat(resource.getProvider().getLocations()).isNotNull().hasSize(1);
-        assertThat(resource.getProvider().getLocations().get(0).getGeo().getCoordinates())
+        assertThat(resource.getProvider().getAvailableAt()).isNotNull().hasSize(1);
+        assertThat(resource.getProvider().getAvailableAt().get(0).getGeo().getCoordinates())
                 .containsExactly(78.0, 13.0);
     }
 
