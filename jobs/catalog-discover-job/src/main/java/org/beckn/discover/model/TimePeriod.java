@@ -1,14 +1,20 @@
 package org.beckn.discover.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.OffsetDateTime;
 
 /**
- * TimePeriod DTO
- * 
- * Represents a time window with date-time precision for availability/validity.
+ * TimePeriod DTO — Beckn Protocol v2.0.
+ *
+ * <p>Aligned with {@code components/schemas/TimePeriod} in beckn.yaml:
+ * {@code startDate}, {@code endDate}, {@code startTime}, {@code endTime}.
+ * {@code additionalProperties: false} in the spec.</p>
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class TimePeriod {
 
     @JsonProperty("startDate")

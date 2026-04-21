@@ -70,10 +70,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertCatalogValid(catalog);
         Assertions.assertThat(catalog.getDescriptor()).isNotNull();
         Assertions.assertThat(catalog.getDescriptor().getName()).isEqualTo("EV Charging Services Network");
-        Assertions.assertThat(catalog.getDescriptor().getImage()).hasSize(2);
-        Assertions.assertThat(catalog.getDescriptor().getImage()).containsExactly(
-                "https://example.com/images/ev-charging-network.jpg",
-                "https://example.com/images/charging-station-banner.png");
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile()).hasSize(2);
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile())
+                .extracting(m -> m.get("uri"))
+                .containsExactly(
+                        "https://example.com/images/ev-charging-network.jpg",
+                        "https://example.com/images/charging-station-banner.png");
 
         // Validate items
         List<String> itemIds = catalog.getResources().stream()
@@ -84,10 +86,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         var firstItem = catalog.getResources().get(0);
         Assertions.assertThat(firstItem.getDescriptor().getName())
                 .isEqualTo("DC Fast Charger - CCS2 (60kW)");
-        Assertions.assertThat(firstItem.getDescriptor().getImage()).hasSize(2);
-        Assertions.assertThat(firstItem.getDescriptor().getImage()).containsExactly(
-                "https://example.com/images/ev-charger-ccs2-60kw.jpg",
-                "https://example.com/images/charging-station-ccs2.png");
+        Assertions.assertThat(firstItem.getDescriptor().getMediaFile()).hasSize(2);
+        Assertions.assertThat(firstItem.getDescriptor().getMediaFile())
+                .extracting(m -> m.get("uri"))
+                .containsExactly(
+                        "https://example.com/images/ev-charger-ccs2-60kw.jpg",
+                        "https://example.com/images/charging-station-ccs2.png");
         
         // Validate provider
         Assertions.assertThat(firstItem.getProvider().getId()).isEqualTo("ecopower-charging");
@@ -257,11 +261,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
         Assertions.assertThat(catalog.getDescriptor().getName()).contains("EV Charging");
-        Assertions.assertThat(catalog.getDescriptor().getImage()).isNotNull();
-        Assertions.assertThat(catalog.getDescriptor().getImage()).hasSize(2);
-        Assertions.assertThat(catalog.getDescriptor().getImage()).containsExactly(
-                "https://example.com/images/ev-charging-network.jpg",
-                "https://example.com/images/charging-station-banner.png");
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile()).isNotNull();
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile()).hasSize(2);
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile())
+                .extracting(m -> m.get("uri"))
+                .containsExactly(
+                        "https://example.com/images/ev-charging-network.jpg",
+                        "https://example.com/images/charging-station-banner.png");
     }
 
     private static final String NLWEB_SAMPLE_RESPONSE = loadNlwebSampleResponse();
@@ -383,7 +389,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getId()).isEqualTo("catalog-ev-charging-001");
         Assertions.assertThat(catalog.getDescriptor()).isNotNull();
         Assertions.assertThat(catalog.getDescriptor().getName()).isEqualTo("EV Charging Services Network");
-        Assertions.assertThat(catalog.getDescriptor().getImage()).hasSize(2);
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile()).hasSize(2);
         Assertions.assertThat(catalog.getResources()).isNotEmpty();
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         Assertions.assertThat(catalog.getProviderId()).isNotNull();

@@ -48,7 +48,7 @@ public final class BecknFields {
     public static final String NAME            = "name";
     public static final String SHORT_DESC      = "shortDesc";
     public static final String LONG_DESC       = "longDesc";
-    public static final String IMAGES          = "images";
+    public static final String CODE            = "code";
     public static final String PROVIDER_ID     = "providerId";
 
     // ── v2.1 Resource fields ───────────────────────────────────────────────────

@@ -11,13 +11,15 @@ import org.beckn.discover.common.BecknFields;
 import java.util.List;
 
 /**
- * Catalog DTO — Beckn Protocol v2.1 (no bppId/bppUri at catalog level).
+ * Catalog DTO — Beckn Protocol v2.0.
  *
- * <p>bppId and bppUri exist only in the Beckn Context and are never stored
- * at the catalog body level. They must not appear in on_discover responses.</p>
+ * <p>Aligned with {@code components/schemas/Catalog} in beckn.yaml:
+ * {@code id}, {@code descriptor}, {@code provider} (full Provider object),
+ * {@code resources[]}, {@code offers[]}, {@code validity}, {@code isActive}.
+ * {@code additionalProperties: false} in the spec.</p>
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonIgnoreProperties({"items", "bppId", "bppUri"})
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Catalog {
 
     @NotBlank(message = "id is required")
@@ -29,11 +31,15 @@ public class Catalog {
     @JsonProperty(BecknFields.DESCRIPTOR)
     private Descriptor descriptor;
 
-    @JsonProperty(BecknFields.PROVIDER_ID)
-    private String providerId;
+    @Valid
+    @JsonProperty(BecknFields.PROVIDER)
+    private Provider provider;
 
     @JsonProperty("validity")
     private TimePeriod validity;
+
+    @JsonProperty("isActive")
+    private Boolean isActive;
 
     @Valid
     @JsonProperty(BecknFields.RESOURCES)
@@ -52,11 +58,17 @@ public class Catalog {
     public Descriptor getDescriptor() { return descriptor; }
     public void setDescriptor(Descriptor descriptor) { this.descriptor = descriptor; }
 
-    public String getProviderId() { return providerId; }
-    public void setProviderId(String providerId) { this.providerId = providerId; }
+    public Provider getProvider() { return provider; }
+    public void setProvider(Provider provider) { this.provider = provider; }
+
+    /** Convenience accessor — extracts {@code provider.id} for downstream code. */
+    public String getProviderId() { return provider != null ? provider.getId() : null; }
 
     public TimePeriod getValidity() { return validity; }
     public void setValidity(TimePeriod validity) { this.validity = validity; }
+
+    public Boolean getIsActive() { return isActive; }
+    public void setIsActive(Boolean isActive) { this.isActive = isActive; }
 
     public List<Resource> getResources() { return resources; }
     public void setResources(List<Resource> resources) { this.resources = resources; }
@@ -66,6 +78,6 @@ public class Catalog {
 
     @Override
     public String toString() {
-        return "Catalog{id='" + id + "', resources=" + resources + '}';
+        return "Catalog{id='" + id + "', provider=" + provider + ", resources=" + resources + '}';
     }
 }

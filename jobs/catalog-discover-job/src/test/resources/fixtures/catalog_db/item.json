@@ -54,9 +54,9 @@
           "descriptor": {
             "name": "EV Charging Services Network",
             "shortDesc": "Comprehensive network of fast charging stations across Bengaluru",
-            "images": [
-              "https://example.com/images/ev-charging-network.jpg",
-              "https://example.com/images/charging-station-banner.png"
+            "mediaFile": [
+              {"label": "EV Charging Network", "mimeType": "image/jpeg", "uri": "https://example.com/images/ev-charging-network.jpg"},
+              {"label": "Charging Station Banner", "mimeType": "image/png", "uri": "https://example.com/images/charging-station-banner.png"}
             ]
           },
           "resources": [
@@ -81,9 +81,9 @@
               "descriptor": {
                 "name": "DC Fast Charger - CCS2 (60kW)",
                 "shortDesc": "High-speed DC charging station with CCS2 connector",
-                "images": [
-                  "https://example.com/images/ev-charger-ccs2-60kw.jpg",
-                  "https://example.com/images/charging-station-ccs2.png"
+                "mediaFile": [
+                  {"label": "CCS2 60kW Charger", "mimeType": "image/jpeg", "uri": "https://example.com/images/ev-charger-ccs2-60kw.jpg"},
+                  {"label": "CCS2 Charging Station", "mimeType": "image/png", "uri": "https://example.com/images/charging-station-ccs2.png"}
                 ]
               },
               "availableAt": [
@@ -180,9 +180,9 @@
           "descriptor": {
             "name": "EV Charging Services Network",
             "shortDesc": "Comprehensive network of fast charging stations across Bengaluru",
-            "images": [
-              "https://example.com/images/ev-charging-network.jpg",
-              "https://example.com/images/charging-station-banner.png"
+            "mediaFile": [
+              {"label": "EV Charging Network", "mimeType": "image/jpeg", "uri": "https://example.com/images/ev-charging-network.jpg"},
+              {"label": "Charging Station Banner", "mimeType": "image/png", "uri": "https://example.com/images/charging-station-banner.png"}
             ]
           },
           "resources": [
@@ -301,9 +301,9 @@
           "descriptor": {
             "name": "EV Charging Services Network",
             "shortDesc": "Comprehensive network of fast charging stations across Bengaluru",
-            "images": [
-              "https://example.com/images/ev-charging-network.jpg",
-              "https://example.com/images/charging-station-banner.png"
+            "mediaFile": [
+              {"label": "EV Charging Network", "mimeType": "image/jpeg", "uri": "https://example.com/images/ev-charging-network.jpg"},
+              {"label": "Charging Station Banner", "mimeType": "image/png", "uri": "https://example.com/images/charging-station-banner.png"}
             ]
           },
           "resources": [

@@ -36,6 +36,7 @@ public class DiscoveryConstants {
         public static final String BECKN_RESOURCES = "resources";
         public static final String BECKN_ID = "id";
         public static final String BECKN_DESCRIPTOR = "descriptor";
+        public static final String BECKN_PROVIDER = "provider";
         public static final String BECKN_PROVIDER_ID = "providerId";
         public static final String BECKN_VALIDITY = "validity";
         /** v2.1 catalog-level addOns field. */
