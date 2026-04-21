@@ -303,6 +303,8 @@ services:
       - SIGNING_KEY_ID_SUFFIX=
       - SIGNING_PRIVATE_KEY=
       - SIGNING_EXPIRY_SECONDS=3600
+      # SSRF validation — disable for local/Docker development (no public DNS)
+      - CALLBACK_URL_VALIDATION_ENABLED=false
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
