@@ -108,7 +108,7 @@ services:
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - JAVA_TOOL_OPTIONS=
       # Beckn Auth SDK — signature verification for /catalog/push
-      - SIGNATURE_AUTH_ENABLED=false
+      - SIGNATURE_AUTH_ENABLED=true
       - SIGNATURE_REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
@@ -203,7 +203,7 @@ services:
       - LOGGING_LEVEL_ORG_APACHE_KAFKA=ERROR
       - OTEL_TRACES_EXPORTER=none
       # Beckn Auth SDK — signature verification for /beckn/discover
-      - SIGNATURE_AUTH_ENABLED=false
+      - SIGNATURE_AUTH_ENABLED=true
       - SIGNATURE_REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
@@ -300,10 +300,10 @@ services:
       - REGISTRY_NAME=subscribers.beckn.one
       # Beckn HTTP Signature — outgoing signing for on_discover callbacks to BAP
       # Set SIGNING_ENABLED=true and provide key details to sign outbound callbacks
-      - SIGNING_ENABLED=false
-      - SIGNING_SUBSCRIBER_ID=
-      - SIGNING_KEY_ID_SUFFIX=
-      - SIGNING_PRIVATE_KEY=
+      - SIGNING_ENABLED=true
+      - SIGNING_SUBSCRIBER_ID=${SIGNING_SUBSCRIBER_ID:-}
+      - SIGNING_KEY_ID_SUFFIX=${SIGNING_KEY_ID_SUFFIX:-}
+      - SIGNING_PRIVATE_KEY=${SIGNING_PRIVATE_KEY:-}
       - SIGNING_EXPIRY_SECONDS=3600
       # SSRF validation — disable for local/Docker development (no public DNS)
       - CALLBACK_URL_VALIDATION_ENABLED=false
