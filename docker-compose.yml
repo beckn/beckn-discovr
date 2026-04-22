@@ -109,7 +109,7 @@ services:
       - JAVA_TOOL_OPTIONS=
       # Beckn Auth SDK — signature verification for /catalog/push
       - SIGNATURE_AUTH_ENABLED=false
-      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
       - SIGNATURE_CLOCK_SKEW_SECONDS=30
@@ -204,7 +204,7 @@ services:
       - OTEL_TRACES_EXPORTER=none
       # Beckn Auth SDK — signature verification for /beckn/discover
       - SIGNATURE_AUTH_ENABLED=false
-      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
       - SIGNATURE_CLOCK_SKEW_SECONDS=30
