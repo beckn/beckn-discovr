@@ -5,7 +5,7 @@
 # On a source-only rebuild the "gradlew dependencies" layer is served from
 # cache — no Maven Central round-trips.
 # =============================================================================
-FROM eclipse-temurin:17-jdk-alpine AS builder
+FROM eclipse-temurin:17-jdk-jammy AS builder
 
 WORKDIR /app/jobs/catalog-publish-job
 
