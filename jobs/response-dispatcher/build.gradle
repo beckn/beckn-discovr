@@ -94,4 +94,7 @@ springBoot {
 bootJar {
     archiveFileName = 'seeker-notifier-1.0.0-SNAPSHOT.jar'
     exclude('**/lombok/**')
+    layered {
+        enabled = true
+    }
 }
