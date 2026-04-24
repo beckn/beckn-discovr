@@ -2,10 +2,15 @@
 # Build Stage
 # build.gradle + SDK are copied BEFORE src/ so that Docker can cache the
 # Gradle artifact-download layer independently from source changes.
-# On a source-only rebuild the "gradlew dependencies" layer is served from
-# cache — no Maven Central round-trips.
+# On a source-only rebuild the dep-resolution and OTel-download layers are
+# served from cache — no Maven Central round-trips.
+#
+# DEPS_BASE: pre-built image with ~/.gradle/ populated for all jobs.
+# When supplied, ./gradlew dependencies becomes a fast cache-check (~10 s).
+# Falls back to plain eclipse-temurin for local builds without the base image.
 # =============================================================================
-FROM eclipse-temurin:17-jdk-jammy AS builder
+ARG DEPS_BASE=eclipse-temurin:17-jdk-jammy
+FROM ${DEPS_BASE} AS builder
 
 WORKDIR /app/jobs/catalog-publish-job
 
@@ -19,36 +24,33 @@ RUN chmod +x gradlew
 # Step 2: Resolve and cache all runtime dependencies.
 RUN ./gradlew dependencies --no-daemon
 
-# Step 3: Copy source — only layers below here are invalidated on code changes.
+# Step 3: Download OTel agent from Maven Central.
+# Placed before COPY src/ so code changes do not invalidate this layer.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -sL -o /tmp/otel-javaagent.jar \
+        https://repo1.maven.org/maven2/io/opentelemetry/javaagent/opentelemetry-javaagent/2.11.0/opentelemetry-javaagent-2.11.0.jar
+
+# Step 4: Copy source — only layers below here are invalidated on code changes.
 COPY jobs/catalog-publish-job/src/ src/
 
-# Step 4: Build the layered JAR (layered.enabled = true in build.gradle).
+# Step 5: Build the layered JAR (layered.enabled = true in build.gradle).
 RUN ./gradlew bootJar -x test -x integrationTest --no-daemon
-
-# =============================================================================
-# OTel Agent Download Stage
-# Pinned version downloaded once and cached as its own Docker layer.
-# =============================================================================
-FROM alpine:3.19 AS otel-downloader
-RUN apk add --no-cache wget && \
-    wget -q -O /otel-javaagent.jar \
-        https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.11.0/opentelemetry-javaagent.jar
 
 # =============================================================================
 # Layered JAR Extraction Stage
 # =============================================================================
-FROM eclipse-temurin:17-jre-alpine AS extractor
+FROM eclipse-temurin:17-jre-jammy AS extractor
 WORKDIR /app
 COPY --from=builder /app/jobs/catalog-publish-job/build/libs/*.jar app.jar
 RUN java -Djarmode=layertools -jar app.jar extract
 
 # =============================================================================
 # Runtime Stage
-# Alpine JRE is ~160 MB smaller than Jammy, meaning faster registry pulls.
 # =============================================================================
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre-jammy
 
-RUN addgroup -S appuser && adduser -S -G appuser appuser
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 WORKDIR /app
 
 COPY --from=extractor /app/dependencies/ ./
@@ -56,7 +58,7 @@ COPY --from=extractor /app/spring-boot-loader/ ./
 COPY --from=extractor /app/snapshot-dependencies/ ./
 COPY --from=extractor /app/application/ ./
 
-COPY --from=otel-downloader /otel-javaagent.jar /app/opentelemetry-javaagent.jar
+COPY --from=builder /tmp/otel-javaagent.jar /app/opentelemetry-javaagent.jar
 
 RUN mkdir -p /app/logs && \
     chmod 644 /app/opentelemetry-javaagent.jar && \
