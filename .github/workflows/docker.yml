@@ -49,15 +49,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # build_args: passes DEPS_BASE to each job so ./gradlew dependencies
+          # hits the pre-populated ~/.gradle/ cache instead of downloading from
+          # Maven Central.
           - name: catalog-discover-job
             dockerfile: jobs/catalog-discover-job/Dockerfile
             tag_prefix: 'discover'
+            build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base:1.0'
           - name: catalog-publish-job
             dockerfile: jobs/catalog-publish-job/Dockerfile
             tag_prefix: 'publish'
+            build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base:1.0'
           - name: response-dispatcher
             dockerfile: jobs/response-dispatcher/Dockerfile
             tag_prefix: 'dispatcher'
+            build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base:1.0'
 
     steps:
       - name: Checkout
@@ -145,6 +151,7 @@ jobs:
           file:    ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.resolve.outputs.tags }}
+          build-args: ${{ matrix.build_args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

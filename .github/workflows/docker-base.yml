@@ -1,0 +1,59 @@
+name: Build & Push Gradle Dependencies Base Image
+
+# =============================================================================
+# This workflow rebuilds the shared Gradle dependency base image whenever
+# any job's build.gradle, settings.gradle, or gradle-wrapper.properties
+# changes on the main branch.
+#
+# All Java job image builds (docker.yml) reference this base image via the
+# DEPS_BASE build argument, reducing cold-build times from ~7 min to ~10 s
+# for the dependency resolution step.
+#
+# The image is also buildable manually (workflow_dispatch) — useful for
+# bootstrapping a fresh environment or after rotating credentials.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'jobs/**/build.gradle'
+      - 'jobs/**/settings.gradle'
+      - 'jobs/**/gradle-wrapper.properties'
+      - 'sdks/beckn-auth-java-sdk/**'
+      - 'deps/Dockerfile.gradle-deps'
+  workflow_dispatch:
+
+jobs:
+  build-gradle-deps-base:
+    name: Build & Push — gradle-deps-base
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+
+      - name: Build and push gradle-deps-base
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deps/Dockerfile.gradle-deps
+          push: true
+          tags: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base:1.0
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
