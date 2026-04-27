@@ -44,7 +44,6 @@ public class ResponseProcessor {
     public Context createMinimalContext() {
         Context ctx = new Context();
         ctx.setMessageId("msg-" + System.currentTimeMillis());
-        ctx.setBapId(null);
         ctx.setTransactionId("txn-" + System.currentTimeMillis());
         ctx.setTimestamp(OffsetDateTime.now());
         ctx.setAction("on_discover");
