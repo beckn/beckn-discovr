@@ -2,8 +2,6 @@
   "context": {
     "action": "discover",
     "version": "2.0.0",
-    "bapId": "https://evcharging-bap.example.com",
-    "bapUri": "https://evcharging-bap.example.com/callback",
     "networkId": "bap.net/ev-charging",
     "transactionId": "c1d2e3f4-a5b6-7890-cdef-123456789012",
     "messageId": "d2e3f4a5-b6c7-8901-def0-234567890123",
@@ -18,7 +16,10 @@
           "targets": "$.catalogs[*].resources[*].resourceAttributes.serviceArea.geo",
           "geometry": {
             "type": "Point",
-            "coordinates": [77.5946, 12.9716]
+            "coordinates": [
+              77.5946,
+              12.9716
+            ]
           },
           "distanceMeters": 1000
         }
