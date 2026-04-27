@@ -27,6 +27,12 @@ on:
       - 'discover/v*'           # Only catalog-discover-job: discover/v1.5.0
       - 'publish/v*'            # Only catalog-publish-job: publish/v1.5.0
       - 'dispatcher/v*'         # Only response-dispatcher: dispatcher/v1.5.0
+  workflow_dispatch:
+    inputs:
+      deps_base_tag:
+        description: 'gradle-deps-base image tag to use as DEPS_BASE (e.g. 1.0, v1.1). Defaults to 1.0.'
+        required: false
+        default: '1.0'
 
 jobs:
   build-and-push:
@@ -55,19 +61,25 @@ jobs:
           - name: catalog-discover-job
             dockerfile: jobs/catalog-discover-job/Dockerfile
             tag_prefix: 'discover'
-            build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base:1.0'
+            build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
           - name: catalog-publish-job
             dockerfile: jobs/catalog-publish-job/Dockerfile
             tag_prefix: 'publish'
-            build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base:1.0'
+            build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
           - name: response-dispatcher
             dockerfile: jobs/response-dispatcher/Dockerfile
             tag_prefix: 'dispatcher'
-            build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base:1.0'
+            build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve DEPS_BASE build arg
+        id: deps_base
+        run: |
+          TAG="${{ inputs.deps_base_tag || '1.0' }}"
+          echo "value=${{ matrix.build_args }}:${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Check if this service should build
         id: should_build
@@ -151,7 +163,7 @@ jobs:
           file:    ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.resolve.outputs.tags }}
-          build-args: ${{ matrix.build_args }}
+          build-args: ${{ steps.deps_base.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
