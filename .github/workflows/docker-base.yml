@@ -25,13 +25,13 @@ name: Build & Push Gradle Dependencies Base Image
 
 on:
   push:
-    branches: [main, 'release-*']
-    paths:
-      - 'jobs/**/build.gradle'
-      - 'jobs/**/settings.gradle'
-      - 'jobs/**/gradle-wrapper.properties'
-      - 'sdks/beckn-auth-java-sdk/**'
-      - 'deps/Dockerfile.gradle-deps'
+    # branches: [main, 'release-*']
+    # paths:
+    #   - 'jobs/**/build.gradle'
+    #   - 'jobs/**/settings.gradle'
+    #   - 'jobs/**/gradle-wrapper.properties'
+    #   - 'sdks/beckn-auth-java-sdk/**'
+    #   - 'deps/Dockerfile.gradle-deps'
     tags:
       - 'deps/v*'
   workflow_dispatch:
