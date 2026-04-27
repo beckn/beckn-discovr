@@ -1,16 +1,26 @@
 name: Build & Push Gradle Dependencies Base Image
 
 # =============================================================================
-# This workflow rebuilds the shared Gradle dependency base image whenever
-# any job's build.gradle, settings.gradle, or gradle-wrapper.properties
-# changes on the main branch.
+# Triggers:
+#
+# 1. Tag push  deps/v*  (e.g. deps/v1.0, deps/v1.1)
+#    Builds and pushes gradle-deps-base:<version> to GCP AR.
+#    Use this to cut a pinned, versioned release of the base image.
+#    After pushing the tag, update DEPS_BASE in docker.yml to the new version
+#    before the next service tag build.
+#
+# 2. Push to main when deps files change
+#    Auto-rebuilds gradle-deps-base:1.0 (floating tag for the current stable
+#    version) whenever build.gradle, settings.gradle, gradle-wrapper.properties,
+#    the SDK, or deps/Dockerfile.gradle-deps changes.
+#    Note: paths filter applies to branch pushes only, not tag pushes.
+#
+# 3. workflow_dispatch
+#    Manual trigger — useful for bootstrapping or after rotating credentials.
 #
 # All Java job image builds (docker.yml) reference this base image via the
 # DEPS_BASE build argument, reducing cold-build times from ~7 min to ~10 s
 # for the dependency resolution step.
-#
-# The image is also buildable manually (workflow_dispatch) — useful for
-# bootstrapping a fresh environment or after rotating credentials.
 # =============================================================================
 
 on:
@@ -22,6 +32,8 @@ on:
       - 'jobs/**/gradle-wrapper.properties'
       - 'sdks/beckn-auth-java-sdk/**'
       - 'deps/Dockerfile.gradle-deps'
+    tags:
+      - 'deps/v*'
   workflow_dispatch:
 
 jobs:
@@ -35,6 +47,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve image version
+        id: resolve
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/deps/* ]]; then
+            # Tag push: strip 'deps/' prefix → e.g. deps/v1.1 becomes v1.1
+            VERSION="${GITHUB_REF_NAME#deps/}"
+          else
+            # Branch push or manual: use the current stable tag
+            VERSION="1.0"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -54,6 +78,6 @@ jobs:
           context: .
           file: deps/Dockerfile.gradle-deps
           push: true
-          tags: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base:1.0
+          tags: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base:${{ steps.resolve.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
