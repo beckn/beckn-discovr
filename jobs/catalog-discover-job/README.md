@@ -41,7 +41,7 @@ Query engine for the Beckn One Catalog Distribution System (CDS). It accepts Bec
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  DiscoveryService.processDiscoveryRequest()                              │
 │  • Validate request (non-null context)                                   │
-│  • Set MDC (transactionId, messageId, bapId)                             │
+│  • Set MDC (transactionId, messageId, networkId)                         │
 │  • Build QueryRequest from DiscoverRequest                               │
 │  • route(qr, context) → path A, B, C, or D                               │
 │  • CatalogPipeline.process(catalogs, qr)                                 │
