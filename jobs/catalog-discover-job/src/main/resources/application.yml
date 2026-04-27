@@ -203,8 +203,8 @@ logging:
     org.apache.kafka: ERROR
     root: INFO
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{bapId},%X{transactionId}] %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{bapId},%X{transactionId}] %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{transactionId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{transactionId}] %logger{36} - %msg%n"
   file:
     name: logs/discovery-service.log
 

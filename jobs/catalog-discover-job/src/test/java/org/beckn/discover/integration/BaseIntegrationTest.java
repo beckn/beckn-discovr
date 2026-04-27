@@ -130,8 +130,6 @@ public abstract class BaseIntegrationTest {
         Context context = new Context();
         context.setTransactionId(transactionId);
         context.setMessageId(messageId);
-        context.setBapId("https://evcharging-bap.example.com");
-        context.setBapUri("https://evcharging-bap.example.com/callback");
         context.setAction("discover");
         context.setVersion("2.0.0");
         context.setTtl("PT10M");
@@ -303,7 +301,7 @@ public abstract class BaseIntegrationTest {
 
     /**
      * Validates that response context has all required fields with proper values.
-     * Checks: transactionId, messageId, bapId, timestamp, action, version.
+     * Checks: transactionId, messageId, timestamp, action, version.
      */
     protected void assertResponseContextValid(Context context, Context requestContext) {
         Assertions.assertThat(context).isNotNull();
@@ -313,9 +311,6 @@ public abstract class BaseIntegrationTest {
         Assertions.assertThat(context.getMessageId())
                 .as("Response context should preserve messageId from request")
                 .isEqualTo(requestContext.getMessageId());
-        Assertions.assertThat(context.getBapId())
-                .as("Response context should preserve bapId from request")
-                .isEqualTo(requestContext.getBapId());
         Assertions.assertThat(context.getTimestamp())
                 .as("Response context must have timestamp")
                 .isNotNull();
