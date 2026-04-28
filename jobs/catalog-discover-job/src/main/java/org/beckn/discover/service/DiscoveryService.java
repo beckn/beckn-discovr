@@ -4,6 +4,7 @@ import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.exception.SemanticSearchException;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.logging.LogMessages;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverRequest;
@@ -216,7 +217,7 @@ public class DiscoveryService {
 
         if (combined.isEmpty()) {
             // Engine could not build spatial conditions → fall back to parallel
-            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", "no-spatial-conditions"));
+            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS));
             return executeJsonPathAndSpatialParallel(qr, context, tracker);
         }
 
