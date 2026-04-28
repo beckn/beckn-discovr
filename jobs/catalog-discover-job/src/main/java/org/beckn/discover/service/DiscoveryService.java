@@ -4,6 +4,7 @@ import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.exception.SemanticSearchException;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.logging.LogMessages;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverRequest;
@@ -180,18 +181,18 @@ public class DiscoveryService {
             throws Exception {
 
         if (qr.hasFilters() && qr.hasSpatial()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "jsonpath-spatial"));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH_SPATIAL));
             return executeJsonPathWithSpatialQuery(qr, context, tracker);
         }
         if (qr.hasFilters()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "jsonpath"));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH));
             return executeJsonPathFilterQuery(qr, context, tracker);
         }
         if (qr.hasSpatial()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "spatial"));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_SPATIAL));
             return executeSpatialOnlyQuery(qr, context, tracker);
         }
-        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "text-search"));
+        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_TEXT_SEARCH));
         return executeTextSearchQuery(qr, context, tracker);
     }
 
@@ -216,7 +217,7 @@ public class DiscoveryService {
 
         if (combined.isEmpty()) {
             // Engine could not build spatial conditions → fall back to parallel
-            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", "no-spatial-conditions"));
+            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS));
             return executeJsonPathAndSpatialParallel(qr, context, tracker);
         }
 
