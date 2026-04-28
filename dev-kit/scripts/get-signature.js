@@ -43,11 +43,7 @@ const privateKey = formatPrivateKey(PRIVATE_KEY_RAW);
  */
 app.post('/sign-payload', (req, res) => {
     try {
-        const rawBody = req.rawBody;
-
-        if (!rawBody || rawBody.trim() === '') {
-            return res.status(400).send('Request body cannot be empty');
-        }
+        const rawBody = req.rawBody || '';
 
         const created = Math.floor(Date.now() / 1000);
         const expires = created + 3600;
