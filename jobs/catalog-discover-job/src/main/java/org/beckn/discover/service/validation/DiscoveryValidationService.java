@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import org.beckn.discover.common.ErrorMessages;
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.logging.LogMessages;
 import org.beckn.discover.model.DiscoverRequest;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -227,13 +228,13 @@ public class DiscoveryValidationService {
 
     public ValidationResult validateDiscoverRequest(JsonNode node) {
         if (node == null || node.isNull()) {
-            logger.warn(LogEvent.VALIDATE_FAILED, value("reason", "null-request"));
+            logger.warn(LogEvent.VALIDATE_FAILED, value("reason", LogMessages.REASON_NULL_REQUEST));
             return new ValidationResult(false, List.of("Request cannot be null"), List.of("root"));
         }
 
         try {
             if (discoverActionSchema == null) {
-                logger.error(LogEvent.VALIDATE_FAILED, value("reason", "schema-not-initialized"));
+                logger.error(LogEvent.VALIDATE_FAILED, value("reason", LogMessages.REASON_SCHEMA_NOT_INITIALIZED));
                 return new ValidationResult(false, List.of(ErrorMessages.SERVICE_STARTING_UP), List.of("root"));
             }
 
@@ -339,7 +340,7 @@ public class DiscoveryValidationService {
 
         } catch (Exception e) {
             logger.error(LogEvent.VALIDATE_FAILED,
-                    value("reason", "unexpected-error"),
+                    value("reason", LogMessages.REASON_UNEXPECTED_ERROR),
                     value("error", e.getMessage()),
                     e);
             return new ValidationResult(false, List.of(ErrorMessages.VALIDATION_FAILED), List.of("root"));
