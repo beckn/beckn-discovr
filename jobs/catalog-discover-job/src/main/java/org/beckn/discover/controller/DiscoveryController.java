@@ -16,6 +16,7 @@ import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
 import org.beckn.discover.service.authorization.AuthorizationService;
+import org.beckn.discover.common.ErrorMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -175,7 +176,7 @@ public class DiscoveryController {
             String kafkaKey = transactionId != null ? transactionId : messageId;
             String requestTopic = discoveryProperties.getKafka().getRequestTopic();
             if (requestTopic == null || requestTopic.isBlank()) {
-                throw new IllegalStateException("discovery.kafka.request-topic is not configured");
+                throw new IllegalStateException(ErrorMessages.SERVICE_MISCONFIGURED);
             }
 
             final String logTxnId = transactionId;
@@ -222,8 +223,7 @@ public class DiscoveryController {
         log.info(LogEvent.VALIDATE_PASSED + ".starting");
         DiscoveryValidationService.ValidationResult result = validationService.validateDiscoverRequest(requestNode);
         if (!result.isValid()) {
-            String paths = result.getPaths().isEmpty() ? "root" : String.join(", ", result.getPaths());
-            String msg = "Schema validation failed: " + String.join("; ", result.getErrors()) + " (paths: " + paths + ")";
+            String msg = "Schema validation failed: " + String.join("; ", result.getErrors());
             log.warn(LogEvent.VALIDATE_FAILED,
                     value("errors", result.getErrors()),
                     value("paths", result.getPaths()),
