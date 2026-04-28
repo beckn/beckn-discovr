@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Retries ES indexing for items that failed in the main pipeline.
@@ -72,7 +73,14 @@ public class EsFailureConsumer {
             msg = mapper.readValue(json, EsFailureMessage.class);
         } catch (Exception e) {
             log.error("event={} reason=parse-error error={}", LogEvent.CONSUMER_ERROR, ErrorSanitizer.sanitize(e));
-            return; // commit offset — malformed message cannot be retried
+            // Route unparseable message to DLQ so operators can investigate — don't silently drop
+            // Use a random UUID key to avoid hot-partition on the DLQ topic
+            kafka.send(finalDlqTopic, UUID.randomUUID().toString(), json).whenComplete((r, dlqEx) -> {
+                if (dlqEx != null) {
+                    log.error("event={} reason=dlq-publish-failed error={}", LogEvent.KAFKA_FAILED, ErrorSanitizer.sanitize(dlqEx));
+                }
+            });
+            return;
         }
 
         if (msg.attempt() >= maxAttempts) {
@@ -86,16 +94,16 @@ public class EsFailureConsumer {
             BulkIndexResult result = bulkIndexService.index(msg.indexKey(), List.of(doc));
 
             if (result.hasFailures()) {
-                log.warn("event={} reason=retry-failed itemId={} attempt={}",
-                        LogEvent.ES_FAILED, msg.itemId(), msg.attempt());
+                log.warn("event={} reason=retry-failed resourceId={} attempt={}",
+                        LogEvent.ES_FAILED, msg.resourceId(), msg.attempt());
                 failurePublisher.republish(msg);
             } else {
                 metrics.incrementRecovered();
-                log.info("event={} itemId={}", LogEvent.ES_INDEXED, msg.itemId());
+                log.info("event={} resourceId={}", LogEvent.ES_INDEXED, msg.resourceId());
             }
         } catch (Exception e) {
-            log.error("event={} itemId={} error={}",
-                    LogEvent.ES_FAILED, msg.itemId(), ErrorSanitizer.sanitize(e));
+            log.error("event={} resourceId={} error={}",
+                    LogEvent.ES_FAILED, msg.resourceId(), ErrorSanitizer.sanitize(e));
             failurePublisher.republish(msg);
         }
     }
@@ -104,12 +112,18 @@ public class EsFailureConsumer {
 
     private void routeToDlq(EsFailureMessage msg) {
         metrics.incrementPermanentFailure();
-        log.error("event={} reason=permanent-failure itemId={} bppId={} attempts={}", LogEvent.ES_FAILED, msg.itemId(), msg.bppId(), msg.attempt());
+        log.error("event={} reason=permanent-failure resourceId={} catalogId={} attempts={}", LogEvent.ES_FAILED, msg.resourceId(), msg.catalogId(), msg.attempt());
         try {
-            kafka.send(finalDlqTopic, msg.bppId(), mapper.writeValueAsString(msg));
+            String dlqPayload = mapper.writeValueAsString(msg);
+            kafka.send(finalDlqTopic, msg.catalogId(), dlqPayload).whenComplete((r, dlqEx) -> {
+                if (dlqEx != null) {
+                    log.error("event={} reason=dlq-publish-failed resourceId={} error={}",
+                            LogEvent.KAFKA_FAILED, msg.resourceId(), ErrorSanitizer.sanitize(dlqEx));
+                }
+            });
         } catch (Exception e) {
-            log.error("event={} reason=dlq-publish-failed itemId={} error={}",
-                    LogEvent.KAFKA_FAILED, msg.itemId(), ErrorSanitizer.sanitize(e));
+            log.error("event={} reason=dlq-serialize-failed resourceId={} error={}",
+                    LogEvent.KAFKA_FAILED, msg.resourceId(), ErrorSanitizer.sanitize(e));
         }
     }
 }

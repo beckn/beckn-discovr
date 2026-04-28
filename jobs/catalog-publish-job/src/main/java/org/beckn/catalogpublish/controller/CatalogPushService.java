@@ -1,46 +1,73 @@
 package org.beckn.catalogpublish.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.catalogpublish.common.BecknFields;
+import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.logging.LogEvent;
-import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
-import org.beckn.catalogpublish.util.CorrelationContext;
-import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 /**
- * Async processing bridge for the HTTP push path.
- * Decouples the HTTP response (202 Accepted) from catalog processing so the BPP
- * is not blocked while the pipeline runs.
+ * Publishes catalog push payloads to Kafka for async processing.
+ * The HTTP response (202 Accepted) is sent before this runs, and the
+ * {@link org.beckn.catalogpublish.consumer.CatalogPublishConsumer} picks up the
+ * message for durable, retryable processing.
  */
 @Service
 public class CatalogPushService {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogPushService.class);
 
-    private final CatalogPublishOrchestrator orchestrator;
-    private final CorrelationContext correlationContext;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObjectMapper objectMapper;
+    private final String ingestionTopic;
 
-    public CatalogPushService(CatalogPublishOrchestrator orchestrator,
-            CorrelationContext correlationContext) {
-        this.orchestrator = orchestrator;
-        this.correlationContext = correlationContext;
+    public CatalogPushService(KafkaTemplate<String, String> kafkaTemplate,
+            ObjectMapper objectMapper,
+            AppProperties props) {
+        this.kafkaTemplate = kafkaTemplate;
+        this.objectMapper = objectMapper;
+        this.ingestionTopic = props.messaging().topics().ingestionRequests();
     }
 
     /**
-     * Processes the raw catalog push payload asynchronously.
-     * The HTTP response has already been sent (202) before this runs.
+     * Publishes the raw catalog push payload to Kafka for async processing.
+     * The message key is derived from context.subscriberId (or bppId as fallback)
+     * so that one subscriber's publishes are routed to the same partition, ensuring
+     * FULL replace and MERGE operations are applied in arrival order.
+     * The existing {@code CatalogPublishConsumer} consumes from this topic.
      */
-    @Async("catalogProcessingExecutor")
-    public void processAsync(String rawBody) {
+    public void enqueueForProcessing(String rawBody) {
+        String key = extractKafkaKey(rawBody);
+        kafkaTemplate.send(ingestionTopic, key, rawBody).whenComplete((result, ex) -> {
+            if (ex != null) {
+                log.error("event={} topic={} error={}", LogEvent.CONSUMER_ERROR, ingestionTopic, ex.getMessage(), ex);
+            } else {
+                log.info("event={} topic={} offset={}",
+                        LogEvent.PUSH_RECEIVED, ingestionTopic, result.getRecordMetadata().offset());
+            }
+        });
+    }
+
+    /**
+     * Extracts a stable partition key from the raw body for ordering guarantees.
+     * One subscriber's publishes must be sequential (FULL replace + MERGE ordering).
+     * Priority: context.subscriberId → context.bppId → null (round-robin).
+     * Falls back to null on any parse failure so delivery is never blocked.
+     */
+    private String extractKafkaKey(String rawBody) {
         try {
-            correlationContext.populateFallback();
-            orchestrator.processPublish(rawBody);
+            JsonNode ctx = objectMapper.readTree(rawBody).path(BecknFields.CONTEXT);
+            String subscriberId = ctx.path(BecknFields.SUBSCRIBER_ID).asText(null);
+            if (subscriberId != null && !subscriberId.isBlank()) return subscriberId;
+            String bppId = ctx.path(BecknFields.BPP_ID).asText(null);
+            if (bppId != null && !bppId.isBlank()) return bppId;
+            return null;
         } catch (Exception e) {
-            log.error("event={} error={}", LogEvent.CONSUMER_ERROR, ErrorSanitizer.sanitize(e));
-        } finally {
-            correlationContext.clear();
+            return null;
         }
     }
 }

@@ -1,6 +1,6 @@
 spring:
   application:
-    name: seeker-notifier
+    name: response-dispatcher
 
   kafka:
     bootstrap-servers: localhost:9092
@@ -48,6 +48,11 @@ http:
     initial-delay: 1000
     max-delay: 10000
     multiplier: 2.0
+
+# DeDi Registry for callback URL resolution (resolves subscriber base URL at delivery time)
+registry:
+  base-url: ${REGISTRY_BASE_URL:}
+  name: ${REGISTRY_NAME:keys}
 
 # HTTP Signature Configuration (Ed25519 + BLAKE-512)
 # Supports both raw 32-byte seed and PKCS#8 48-byte format

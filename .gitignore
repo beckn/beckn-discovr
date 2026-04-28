@@ -27,3 +27,7 @@ logs/
 .env
 .env.local
 *.local
+key.json
+
+# Graphify (generated knowledge graph output)
+graphify-out/

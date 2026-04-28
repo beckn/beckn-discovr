@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.header.Header;
 import org.beckn.seeker.common.BecknFields;
 import org.beckn.seeker.logging.BecknMdcContext;
 import org.beckn.seeker.logging.LogEvent;
@@ -13,6 +14,8 @@ import org.beckn.seeker.service.MessageProcessingService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
+
+import java.nio.charset.StandardCharsets;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
@@ -34,6 +37,14 @@ public class EventListener {
         String rawValue = record.value();
         String key = record.key();
 
+        // Extract tags header first so it is set for all subsequent log lines
+        Header tagsHeader = record.headers().lastHeader("tags");
+        BecknMdcContext.setTags(tagsHeader != null ? tagsHeader.value() : null);
+
+        // Extract subscriber identity headers (set by catalog-discover-job from auth header)
+        String subscriberId = extractHeader(record.headers().lastHeader("subscriber_id"));
+        String recordId = extractHeader(record.headers().lastHeader("record_id"));
+
         // Populate MDC from Beckn context if the message is parseable JSON
         try {
             if (rawValue != null) {
@@ -53,7 +64,7 @@ public class EventListener {
                     value("partition", record.partition()),
                     value("offset", record.offset()));
 
-            String result = messageProcessingService.processMessage(rawValue);
+            String result = messageProcessingService.processMessage(rawValue, subscriberId, recordId);
 
             log.info("{}", value("event", LogEvent.CONSUMER_PROCESSED),
                     value("result", result));
@@ -80,14 +91,25 @@ public class EventListener {
                 log.warn("{}", value("event", LogEvent.DLT_SENT),
                         value("topic", record.topic()),
                         value("key", messageKey));
+                // Ack only after successful DLT publish. If DLT publish fails we must
+                // NOT ack — throw so the container error handler retries or raises an alert.
+                ack.acknowledge();
             } catch (Exception dltEx) {
                 log.error("{}", value("event", LogEvent.DLT_FAILED),
                         value("errorMessage", dltEx.getMessage()), dltEx);
-            } finally {
-                ack.acknowledge();
+                // Re-throw so the container error handler sees the failure and does not
+                // commit the offset. The message will be retried on the next poll.
+                throw new RuntimeException("DLT publish failed — offset not committed", dltEx);
             }
         } finally {
             BecknMdcContext.clear();
         }
+    }
+
+    private static String extractHeader(Header header) {
+        if (header == null || header.value() == null || header.value().length == 0) {
+            return null;
+        }
+        return new String(header.value(), StandardCharsets.UTF_8);
     }
 }

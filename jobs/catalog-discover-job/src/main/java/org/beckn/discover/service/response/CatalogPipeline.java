@@ -1,5 +1,6 @@
 package org.beckn.discover.service.response;
 
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.slf4j.Logger;
@@ -24,12 +25,12 @@ import java.util.Objects;
  *       and is the <em>primary</em> filter for NLWeb / Elasticsearch.</li>
  *   <li><b>deduplicateOffers</b> — removes duplicate offers within each
  *       catalog (by {@code id}).</li>
- *   <li><b>filterItemsByOfferReferences</b> — when an offer-scoped query
- *       has populated offers, restricts items to only those referenced by
+ *   <li><b>filterResourcesByOfferReferences</b> — when an offer-scoped query
+ *       has populated offers, restricts resources to only those referenced by
  *       at least one offer.</li>
- *   <li><b>filterOffersByItemIds</b> — removes offers that reference none
- *       of the catalog's items (cross-filter in the opposite direction).</li>
- *   <li><b>removeEmptyCatalogs</b> — discards catalogs that have no items
+ *   <li><b>filterOffersByResourceIds</b> — removes offers that reference none
+ *       of the catalog's resources (cross-filter in the opposite direction).</li>
+ *   <li><b>removeEmptyCatalogs</b> — discards catalogs that have no resources
  *       after the preceding steps.</li>
  * </ol>
  *
@@ -58,8 +59,10 @@ public class CatalogPipeline {
      * Runs the full post-processing pipeline on {@code catalogs} and returns
      * the processed list.
      *
-     * <p>The input list is not mutated; a new mutable list is used
-     * internally.</p>
+     * <p>Delegates to {@link #process(List, QueryRequest, boolean)} with
+     * {@code schemaPreFiltered=false}, so step 1 (schema context filtering)
+     * always runs. This is the correct choice for NLWeb-backed queries where
+     * ES/PG has not already applied schema filtering.</p>
      *
      * @param catalogs raw catalogs from any engine/assembler; {@code null}
      *                 is treated as empty
@@ -67,99 +70,121 @@ public class CatalogPipeline {
      * @return processed catalogs; never {@code null}, may be empty
      */
     public List<Catalog> process(List<Catalog> catalogs, QueryRequest request) {
+        return process(catalogs, request, false);
+    }
+
+    /**
+     * Runs the post-processing pipeline on {@code catalogs} and returns the
+     * processed list.
+     *
+     * <p>When {@code schemaPreFiltered} is {@code true}, step 1 (schema context
+     * filtering) is skipped because the query engine has already applied it at
+     * the ES or PostgreSQL layer. Pass {@code true} for ES and PostgreSQL paths;
+     * pass {@code false} (or use the 2-arg overload) for NLWeb paths.</p>
+     *
+     * <p>The input list is not mutated; a new mutable list is used
+     * internally.</p>
+     *
+     * @param catalogs         raw catalogs from any engine/assembler; {@code null}
+     *                         is treated as empty
+     * @param request          provides schema context URLs for the filtering step
+     * @param schemaPreFiltered when {@code true}, step 1 is skipped
+     * @return processed catalogs; never {@code null}, may be empty
+     */
+    public List<Catalog> process(List<Catalog> catalogs, QueryRequest request, boolean schemaPreFiltered) {
         if (catalogs == null || catalogs.isEmpty()) {
-            log.debug("pipeline.empty transactionId={}", request.transactionId());
+            log.debug("event={}", LogEvent.PIPELINE_EMPTY);
             return List.of();
         }
 
-        long t0 = System.nanoTime();
+        long startNanos = System.nanoTime();
         int inputSize = catalogs.size();
 
         // Work on a mutable copy so we can remove empty catalogs at the end
-        List<Catalog> work = new ArrayList<>(catalogs);
+        List<Catalog> mutableCatalogs = new ArrayList<>(catalogs);
 
-        step1FilterBySchemaContext(work, request);
-        step2DeduplicateOffers(work);
-        step3FilterItemsByOfferReferences(work);
-        step4FilterOffersByItemIds(work);
-        step5RemoveEmptyCatalogs(work, request.transactionId());
+        if (!schemaPreFiltered) {
+            filterResourcesBySchemaContext(mutableCatalogs, request);
+        } else {
+            log.debug("event={} reason=schema-pre-filtered", LogEvent.PIPELINE_STEP1_SKIPPED);
+        }
+        deduplicateOffersInCatalogs(mutableCatalogs);
+        filterResourcesByOfferReferences(mutableCatalogs);
+        filterOffersByResourceIds(mutableCatalogs);
+        removeEmptyCatalogs(mutableCatalogs, request.transactionId());
 
-        long ms = (System.nanoTime() - t0) / 1_000_000;
-        log.info("pipeline.done input={} output={} resources={} durationMs={} transactionId={}",
-                inputSize,
-                work.size(),
-                work.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
-                ms,
-                request.transactionId());
+        long ms = (System.nanoTime() - startNanos) / 1_000_000;
+        log.info("event={} input={} output={} resources={} durationMs={} schemaPreFiltered={}",
+                LogEvent.PIPELINE_COMPLETED, inputSize,
+                mutableCatalogs.size(),
+                mutableCatalogs.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
+                ms, schemaPreFiltered);
 
-        return work;
+        return mutableCatalogs;
     }
 
     // ── Pipeline steps ────────────────────────────────────────────────────────
 
     /**
-     * Step 1 — Filter items by schema context URL.
+     * Filter resources by schema context URL.
      * No-op when the request has no schema context filter.
      */
-    private void step1FilterBySchemaContext(List<Catalog> catalogs, QueryRequest request) {
+    private void filterResourcesBySchemaContext(List<Catalog> catalogs, QueryRequest request) {
         if (request.schemaContextUrls().isEmpty()) return;
 
-        int beforeItems = totalItems(catalogs);
+        int beforeCount = totalResourceCount(catalogs);
         processor.filterCatalogsBySchemaContext(catalogs, request.schemaContextUrls());
-        int afterItems = totalItems(catalogs);
+        int afterCount = totalResourceCount(catalogs);
 
-        if (beforeItems != afterItems) {
-            log.debug("pipeline.step1.schemaFilter removed={} transactionId={}",
-                    beforeItems - afterItems, request.transactionId());
+        if (beforeCount != afterCount) {
+            log.debug("event={} removed={}", LogEvent.PIPELINE_STEP1_SCHEMA_FILTER, beforeCount - afterCount);
         }
     }
 
     /**
-     * Step 2 — Remove duplicate offers within each catalog.
+     * Remove duplicate offers within each catalog.
      * No-op when a catalog has ≤1 offer.
      */
-    private void step2DeduplicateOffers(List<Catalog> catalogs) {
+    private void deduplicateOffersInCatalogs(List<Catalog> catalogs) {
         catalogs.forEach(processor::deduplicateOffers);
     }
 
     /**
-     * Step 3 — Restrict items to those referenced by offers.
+     * Restrict resources to those referenced by offers.
      * Applies only when offers are present; otherwise a no-op.
      */
-    private void step3FilterItemsByOfferReferences(List<Catalog> catalogs) {
-        catalogs.forEach(processor::filterItemsByOfferReferences);
+    private void filterResourcesByOfferReferences(List<Catalog> catalogs) {
+        catalogs.forEach(processor::filterResourcesByOfferReferences);
     }
 
     /**
-     * Step 4 — Remove offers that reference none of the catalog's items.
+     * Remove offers that reference none of the catalog's resources.
      * Always safe; no-op when no offers are present.
      */
-    private void step4FilterOffersByItemIds(List<Catalog> catalogs) {
-        catalogs.forEach(processor::filterOffersByItemIds);
+    private void filterOffersByResourceIds(List<Catalog> catalogs) {
+        catalogs.forEach(processor::filterOffersByResourceIds);
     }
 
     /**
-     * Step 5 — Remove catalogs that have no items after the preceding steps.
+     * Remove catalogs that have no resources after the preceding steps.
      */
-    private void step5RemoveEmptyCatalogs(List<Catalog> catalogs, String transactionId) {
+    private void removeEmptyCatalogs(List<Catalog> catalogs, String transactionId) {
         int before = catalogs.size();
         catalogs.removeIf(c -> {
             boolean empty = c.getResources() == null || c.getResources().isEmpty();
             if (empty) {
-                log.debug("pipeline.step5.removedEmptyCatalog id={} transactionId={}",
-                        c.getId(), transactionId);
+                log.debug("event={} id={}", LogEvent.PIPELINE_STEP5_REMOVED_EMPTY, c.getId());
             }
             return empty;
         });
         if (catalogs.size() < before) {
-            log.info("pipeline.step5.removed count={} transactionId={}",
-                    before - catalogs.size(), transactionId);
+            log.debug("event={} count={}", LogEvent.PIPELINE_STEP5_REMOVED, before - catalogs.size());
         }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static int totalItems(List<Catalog> catalogs) {
+    private static int totalResourceCount(List<Catalog> catalogs) {
         return catalogs.stream()
                 .map(Catalog::getResources)
                 .filter(Objects::nonNull)

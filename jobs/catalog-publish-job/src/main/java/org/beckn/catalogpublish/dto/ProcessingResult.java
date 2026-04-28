@@ -13,7 +13,7 @@ public sealed interface ProcessingResult
     String catalogId();
     ProcessingStatus status();
 
-    record Success(String catalogId, int itemCount, List<ProcessingError> partialErrors)
+    record Success(String catalogId, @com.fasterxml.jackson.annotation.JsonAlias("itemCount") int resourceCount, List<ProcessingError> partialErrors)
             implements ProcessingResult {
         @Override
         public ProcessingStatus status() {
@@ -38,7 +38,7 @@ public sealed interface ProcessingResult
     }
 
     static ProcessingResult success(String catalogId, CatalogBatch batch) {
-        return new Success(catalogId, batch.savedItems().size(), batch.errors());
+        return new Success(catalogId, batch.savedResources().size(), batch.errors());
     }
 
     static ProcessingResult rejected(String catalogId, Throwable e) {

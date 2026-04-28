@@ -39,76 +39,31 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private DiscoveryService discoveryService;
 
-    private static final String CAT_ID  = "cat-schema-test";
-    private static final String PROV_ID = "prov-schema-test";
-    private static final String BPP_ID  = "bpp-schema-test.example.com";
-    private static final String BPP_URI = "https://bpp-schema-test.example.com";
+    private static final String CAT_ID      = "cat-schema-test";
+    private static final String PROV_ID     = "prov-schema-test";
     private static final String CONTEXT_URL = "https://raw.githubusercontent.com/beckn/protocol-specifications-new/"
             + "refs/heads/draft/schema/EvChargingService/v1/context.jsonld";
 
     @BeforeEach
     void cleanSchemaTestRows() {
-        jdbcTemplate.execute("DELETE FROM item_location_collection WHERE item_id LIKE 'schema-test-%'");
-        jdbcTemplate.execute("DELETE FROM item WHERE id LIKE 'schema-test-%'");
-        jdbcTemplate.update("DELETE FROM provider WHERE id = ?", PROV_ID);
-        jdbcTemplate.update("DELETE FROM catalog WHERE id = ?", CAT_ID);
+        jdbcTemplate.update("DELETE FROM item_location_collection WHERE item_id LIKE ?", "schema-test-%");
+        jdbcTemplate.update("DELETE FROM item WHERE id LIKE ? AND catalog_id = ?", "schema-test-%", CAT_ID);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private void insertCatalog() {
+    private void insertItem(String itemId, String payloadJson) {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO catalog (id, name, context_url, type, bpp_id, bpp_uri, payload, updated_at) "
-                            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING");
-            ps.setString(1, CAT_ID);
-            ps.setString(2, "Schema Test Catalog");
-            ps.setString(3, CONTEXT_URL);
-            ps.setString(4, "Catalog");
-            ps.setString(5, BPP_ID);
-            ps.setString(6, BPP_URI);
-            ps.setObject(7, pgJsonb("{}"));
-            ps.setTimestamp(8, Timestamp.from(OffsetDateTime.now().toInstant()));
-            return ps;
-        });
-    }
-
-    private void insertProvider() {
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO provider (id, name, context_url, type, bpp_id, bpp_uri, catalog_id, payload, updated_at) "
-                            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING");
-            ps.setString(1, PROV_ID);
-            ps.setString(2, "Test Provider");
-            ps.setString(3, CONTEXT_URL);
-            ps.setString(4, "Provider");
-            ps.setString(5, BPP_ID);
-            ps.setString(6, BPP_URI);
-            ps.setString(7, CAT_ID);
-            ps.setObject(8, pgJsonb("{}"));
-            ps.setTimestamp(9, Timestamp.from(OffsetDateTime.now().toInstant()));
-            return ps;
-        });
-    }
-
-    private void insertItem(String itemId, String schemaVersion, String payloadJson) {
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO item (id, name, context_url, type, bpp_id, bpp_uri, provider_id, catalog_id, "
-                            + "payload, schema_version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                            + "ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, "
-                            + "schema_version = EXCLUDED.schema_version");
+                    "INSERT INTO item (id, catalog_id, context_url, type, offer_ids, payload, updated_at) "
+                            + "VALUES (?, ?, ?, ?, ARRAY[]::TEXT[], ?, ?) "
+                            + "ON CONFLICT (id, catalog_id) DO UPDATE SET payload = EXCLUDED.payload");
             ps.setString(1, itemId);
-            ps.setString(2, "Test Item " + itemId);
+            ps.setString(2, CAT_ID);
             ps.setString(3, CONTEXT_URL);
             ps.setString(4, "ChargingService");
-            ps.setString(5, BPP_ID);
-            ps.setString(6, BPP_URI);
-            ps.setString(7, PROV_ID);
-            ps.setString(8, CAT_ID);
-            ps.setObject(9, pgJsonb(payloadJson));
-            ps.setString(10, schemaVersion);
-            ps.setTimestamp(11, Timestamp.from(OffsetDateTime.now().toInstant()));
+            ps.setObject(5, pgJsonb(payloadJson));
+            ps.setTimestamp(6, Timestamp.from(OffsetDateTime.now().toInstant()));
             return ps;
         });
     }
@@ -129,16 +84,18 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                 {
                   "catalogs": [
                     {
-                      "@type": "Catalog",
-                      "@context": "%s",
                       "id": "%s",
-                      "bppId": "%s",
-                      "bppUri": "%s",
                       "descriptor": {"name": "Schema Test Catalog"},
-                      "offers": [],
+                      "offers": [
+                        {
+                          "id": "offer-%s",
+                          "descriptor": {"name": "Test Tariff"},
+                          "resourceIds": ["%s"],
+                          "price": {"currency": "INR", "value": 20.0}
+                        }
+                      ],
                       "resources": [
                         {
-                          "@context": "%s",
                           "id": "%s",
                           "descriptor": {
                             "name": "%s",
@@ -157,22 +114,19 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
                           ],
                           "policies": [
                             {"type": "cancellation", "terms": "No refunds after session start"}
-                          ],
-                          "networkId": "bap.net/ev-charging"
+                          ]
                         }
                       ]
                     }
                   ]
                 }
-                """, CONTEXT_URL, CAT_ID, BPP_ID, BPP_URI, CONTEXT_URL, itemId, itemName, PROV_ID, CONTEXT_URL);
+                """, CAT_ID, itemId, itemId, itemId, itemName, PROV_ID, CONTEXT_URL);
     }
 
     private DiscoverRequest buildRequest(String transactionId, String schemaContextUrl) {
         Context ctx = new Context();
         ctx.setTransactionId(transactionId);
         ctx.setMessageId(UUID.randomUUID().toString());
-        ctx.setBapId("bap.test.example.com");
-        ctx.setBapUri("https://bap.test.example.com/callback");
         ctx.setAction("discover");
         ctx.setVersion("2.0.0");
         ctx.setTimestamp(OffsetDateTime.of(2026, 3, 22, 10, 0, 0, 0, ZoneOffset.UTC));
@@ -191,9 +145,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void discoverV21Item_returnedWithCorrectFields_noSchemaVersionInResponse() throws Exception {
-        insertCatalog();
-        insertProvider();
-        insertItem("schema-test-v21-001", "2.1", v21ItemPayload("schema-test-v21-001", "v2.1 CCS2 Charger"));
+        insertItem("schema-test-v21-001", v21ItemPayload("schema-test-v21-001", "v2.1 CCS2 Charger"));
 
         DiscoverRequest request = buildRequest("tx-schema-v21-001", CONTEXT_URL);
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
@@ -235,9 +187,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void discoverV21Item_constraintsAndPoliciesPresent_noSchemaVersionInResponse() throws Exception {
-        insertCatalog();
-        insertProvider();
-        insertItem("schema-test-v21-002", "2.1", v21ItemPayload("schema-test-v21-002", "v2.1 Smart Charger"));
+        insertItem("schema-test-v21-002", v21ItemPayload("schema-test-v21-002", "v2.1 Smart Charger"));
 
         DiscoverRequest request = buildRequest("tx-schema-v21-002", CONTEXT_URL);
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
@@ -278,10 +228,8 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void discoverMultipleV21Items_allReturnedCorrectly() throws Exception {
-        insertCatalog();
-        insertProvider();
-        insertItem("schema-test-item-a", "2.1", v21ItemPayload("schema-test-item-a", "CCS2 Charger"));
-        insertItem("schema-test-item-b", "2.1", v21ItemPayload("schema-test-item-b", "Type2 Charger"));
+        insertItem("schema-test-item-a", v21ItemPayload("schema-test-item-a", "CCS2 Charger"));
+        insertItem("schema-test-item-b", v21ItemPayload("schema-test-item-b", "Type2 Charger"));
 
         DiscoverRequest request = buildRequest("tx-schema-multi-001", CONTEXT_URL);
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
@@ -327,9 +275,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void discoverV21Item_providerIdExtractedCorrectly() throws Exception {
-        insertCatalog();
-        insertProvider();
-        insertItem("schema-test-prov-001", "2.1", v21ItemPayload("schema-test-prov-001", "Provider Test Charger"));
+        insertItem("schema-test-prov-001", v21ItemPayload("schema-test-prov-001", "Provider Test Charger"));
 
         DiscoverRequest request = buildRequest("tx-schema-prov-001", CONTEXT_URL);
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);

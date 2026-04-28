@@ -1,13 +1,14 @@
 package org.beckn.catalogpublish.indexing.failure;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.Instant;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record EsFailureMessage(
-        String itemId,
-        String bppId,
+        @JsonAlias("itemId") String resourceId,
+        String catalogId,
         String indexKey,
         String payload,
         String errorReason,
@@ -15,6 +16,6 @@ public record EsFailureMessage(
         int attempt) {
 
     public EsFailureMessage withNextAttempt() {
-        return new EsFailureMessage(itemId, bppId, indexKey, payload, errorReason, Instant.now(), attempt + 1);
+        return new EsFailureMessage(resourceId, catalogId, indexKey, payload, errorReason, Instant.now(), attempt + 1);
     }
 }

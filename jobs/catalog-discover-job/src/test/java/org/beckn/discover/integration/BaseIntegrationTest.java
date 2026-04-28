@@ -8,7 +8,6 @@ import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.model.Resource;
 import okhttp3.mockwebserver.MockWebServer;
-import org.beckn.discover.model.Context;
 import org.postgresql.util.PGobject;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -131,8 +130,6 @@ public abstract class BaseIntegrationTest {
         Context context = new Context();
         context.setTransactionId(transactionId);
         context.setMessageId(messageId);
-        context.setBapId("https://evcharging-bap.example.com");
-        context.setBapUri("https://evcharging-bap.example.com/callback");
         context.setAction("discover");
         context.setVersion("2.0.0");
         context.setTtl("PT10M");
@@ -142,11 +139,9 @@ public abstract class BaseIntegrationTest {
     }
 
     private void ensureSampleDataPresent() {
-        if (!Files.exists(SAMPLE_DATA_DIR.resolve("item.json"))
-                || !Files.exists(SAMPLE_DATA_DIR.resolve("catalog.json"))
-                || !Files.exists(SAMPLE_DATA_DIR.resolve("provider.json"))) {
+        if (!Files.exists(SAMPLE_DATA_DIR.resolve("item.json"))) {
             throw new IllegalStateException(
-                    "Sample catalog_db JSON files are missing under " + SAMPLE_DATA_DIR.toAbsolutePath());
+                    "Sample catalog_db item.json is missing under " + SAMPLE_DATA_DIR.toAbsolutePath());
         }
     }
 
@@ -155,12 +150,9 @@ public abstract class BaseIntegrationTest {
 
     private void createSchema() {
         jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS postgis");
-        // Drop in dependency order: item_location_collection before item (FK
-        // constraint)
+        jdbcTemplate.execute("DROP TABLE IF EXISTS provider_offer CASCADE");
         jdbcTemplate.execute("DROP TABLE IF EXISTS item_location_collection CASCADE");
         jdbcTemplate.execute("DROP TABLE IF EXISTS item CASCADE");
-        jdbcTemplate.execute("DROP TABLE IF EXISTS provider CASCADE");
-        jdbcTemplate.execute("DROP TABLE IF EXISTS catalog CASCADE");
 
         var dataSource = Objects.requireNonNull(jdbcTemplate.getDataSource(), "DataSource must not be null");
         try (Connection connection = dataSource.getConnection()) {
@@ -173,16 +165,6 @@ public abstract class BaseIntegrationTest {
     }
 
     private void loadSampleData() throws IOException {
-        List<Map<String, Object>> catalogRows = readJsonRows("catalog.json");
-        for (Map<String, Object> row : catalogRows) {
-            insertCatalogRow(row);
-        }
-
-        List<Map<String, Object>> providerRows = readJsonRows("provider.json");
-        for (Map<String, Object> row : providerRows) {
-            insertProviderRow(row);
-        }
-
         List<Map<String, Object>> itemRows = readJsonRows("item.json");
         for (Map<String, Object> row : itemRows) {
             insertItemRow(row);
@@ -223,19 +205,21 @@ public abstract class BaseIntegrationTest {
             // Path format matches catalog-publish-job and request targets.
             // Used by spatialQueryUsesPostgisTargets — s_dwithin with radius 1000m.
             String path = "$.catalogs[*].resources[*].availableAt[*].geo";
-            insertItemLocationGeom("ev-charger-ccs2-001", path, 77.5946, 12.9716);
-            insertItemLocationGeom("ev-charger-ccs2-002", path, 77.5700, 12.9800);
+            String catId = "catalog-ev-charging-001";
+            insertItemLocationGeom("ev-charger-ccs2-001", catId, path, 77.5946, 12.9716);
+            insertItemLocationGeom("ev-charger-ccs2-002", catId, path, 77.5700, 12.9800);
         }
     }
 
     /**
      * Inserts one location row from a JSON fixture map.
-     * Expected keys: {@code item_id}, {@code path}, {@code lon}, {@code lat}.
+     * Expected keys: {@code item_id}, {@code catalog_id}, {@code path}, {@code lon}, {@code lat}.
      */
     private void insertItemLocationRow(Map<String, Object> row) {
         double lon = ((Number) row.get("lon")).doubleValue();
         double lat = ((Number) row.get("lat")).doubleValue();
-        insertItemLocationGeom(asString(row, "item_id"), asString(row, "path"), lon, lat);
+        String catalogId = asString(row, "catalog_id");
+        insertItemLocationGeom(asString(row, "item_id"), catalogId != null ? catalogId : "", asString(row, "path"), lon, lat);
     }
 
     /**
@@ -247,17 +231,18 @@ public abstract class BaseIntegrationTest {
      * are JDBC bind parameters, not interpolated strings.
      * </p>
      *
-     * @param itemId the FK into {@code item.id}
-     * @param path   the path token (e.g. {@code $.catalogs[*].resources[*].availableAt[*].geo})
-     * @param lon    longitude (x), in degrees
-     * @param lat    latitude (y), in degrees
+     * @param itemId    the item identifier
+     * @param catalogId the catalog this item belongs to
+     * @param path      the path token (e.g. {@code $.catalogs[*].resources[*].availableAt[*].geo})
+     * @param lon       longitude (x), in degrees
+     * @param lat       latitude (y), in degrees
      */
-    private void insertItemLocationGeom(String itemId, String path, double lon, double lat) {
+    private void insertItemLocationGeom(String itemId, String catalogId, String path, double lon, double lat) {
         jdbcTemplate.update(
-                "INSERT INTO item_location_collection (item_id, path, geom) "
-                        + "VALUES (?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)) "
-                        + "ON CONFLICT (item_id, path) DO UPDATE SET geom = EXCLUDED.geom",
-                itemId, path, lon, lat);
+                "INSERT INTO item_location_collection (item_id, catalog_id, path, geom) "
+                        + "VALUES (?, ?, ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)) "
+                        + "ON CONFLICT (item_id, catalog_id, path) DO UPDATE SET geom = EXCLUDED.geom",
+                itemId, catalogId, path, lon, lat);
     }
 
     private List<Map<String, Object>> readJsonRows(String fileName) throws IOException {
@@ -269,53 +254,21 @@ public abstract class BaseIntegrationTest {
         });
     }
 
-    private void insertCatalogRow(Map<String, Object> row) {
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO catalog (id, name, context_url, type, bpp_id, bpp_uri, payload, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            ps.setString(1, asString(row, "id"));
-            ps.setString(2, asString(row, "name"));
-            ps.setString(3, asString(row, "context_url"));
-            ps.setString(4, asString(row, "type"));
-            ps.setString(5, asString(row, "bpp_id"));
-            ps.setString(6, asString(row, "bpp_uri"));
-            ps.setObject(7, toJsonb(row.get("payload")));
-            ps.setTimestamp(8, parseTimestamp(asString(row, "updated_at")));
-            return ps;
-        });
-    }
-
-    private void insertProviderRow(Map<String, Object> row) {
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO provider (id, name, context_url, type, bpp_id, bpp_uri, catalog_id, payload, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            ps.setString(1, asString(row, "id"));
-            ps.setString(2, asString(row, "name"));
-            ps.setString(3, asString(row, "context_url"));
-            ps.setString(4, asString(row, "type"));
-            ps.setString(5, asString(row, "bpp_id"));
-            ps.setString(6, asString(row, "bpp_uri"));
-            ps.setString(7, asString(row, "catalog_id"));
-            ps.setObject(8, toJsonb(row.get("payload")));
-            ps.setTimestamp(9, parseTimestamp(asString(row, "updated_at")));
-            return ps;
-        });
-    }
-
     private void insertItemRow(Map<String, Object> row) {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO item (id, name, context_url, type, bpp_id, bpp_uri, provider_id, catalog_id, payload, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    "INSERT INTO item (id, catalog_id, context_url, type, offer_ids, payload, created_by, updated_by, updated_at) "
+                            + "VALUES (?, ?, ?, ?, ARRAY[]::TEXT[], ?, ?, ?, ?) "
+                            + "ON CONFLICT (id, catalog_id) DO UPDATE SET "
+                            + "payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at");
             ps.setString(1, asString(row, "id"));
-            ps.setString(2, asString(row, "name"));
+            ps.setString(2, asString(row, "catalog_id"));
             ps.setString(3, asString(row, "context_url"));
             ps.setString(4, asString(row, "type"));
-            ps.setString(5, asString(row, "bpp_id"));
-            ps.setString(6, asString(row, "bpp_uri"));
-            ps.setString(7, asString(row, "provider_id"));
-            ps.setString(8, asString(row, "catalog_id"));
-            ps.setObject(9, toJsonb(row.get("payload")));
-            ps.setTimestamp(10, parseTimestamp(asString(row, "updated_at")));
+            ps.setObject(5, toJsonb(row.get("payload")));
+            ps.setString(6, asString(row, "created_by"));
+            ps.setString(7, asString(row, "updated_by"));
+            ps.setTimestamp(8, parseTimestamp(asString(row, "updated_at")));
             return ps;
         });
     }
@@ -348,7 +301,7 @@ public abstract class BaseIntegrationTest {
 
     /**
      * Validates that response context has all required fields with proper values.
-     * Checks: transactionId, messageId, bapId, timestamp, action, version.
+     * Checks: transactionId, messageId, timestamp, action, version.
      */
     protected void assertResponseContextValid(Context context, Context requestContext) {
         Assertions.assertThat(context).isNotNull();
@@ -358,9 +311,6 @@ public abstract class BaseIntegrationTest {
         Assertions.assertThat(context.getMessageId())
                 .as("Response context should preserve messageId from request")
                 .isEqualTo(requestContext.getMessageId());
-        Assertions.assertThat(context.getBapId())
-                .as("Response context should preserve bapId from request")
-                .isEqualTo(requestContext.getBapId());
         Assertions.assertThat(context.getTimestamp())
                 .as("Response context must have timestamp")
                 .isNotNull();

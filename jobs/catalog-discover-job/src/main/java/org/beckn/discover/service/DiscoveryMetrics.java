@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -52,7 +53,14 @@ public class DiscoveryMetrics {
     private final Counter totalRequestsCounter;
     private final Counter successCounter;
     private final Counter failureCounter;
+    private final Counter schemaFilterAppliedCounter;
     private final Timer   processingTimer;
+
+    // ── Overall (non-engine-tagged) result count ─────────────────────────────
+
+    private static final String METRIC_RESULT_COUNT_TOTAL = "discovr.discover.results.count.total";
+
+    private final DistributionSummary resultCountTotal;
 
     // Pre-registered per-engine meters (avoids per-call registration overhead)
     private final Map<String, Timer>               searchTimers;
@@ -66,32 +74,46 @@ public class DiscoveryMetrics {
     private final AtomicLong totalProcessingTime = new AtomicLong();
 
     public DiscoveryMetrics(MeterRegistry meterRegistry) {
-        this.totalRequestsCounter = Counter.builder("discovery.requests.total")
+        this.totalRequestsCounter = Counter.builder("discovr.discover.requests.total")
                 .description("Total discovery requests received")
                 .register(meterRegistry);
-        this.successCounter = Counter.builder("discovery.requests.success")
+        this.successCounter = Counter.builder("discovr.discover.requests.success")
                 .description("Successful discovery requests")
                 .register(meterRegistry);
-        this.failureCounter = Counter.builder("discovery.requests.failure")
+        this.failureCounter = Counter.builder("discovr.discover.requests.failure")
                 .description("Failed discovery requests")
                 .register(meterRegistry);
-        this.processingTimer = Timer.builder("discovery.processing.duration")
+        this.schemaFilterAppliedCounter = Counter.builder("discovr.discover.schema_filter.applied")
+                .description("Number of times schema context filtering was applied in ES queries")
+                .register(meterRegistry);
+        this.processingTimer = Timer.builder("discovr.discover.processing.duration")
                 .description("Discovery request processing duration")
+                .register(meterRegistry);
+        this.resultCountTotal = DistributionSummary.builder(METRIC_RESULT_COUNT_TOTAL)
+                .description("Number of catalog results returned per discover query")
                 .register(meterRegistry);
 
         this.searchTimers = Map.of(
-                ENGINE_POSTGRES,      Timer.builder("discovery.search.duration").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
-                ENGINE_ELASTICSEARCH, Timer.builder("discovery.search.duration").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
-                ENGINE_NLWEB,         Timer.builder("discovery.search.duration").tag("engine", ENGINE_NLWEB).register(meterRegistry)
+                ENGINE_POSTGRES,      Timer.builder("discovr.discover.search.duration").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
+                ENGINE_ELASTICSEARCH, Timer.builder("discovr.discover.search.duration").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
+                ENGINE_NLWEB,         Timer.builder("discovr.discover.search.duration").tag("engine", ENGINE_NLWEB).register(meterRegistry)
         );
         this.resultSummaries = Map.of(
-                ENGINE_POSTGRES,      DistributionSummary.builder("discovery.results.count").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
-                ENGINE_ELASTICSEARCH, DistributionSummary.builder("discovery.results.count").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
-                ENGINE_NLWEB,         DistributionSummary.builder("discovery.results.count").tag("engine", ENGINE_NLWEB).register(meterRegistry)
+                ENGINE_POSTGRES,      DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
+                ENGINE_ELASTICSEARCH, DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
+                ENGINE_NLWEB,         DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_NLWEB).register(meterRegistry)
         );
     }
 
     // ── Recording ────────────────────────────────────────────────────────────
+
+    /**
+     * Increments the schema filter applied counter.
+     * Call when a request carries schemaContext URLs that are pushed down into ES.
+     */
+    public void incrementSchemaFilterApplied() {
+        schemaFilterAppliedCounter.increment();
+    }
 
     /** Increments the total request counter. Call at the start of each request. */
     public void incrementTotalRequests() {
@@ -124,8 +146,8 @@ public class DiscoveryMetrics {
         long ms = Duration.between(startTime, Instant.now()).toMillis();
         failedRequests.incrementAndGet();
         failureCounter.increment();
-        log.error("discovery.metrics.failure durationMs={} transactionId={} error={}",
-                ms, transactionId, e.getMessage(), e);
+        log.error("event={} durationMs={} error={}",
+                LogEvent.METRICS_FAILURE, ms, e.getMessage(), e);
     }
 
     /**
@@ -139,7 +161,7 @@ public class DiscoveryMetrics {
         if (timer != null) {
             timer.record(duration);
         } else {
-            log.warn("discovery.metrics.unknown_engine engine={}", engine);
+            log.warn("event={} engine={}", LogEvent.METRICS_UNKNOWN_ENGINE, engine);
         }
     }
 
@@ -154,8 +176,18 @@ public class DiscoveryMetrics {
         if (summary != null) {
             summary.record(resultCount);
         } else {
-            log.warn("discovery.metrics.unknown_engine engine={}", engine);
+            log.warn("event={} engine={}", LogEvent.METRICS_UNKNOWN_ENGINE, engine);
         }
+    }
+
+    /**
+     * Records the total number of catalog results returned by a discover query,
+     * independent of which engine served the request.
+     *
+     * @param count number of catalogs included in the response
+     */
+    public void recordResultCount(int count) {
+        resultCountTotal.record(count);
     }
 
     // ── Stats retrieval ───────────────────────────────────────────────────────
@@ -175,7 +207,7 @@ public class DiscoveryMetrics {
         successfulRequests.set(0);
         failedRequests.set(0);
         totalProcessingTime.set(0);
-        log.info("discovery.metrics.reset");
+        log.info("event={}", LogEvent.METRICS_RESET);
     }
 
     /** Always returns {@code true}; extend with circuit-breaker state if needed. */

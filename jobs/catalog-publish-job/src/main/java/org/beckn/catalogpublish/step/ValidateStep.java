@@ -5,6 +5,7 @@ import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.dto.ParsedCatalogMessage;
 import org.beckn.catalogpublish.exception.ValidationException;
 import org.beckn.catalogpublish.logging.LogEvent;
+import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.validation.CatalogMessageValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +48,7 @@ public class ValidateStep {
             String snippet = rootText.length() > SNIPPET_LEN
                     ? rootText.substring(0, SNIPPET_LEN) + "…"
                     : rootText;
-            log.warn("event={} errors={} bodySnippet={}", LogEvent.VALIDATE_FAILED, e.getErrors(), snippet);
+            log.warn("event={} errors={} bodySnippet={}", LogEvent.VALIDATE_FAILED, e.getErrors(), ErrorSanitizer.sanitize(snippet));
             throw e;
         }
     }

@@ -10,8 +10,8 @@ import java.util.Map;
 /**
  * Result of PersistenceStep for one catalog.
  * <p>
- * {@code payloadNodes} carries the already-parsed {@link JsonNode} for each saved item,
- * keyed by item ID. Passing pre-parsed nodes avoids re-parsing the payload JSON strings
+ * {@code payloadNodes} carries the already-parsed {@link JsonNode} for each saved resource,
+ * keyed by resource ID. Passing pre-parsed nodes avoids re-parsing the payload JSON strings
  * in the post-commit Kafka publishing path.
  */
 public record CatalogBatch(
@@ -19,20 +19,21 @@ public record CatalogBatch(
     CatalogContext context,
     @Nullable String schemaType,
     CatalogOperation operation,
-    List<Item> savedItems,
+    List<Item> savedResources,
     List<ProcessingError> errors,
-    Map<String, JsonNode> payloadNodes
+    Map<String, JsonNode> payloadNodes,
+    boolean fullReplace
 ) {
     public boolean hasErrors() {
         return !errors.isEmpty();
     }
 
-    public boolean hasItems() {
-        return !savedItems.isEmpty();
+    public boolean hasResources() {
+        return !savedResources.isEmpty();
     }
 
     public int savedCount() {
-        return savedItems.size();
+        return savedResources.size();
     }
 
     public int errorCount() {

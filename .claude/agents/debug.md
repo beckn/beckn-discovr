@@ -36,11 +36,11 @@ You are a **debugging specialist** for Beckn Discovr (Java 17 / Spring Boot 3.x)
 ### Step 3 — Fix (Minimal)
 - Change only what is wrong.
 - Common patterns for this project:
-  - Fixture uses `"items"` → change to `"resources"` (v2.1).
+  - Fixture uses `"items"` → change to `"resources"` (v2.0).
   - Fixture uses `"itemAttributes"` → change to `"resourceAttributes"`.
-  - Fixture uses `"@type": "Item"` → change to `"@type": "beckn:Resource"`.
+  - Fixture has `"@type"` on Resource/Offer/Descriptor → remove it (only belongs on `resourceAttributes`/`offerAttributes`).
   - Offer uses `"items"` for refs → change to `"resourceIds"`.
-  - Context has `domain`, `schemaContext` → remove (not v2.1 Context fields).
+  - Context has `domain`, `schemaContext` → remove (not v2.0 Context fields).
   - Fixture uses `"action": "beckn/discover"` → check spec for correct const (`"discover"`).
   - Validity uses `"start"`/`"end"` → change to `"startDate"`/`"endDate"`.
   - `networkId` on resources → remove (only on context).

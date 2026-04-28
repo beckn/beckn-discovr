@@ -56,30 +56,27 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         Set<String> ids = items.stream().map(Item::getId).collect(Collectors.toSet());
         assertThat(ids).containsExactlyInAnyOrder("ev-charger-ccs2-001", "ev-charger-ccs2-002", "ev-charger-type2-001");
 
-        items.forEach(item -> assertThat(item.getBppId()).isEqualTo("bpp.example.com1"));
+        items.forEach(item -> assertThat(item.getCatalogId()).isEqualTo("catalog-ev-charging-001"));
 
         Item ccs2_001 = items.stream().filter(i -> "ev-charger-ccs2-001".equals(i.getId())).findFirst().orElseThrow();
         Item ccs2_002 = items.stream().filter(i -> "ev-charger-ccs2-002".equals(i.getId())).findFirst().orElseThrow();
         Item type2_001 = items.stream().filter(i -> "ev-charger-type2-001".equals(i.getId())).findFirst().orElseThrow();
 
-        // Assert all persisted columns on publish (name, type, provider_id, catalog_id, context_url)
-        assertThat(ccs2_001.getName()).isEqualTo("DC Fast Charger - CCS2 (60kW)");
+        // Assert persisted columns: type, catalog_id, context_url (name/providerId removed from schema)
         assertThat(ccs2_001.getType()).isEqualTo("ChargingService");
-        assertThat(ccs2_001.getProviderId()).isEqualTo("ecopower-charging");
         assertThat(ccs2_001.getCatalogId()).isEqualTo("catalog-ev-charging-001");
         assertThat(ccs2_001.getContextUrl()).isNotNull().contains("context.jsonld");
+        assertThat(ccs2_001.getPayload()).contains("DC Fast Charger - CCS2 (60kW)");
 
-        assertThat(ccs2_002.getName()).isEqualTo("DC Fast Charger - CCS2 (120kW)");
         assertThat(ccs2_002.getType()).isEqualTo("ChargingService");
-        assertThat(ccs2_002.getProviderId()).isEqualTo("greencharge-koramangala");
         assertThat(ccs2_002.getCatalogId()).isEqualTo("catalog-ev-charging-001");
         assertThat(ccs2_002.getContextUrl()).isNotNull();
+        assertThat(ccs2_002.getPayload()).contains("DC Fast Charger - CCS2 (120kW)");
 
-        assertThat(type2_001.getName()).isEqualTo("AC Fast Charger - Type 2 (22kW)");
         assertThat(type2_001.getType()).isEqualTo("ChargingService");
-        assertThat(type2_001.getProviderId()).isEqualTo("powergrid-indiranagar");
         assertThat(type2_001.getCatalogId()).isEqualTo("catalog-ev-charging-001");
         assertThat(type2_001.getContextUrl()).isNotNull();
+        assertThat(type2_001.getPayload()).contains("AC Fast Charger - Type 2 (22kW)");
 
         assertThat(ccs2_001.getOfferIds()).containsExactlyInAnyOrder("offer-ccs2-60kw-kwh", "offer-ccs2-120kw-kwh");
         assertThat(ccs2_002.getOfferIds()).containsExactlyInAnyOrder("offer-ccs2-120kw-kwh");
@@ -98,7 +95,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                         JsonNode res = r.path("message").path("results");
                         return res.size() == 1
                                 && "catalog-ev-charging-001".equals(res.get(0).path("catalogId").asText())
-                                && res.get(0).path("itemCount").asInt() == 3;
+                                && res.get(0).path("resourceCount").asInt() == 3;
                     } catch (Exception e) { return false; }
                 });
         assertThat(responseRecord).as("Expected on_catalog_publish response on %s", responseTopic).isNotNull();
@@ -109,7 +106,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         assertThat(results.isArray()).isTrue();
         assertThat(results.size()).isEqualTo(1);
         assertThat(results.get(0).path("catalogId").asText()).isEqualTo("catalog-ev-charging-001");
-        assertThat(results.get(0).path("itemCount").asInt()).isEqualTo(3);
+        assertThat(results.get(0).path("resourceCount").asInt()).isEqualTo(3);
     }
 
     @Test
@@ -126,7 +123,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(3));
 
-        Item ccs2_001Before = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
+        Item ccs2_001Before = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "catalog-ev-charging-001")).orElseThrow();
         assertThat(ccs2_001Before.getPayload()).contains("isActive");
         assertThat(ccs2_001Before.getPayload()).contains("77.5946");
         assertThat(ccs2_001Before.getPayload()).contains("value").contains("18.0");
@@ -139,23 +136,22 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
-                    Item item = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
+                    Item item = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "catalog-ev-charging-001")).orElseThrow();
                     assertThat(item.getPayload()).contains("isActive");
                     assertThat(item.getPayload()).contains("99.5946");
                     assertThat(item.getPayload()).contains("value").contains("22.1");
                 });
 
-        Item ccs2_001After = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
+        Item ccs2_001After = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "catalog-ev-charging-001")).orElseThrow();
         assertThat(ccs2_001After.getPayload()).contains("isActive").contains("true");
         assertThat(ccs2_001After.getPayload()).contains("99.5946");
         assertThat(ccs2_001After.getPayload()).contains("value").contains("22.1");
         assertThat(ccs2_001After.getPayload()).contains("unitQuantity").contains("1.1");
         assertThat(ccs2_001After.getPayload()).contains("EcoPower Charging Pvt Ltd");
-        // On upsert, all columns remain/update from merged payload
-        assertThat(ccs2_001After.getName()).isEqualTo("DC Fast Charger - CCS2 (60kW)");
+        // On upsert, persisted columns remain/update from merged payload
         assertThat(ccs2_001After.getType()).isEqualTo("ChargingService");
-        assertThat(ccs2_001After.getProviderId()).isEqualTo("ecopower-charging");
         assertThat(ccs2_001After.getCatalogId()).isEqualTo("catalog-ev-charging-001");
+        assertThat(ccs2_001After.getPayload()).contains("DC Fast Charger - CCS2 (60kW)");
 
         String responseTopic = props.messaging().topics().responses();
         ConsumerRecord<String, String> responseRecord = consumeOneRecord(responseTopic,
@@ -164,7 +160,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                     try {
                         JsonNode r = objectMapper.readTree(v);
                         JsonNode res = r.path("message").path("results");
-                        return res.size() == 1 && res.get(0).path("itemCount").asInt() == 1
+                        return res.size() == 1 && res.get(0).path("resourceCount").asInt() == 1
                                 && "catalog-ev-charging-001".equals(res.get(0).path("catalogId").asText());
                     } catch (Exception e) { return false; }
                 });
@@ -173,7 +169,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         JsonNode results = response.path("message").path("results");
         assertThat(results.size()).isEqualTo(1);
         assertThat(results.get(0).path("catalogId").asText()).isEqualTo("catalog-ev-charging-001");
-        assertThat(results.get(0).path("itemCount").asInt()).isEqualTo(1);
+        assertThat(results.get(0).path("resourceCount").asInt()).isEqualTo(1);
     }
 
     // --- Multi-catalog: array of catalogs → all catalogs, items, and geo updated; solid assertions ---
@@ -195,7 +191,8 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         Set<String> ids = items.stream().map(Item::getId).collect(Collectors.toSet());
         assertThat(ids).containsExactlyInAnyOrder("item-1", "item-2", "item-3", "item-4", "item-5");
 
-        items.forEach(item -> assertThat(item.getBppId()).isEqualTo("bpp-1"));
+        // Items belong to cat-1 or cat-2 based on their source catalog
+        items.forEach(item -> assertThat(item.getCatalogId()).isIn("cat-1", "cat-2"));
 
         Item item1 = items.stream().filter(i -> "item-1".equals(i.getId())).findFirst().orElseThrow();
         Item item2 = items.stream().filter(i -> "item-2".equals(i.getId())).findFirst().orElseThrow();
@@ -246,8 +243,8 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
 
         JsonNode cat1Result = r0.path("catalogId").asText().equals("cat-1") ? r0 : r1;
         JsonNode cat2Result = r0.path("catalogId").asText().equals("cat-2") ? r0 : r1;
-        assertThat(cat1Result.path("itemCount").asInt()).as("cat-1 must have 3 items").isEqualTo(3);
-        assertThat(cat2Result.path("itemCount").asInt()).as("cat-2 must have 2 items").isEqualTo(2);
+        assertThat(cat1Result.path("resourceCount").asInt()).as("cat-1 must have 3 items").isEqualTo(3);
+        assertThat(cat2Result.path("resourceCount").asInt()).as("cat-2 must have 2 items").isEqualTo(2);
     }
 
     @Test
@@ -275,7 +272,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
-                    Item item = itemRepository.findById(new ItemId(before.getId(), before.getBppId())).orElseThrow();
+                    Item item = itemRepository.findById(new ItemId(before.getId(), before.getCatalogId())).orElseThrow();
                     assertThat(item.getPayload()).contains("EV Station Updated");
                 });
 
@@ -290,7 +287,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                         JsonNode r = objectMapper.readTree(v);
                         JsonNode res = r.path("message").path("results");
                         return res.size() == 1 && "cat-1".equals(res.get(0).path("catalogId").asText())
-                                && res.get(0).path("itemCount").asInt() == 1;
+                                && res.get(0).path("resourceCount").asInt() == 1;
                     } catch (Exception e) { return false; }
                 });
         assertThat(responseRecord).as("Expected on_catalog_publish response on %s", responseTopic).isNotNull();
@@ -298,6 +295,6 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         JsonNode results = response.path("message").path("results");
         assertThat(results.size()).isEqualTo(1);
         assertThat(results.get(0).path("catalogId").asText()).isEqualTo("cat-1");
-        assertThat(results.get(0).path("itemCount").asInt()).isEqualTo(1);
+        assertThat(results.get(0).path("resourceCount").asInt()).isEqualTo(1);
     }
 }

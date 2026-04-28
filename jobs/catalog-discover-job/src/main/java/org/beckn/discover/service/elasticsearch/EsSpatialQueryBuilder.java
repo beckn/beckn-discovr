@@ -4,6 +4,7 @@ import co.elastic.clients.elasticsearch._types.GeoShapeRelation;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.json.JsonData;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.DiscoverRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,10 +34,10 @@ public class EsSpatialQueryBuilder {
     private static final Set<String> UNSUPPORTED =
             Set.of("s_overlaps", "s_crosses", "s_touches", "s_equals");
 
-    private final ObjectMapper mapper;
+    private final ObjectMapper objectMapper;
 
-    public EsSpatialQueryBuilder(ObjectMapper mapper) {
-        this.mapper = mapper;
+    public EsSpatialQueryBuilder(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -54,19 +55,19 @@ public class EsSpatialQueryBuilder {
             String op = c.getOperation();
 
             if (UNSUPPORTED.contains(op)) {
-                log.warn("es.spatial.unsupported-op op={} — skipping", op);
+                log.warn("event={} op={}", LogEvent.ES_SPATIAL_UNSUPPORTED_OP, op);
                 continue;
             }
 
             String quantifier = c.getQuantifier();
             if ("all".equals(quantifier) || "none".equals(quantifier)) {
-                log.warn("es.spatial.unsupported-quantifier quantifier={} — skipping", quantifier);
+                log.warn("event={} quantifier={}", LogEvent.ES_SPATIAL_UNSUPPORTED_QUANTIFIER, quantifier);
                 continue;
             }
 
             String fieldName = resolveFieldName(c.getTargets());
             if (fieldName == null) {
-                log.warn("es.spatial.no-valid-target targets={} — skipping", c.getTargets());
+                log.warn("event={} targets={}", LogEvent.ES_SPATIAL_NO_VALID_TARGET, c.getTargets());
                 continue;
             }
             String queryField = fieldName + ".geo";
@@ -108,7 +109,7 @@ public class EsSpatialQueryBuilder {
                     shape.put("radius", c.getDistanceMeters().longValue() + "m");
                     relation = "INTERSECTS";
                 } else {
-                    shape = mapper.convertValue(c.getGeometry(), Map.class);
+                    shape = objectMapper.convertValue(c.getGeometry(), Map.class);
                     relation = RELATIONS.get(op).jsonValue().toUpperCase();
                 }
                 Map<String, Object> fieldClause = new LinkedHashMap<>();
@@ -125,7 +126,7 @@ public class EsSpatialQueryBuilder {
         body.put("query", Map.of("bool", Map.of("must", mustClauses)));
         try {
             return "POST /" + alias + "/_search\n"
-                    + mapper.writerWithDefaultPrettyPrinter().writeValueAsString(body);
+                    + objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(body);
         } catch (Exception e) {
             return "(json-serialization failed: " + e.getMessage() + ")";
         }
@@ -169,7 +170,7 @@ public class EsSpatialQueryBuilder {
                     shape.put("radius", c.getDistanceMeters().longValue() + "m");
                     relation = "INTERSECTS";
                 } else {
-                    shape = mapper.convertValue(c.getGeometry(), Map.class);
+                    shape = objectMapper.convertValue(c.getGeometry(), Map.class);
                     relation = RELATIONS.get(op).jsonValue().toUpperCase();
                 }
                 Map<String, Object> fieldClause = new LinkedHashMap<>();
@@ -186,7 +187,7 @@ public class EsSpatialQueryBuilder {
         body.put("query", Map.of("bool", Map.of("must", mustClauses)));
         try {
             return "POST /" + alias + "/_search\n"
-                    + mapper.writerWithDefaultPrettyPrinter().writeValueAsString(body);
+                    + objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(body);
         } catch (Exception e) {
             return "(json-serialization failed: " + e.getMessage() + ")";
         }
@@ -209,11 +210,11 @@ public class EsSpatialQueryBuilder {
                 return buildGeoShapeQuery(field, circleShape, GeoShapeRelation.Intersects);
             } else {
                 GeoShapeRelation relation = RELATIONS.get(op);
-                Map<String, Object> geoJson = mapper.convertValue(c.getGeometry(), Map.class);
+                Map<String, Object> geoJson = objectMapper.convertValue(c.getGeometry(), Map.class);
                 return buildGeoShapeQuery(field, geoJson, relation);
             }
         } catch (Exception e) {
-            log.warn("es.spatial.build-query.failed op={} field={} error={}", op, field, e.getMessage());
+            log.warn("event={} op={} field={} error={}", LogEvent.ES_SPATIAL_BUILD_QUERY_FAILED, op, field, e.getMessage());
             return null;
         }
     }

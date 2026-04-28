@@ -19,6 +19,9 @@ public class ItemLocationId implements Serializable {
     @Column(name = "item_id")
     private String itemId;
 
+    @Column(name = "catalog_id")
+    private String catalogId;
+
     @Column(name = "path")
     private String path;
 }

@@ -1,6 +1,7 @@
 package org.beckn.catalogpublish.integration;
 
 import org.beckn.catalogpublish.model.ItemId;
+import org.beckn.catalogpublish.model.ProviderOfferId;
 import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,9 +21,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
 
         var itemAfterPublish = itemRepository.findAll().get(0);
         assertThat(itemAfterPublish.getId()).isEqualTo("item-1");
-        assertThat(itemAfterPublish.getBppId()).isEqualTo("bpp-1");
-        assertThat(itemAfterPublish.getName()).isEqualTo("EV Station");
         assertThat(itemAfterPublish.getCatalogId()).isEqualTo("cat-1");
+        assertThat(itemAfterPublish.getPayload()).contains("EV Station");
 
         String patchFixture = readFixture("fixtures/ev_charging_patch_update.json");
         var results = orchestrator.processPublish(patchFixture).results();
@@ -30,18 +30,21 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(itemRepository.count()).isEqualTo(1);
         var item = itemRepository.findAll().get(0);
         assertThat(item.getPayload()).contains("EV Station Updated");
-        assertThat(item.getName()).isEqualTo("EV Station Updated");
         assertThat(item.getCatalogId()).isEqualTo("cat-1");
     }
 
     /**
-     * Null fields in the second publish must NOT delete existing stored data.
-     * The item's gps, id, and other fields published in round-1 must survive
-     * even when the round-2 publish sends those fields as null.
+     * FULL REPLACE semantics per item: each publish replaces the entire stored payload
+     * with the incoming data. Fields absent from the new publish are NOT preserved —
+     * the assembled payload from Catalg is the source of truth.
+     *
+     * <p>In round-1 the item has {@code gps} and {@code weight}.
+     * In round-2 the item is re-published WITHOUT {@code gps} and without {@code weight}.
+     * Both fields must be absent from the stored payload after round-2.
      */
     @Test
-    void upsertPublish_nullFieldsInSecondPublish_doNotDeleteExistingData() {
-        // Round 1: publish item with name + gps
+    void upsertPublish_republishWithoutField_fieldAbsentFromStoredPayload() {
+        // Round 1: publish item with gps and weight
         String round1 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
@@ -49,48 +52,69 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   "message": {"catalogs": [{"id": "cat-1",
                     "resources": [{"id": "item-1",
                       "descriptor": {"name": "EV Station"},
-                      "gps": "12.34,56.78"}],
+                      "gps": "12.34,56.78",
+                      "resourceAttributes": {
+                        "@context": "https://schema.example.org",
+                        "@type": "EVCharger",
+                        "weight": "5kg"
+                      }}],
                     "offers": []}]}
                 }""";
         orchestrator.processPublish(round1);
         assertThat(itemRepository.count()).isEqualTo(1);
         var afterRound1 = itemRepository.findAll().get(0);
-        assertThat(afterRound1.getPayload()).contains("EV Station").contains("12.34,56.78");
+        assertThat(afterRound1.getPayload()).contains("5kg").contains("EV Station").contains("12.34,56.78");
 
-        // Round 2: publish same item with name set to null and gps absent — neither should delete stored data
+        // Round 2: same item re-published without gps and without weight.
+        // Full-replace semantics: stored payload is replaced with the new incoming data.
+        // Neither gps nor weight appear in round-2 → both must be absent from stored payload.
         String round2 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
                   "message": {"catalogs": [{"id": "cat-1",
                     "resources": [{"id": "item-1",
-                      "descriptor": {"name": null}}],
+                      "descriptor": {"name": "EV Station Updated"},
+                      "resourceAttributes": {
+                        "@context": "https://schema.example.org",
+                        "@type": "EVCharger"
+                      }}],
                     "offers": []}]}
                 }""";
         orchestrator.processPublish(round2);
 
         assertThat(itemRepository.count()).isEqualTo(1);
         var afterRound2 = itemRepository.findAll().get(0);
-        // null name must not delete the stored name
-        assertThat(afterRound2.getPayload()).contains("EV Station");
-        // absent gps must not delete the stored gps
-        assertThat(afterRound2.getPayload()).contains("12.34,56.78");
+        // weight absent from round-2 payload → must not be in stored payload
+        assertThat(afterRound2.getPayload()).doesNotContain("5kg");
+        // gps absent from round-2 payload → must not be in stored payload
+        assertThat(afterRound2.getPayload()).doesNotContain("12.34,56.78");
+        // descriptor name updated in round-2
+        assertThat(afterRound2.getPayload()).contains("EV Station Updated");
         // item id must remain intact
         assertThat(afterRound2.getId()).isEqualTo("item-1");
     }
 
     /**
-     * Null fields inside an offer in the second publish must NOT delete existing offer data,
-     * specifically the resourceIds item-link array that associates the offer to items.
+     * Provider-level offer reclassification: when an offer is re-published with
+     * {@code "resourceIds": null}, the 2-way OfferIndex classification treats it as a
+     * provider-level offer (no resourceIds = provider-level). The offer is no longer
+     * stamped on the item payload and is instead persisted to the {@code provider_offer}
+     * table.
+     *
+     * <p>Round 1: offer-1 with {@code resourceIds: ["item-1"]} -- item-level, stamped on item.
+     * Round 2: same offer with {@code resourceIds: null} -- reclassified as provider-level,
+     * removed from item payload, persisted to provider_offer table.
      */
     @Test
-    void upsertPublish_nullFieldInOffer_doesNotDeleteOfferItemLink() {
-        // Round 1: publish with an offer that links to item-1
+    void upsertPublish_nullResourceIdsInOffer_reclassifiedAsProviderLevel() {
+        // Round 1: publish with an offer that links to item-1 (item-level)
         String round1 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m1","transactionId":"t1"},
                   "message": {"catalogs": [{"id": "cat-1",
+                    "provider": {"id": "prov-1"},
                     "resources": [{"id": "item-1",
                       "descriptor": {"name": "EV Station"}}],
                     "offers": [{"id": "offer-1",
@@ -101,14 +125,17 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(itemRepository.count()).isEqualTo(1);
         var afterRound1 = itemRepository.findAll().get(0);
         assertThat(afterRound1.getPayload()).contains("offer-1").contains("Offer One");
+        // No provider offers in round 1 (offer-1 has resourceIds)
+        assertThat(providerOfferRepository.count()).isEqualTo(0);
 
-        // Round 2: update only the offer name — send null for resourceIds (accidentally omitted/nulled)
-        // The resourceIds link inside the stored offer must be preserved
+        // Round 2: explicit null on resourceIds → reclassified as provider-level offer.
+        // The offer is removed from the item payload and stored in provider_offer table.
         String round2 = """
                 {
                   "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
                                "messageId":"m2","transactionId":"t2"},
                   "message": {"catalogs": [{"id": "cat-1",
+                    "provider": {"id": "prov-1"},
                     "resources": [{"id": "item-1",
                       "descriptor": {"name": "EV Station"}}],
                     "offers": [{"id": "offer-1",
@@ -119,11 +146,16 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
 
         assertThat(itemRepository.count()).isEqualTo(1);
         var afterRound2 = itemRepository.findAll().get(0);
-        // Offer name must be updated
-        assertThat(afterRound2.getPayload()).contains("Offer One Updated");
-        // resourceIds link inside the offer must NOT be deleted despite null in round-2
-        assertThat(afterRound2.getOfferIds()).contains("offer-1");
-        assertThat(afterRound2.getPayload()).contains("\"resourceIds\"");
+        // Offer is no longer stamped on item payload (it is now provider-level)
+        assertThat(afterRound2.getPayload())
+                .as("Provider-level offer must NOT appear in item payload")
+                .doesNotContain("offer-1")
+                .doesNotContain("Offer One Updated");
+
+        // Provider-level offer persisted to provider_offer table
+        var provOffer = providerOfferRepository.findById(new ProviderOfferId("offer-1", "cat-1")).orElseThrow();
+        assertThat(provOffer.getProviderId()).isEqualTo("prov-1");
+        assertThat(provOffer.getPayload()).contains("Offer One Updated");
     }
 
     /**
@@ -158,8 +190,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                 }""";
         orchestrator.processPublish(round1);
         assertThat(itemRepository.count()).isEqualTo(2);
-        var item1AfterR1 = itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow();
-        var item2AfterR1 = itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow();
+        var item1AfterR1 = itemRepository.findById(new ItemId("item-1", "cat-1")).orElseThrow();
+        var item2AfterR1 = itemRepository.findById(new ItemId("item-2", "cat-1")).orElseThrow();
         // Verify both items have offer-A in their offer_ids DB column
         assertThat(item1AfterR1.getOfferIds()).contains("offer-A");
         assertThat(item2AfterR1.getOfferIds()).contains("offer-A");
@@ -185,8 +217,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         orchestrator.processPublish(round2);
 
         assertThat(itemRepository.count()).isEqualTo(2);
-        var item1AfterR2 = itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow();
-        var item2AfterR2 = itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow();
+        var item1AfterR2 = itemRepository.findById(new ItemId("item-1", "cat-1")).orElseThrow();
+        var item2AfterR2 = itemRepository.findById(new ItemId("item-2", "cat-1")).orElseThrow();
 
         // item-1: updated via Phase 1 (explicit), new price must be present
         assertThat(item1AfterR2.getPayload())
@@ -230,8 +262,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                   }]}
                 }""";
         orchestrator.processPublish(round1);
-        assertThat(itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
-        assertThat(itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
+        assertThat(itemRepository.findById(new ItemId("item-1", "cat-1")).orElseThrow().getOfferIds()).contains("offer-A");
+        assertThat(itemRepository.findById(new ItemId("item-2", "cat-1")).orElseThrow().getOfferIds()).contains("offer-A");
 
         // Round 2: offer-A updated with resourceIds = ["item-1"] ONLY — item-2 intentionally absent.
         // Despite item-2 being absent from offer.resourceIds, Phase 2 MUST still update item-2
@@ -251,8 +283,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         orchestrator.processPublish(round2);
 
         assertThat(itemRepository.count()).isEqualTo(2);
-        var item1 = itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow();
-        var item2 = itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow();
+        var item1 = itemRepository.findById(new ItemId("item-1", "cat-1")).orElseThrow();
+        var item2 = itemRepository.findById(new ItemId("item-2", "cat-1")).orElseThrow();
 
         // item-1: offer-A mentions it — must be updated via Phase 2 DB lookup
         assertThat(item1.getPayload())
@@ -299,8 +331,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
                 }""";
         orchestrator.processPublish(round1);
         assertThat(itemRepository.count()).isEqualTo(2);
-        assertThat(itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
-        assertThat(itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow().getOfferIds()).contains("offer-A");
+        assertThat(itemRepository.findById(new ItemId("item-1", "cat-1")).orElseThrow().getOfferIds()).contains("offer-A");
+        assertThat(itemRepository.findById(new ItemId("item-2", "cat-1")).orElseThrow().getOfferIds()).contains("offer-A");
 
         // Round 2: no explicit resources at all — only an updated offer.
         // Phase 2 must propagate to BOTH items via the DB offer_ids column.
@@ -322,8 +354,8 @@ class PatchFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(results).hasSize(1);
 
         assertThat(itemRepository.count()).isEqualTo(2);
-        var item1 = itemRepository.findById(new ItemId("item-1", "bpp-1")).orElseThrow();
-        var item2 = itemRepository.findById(new ItemId("item-2", "bpp-1")).orElseThrow();
+        var item1 = itemRepository.findById(new ItemId("item-1", "cat-1")).orElseThrow();
+        var item2 = itemRepository.findById(new ItemId("item-2", "cat-1")).orElseThrow();
 
         // item-1: no explicit items in round-2 → updated ONLY via Phase 2 DB column lookup
         assertThat(item1.getPayload())

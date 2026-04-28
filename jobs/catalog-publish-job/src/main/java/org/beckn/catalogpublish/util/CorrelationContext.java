@@ -5,11 +5,10 @@ import org.beckn.catalogpublish.logging.MdcField;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
-import java.util.UUID;
+import java.util.List;
 
 /**
- * MDC population and clear for trace context (messageId, bppId, transactionId,
- * correlationId, networkId).
+ * MDC population and clear for trace context (messageId, transactionId, networkId, catalogId).
  * MDC is populated once from the parsed context so no double-parse occurs.
  */
 @Component
@@ -27,16 +26,47 @@ public class CorrelationContext {
     public void populate(CatalogContext ctx, String messageId) {
         String mid = (messageId != null && !messageId.isBlank()) ? messageId : null;
         String txnId = ctx.contextNode() != null
-                ? ctx.contextNode().path("transactionId").asText(
-                        ctx.contextNode().path("transaction_id").asText("unknown"))
-                : "unknown";
-        MDC.put(MdcField.MESSAGE_ID, mid != null ? mid : "unknown");
-        MDC.put(MdcField.BPP_ID, ctx.bppId() != null ? ctx.bppId() : "unknown");
-        MDC.put(MdcField.BPP_URI, ctx.bppUri() != null ? ctx.bppUri() : "unknown");
-        MDC.put(MdcField.TRANSACTION_ID, txnId);
-        MDC.put(MdcField.CORRELATION_ID, mid != null ? mid : UUID.randomUUID().toString());
-        if (ctx.networkIds() != null && ctx.networkIds().length > 0) {
-            MDC.put(MdcField.NETWORK_ID, ctx.networkIds()[0]);
+                ? ctx.contextNode().path("transactionId").asText(null)
+                : null;
+        if (mid != null) MDC.put(MdcField.MESSAGE_ID, mid); else MDC.remove(MdcField.MESSAGE_ID);
+        if (txnId != null) MDC.put(MdcField.TRANSACTION_ID, txnId); else MDC.remove(MdcField.TRANSACTION_ID);
+        List<String> networkIds = ctx.networkIds();
+        if (networkIds != null && !networkIds.isEmpty()) {
+            MDC.put(MdcField.NETWORK_ID, networkIds.get(0));
+        }
+        if (ctx.contextNode() != null) {
+            String catalogId = ctx.contextNode().path("catalogId").asText(null);
+            if (catalogId != null && !catalogId.isBlank()) {
+                MDC.put(MdcField.CATALOG_ID, catalogId);
+            } else {
+                MDC.remove(MdcField.CATALOG_ID);
+            }
+            // auth.subscriberId — org-level identity from auth header, injected by Catalg API
+            String subscriberId = ctx.subscriberId();
+            if (subscriberId != null && !subscriberId.isBlank() && !"anonymous".equals(subscriberId)) {
+                MDC.put(MdcField.AUTH_SUBSCRIBER_ID, subscriberId);
+            } else {
+                MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
+            }
+            // auth.recordId — key-level identity from auth header
+            String recordId = ctx.recordId();
+            if (recordId != null && !recordId.isBlank()) {
+                MDC.put(MdcField.AUTH_RECORD_ID, recordId);
+            } else {
+                MDC.remove(MdcField.AUTH_RECORD_ID);
+            }
+            // publishTimestamp — epoch millis from distribution envelope context
+            String publishTimestamp = ctx.contextNode().path("publishTimestamp").asText(null);
+            if (publishTimestamp != null && !publishTimestamp.isBlank()) {
+                MDC.put(MdcField.PUBLISH_TIMESTAMP, publishTimestamp);
+            } else {
+                MDC.remove(MdcField.PUBLISH_TIMESTAMP);
+            }
+        } else {
+            MDC.remove(MdcField.CATALOG_ID);
+            MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
+            MDC.remove(MdcField.AUTH_RECORD_ID);
+            MDC.remove(MdcField.PUBLISH_TIMESTAMP);
         }
     }
 
@@ -46,11 +76,39 @@ public class CorrelationContext {
      * parse.
      */
     public void populateFallback() {
-        MDC.put(MdcField.MESSAGE_ID, "unknown");
-        MDC.put(MdcField.BPP_ID, "unknown");
-        MDC.put(MdcField.BPP_URI, "unknown");
-        MDC.put(MdcField.TRANSACTION_ID, "unknown");
-        MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
+        MDC.remove(MdcField.MESSAGE_ID);
+        MDC.remove(MdcField.TRANSACTION_ID);
+        MDC.remove(MdcField.CATALOG_ID);
+        MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
+        MDC.remove(MdcField.AUTH_RECORD_ID);
+        MDC.remove(MdcField.PUBLISH_TIMESTAMP);
+    }
+
+    /**
+     * Sets the {@code tags} MDC field from a raw Kafka header byte array.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader raw bytes from the {@code tags} Kafka record header
+     */
+    public void setTags(byte[] tagsHeader) {
+        if (tagsHeader != null && tagsHeader.length > 0) {
+            var tags = new String(tagsHeader, java.nio.charset.StandardCharsets.UTF_8);
+            if (!tags.isBlank()) {
+                MDC.put(MdcField.TAGS, tags);
+            }
+        }
+    }
+
+    /**
+     * Sets the {@code tags} MDC field from an HTTP header string value.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader value of the {@code X-Tags} HTTP request header
+     */
+    public void setTagsFromHttp(String tagsHeader) {
+        if (tagsHeader != null && !tagsHeader.isBlank()) {
+            MDC.put(MdcField.TAGS, tagsHeader);
+        }
     }
 
     public void clear() {

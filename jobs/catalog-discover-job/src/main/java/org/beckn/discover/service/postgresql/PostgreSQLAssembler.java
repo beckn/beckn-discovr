@@ -2,8 +2,10 @@ package org.beckn.discover.service.postgresql;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Descriptor;
+import org.beckn.discover.model.Provider;
 import org.beckn.discover.model.Resource;
 import org.beckn.discover.model.TimePeriod;
 import org.beckn.discover.service.engine.QueryRequest;
@@ -27,18 +29,18 @@ import java.util.stream.StreamSupport;
  *
  * <h3>Row shape</h3>
  * <pre>
- * id            TEXT  — item primary key
- * catalog_id    TEXT  — used as the catalog grouping key
- * item_payload  JSONB — full item JSON (may be PGobject or String at runtime)
+ * id               TEXT  — item primary key
+ * catalog_id       TEXT  — used as the catalog grouping key
+ * resource_payload JSONB — full resource JSON (may be PGobject or String at runtime)
  * matching_offers JSONB — optional; present only for selection-path JSONPath queries
  *                         ({@link QueryBuilderHelper#MATCHING_OFFERS_ALIAS})
  * </pre>
  *
  * <h3>Grouping strategy</h3>
  * Items are grouped by {@code catalog_id}.  The catalog-level metadata
- * (context, type, descriptor, validity, bppId, bppUri, providerId) is
- * extracted from the first row that carries a catalog payload inside
- * {@code item_payload.catalogs[0]}.  All subsequent rows for the same
+ * (context, type, descriptor, validity, providerId) is extracted from the
+ * first row that carries a catalog payload inside
+ * {@code resource_payload.catalogs[0]}.  All subsequent rows for the same
  * {@code catalog_id} only contribute items / offers — the catalog metadata
  * is not re-parsed.
  *
@@ -81,11 +83,11 @@ public class PostgreSQLAssembler {
      */
     public List<Catalog> assemble(List<Map<String, Object>> rows, QueryRequest request) {
         if (rows == null || rows.isEmpty()) {
-            log.debug("assembler.empty transactionId={}", request.transactionId());
+            log.debug("event={}", LogEvent.ASSEMBLER_EMPTY);
             return List.of();
         }
 
-        log.debug("assembler.start rows={} transactionId={}", rows.size(), request.transactionId());
+        log.debug("event={} rows={}", LogEvent.ASSEMBLER_START, rows.size());
         long t0 = System.nanoTime();
 
         Map<String, Catalog> catalogMap = new HashMap<>(16);
@@ -93,9 +95,9 @@ public class PostgreSQLAssembler {
 
         for (Map<String, Object> row : rows) {
             try {
-                if (!processRow(row, catalogMap)) skipped++;
+                if (!assembleRowIntoCatalogMap(row, catalogMap)) skipped++;
             } catch (Exception e) {
-                log.warn("assembler.row.error transactionId={} error={}", request.transactionId(), e.getMessage(), e);
+                log.warn("event={} error={}", LogEvent.ASSEMBLER_ROW_ERROR, e.getMessage(), e);
                 skipped++;
             }
         }
@@ -103,10 +105,10 @@ public class PostgreSQLAssembler {
         List<Catalog> catalogs = new ArrayList<>(catalogMap.values());
         long elapsedMs = (System.nanoTime() - t0) / 1_000_000;
 
-        log.info("assembler.done catalogs={} resources={} skippedRows={} durationMs={} transactionId={}",
-                catalogs.size(),
+        log.debug("event={} catalogs={} resources={} skippedRows={} durationMs={}",
+                LogEvent.ASSEMBLER_DONE, catalogs.size(),
                 catalogs.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum(),
-                skipped, elapsedMs, request.transactionId());
+                skipped, elapsedMs);
 
         return catalogs;
     }
@@ -119,29 +121,29 @@ public class PostgreSQLAssembler {
      * @return {@code true} if the row contributed to a catalog; {@code false}
      *         if the row was skipped due to missing/unparseable data
      */
-    private boolean processRow(Map<String, Object> row, Map<String, Catalog> catalogMap) throws Exception {
+    private boolean assembleRowIntoCatalogMap(Map<String, Object> row, Map<String, Catalog> catalogMap) throws Exception {
         String catalogId = (String) row.get("catalog_id");
         if (catalogId == null || catalogId.isBlank()) {
-            log.warn("assembler.row.skip reason=missing-catalog-id");
+            log.warn("event={} reason=missing-catalog-id", LogEvent.ASSEMBLER_ROW_SKIP);
             return false;
         }
 
         String itemId = (String) row.get("id");
-        JsonNode itemPayload = toJsonNode(row.get("item_payload"));
+        JsonNode itemPayload = toJsonNode(row.get("resource_payload"));
         if (itemPayload == null) {
-            log.warn("assembler.row.skip reason=null-payload itemId={}", itemId);
+            log.warn("event={} reason=null-payload itemId={}", LogEvent.ASSEMBLER_ROW_SKIP, itemId);
             return false;
         }
 
-        JsonNode itemNode = extractItemNode(itemId, itemPayload);
+        JsonNode itemNode = extractResourceNode(itemId, itemPayload);
         if (itemNode == null) {
-            log.warn("assembler.row.skip reason=item-not-found itemId={}", itemId);
+            log.warn("event={} reason=item-not-found itemId={}", LogEvent.ASSEMBLER_ROW_SKIP, itemId);
             return false;
         }
 
         Resource resource = objectMapper.treeToValue(itemNode, Resource.class);
         if (resource == null) {
-            log.warn("assembler.row.skip reason=resource-deserialise-failed itemId={}", itemId);
+            log.warn("event={} reason=resource-deserialise-failed itemId={}", LogEvent.ASSEMBLER_ROW_SKIP, itemId);
             return false;
         }
 
@@ -151,12 +153,12 @@ public class PostgreSQLAssembler {
         Catalog catalog = catalogMap.computeIfAbsent(catalogId, id -> buildCatalog(id, catalogPayload));
         catalog.getResources().add(resource);
 
-        // Back-fill providerId from resource when catalog payload lacks providerId
-        if (catalog.getProviderId() == null
+        // Back-fill provider from resource when catalog payload lacks provider
+        if (catalog.getProvider() == null
                 && resource.getProvider() != null
                 && resource.getProvider().getId() != null
                 && !resource.getProvider().getId().isBlank()) {
-            catalog.setProviderId(resource.getProvider().getId());
+            catalog.setProvider(resource.getProvider());
         }
 
         // Offer extraction — uses matching_offers when present, falls back to catalog payload
@@ -179,18 +181,17 @@ public class PostgreSQLAssembler {
         return catalog;
     }
 
-    private void extractCatalogAttributes(Catalog catalog, JsonNode cp) {
+    private void extractCatalogAttributes(Catalog catalog, JsonNode catalogPayload) {
         try {
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_ID,          catalog::setId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_PROVIDER_ID,  catalog::setProviderId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_ID,       catalog::setBppId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_URI,      catalog::setBppUri);
-            parseIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_DESCRIPTOR, Descriptor.class, catalog::setDescriptor);
-            parseIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_VALIDITY,   TimePeriod.class,  catalog::setValidity);
+            setTextIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_ID,          catalog::setId);
+            parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_PROVIDER,   Provider.class,    catalog::setProvider);
+            parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_DESCRIPTOR, Descriptor.class,  catalog::setDescriptor);
+            parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_VALIDITY,   TimePeriod.class,  catalog::setValidity);
+            setBooleanIfPresent(catalogPayload, "isActive", catalog::setIsActive);
             // Note: offers are NOT merged here — they are merged exactly once per catalog
             // in mergeOffersFromRow (first row guard) to avoid N-row duplication.
         } catch (Exception e) {
-            log.warn("assembler.catalog.attributes.error catalogId={} error={}", catalog.getId(), e.getMessage());
+            log.warn("event={} catalogId={} error={}", LogEvent.ASSEMBLER_CATALOG_ATTR_ERROR, catalog.getId(), e.getMessage());
         }
     }
 
@@ -239,7 +240,7 @@ public class PostgreSQLAssembler {
         try {
             catalog.getOffers().add(objectMapper.convertValue(offerNode, Object.class));
         } catch (Exception e) {
-            log.debug("assembler.offer.skip error={}", e.getMessage());
+            log.debug("event={} error={}", LogEvent.ASSEMBLER_OFFER_SKIP, e.getMessage());
         }
     }
 
@@ -259,22 +260,22 @@ public class PostgreSQLAssembler {
     // ── JSON extraction helpers ──────────────────────────────────────────────
 
     /**
-     * Extracts the item {@link JsonNode} from the payload.
-     * Item lives inside {@code payload.catalogs[0].resources[*]}.
+     * Extracts the resource {@link JsonNode} from the payload.
+     * Resource lives inside {@code payload.catalogs[0].resources[*]}.
      */
-    private JsonNode extractItemNode(String itemId, JsonNode itemPayload) {
+    private JsonNode extractResourceNode(String itemId, JsonNode itemPayload) {
         if (itemPayload == null) return null;
 
-        // Item lives inside catalogs array
+        // Resource lives inside catalogs array
         JsonNode catalogsNode = itemPayload.get(DiscoveryConstants.JsonFields.CATALOGS);
         if (catalogsNode == null || !catalogsNode.isArray()) return null;
 
         return StreamSupport.stream(catalogsNode.spliterator(), false)
-                .map(cat -> {
-                    return cat.get(DiscoveryConstants.JsonFields.BECKN_RESOURCES);
+                .map(catalogNode -> {
+                    return catalogNode.get(DiscoveryConstants.JsonFields.BECKN_RESOURCES);
                 })
-                .filter(items -> items != null && items.isArray())
-                .flatMap(items -> StreamSupport.stream(items.spliterator(), false))
+                .filter(resourcesNode -> resourcesNode != null && resourcesNode.isArray())
+                .flatMap(resourcesNode -> StreamSupport.stream(resourcesNode.spliterator(), false))
                 .filter(node -> itemId != null
                         && itemId.equals(node.path(DiscoveryConstants.JsonFields.BECKN_ID).asText()))
                 .findFirst()
@@ -299,7 +300,7 @@ public class PostgreSQLAssembler {
         try {
             return objectMapper.readTree(value.toString());
         } catch (Exception e) {
-            log.debug("assembler.json.parse.failed type={} error={}", value.getClass().getSimpleName(), e.getMessage());
+            log.debug("event={} type={} error={}", LogEvent.ASSEMBLER_JSON_PARSE_FAILED, value.getClass().getSimpleName(), e.getMessage());
             return null;
         }
     }
@@ -310,12 +311,16 @@ public class PostgreSQLAssembler {
         if (node.has(field)) setter.accept(node.get(field).asText());
     }
 
+    private void setBooleanIfPresent(JsonNode node, String field, Consumer<Boolean> setter) {
+        if (node.has(field) && node.get(field).isBoolean()) setter.accept(node.get(field).asBoolean());
+    }
+
     private <T> void parseIfPresent(JsonNode node, String field, Class<T> type, Consumer<T> setter) {
         if (!node.has(field)) return;
         try {
             setter.accept(objectMapper.treeToValue(node.get(field), type));
         } catch (Exception e) {
-            log.debug("assembler.field.parse.failed field={} error={}", field, e.getMessage());
+            log.debug("event={} field={} error={}", LogEvent.ASSEMBLER_FIELD_PARSE_FAILED, field, e.getMessage());
         }
     }
 }

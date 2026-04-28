@@ -22,7 +22,7 @@ public class DiscoveryConstants {
     public static class ColumnNames {
         public static final String ID = "id";
         public static final String CATALOG_ID = "catalog_id";
-        public static final String ITEM_PAYLOAD = "item_payload";
+        public static final String RESOURCE_PAYLOAD = "resource_payload";
         public static final String CATALOG_PAYLOAD = "catalog_payload";
         public static final String PAYLOAD = "payload"; // Legacy column name
     }
@@ -36,9 +36,8 @@ public class DiscoveryConstants {
         public static final String BECKN_RESOURCES = "resources";
         public static final String BECKN_ID = "id";
         public static final String BECKN_DESCRIPTOR = "descriptor";
+        public static final String BECKN_PROVIDER = "provider";
         public static final String BECKN_PROVIDER_ID = "providerId";
-        public static final String BECKN_BPP_ID = "bppId";
-        public static final String BECKN_BPP_URI = "bppUri";
         public static final String BECKN_VALIDITY = "validity";
         /** v2.1 catalog-level addOns field. */
         public static final String ADD_ONS = "addOns";

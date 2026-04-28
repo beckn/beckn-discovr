@@ -126,7 +126,7 @@ class CatalogDocumentAssemblerTest {
     // ── schema_version ────────────────────────────────────────────────────────
 
     @Test
-    void assemble_withSchemaVersion20_setsSchemaVersion() throws Exception {
+    void assemble_payloadOverload_schemaVersionNotInDocument() throws Exception {
         JsonNode payload = buildPayload("""
                 {
                   "@type": "beckn:Resource",
@@ -137,25 +137,24 @@ class CatalogDocumentAssemblerTest {
                 }
                 """);
 
-        // Use the Item-carrying overload: assemble(Item, JsonNode, schemaType, networkId)
-        // For unit tests we call the payload-only overload which defaults to "2.0"
         Map<String, Object> doc = assembler.assemble(payload, "ServiceItem");
 
-        assertThat(doc.get("schema_version")).isEqualTo("2.0");
+        // schema_version has been removed from the ES document model (v2.1 schema redesign)
+        assertThat(doc).doesNotContainKey("schema_version");
+        // bpp_id and bpp_uri must not appear in ES documents
+        assertThat(doc).doesNotContainKey("bpp_id");
+        assertThat(doc).doesNotContainKey("bpp_uri");
     }
 
     @Test
-    void assemble_withSchemaVersion21ViaItemOverload_setsSchemaVersion() throws Exception {
-        // Build a minimal Item entity with schema_version = "2.1"
-        org.beckn.catalogpublish.dto.CatalogContext ctx =
-                new org.beckn.catalogpublish.dto.CatalogContext("bpp.test", "https://bpp.test", null, null);
+    void assemble_itemViaItemOverload_setsCatalogIdNotBppId() throws Exception {
+        // Item entity built with subscriber identity — no bpp_id stored
         org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
-                "item-v21", "{}", new String[0], ctx, "cat-1",
-                "v2.1 Item", "SmartMeter", "prov-1", null, "2.1");
+                "item-v21", "{}", new String[0], null, "sub-1", "cat-1",
+                "SmartMeter", null, new String[]{"net-1"});
 
         JsonNode payload = buildPayload("""
                 {
-                  "@type": "beckn:Resource",
                   "id": "item-v21",
                   "descriptor": {"name": "v2.1 Item"},
                   "provider": {"id": "prov-1"},
@@ -165,7 +164,11 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(item, payload, "SmartMeter", List.of("net-1"));
 
-        assertThat(doc.get("schema_version")).isEqualTo("2.1");
+        assertThat(doc.get("catalog_id")).isEqualTo("cat-1");
+        assertThat(doc.containsKey("bpp_id")).isFalse();
+        assertThat(doc.containsKey("bpp_uri")).isFalse();
+        assertThat(doc.containsKey("schema_version")).isFalse();
+        assertThat(doc.get("schema_type")).isEqualTo("SmartMeter");
     }
 
     // ── constraints and policies ──────────────────────────────────────────────
@@ -357,12 +360,9 @@ class CatalogDocumentAssemblerTest {
 
     @Test
     void assemble_itemWithArrayNetworkIds_populatesNetworkIdAsList() throws Exception {
-        org.beckn.catalogpublish.dto.CatalogContext ctx =
-                new org.beckn.catalogpublish.dto.CatalogContext("bpp.net", "https://bpp.net",
-                        new String[]{"net-a", "net-b"}, null);
         org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
-                "item-multi-net", "{}", new String[0], ctx, "cat-1",
-                "Multi Net Item", "GenericItem", "prov-1", null, "2.0");
+                "item-multi-net", "{}", new String[0], null, "sub-1", "cat-1",
+                "GenericItem", null, new String[]{"net-a", "net-b"});
 
         JsonNode payload = buildPayload("""
                 {
@@ -383,12 +383,9 @@ class CatalogDocumentAssemblerTest {
 
     @Test
     void assemble_itemWithSingleNetworkId_populatesNetworkIdAsListOfOne() throws Exception {
-        org.beckn.catalogpublish.dto.CatalogContext ctx =
-                new org.beckn.catalogpublish.dto.CatalogContext("bpp.single", "https://bpp.single",
-                        new String[]{"net-only"}, null);
         org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
-                "item-single-net", "{}", new String[0], ctx, "cat-1",
-                "Single Net Item", "GenericItem", "prov-1", null, "2.0");
+                "item-single-net", "{}", new String[0], null, "sub-1", "cat-1",
+                "GenericItem", null, new String[]{"net-only"});
 
         JsonNode payload = buildPayload("""
                 {
@@ -405,6 +402,92 @@ class CatalogDocumentAssemblerTest {
         @SuppressWarnings("unchecked")
         List<String> networkId = (List<String>) doc.get("network_id");
         assertThat(networkId).containsExactly("net-only");
+    }
+
+    // ── full_text_blob: numeric values ────────────────────────────────────────
+
+    @Test
+    void assemble_numericResourceAttributes_includedInTextBlob() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "@type": "beckn:Resource",
+                  "id": "item-ev-numeric",
+                  "descriptor": {"name": "EV Fast Charger"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {
+                    "@context": "https://example.org/ev.jsonld",
+                    "@type": "ChargingService",
+                    "powerKw": 150,
+                    "pricePerKwh": 12.5
+                  }
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "ChargingService");
+
+        String blob = (String) doc.get("full_text_blob");
+        assertThat(blob).contains("150");
+        assertThat(blob).contains("12.5");
+    }
+
+    // ── full_text_blob: boolean key names ─────────────────────────────────────
+
+    @Test
+    void assemble_booleanTrueResourceAttributes_keyNameIncludedInTextBlob() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "@type": "beckn:Resource",
+                  "id": "item-organic",
+                  "descriptor": {"name": "Organic Produce"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {
+                    "@context": "https://example.org/food.jsonld",
+                    "@type": "GroceryItem",
+                    "organic": true,
+                    "frozen": false
+                  }
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GroceryItem");
+
+        String blob = (String) doc.get("full_text_blob");
+        assertThat(blob).contains("organic");
+        assertThat(blob).doesNotContain("frozen");
+    }
+
+    // ── full_text_blob: deduplication ─────────────────────────────────────────
+
+    @Test
+    void assemble_duplicateTextInBlob_deduplicatedInOutput() throws Exception {
+        // resource_name "EV Charger" also appears in resourceAttributes.label — should appear once
+        JsonNode payload = buildPayload("""
+                {
+                  "@type": "beckn:Resource",
+                  "id": "item-dedup",
+                  "descriptor": {
+                    "name": "EV Charger",
+                    "shortDesc": "EV Charger"
+                  },
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {
+                    "@context": "https://example.org/ev.jsonld",
+                    "@type": "ChargingService",
+                    "label": "EV Charger"
+                  }
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "ChargingService");
+
+        String blob = (String) doc.get("full_text_blob");
+        // Split on space and count occurrences of "EV" to verify no duplicates from dedup
+        String[] tokens = blob.split("\\s+");
+        long count = java.util.Arrays.stream(tokens).filter("EV Charger"::equals).count();
+        // The full phrase won't occur as a single token, but we can count how many times
+        // "EV" appears — with LinkedHashSet dedup it should appear exactly once
+        long evCount = java.util.Arrays.stream(tokens).filter("EV"::equals).count();
+        assertThat(evCount).isEqualTo(1L);
     }
 
     // ── full_text_blob includes constraints and policies text ─────────────────

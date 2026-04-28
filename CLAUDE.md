@@ -46,9 +46,11 @@ BAPs send `discover` requests → Discovr queries the catalog index → delivers
 |------|------|
 | Kafka consumer | `consumer/CatalogPublishConsumer.java` |
 | Pipeline steps | `step/ParseStep.java`, `step/ValidateStep.java`, `step/PersistenceStep.java` |
+| Cross-catalog offer resolution (Phase 3) | `step/OfferResolutionStep.java` |
 | Context field extraction | `util/FieldExtractor.java` |
 | HTTP push controller | `controller/CatalogPushController.java` |
 | Elasticsearch doc assembler | `indexing/document/CatalogDocumentAssembler.java` |
+| Item domain model (PK = `id` + `catalog_id`) | `model/Item.java`, `model/ItemId.java` |
 | Config | `config/AppProperties.java` · `src/main/resources/application.yml` |
 
 ### Response Dispatcher (`jobs/response-dispatcher/src/main/java/org/beckn/seeker/`)
@@ -63,18 +65,18 @@ BAPs send `discover` requests → Discovr queries the catalog index → delivers
 
 ---
 
-## Beckn Protocol v2.1 — Applied (March 2026)
+## Beckn Protocol v2.0 — Applied
 
-All three jobs are fully migrated to Beckn Protocol v2.1. **No legacy v2.0/v1.0 support.**
+All three jobs are fully migrated to Beckn Protocol v2.0. **No legacy v1.0 support.**
 
 ### Context fields (camelCase, `additionalProperties: false`)
-`action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId` (uuid), `networkId` (String), `timestamp` (date-time), `transactionId` (uuid), `version` (const `"2.0.0"`), `ttl`, `try`, `lineage`. **No `domain`, `schemaContext`, `country`, `city` in context** — `schemaContext` moved to `message.intent`.
+`action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId` (uuid), `networkId` (String), `timestamp` (date-time), `transactionId` (uuid), `version` (const `"2.0.0"`). **No `domain`, `schemaContext`, `country`, `city` in context** — `schemaContext` moved to `message.intent`.
 
-### Resource fields (v2.1 — no `beckn:` prefix, no `items`)
-`@context`, `@type` (`"beckn:Resource"`), `id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`, `rating`, `category`. **No `items` array — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.** **No `networkId` on resources — only on context.**
+### Resource fields
+`id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`, `rating`, `category`. **No `@context`/`@type` on Resource itself — those belong only on `resourceAttributes`.** **No `items` array — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.** **No `networkId` on resources — only on context.**
 
 ### Offer fields
-`@type` (`"beckn:Offer"`), `id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`
+`id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`. **No `@context`/`@type` on Offer itself — those belong only on `offerAttributes`.**
 
 ### ACK/NACK format
 - ACK: `{"status":"ACK"}` — no transactionId, no timestamp
@@ -167,17 +169,31 @@ docker compose up -d
 
 ## Structured Logging
 
-All three jobs use **LogstashEncoder** (structured JSON) with unified MDC fields:
+All three jobs use **LogstashEncoder** (structured JSON) with unified MDC fields.
+Every `MdcField.java` across all 6 Java jobs (Catalg + Discovr) declares ALL constants for consistency.
 
-| MDC Field | Set by | Description |
-|-----------|--------|-------------|
-| `correlationId` | BecknMdcContext | UUID per processing unit |
-| `transactionId` | BecknMdcContext | From Beckn context |
-| `messageId` | BecknMdcContext | From Beckn context |
-| `bapId`, `bapUri` | BecknMdcContext | BAP identifiers |
-| `bppId`, `bppUri` | BecknMdcContext | BPP identifiers |
-| `networkId` | BecknMdcContext | From context.networkId |
-| `action` | BecknMdcContext | Beckn action value |
+### MDC Field Standard
+
+| MDC Field | Description | Set by |
+|-----------|-------------|--------|
+| `transactionId` | Beckn protocol end-to-end trace ID | ALL |
+| `messageId` | Beckn protocol request/response correlation | ALL |
+| `catalogId` | Which catalog is being processed | Discovr Publish |
+| `networkId` | Which network | ALL |
+| `auth.subscriberId` | Org identity from auth header keyId first segment | ALL |
+| `auth.recordId` | Key identity from auth header keyId second segment | ALL |
+| `schemaType` | Resource `@type` | Discovr Publish |
+| `publishTimestamp` | Epoch millis when catalog was published | Discovr Publish |
+| `subscriptionId` | Matched subscription UUID | (not set in Discovr — declared for cross-service consistency) |
+| `taskId` | Delivery task UUID | (not set in Discovr — declared for cross-service consistency) |
+| `tags` | X-Tags header for origin tracking | ALL |
+
+**Rules:**
+- ALL `MdcField.java` files declare ALL constants (even if not set by that job)
+- Fields not available at a stage are simply not set (absent from log output, not "unknown")
+- Never add a field to individual log statements if it belongs in MDC — MDC auto-includes
+- `auth.subscriberId` is set by `AuthorizationService` after `verifySignature()` for HTTP entry points
+- `auth.subscriberId` is set by `CorrelationContext` from `context.subscriberId` in Kafka consumers
 
 - **LogEvent constants** in `logging/LogEvent.java` — no hardcoded log strings
 - **Log levels**: DEBUG=internal steps, INFO=milestones, WARN=validation failures/NACK, ERROR=unrecoverable
@@ -208,11 +224,20 @@ Critical rules:
 - **No `Thread.sleep()` in tests** — use deadline-based poll loops from `BaseIntegrationTest`
 - **Validate callback URLs before HTTP POST** — SSRF risk
 - **No `new ObjectMapper()`** — inject Spring Boot's auto-configured bean
-- **Beckn v2.1 field names only** — `resources` not `items`, `resourceAttributes` not `itemAttributes`, `resourceIds` not `items` in offers, `@type: "beckn:Resource"`, `networkId` only on context
+- **Beckn v2.0 field names only** — `resources` not `items`, `resourceAttributes` not `itemAttributes`, `resourceIds` not `items` in offers, `networkId` only on context
 - **No fabricated defaults** — don't default `@context`/`@type` on resourceAttributes; they're required publisher fields
 - **Topic names from `@ConfigurationProperties`** — never hardcoded string literals
 - **Kafka publish**: `kafkaTemplate.send().whenComplete(...)` — never `.get()`
 - **Per-job Gradle wrappers**: run `./gradlew` from the specific job directory
+- **Item PK is `(id, catalog_id)`** — never use `bpp_id` as part of the item key; `Item.from()` takes `catalogId` and `subscriberId`, not `bppId`
+- **No `catalog`, `provider`, `networks`, `subscribers` tables** — these do not exist in Discovr DB; only `item` and `item_location_collection`
+- **ES document ID = `catalogId:resourceId`** — format enforced in `CatalogDocumentAssembler`; never `bppId:resourceId`
+- **FULL replace scoped to `catalog_id` only** — `DELETE WHERE catalog_id = :catalogId`; no `bpp_id` predicate in any delete query
+- **No v1 backward compatibility** — `ContextNormalizer` deleted; `@JsonAlias` for snake_case `bpp_id`/`bap_id` removed; camelCase only
+- **DefaultErrorHandler on Kafka consumer** — do not ack on transient failures; let `DefaultErrorHandler` retry; ack only after successful processing
+- **`subscriberId` as Kafka message key on push path** — `CatalogPushService` sets key = `subscriberId` from `context.subscriberId` when publishing to internal Kafka topic
+- **`created_by` is immutable** — `Item` has `@Column(updatable = false)` on `createdBy`; upsert logic must not overwrite it
+- **`item` table stores both `created_by` and `subscriber_id`** — `created_by` = record_id (second `|`-segment of keyId, immutable ownership key); `subscriber_id` = org identity (first segment of keyId); these are two distinct columns: `created_by` for ownership checks, `subscriber_id` for org-level grouping. Never conflate them.
 
 ---
 
@@ -240,3 +265,12 @@ requirements → [USER APPROVAL] → design → [USER APPROVAL] → implement �
 For small tasks (bug fix, field rename): implement → review → test-runner → verify.
 
 **Regression verification:** Run `verify` agent any time to confirm no regressions against the live system.
+
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current

@@ -98,8 +98,8 @@ public class CatalogPublishPayloadAssembler {
 
             // When filtering, only include saved items whose id is in the set.
             List<Item> itemsToAssemble = itemIdsToInclude == null
-                    ? batch.savedItems()
-                    : batch.savedItems().stream()
+                    ? batch.savedResources()
+                    : batch.savedResources().stream()
                             .filter(i -> itemIdsToInclude.contains(i.getId()))
                             .toList();
 
@@ -149,7 +149,7 @@ public class CatalogPublishPayloadAssembler {
         // Copy catalog-level fields; items and offers are assembled below.
         ObjectNode catalogNode = objectMapper.createObjectNode();
         catalogTemplate.fields().forEachRemaining(entry -> {
-            if (!BecknFields.ITEMS.equals(entry.getKey()) && !BecknFields.RESOURCES.equals(entry.getKey())
+            if (!"items".equals(entry.getKey()) && !BecknFields.RESOURCES.equals(entry.getKey())
                     && !BecknFields.OFFERS.equals(entry.getKey())) {
                 catalogNode.set(entry.getKey(), entry.getValue());
             }

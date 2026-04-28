@@ -1,35 +1,33 @@
 {
-    "context": {
-        "action": "discover",
-        "version": "2.0.0",
-        "bapId": "https://evcharging-bap.example.com",
-        "bapUri": "https://evcharging-bap.example.com/callback",
-        "networkId": "bap.net/ev-charging",
-        "transactionId": "ce6d6f29-4a62-4fd8-96b4-9aa6bdbda890",
-        "messageId": "7c82502a-9d0b-4fbd-9a4a-1f5f9f0ac8c2",
-        "ttl": "PT10M",
-        "timestamp": "2025-10-14T10:30:00.000Z"
-    },
-    "message": {
-        "intent": {
-            "filters": {
-                "type": "jsonpath",
-                "expression": "$.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"CCS2\")"
-            },
-            "spatial": [
-                {
-                    "op": "s_dwithin",
-                    "targets": "$.catalogs[*].resources[*].availableAt[*].geo",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [
-                            77.5946,
-                            12.9716
-                        ]
-                    },
-                    "distanceMeters": 1500.0
-                }
+  "context": {
+    "action": "discover",
+    "version": "2.0.0",
+    "networkId": "bap.net/ev-charging",
+    "transactionId": "ce6d6f29-4a62-4fd8-96b4-9aa6bdbda890",
+    "messageId": "7c82502a-9d0b-4fbd-9a4a-1f5f9f0ac8c2",
+    "ttl": "PT10M",
+    "timestamp": "2025-10-14T10:30:00.000Z"
+  },
+  "message": {
+    "intent": {
+      "filters": {
+        "type": "jsonpath",
+        "expression": "$.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"CCS2\")"
+      },
+      "spatial": [
+        {
+          "op": "s_dwithin",
+          "targets": "$.catalogs[*].resources[*].availableAt[*].geo",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              77.5946,
+              12.9716
             ]
+          },
+          "distanceMeters": 1500.0
         }
+      ]
     }
+  }
 }

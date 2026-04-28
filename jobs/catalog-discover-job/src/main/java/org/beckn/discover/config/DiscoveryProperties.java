@@ -1,7 +1,10 @@
 package org.beckn.discover.config;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
@@ -15,6 +18,7 @@ import org.springframework.validation.annotation.Validated;
 public class DiscoveryProperties {
 
     private boolean latencyTrackingEnabled = true;
+    @Valid private Filter filter = new Filter();
     @Valid private Kafka kafka = new Kafka();
     @Valid private NLWeb nlweb = new NLWeb();
     @Valid private PostgreSQL postgresql = new PostgreSQL();
@@ -63,6 +67,14 @@ public class DiscoveryProperties {
         this.latencyTrackingEnabled = latencyTrackingEnabled;
     }
 
+    public Filter getFilter() {
+        return filter;
+    }
+
+    public void setFilter(Filter filter) {
+        this.filter = filter;
+    }
+
     public TextSearch getTextSearch() {
         return textSearch;
     }
@@ -88,6 +100,21 @@ public class DiscoveryProperties {
     }
 
     /**
+     * Post-enrichment filtering configuration.
+     */
+    public static class Filter {
+        private boolean discardCatalogsWithoutOffers = true;
+
+        public boolean isDiscardCatalogsWithoutOffers() {
+            return discardCatalogsWithoutOffers;
+        }
+
+        public void setDiscardCatalogsWithoutOffers(boolean discardCatalogsWithoutOffers) {
+            this.discardCatalogsWithoutOffers = discardCatalogsWithoutOffers;
+        }
+    }
+
+    /**
      * Elasticsearch configuration — used when text-search.engine=elasticsearch.
      */
     public static class Elasticsearch {
@@ -99,6 +126,13 @@ public class DiscoveryProperties {
         private float minScore = 0.72f;
         private int connectTimeoutMs = 5000;
         private int socketTimeoutMs = 30000;
+        @NotEmpty(message = "discovery.elasticsearch.multi-match-fields must not be empty")
+        private java.util.List<String> multiMatchFields = java.util.List.of(
+                "full_text_blob", "resource_name^2", "catalog_name^2",
+                "resource_provider_name^1.5", "resource_rating_review_text");
+        @DecimalMin(value = "0.0", message = "discovery.elasticsearch.relative-score-threshold must be >= 0.0")
+        @DecimalMax(value = "1.0", message = "discovery.elasticsearch.relative-score-threshold must be <= 1.0")
+        private double relativeScoreThreshold = 0.6;
 
         public String getHosts() { return hosts; }
         public void setHosts(String hosts) { this.hosts = hosts; }
@@ -112,6 +146,10 @@ public class DiscoveryProperties {
         public void setConnectTimeoutMs(int connectTimeoutMs) { this.connectTimeoutMs = connectTimeoutMs; }
         public int getSocketTimeoutMs() { return socketTimeoutMs; }
         public void setSocketTimeoutMs(int socketTimeoutMs) { this.socketTimeoutMs = socketTimeoutMs; }
+        public java.util.List<String> getMultiMatchFields() { return multiMatchFields; }
+        public void setMultiMatchFields(java.util.List<String> multiMatchFields) { this.multiMatchFields = multiMatchFields; }
+        public double getRelativeScoreThreshold() { return relativeScoreThreshold; }
+        public void setRelativeScoreThreshold(double relativeScoreThreshold) { this.relativeScoreThreshold = relativeScoreThreshold; }
     }
 
     /**

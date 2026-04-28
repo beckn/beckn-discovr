@@ -2,6 +2,7 @@ package org.beckn.discover.service.postgresql.spatial;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper.QuerySpec;
@@ -103,7 +104,7 @@ public class SpatialQueryBuilder {
             int limit) {
 
         if (constraints == null || constraints.isEmpty()) {
-            log.debug("spatial.build.skip reason=no-constraints");
+            log.debug("event={} reason=no-constraints", LogEvent.SPATIAL_BUILD_SKIP);
             return Optional.empty();
         }
 
@@ -111,13 +112,13 @@ public class SpatialQueryBuilder {
         int added = appendSpatialConditions(template, constraints);
 
         if (added == 0) {
-            log.warn("spatial.build.skip reason=no-valid-conditions constraints={}", constraints.size());
+            log.warn("event={} reason=no-valid-conditions constraints={}", LogEvent.SPATIAL_BUILD_SKIP, constraints.size());
             return Optional.empty();
         }
 
         template.schemaFilters(schemaTypes, schemaContextUrls);
         QuerySpec spec = template.build(limit);
-        log.debug("spatial.build.done added={} params={}", added, spec.parameters().size());
+        log.debug("event={} added={} params={}", LogEvent.SPATIAL_BUILD_DONE, added, spec.parameters().size());
         return Optional.of(spec);
     }
 
@@ -147,7 +148,7 @@ public class SpatialQueryBuilder {
             int limit) {
 
         if (constraints == null || constraints.isEmpty()) {
-            log.debug("spatial.combined.skip reason=no-constraints");
+            log.debug("event={} reason=no-constraints", LogEvent.SPATIAL_COMBINED_SKIP);
             return Optional.empty();
         }
 
@@ -162,13 +163,13 @@ public class SpatialQueryBuilder {
 
         int added = appendSpatialConditions(template, constraints);
         if (added == 0) {
-            log.warn("spatial.combined.skip reason=no-valid-spatial-conditions");
+            log.warn("event={} reason=no-valid-spatial-conditions", LogEvent.SPATIAL_COMBINED_SKIP);
             return Optional.empty();
         }
 
         template.schemaFilters(schemaTypes, schemaContextUrls);
         QuerySpec spec = template.build(limit);
-        log.debug("spatial.combined.built added={} params={}", added, spec.parameters().size());
+        log.debug("event={} added={} params={}", LogEvent.SPATIAL_COMBINED_BUILT, added, spec.parameters().size());
         return Optional.of(spec);
     }
 
@@ -207,8 +208,8 @@ public class SpatialQueryBuilder {
     private int appendSpatialConditions(QueryTemplate template,
             List<DiscoverRequest.SpatialConstraint> constraints) {
         int added = 0;
-        for (DiscoverRequest.SpatialConstraint c : constraints) {
-            if (addCondition(template, c)) added++;
+        for (DiscoverRequest.SpatialConstraint constraint : constraints) {
+            if (addCondition(template, constraint)) added++;
         }
         return added;
     }
@@ -223,29 +224,29 @@ public class SpatialQueryBuilder {
      */
     private boolean addCondition(QueryTemplate template, DiscoverRequest.SpatialConstraint c) {
         if (c == null) {
-            log.warn("spatial.condition.skip reason=null-constraint");
+            log.warn("event={} reason=null-constraint", LogEvent.SPATIAL_CONDITION_SKIP);
             return false;
         }
 
         String op = c.getOperation();
         if (!StringUtils.hasText(op)) {
-            log.warn("spatial.condition.skip reason=blank-operation");
+            log.warn("event={} reason=blank-operation", LogEvent.SPATIAL_CONDITION_SKIP);
             return false;
         }
 
         SpatialOp spatialOp = OPERATIONS.get(op);
         if (spatialOp == null) {
-            log.warn("spatial.condition.skip reason=unsupported-operation op={} supported={}", op, OPERATIONS.keySet());
+            log.warn("event={} reason=unsupported-operation op={} supported={}", LogEvent.SPATIAL_CONDITION_SKIP, op, OPERATIONS.keySet());
             return false;
         }
 
         if (c.getGeometry() == null) {
-            log.warn("spatial.condition.skip reason=null-geometry op={}", op);
+            log.warn("event={} reason=null-geometry op={}", LogEvent.SPATIAL_CONDITION_SKIP, op);
             return false;
         }
 
         if (spatialOp.hasDistance() && c.getDistanceMeters() == null) {
-            log.warn("spatial.condition.skip reason=missing-distance op={}", op);
+            log.warn("event={} reason=missing-distance op={}", LogEvent.SPATIAL_CONDITION_SKIP, op);
             return false;
         }
 
@@ -253,7 +254,7 @@ public class SpatialQueryBuilder {
         try {
             geoJson = objectMapper.writeValueAsString(c.getGeometry());
         } catch (JsonProcessingException e) {
-            log.error("spatial.condition.skip reason=geometry-serialise-failed op={} error={}", op, e.getMessage());
+            log.error("event={} reason=geometry-serialise-failed op={} error={}", LogEvent.SPATIAL_CONDITION_SKIP, op, e.getMessage());
             return false;
         }
 
@@ -289,9 +290,9 @@ public class SpatialQueryBuilder {
                 pathCondition, spatialOp.stFunction(), geomCast, geoFragment, distanceSuffix);
         template.condition(condition, params.toArray());
 
-        log.debug("spatial.condition.added op={} fn={} geography={} distanceMeters={} pathFilter={}",
-                op, spatialOp.stFunction(), spatialOp.useGeography(),
-                spatialOp.hasDistance() ? c.getDistanceMeters() : "n/a", usePathFilter);
+        log.debug("event={} op={} fn={} geography={} distanceMeters={} pathFilter={}",
+                LogEvent.SPATIAL_CONDITION_ADDED, op, spatialOp.stFunction(), spatialOp.useGeography(),
+                spatialOp.hasDistance() ? c.getDistanceMeters() : null, usePathFilter);
         return true;
     }
 

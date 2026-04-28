@@ -12,9 +12,9 @@
                             "@type": "beckn:Descriptor",
                             "name": "EV Charging Services Network",
                             "shortDesc": "Fast charging stations across Bengaluru",
-                            "images": [
-                                "https://example.com/images/ev-charging-network.jpg",
-                                "https://example.com/images/charging-station-banner.png"
+                            "mediaFile": [
+                                {"label": "EV Charging Network", "mimeType": "image/jpeg", "uri": "https://example.com/images/ev-charging-network.jpg"},
+                                {"label": "Charging Station Banner", "mimeType": "image/png", "uri": "https://example.com/images/charging-station-banner.png"}
                             ]
                         },
                         "providerId": "ecopower-charging",
@@ -32,9 +32,9 @@
                                     "name": "DC Fast Charger - CCS2 (60kW)",
                                     "shortDesc": "High-speed DC charging station",
                                     "longDesc": "Ultra-fast DC charging station supporting CCS2 connector with 60kW maximum power output.",
-                                    "images": [
-                                        "https://example.com/images/ev-charger-ccs2-60kw.jpg",
-                                        "https://example.com/images/charging-station-ccs2.png"
+                                    "mediaFile": [
+                                        {"label": "CCS2 60kW Charger", "mimeType": "image/jpeg", "uri": "https://example.com/images/ev-charger-ccs2-60kw.jpg"},
+                                        {"label": "CCS2 Charging Station", "mimeType": "image/png", "uri": "https://example.com/images/charging-station-ccs2.png"}
                                     ]
                                 },
                                 "category": {
