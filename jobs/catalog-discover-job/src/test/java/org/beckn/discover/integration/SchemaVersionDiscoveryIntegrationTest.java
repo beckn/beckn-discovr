@@ -127,8 +127,6 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
         Context ctx = new Context();
         ctx.setTransactionId(transactionId);
         ctx.setMessageId(UUID.randomUUID().toString());
-        ctx.setBapId("bap.test.example.com");
-        ctx.setBapUri("https://bap.test.example.com/callback");
         ctx.setAction("discover");
         ctx.setVersion("2.0.0");
         ctx.setTimestamp(OffsetDateTime.of(2026, 3, 22, 10, 0, 0, 0, ZoneOffset.UTC));

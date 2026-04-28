@@ -401,13 +401,11 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertRequestValid(request);
         String expectedTxnId = request.getContext().getTransactionId();
         String expectedMsgId = request.getContext().getMessageId();
-        String expectedBapId = request.getContext().getBapId();
 
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
 
         Assertions.assertThat(response.getContext().getTransactionId()).isEqualTo(expectedTxnId);
         Assertions.assertThat(response.getContext().getMessageId()).isEqualTo(expectedMsgId);
-        Assertions.assertThat(response.getContext().getBapId()).isEqualTo(expectedBapId);
         Assertions.assertThat(response.getContext().getAction()).isEqualTo("on_discover");
         Assertions.assertThat(response.getContext().getTimestamp()).isNotNull();
     }
