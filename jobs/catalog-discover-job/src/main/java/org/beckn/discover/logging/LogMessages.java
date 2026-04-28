@@ -24,4 +24,8 @@ public final class LogMessages {
 
     // ── Query Engine ─────────────────────────────────────────────────────────
     public static final String REASON_NO_SPATIAL_CONDITIONS = "no-spatial-conditions";
+    public static final String PATH_JSONPATH_SPATIAL = "jsonpath-spatial";
+    public static final String PATH_JSONPATH = "jsonpath";
+    public static final String PATH_SPATIAL = "spatial";
+    public static final String PATH_TEXT_SEARCH = "text-search";
 }

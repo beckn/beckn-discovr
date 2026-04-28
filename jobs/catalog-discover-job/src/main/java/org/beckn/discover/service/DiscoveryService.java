@@ -181,18 +181,18 @@ public class DiscoveryService {
             throws Exception {
 
         if (qr.hasFilters() && qr.hasSpatial()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "jsonpath-spatial"));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH_SPATIAL));
             return executeJsonPathWithSpatialQuery(qr, context, tracker);
         }
         if (qr.hasFilters()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "jsonpath"));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH));
             return executeJsonPathFilterQuery(qr, context, tracker);
         }
         if (qr.hasSpatial()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "spatial"));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_SPATIAL));
             return executeSpatialOnlyQuery(qr, context, tracker);
         }
-        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "text-search"));
+        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_TEXT_SEARCH));
         return executeTextSearchQuery(qr, context, tracker);
     }
 
