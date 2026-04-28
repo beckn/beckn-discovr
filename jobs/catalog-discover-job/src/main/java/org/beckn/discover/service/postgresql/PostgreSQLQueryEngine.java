@@ -1,6 +1,7 @@
 package org.beckn.discover.service.postgresql;
 
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.logging.LogMessages;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.service.engine.QueryEngine;
 import org.beckn.discover.service.engine.QueryRequest;
@@ -108,7 +109,8 @@ public class PostgreSQLQueryEngine implements QueryEngine {
 
         if (rowsOpt.isEmpty()) {
             log.info(LogEvent.QUERY_COMPLETED + ".combined-skip",
-                    value("reason", "no-spatial-conditions"),
+                    value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS),
+                    value("method", "spatialQuery"),
                     value("transactionId", request.transactionId()));
             return Optional.empty();
         }

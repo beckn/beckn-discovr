@@ -8,6 +8,7 @@ import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.logging.LogMessages;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
@@ -171,7 +172,7 @@ public class DiscoveryEventConsumer {
         String responseTopic = discoveryProperties.getKafka().getResponseTopic();
         if (responseTopic == null || responseTopic.isBlank()) {
             log.warn(LogEvent.RESPONSE_PUBLISH_FAILED,
-                    value("reason", "response-topic-not-configured"));
+                    value("reason", LogMessages.REASON_RESPONSE_TOPIC_NOT_CONFIGURED));
             return;
         }
         String transactionId = request.getContext() != null ? request.getContext().getTransactionId() : null;
@@ -205,7 +206,7 @@ public class DiscoveryEventConsumer {
         } catch (TimeoutException e) {
             log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),
-                    value("reason", "publish timed out after 30s"),
+                    value("reason", LogMessages.REASON_PUBLISH_TIMED_OUT),
                     e);
             throw new RuntimeException("Kafka publish timed out", e);
         } catch (Exception e) {
