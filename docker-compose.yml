@@ -79,14 +79,14 @@ services:
 
   # on-discovery-api removed — catalog push is now handled by catalog-publish service (POST /catalog/push)
 
-  # Catalog Publish Job (Persistence Only - Distribution Disabled)
-  # This job acts as the bridge for discovery ingestion
-  catalog-publish:
+  # ── Discovr Ingestion ──────────────────────────────────────────────────────
+  # Receives catalog/push from Catalg Delivery and persists to Discovr's DB + ES.
+  discovr-ingestion:
     build:
       context: .
       dockerfile: jobs/catalog-publish-job/Dockerfile
     image: beckn/catalog-publish-job:1.0
-    container_name: catalog-publish
+    container_name: discovr-ingestion
     ports:
       - "8085:8080"
     environment:
@@ -175,7 +175,8 @@ services:
       - beckn-network
     restart: unless-stopped
 
-  # Catalog Discover Job (formerly discovery-service)
+  # ── Discovr Search ───────────────────────────────────────────────────────
+  # Handles discover requests from Buyers (BAPs). Searches PostgreSQL + ES.
   catalog-discover-job:
     build:
       context: .
@@ -278,8 +279,8 @@ services:
       retries: 5
       start_period: 60s
 
-  # Response Dispatcher Job (seeker-notifier)
-  # Consumes discovery responses and notifies the BAP; failures go to a DLT topic.
+  # ── Discovr Dispatcher ──────────────────────────────────────────────────
+  # Delivers on_discover callbacks to Buyers (BAPs); failures go to DLT topic.
   response-dispatcher:
     build:
       context: .
@@ -323,21 +324,28 @@ services:
       retries: 5
       start_period: 60s
 
-  # Two BAP signature service instances are needed because each DeDi registry record holds only one
-  # base URL, and the BAP has two distinct callback endpoints on different base URLs:
-  #   - record 1 (port 3031): base URL points to catalog-publish-job — used when triggering a
-  #     subscription (catalog/subscription); delivery job resolves this record to push catalog/push
-  #     callbacks to the BAP's catalog-publish-job endpoint
-  #   - record 2 (port 3032): base URL points to bap-callback-sink — used when sending discover
-  #     or catalog/pull requests; response-dispatcher and delivery job resolve this record to deliver
-  #     on_discover and catalog/on_pull callbacks to the sink
-  # Use record 1 credentials in Postman when sending catalog/subscription requests.
-  # Use record 2 credentials in Postman when sending discover or catalog/pull requests.
+  # ── NP Signer + Buyer Signer ────────────────────────────────────────────
+  # Two signing services are needed because each DeDi registry record holds
+  # only one base URL, and there are two distinct callback destinations:
+  #
+  #   NP Signer (port 3031) — Network Participant who hosts this Discovr instance
+  #     Registry record → base URL points to Discovr Ingestion (discovr-ingestion:8085)
+  #     Used when: managing subscriptions (catalog/subscription CRUD)
+  #     Catalg Delivery resolves this record → sends catalog/push to Discovr Ingestion
+  #
+  #   Buyer Signer (port 3032) — Buyer app within the NP's network
+  #     Registry record → base URL points to Buyer Callbacks (buyer-callbacks:8097)
+  #     Used when: sending discover or catalog/pull requests
+  #     Discovr Dispatcher + Catalg Delivery resolve this → deliver on_discover / on_pull
+  #
+  # In Postman: use port 3031 for subscription, port 3032 for discover/pull.
 
-  # Signature service (BAP record 1) — signs payloads as BAP identity for catalog/push
-  signature-service-bap:
+  # ── NP Signer — Network Participant signs subscription CRUD requests
+  # Actor: NP who hosts this Discovr instance. Subscribes to Catalg so that
+  # catalog/push deliveries flow into Discovr Ingestion.
+  np-signer:
     image: node:20-alpine
-    container_name: signature-service-bap
+    container_name: np-signer
     working_dir: /app
     volumes:
       - ./dev-kit:/app
@@ -353,10 +361,12 @@ services:
       - beckn-network
     restart: unless-stopped
 
-  # Signature service (BAP record 2) — signs payloads as BAP sink identity for on_discover + on_pull
-  signature-service-bap2:
+  # ── Buyer Signer — Buyer app signs discover and pull requests
+  # Actor: Buyer (BAP) within the NP's network. Calls discover API to find catalogs.
+  # on_discover and on_pull callbacks are delivered to buyer-callbacks (port 8097).
+  buyer-signer:
     image: node:20-alpine
-    container_name: signature-service-bap2
+    container_name: buyer-signer
     working_dir: /app
     volumes:
       - ./dev-kit:/app
@@ -372,10 +382,12 @@ services:
       - beckn-network
     restart: unless-stopped
 
-  # BAP Callback Sink — receives on_discover and on_catalog_pull callbacks for local testing
-  bap-callback-sink:
+  # ── Buyer Callbacks — receives on_discover and on_pull callbacks for local testing
+  # Actor: Buyer (BAP). Lightweight HTTP server that prints received callbacks to stdout.
+  # In production this would be the Buyer's actual application server.
+  buyer-callbacks:
     image: python:3-alpine
-    container_name: bap-callback-sink
+    container_name: buyer-callbacks
     ports:
       - "8097:8097"
     volumes:
