@@ -104,11 +104,12 @@ services:
       - APP_MESSAGING_TOPICS_RESPONSES=discovr.publish.out.responses
       - APP_MESSAGING_TOPICS_FAILED=discovr.publish.dlt.requests
       - APP_CATALOG_VALIDATION_ENABLED=false
+      - BECKN_PROTOCOL_API_SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/schema-update/api/v2.0.0/beckn.yaml
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - JAVA_TOOL_OPTIONS=
       # Beckn Auth SDK — signature verification for /catalog/push
-      - SIGNATURE_AUTH_ENABLED=false
-      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
       - SIGNATURE_CLOCK_SKEW_SECONDS=30
@@ -202,8 +203,8 @@ services:
       - LOGGING_LEVEL_ORG_APACHE_KAFKA=ERROR
       - OTEL_TRACES_EXPORTER=none
       # Beckn Auth SDK — signature verification for /beckn/discover
-      - SIGNATURE_AUTH_ENABLED=false
-      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
       - SIGNATURE_CLOCK_SKEW_SECONDS=30
@@ -233,6 +234,7 @@ services:
       # els-semantic-search — vector knn via Elasticsearch + optional LLM enrichment
       #                       requires embedding-model and llm-model config below
       # nlweb             — delegates to an external NLWeb service
+      - DISCOVERY_FILTER_DISCARD_CATALOGS_WITHOUT_OFFERS=true
       - DISCOVERY_TEXT_SEARCH_ENGINE=native-els
       # ── Embedding model (required when engine=els-semantic-search) ───────────
       # Supports any OpenAI-compatible /v1/embeddings provider.
@@ -294,14 +296,14 @@ services:
       - SPRING_KAFKA_CONSUMER_GROUP_ID=seeker-notifier-group
       - SPRING_KAFKA_LISTENER_CONCURRENCY=1
       # DeDi Registry — callback URL resolution (resolves subscriber base URL at delivery time)
-      - REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - REGISTRY_NAME=subscribers.beckn.one
       # Beckn HTTP Signature — outgoing signing for on_discover callbacks to BAP
       # Set SIGNING_ENABLED=true and provide key details to sign outbound callbacks
-      - SIGNING_ENABLED=false
-      - SIGNING_SUBSCRIBER_ID=
-      - SIGNING_KEY_ID_SUFFIX=
-      - SIGNING_PRIVATE_KEY=
+      - SIGNING_ENABLED=true
+      - SIGNING_SUBSCRIBER_ID=${SIGNING_SUBSCRIBER_ID:-}
+      - SIGNING_KEY_ID_SUFFIX=${SIGNING_KEY_ID_SUFFIX:-}
+      - SIGNING_PRIVATE_KEY=${SIGNING_PRIVATE_KEY:-}
       - SIGNING_EXPIRY_SECONDS=3600
       # SSRF validation — disable for local/Docker development (no public DNS)
       - CALLBACK_URL_VALIDATION_ENABLED=false
@@ -320,6 +322,68 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+
+  # Two BAP signature service instances are needed because each DeDi registry record holds only one
+  # base URL, and the BAP has two distinct callback endpoints on different base URLs:
+  #   - record 1 (port 3031): base URL points to catalog-publish-job — used when triggering a
+  #     subscription (catalog/subscription); delivery job resolves this record to push catalog/push
+  #     callbacks to the BAP's catalog-publish-job endpoint
+  #   - record 2 (port 3032): base URL points to bap-callback-sink — used when sending discover
+  #     or catalog/pull requests; response-dispatcher and delivery job resolve this record to deliver
+  #     on_discover and catalog/on_pull callbacks to the sink
+  # Use record 1 credentials in Postman when sending catalog/subscription requests.
+  # Use record 2 credentials in Postman when sending discover or catalog/pull requests.
+
+  # Signature service (BAP record 1) — signs payloads as BAP identity for catalog/push
+  signature-service-bap:
+    image: node:20-alpine
+    container_name: signature-service-bap
+    working_dir: /app
+    volumes:
+      - ./dev-kit:/app
+    command: sh -c "npm install --silent && node scripts/get-signature.js"
+    ports:
+      - "3031:3031"
+    environment:
+      - SUBSCRIBER_ID=${BAP_SUBSCRIBER_ID:-}
+      - RECORD_ID=${BAP_RECORD_ID:-}
+      - PRIVATE_KEY=${BAP_PRIVATE_KEY:-}
+      - PORT=3031
+    networks:
+      - beckn-network
+    restart: unless-stopped
+
+  # Signature service (BAP record 2) — signs payloads as BAP sink identity for on_discover + on_pull
+  signature-service-bap2:
+    image: node:20-alpine
+    container_name: signature-service-bap2
+    working_dir: /app
+    volumes:
+      - ./dev-kit:/app
+    command: sh -c "npm install --silent && node scripts/get-signature.js"
+    ports:
+      - "3032:3032"
+    environment:
+      - SUBSCRIBER_ID=${BAP2_SUBSCRIBER_ID:-}
+      - RECORD_ID=${BAP2_RECORD_ID:-}
+      - PRIVATE_KEY=${BAP2_PRIVATE_KEY:-}
+      - PORT=3032
+    networks:
+      - beckn-network
+    restart: unless-stopped
+
+  # BAP Callback Sink — receives on_discover and on_catalog_pull callbacks for local testing
+  bap-callback-sink:
+    image: python:3-alpine
+    container_name: bap-callback-sink
+    ports:
+      - "8097:8097"
+    volumes:
+      - ./dev-kit/scripts/receive-discover-callbacks.sh:/scripts/receive-discover-callbacks.sh:ro
+    command: sh /scripts/receive-discover-callbacks.sh
+    networks:
+      - beckn-network
+    restart: unless-stopped
 
   # Beckn Demo UI
   # beckn-demo-ui:
