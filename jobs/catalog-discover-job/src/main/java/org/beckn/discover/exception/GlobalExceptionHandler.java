@@ -88,7 +88,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             message = pd.getDetail();
         } else if (status == HttpStatus.BAD_REQUEST || ex instanceof IllegalArgumentException) {
             code = ErrorCodes.INVALID_REQUEST;
-            message = ex.getMessage();
+            message = sanitizeValidationMessage(ex.getMessage());
         } else {
             code = ErrorCodes.INTERNAL_ERROR;
             message = ErrorMessages.INTERNAL_SERVER_ERROR;
@@ -101,6 +101,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
         AckResponse ackResponse = AckResponse.nack(code, message);
         return new ResponseEntity<>(ackResponse, status);
+    }
+
+    /**
+     * Strips internal implementation details from validation error messages
+     * before they reach the client. Removes "(paths: ...)" suffixes and
+     * replaces null/empty messages with a generic fallback.
+     */
+    private static String sanitizeValidationMessage(String raw) {
+        if (raw == null || raw.isBlank()) return ErrorMessages.VALIDATION_FAILED;
+        // Strip "(paths: $.context, $.message)" suffix that leaks internal schema paths
+        String cleaned = raw.replaceAll("\\s*\\(paths?:.*\\)$", "");
+        return cleaned.isBlank() ? ErrorMessages.VALIDATION_FAILED : cleaned;
     }
 
 }

@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.beckn.discover.common.ErrorMessages;
 import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.DiscoverRequest;
 import org.json.JSONObject;
@@ -93,8 +94,7 @@ public class DiscoveryValidationService {
                     .path("schema");
 
             if (endpointSchema.isMissingNode()) {
-                throw new RuntimeException(
-                        "beckn.yaml is missing paths./discover.post.requestBody.content.application/json.schema");
+                throw new RuntimeException(ErrorMessages.SCHEMA_CONFIG_ERROR);
             }
 
             var envelopeSchema = buildSelfContainedSchema(rootSchemaNode, endpointSchema);
@@ -234,7 +234,7 @@ public class DiscoveryValidationService {
         try {
             if (discoverActionSchema == null) {
                 logger.error(LogEvent.VALIDATE_FAILED, value("reason", "schema-not-initialized"));
-                return new ValidationResult(false, List.of("Validation schema not initialized"), List.of("root"));
+                return new ValidationResult(false, List.of(ErrorMessages.SERVICE_STARTING_UP), List.of("root"));
             }
 
             // Presence checks — these always run and give clearer error messages than schema failures
@@ -342,7 +342,7 @@ public class DiscoveryValidationService {
                     value("reason", "unexpected-error"),
                     value("error", e.getMessage()),
                     e);
-            return new ValidationResult(false, List.of("Validation error: " + e.getMessage()), List.of("root"));
+            return new ValidationResult(false, List.of(ErrorMessages.VALIDATION_FAILED), List.of("root"));
         }
     }
 
@@ -354,7 +354,7 @@ public class DiscoveryValidationService {
             UUID.fromString(node.asText());
             return java.util.Optional.empty();
         } catch (IllegalArgumentException e) {
-            return java.util.Optional.of("$.context." + field + ": invalid uuid — must be a valid UUID v4 (got: " + node.asText() + ")");
+            return java.util.Optional.of("$.context." + field + ": " + ErrorMessages.INVALID_UUID);
         }
     }
 
