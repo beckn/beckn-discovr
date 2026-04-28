@@ -159,9 +159,6 @@ class DiscoveryServiceTest {
         context.setAction("discover");
         context.setMessageId(UUID.randomUUID().toString());
         context.setTransactionId(UUID.randomUUID().toString());
-        context.setBapId("test-bap");
-        context.setBapUri("https://test-bap.example.com");
-
         var intent = new DiscoverRequest.Intent();
         intent.setTextSearch(query);
 

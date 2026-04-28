@@ -1,21 +1,19 @@
 {
-    "context": {
-        "action": "discover",
-        "version": "2.0.0",
-        "bapId": "https://evcharging-bap.example.com",
-        "bapUri": "https://evcharging-bap.example.com/callback",
-        "networkId": "bap.net/ev-charging",
-        "transactionId": "c4d3e2f1-a0b9-8c8d-7e6f-5a4b3c2d1e0f",
-        "messageId": "d5e4f3a2-b1c0-9d9e-8070-6b5a4d3e2f1a",
-        "ttl": "PT10M",
-        "timestamp": "2025-10-14T10:30:00.000Z"
-    },
-    "message": {
-        "intent": {
-            "filters": {
-                "type": "jsonpath",
-                "expression": "$.catalogs[*] ? (exists(@.resources[*] ? (@.descriptor.name == \"DC Fast Charger - CCS2 (60kW)\")) && exists(@.offers[*] ? (@.price.value < 20)))"
-            }
-        }
+  "context": {
+    "action": "discover",
+    "version": "2.0.0",
+    "networkId": "bap.net/ev-charging",
+    "transactionId": "c4d3e2f1-a0b9-8c8d-7e6f-5a4b3c2d1e0f",
+    "messageId": "d5e4f3a2-b1c0-9d9e-8070-6b5a4d3e2f1a",
+    "ttl": "PT10M",
+    "timestamp": "2025-10-14T10:30:00.000Z"
+  },
+  "message": {
+    "intent": {
+      "filters": {
+        "type": "jsonpath",
+        "expression": "$.catalogs[*] ? (exists(@.resources[*] ? (@.descriptor.name == \"DC Fast Charger - CCS2 (60kW)\")) && exists(@.offers[*] ? (@.price.value < 20)))"
+      }
     }
+  }
 }

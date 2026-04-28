@@ -23,10 +23,6 @@ public class Context {
     @JsonProperty(BecknFields.MESSAGE_ID)
     private String messageId;
 
-    @NotBlank(message = "BAP ID is required")
-    @JsonProperty(BecknFields.BAP_ID)
-    private String bapId;
-
     @NotBlank(message = "Transaction ID is required")
     @JsonProperty(BecknFields.TRANSACTION_ID)
     private String transactionId;
@@ -44,12 +40,6 @@ public class Context {
     @JsonProperty(BecknFields.VERSION)
     private String version;
 
-    @JsonProperty(BecknFields.BPP_ID)
-    private String bppId;
-
-    @JsonProperty(BecknFields.BPP_URI)
-    private String bppUri;
-
     @JsonProperty(BecknFields.COUNTRY)
     private String country;
 
@@ -58,9 +48,6 @@ public class Context {
 
     @JsonProperty(BecknFields.TTL)
     private String ttl;
-
-    @JsonProperty(BecknFields.BAP_URI)
-    private String bapUri;
 
     @JsonProperty(BecknFields.NETWORK_ID)
     private String networkId;
@@ -72,9 +59,8 @@ public class Context {
     public Context() {}
 
     // Constructor with required fields
-    public Context(String messageId, String bapId, String transactionId, OffsetDateTime timestamp) {
+    public Context(String messageId, String transactionId, OffsetDateTime timestamp) {
         this.messageId = messageId;
-        this.bapId = bapId;
         this.transactionId = transactionId;
         this.timestamp = timestamp;
     }
@@ -83,18 +69,14 @@ public class Context {
     public Context(Context other) {
         if (other == null) return;
         this.messageId = other.messageId;
-        this.bapId = other.bapId;
         this.transactionId = other.transactionId;
         this.timestamp = other.timestamp;
         this.domain = other.domain;
         this.action = other.action;
         this.version = other.version;
-        this.bppId = other.bppId;
-        this.bppUri = other.bppUri;
         this.country = other.country;
         this.city = other.city;
         this.ttl = other.ttl;
-        this.bapUri = other.bapUri;
         this.networkId = other.networkId;
         this.schemaContext = other.schemaContext != null ? new java.util.ArrayList<>(other.schemaContext) : null;
     }
@@ -102,9 +84,6 @@ public class Context {
     // Getters and Setters
     public String getMessageId() { return messageId; }
     public void setMessageId(String messageId) { this.messageId = messageId; }
-
-    public String getBapId() { return bapId; }
-    public void setBapId(String bapId) { this.bapId = bapId; }
 
     public String getTransactionId() { return transactionId; }
     public void setTransactionId(String transactionId) { this.transactionId = transactionId; }
@@ -121,12 +100,6 @@ public class Context {
     public String getVersion() { return version; }
     public void setVersion(String version) { this.version = version; }
 
-    public String getBppId() { return bppId; }
-    public void setBppId(String bppId) { this.bppId = bppId; }
-
-    public String getBppUri() { return bppUri; }
-    public void setBppUri(String bppUri) { this.bppUri = bppUri; }
-
     public String getCountry() { return country; }
     public void setCountry(String country) { this.country = country; }
 
@@ -135,9 +108,6 @@ public class Context {
 
     public String getTtl() { return ttl; }
     public void setTtl(String ttl) { this.ttl = ttl; }
-
-    public String getBapUri() { return bapUri; }
-    public void setBapUri(String bapUri) { this.bapUri = bapUri; }
 
     public String getNetworkId() { return networkId; }
     public void setNetworkId(String networkId) { this.networkId = networkId; }
@@ -149,7 +119,6 @@ public class Context {
     public String toString() {
         return "Context{" +
                 "messageId='" + messageId + '\'' +
-                ", bapId='" + bapId + '\'' +
                 ", transactionId='" + transactionId + '\'' +
                 ", timestamp=" + timestamp +
                 ", domain='" + domain + '\'' +
