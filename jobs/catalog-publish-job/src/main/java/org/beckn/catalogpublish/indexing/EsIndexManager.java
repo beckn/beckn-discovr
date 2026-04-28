@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.indexing;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import org.beckn.catalogpublish.config.AppProperties;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,7 +86,7 @@ public class EsIndexManager {
         esClient.indices().create(r -> r.index(indexName));
         ensureAlias(indexName);
         metrics.incrementIndexCreated();
-        log.info("es.index.created name={} alias={}", indexName, aliasName);
+        log.info("event={} name={} alias={}", LogEvent.ES_INDEX_CREATED, indexName, aliasName);
     }
 
     // ── Private ──────────────────────────────────────────────────────────────
@@ -95,10 +96,10 @@ public class EsIndexManager {
         try {
             String json = resolveTemplateJson();
             esClient.indices().putIndexTemplate(t -> t.name(TEMPLATE_NAME).withJson(new StringReader(json)));
-            log.info("es.template.created name={}", TEMPLATE_NAME);
+            log.info("event={} name={}", LogEvent.ES_TEMPLATE_CREATED, TEMPLATE_NAME);
             templateCreated.set(true);
         } catch (Exception e) {
-            log.warn("es.template.ensure.failed error={}", ErrorSanitizer.sanitize(e));
+            log.warn("event={} error={}", LogEvent.ES_TEMPLATE_ENSURE_FAILED, ErrorSanitizer.sanitize(e));
         }
     }
 
@@ -123,11 +124,11 @@ public class EsIndexManager {
         try {
             String content = Files.readString(Path.of(templateFile));
             String resolved = content.replace("${INDEX_PREFIX}", indexPrefix);
-            log.info("es.template.loaded-from-file path={}", templateFile);
+            log.info("event={} path={}", LogEvent.ES_TEMPLATE_LOADED, templateFile);
             return resolved;
         } catch (IOException e) {
-            log.warn("es.template.file-load-failed path={} error={}, falling back to default",
-                    templateFile, e.getMessage());
+            log.warn("event={} path={} error={} reason=falling-back-to-default",
+                    LogEvent.ES_TEMPLATE_LOAD_FAILED, templateFile, e.getMessage());
             return defaultTemplateJson();
         }
     }
@@ -139,7 +140,26 @@ public class EsIndexManager {
                   "template": {
                     "settings": {
                       "index.mapping.total_fields.limit": %d,
-                      "index.mapping.depth.limit": %d
+                      "index.mapping.depth.limit": %d,
+                      "analysis": {
+                        "filter": {
+                          "english_stop":    { "type": "stop",    "stopwords": "_english_" },
+                          "english_stemmer": { "type": "stemmer", "language": "english" },
+                          "beckn_synonyms":  { "type": "synonym", "lenient": true, "synonyms": ["ev, electric vehicle", "charger, charging station", "kw, kilowatt", "logistics, shipping, delivery", "parcel, package, shipment", "organic, natural", "vegan, plant-based", "discount, offer, deal", "cod, cash delivery"] }
+                        },
+                        "analyzer": {
+                          "beckn_text": {
+                            "type": "custom",
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "english_stop", "english_stemmer"]
+                          },
+                          "beckn_text_search": {
+                            "type": "custom",
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "english_stop", "beckn_synonyms", "english_stemmer"]
+                          }
+                        }
+                      }
                     },
                     "mappings": {
                       "dynamic_templates": [
@@ -164,11 +184,19 @@ public class EsIndexManager {
                         "catalog_provider_id":     { "type": "keyword" },
                         "catalog_provider_name":   { "type": "text", "fields": { "raw": { "type": "keyword" } } },
                         "catalog_is_active":       { "type": "boolean" },
+                        "catalog_validity": {
+                          "type": "object",
+                          "properties": {
+                            "@type":     { "type": "keyword" },
+                            "startDate": { "type": "date" },
+                            "endDate":   { "type": "date" },
+                            "startTime": { "type": "keyword" },
+                            "endTime":   { "type": "keyword" }
+                          }
+                        },
                         "resource_id":                 { "type": "keyword" },
                         "resource_context":            { "type": "keyword" },
                         "resource_type":               { "type": "keyword" },
-                        "bpp_id":                  { "type": "keyword" },
-                        "bpp_uri":                 { "type": "keyword" },
                         "network_id":              { "type": "keyword" },
                         "schema_type":             { "type": "keyword" },
                         "resource_name":               { "type": "text", "fields": { "raw": { "type": "keyword" } } },
@@ -180,7 +208,7 @@ public class EsIndexManager {
                         "resource_descriptor_docs":            { "type": "nested" },
                         "resource_descriptor_media_file":      { "type": "nested" },
                         "resource_category_code":      { "type": "keyword" },
-                        "resource_category_name":      { "type": "keyword" },
+                        "resource_category_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
                         "resource_rating_value":       { "type": "float" },
                         "resource_rating_count":       { "type": "integer" },
                         "resource_rating_review_text": { "type": "text" },
@@ -211,9 +239,8 @@ public class EsIndexManager {
                             "name":  { "type": "keyword" }
                           }
                         },
-                        "schema_version":          { "type": "keyword" },
                         "offers":                  { "type": "nested" },
-                        "full_text_blob":          { "type": "text", "analyzer": "standard" },
+                        "full_text_blob":          { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
                         "indexed_at":              { "type": "date" },
                         "resource_vector":             { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }
                       }

@@ -28,8 +28,8 @@ import java.util.regex.Pattern;
  *
  * <h3>Responsibilities</h3>
  * <ul>
- * <li>Cache-aside lookup: returns a cached {@link PublicKey} on hit to avoid
- * repeated network calls (default TTL: 30 days)</li>
+ * <li>Cache-aside lookup: returns a cached {@link RegistryEntry} (public key +
+ * subscriber URL) on hit to avoid repeated network calls (default TTL: 30 days)</li>
  * <li>HTTP GET to the registry with configurable timeout and exponential
  * backoff retry (retries on 429 and 5xx, fails fast on other 4xx)</li>
  * <li>JSON response parsing: explicit path navigation
@@ -37,8 +37,6 @@ import java.util.regex.Pattern;
  * matching discovery-service-v2 behaviour</li>
  * <li>Key state validation: rejects keys whose {@code state} field is not
  * {@code "live"}</li>
- * <li>Namespaced cache keys: includes {@code registryBaseUrl} to prevent
- * collisions across different registries</li>
  * </ul>
  */
 public final class RegistryService {
@@ -87,6 +85,8 @@ public final class RegistryService {
      * <p>
      * Checks the cache first. On a miss, fetches from the registry with retry,
      * validates key state, parses the key, caches it, and returns it.
+     * The subscriber URL ({@code details.url}) is also cached alongside the
+     * public key from the same registry response.
      * </p>
      *
      * @param subscriberId the subscriber ID extracted from the Authorization header keyId
@@ -100,16 +100,33 @@ public final class RegistryService {
      *                            are exhausted
      */
     public PublicKey getPublicKey(String subscriberId, String uniqueKeyId) {
+        return getRegistryEntry(subscriberId, uniqueKeyId).publicKey();
+    }
+
+    /**
+     * Returns the cached {@link RegistryEntry} for the given subscriber and key ID.
+     * <p>
+     * Checks the cache first. On a miss, fetches from the registry with retry,
+     * validates key state, parses the key, extracts the subscriber URL, caches the
+     * combined entry, and returns it.
+     * </p>
+     *
+     * @param subscriberId the subscriber ID extracted from the Authorization header keyId
+     * @param uniqueKeyId  the unique key ID extracted from the Authorization header keyId
+     * @return the cached registry entry containing public key and subscriber URL
+     * @throws BecknAuthException on registry errors, non-live key state, or missing key
+     */
+    public RegistryEntry getRegistryEntry(String subscriberId, String uniqueKeyId) {
         String cacheKey = buildCacheKey(subscriberId, uniqueKeyId);
 
         // 1. Cache-aside: return immediately on hit
-        PublicKey cachedKey = cache.get(cacheKey, PublicKey.class);
-        if (cachedKey != null) {
-            logger.debug("Cache hit for public key | subscriber=" + subscriberId
+        RegistryEntry cached = cache.get(cacheKey, RegistryEntry.class);
+        if (cached != null) {
+            logger.debug("Cache hit for registry entry | subscriber=" + subscriberId
                     + " | uniqueKeyId=" + uniqueKeyId);
-            return cachedKey;
+            return cached;
         }
-        logger.debug("Cache miss for public key, fetching from registry"
+        logger.debug("Cache miss, fetching from registry"
                 + " | subscriber=" + subscriberId + " | uniqueKeyId=" + uniqueKeyId);
 
         // 2. Fetch from registry with exponential backoff retry
@@ -128,26 +145,45 @@ public final class RegistryService {
         // 6. Parse raw bytes into a java.security.PublicKey object
         PublicKey publicKey = cryptoService.parsePublicKey(pemPublicKey);
 
-        // 7. Cache and return
-        cache.set(cacheKey, publicKey);
-        logger.info("Public key fetched, parsed, and cached"
+        // 7. Extract subscriber URL from the same response
+        String subscriberUrl = extractSubscriberUrl(responseJson, subscriberId);
+
+        // 8. Cache combined entry
+        var entry = new RegistryEntry(publicKey, subscriberUrl);
+        cache.set(cacheKey, entry);
+
+        logger.info("Registry entry fetched, parsed, and cached"
                 + " | subscriber=" + subscriberId + " | uniqueKeyId=" + uniqueKeyId);
-        return publicKey;
+        return entry;
+    }
+
+    /**
+     * Returns the canonical callback base URI ({@code details.url}) for the
+     * given subscriber from the DeDi registry.
+     *
+     * @param subscriberId the subscriber ID
+     * @param uniqueKeyId  the unique key ID
+     * @return the subscriber's canonical URL, or {@code null} if the field was
+     *         absent in the registry response
+     * @throws BecknAuthException on registry errors or non-live key state
+     */
+    public String getSubscriberUrl(String subscriberId, String uniqueKeyId) {
+        return getRegistryEntry(subscriberId, uniqueKeyId).subscriberUrl();
     }
 
     // ─── Private helpers ────────────────────────────────────────────────────────
 
     /**
-     * Builds a namespaced cache key that includes the registry base URL to
-     * prevent collisions when multiple registries are in use or subscriber IDs
-     * overlap across environments.
+     * Builds a cache key from subscriber and key IDs.
      *
      * @param subscriberId the subscriber ID
      * @param uniqueKeyId  the unique key ID
-     * @return namespaced cache key string
+     * @return cache key string
      */
+    // Safe without registry URL namespace: each BecknAuth instance creates its own
+    // RegistryService with its own Cache, so no cross-registry key collisions.
     private String buildCacheKey(String subscriberId, String uniqueKeyId) {
-        return config.getRegistryBaseUrl() + "|" + subscriberId + "|" + uniqueKeyId;
+        return subscriberId + "|" + uniqueKeyId;
     }
 
     /**
@@ -417,6 +453,40 @@ public final class RegistryService {
             names.setLength(names.length() - 2);
         names.append("]");
         return names.toString();
+    }
+
+    /**
+     * Extracts the subscriber's canonical URL ({@code details.url}) from the
+     * registry JSON response.
+     *
+     * @param responseJson the raw registry JSON response string
+     * @param subscriberId the subscriber ID, used for logging context
+     * @return the URL string, or {@code null} if the field is absent or blank
+     */
+    private String extractSubscriberUrl(String responseJson, String subscriberId) {
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(responseJson);
+            JsonNode details = root.path("data");
+            if (!details.isMissingNode() && details.has("details")) {
+                details = details.path("details");
+            }
+            if (details.isArray() && !details.isEmpty()) {
+                details = details.get(0);
+            }
+            if (details.has("url")) {
+                String url = details.get("url").asText(null);
+                if (url != null && !url.isBlank()) {
+                    return url.trim();
+                }
+            }
+            logger.debug("No 'url' field found in registry response"
+                    + " | subscriber=" + subscriberId);
+            return null;
+        } catch (Exception e) {
+            logger.warn("Could not parse subscriber URL from registry response"
+                    + " | subscriber=" + subscriberId + " | error=" + e.getMessage());
+            return null;
+        }
     }
 
     /**

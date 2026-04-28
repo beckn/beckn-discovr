@@ -60,7 +60,9 @@ public class CatalogPublishConsumer {
             @Payload String raw,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.OFFSET) long offset,
+            @Header(value = "tags", required = false) byte[] tagsHeader,
             Acknowledgment ack) {
+        correlationContext.setTags(tagsHeader);
         metrics.recordProcessingTime(PUBLISH,
                 () -> dispatch(raw, topic, offset, ack, PUBLISH, orchestrator::processPublish));
     }
@@ -68,7 +70,7 @@ public class CatalogPublishConsumer {
     private void dispatch(String raw, String topic, long offset, Acknowledgment ack,
             CatalogOperation operation, Function<String, PublishOutcome> handler) {
         try {
-            int rawByteLen = payloadSizeBytes(raw);
+            long rawByteLen = payloadSizeBytes(raw);
             if (rawByteLen > maxPayloadSize) {
                 log.warn("event={} op={} topic={} offset={} sizeBytes={} limit={}",
                         LogEvent.CONSUMER_REJECTED, operation, topic, offset, rawByteLen, maxPayloadSize);
@@ -82,10 +84,13 @@ public class CatalogPublishConsumer {
             PublishOutcome outcome = handler.apply(raw);
             List<ProcessingResult> results = outcome.results();
 
-            if (!results.isEmpty() && results.stream().allMatch(r -> r.status() == ProcessingStatus.INTERNAL_ERROR)) {
-                log.error("event={} op={} topic={} offset={} count={} — retrying",
-                        LogEvent.CONSUMER_ERROR, operation, topic, offset, results.size());
-                throw new RuntimeException("All " + results.size() + " catalog(s) returned INTERNAL_ERROR");
+            // Retry if ANY catalog has INTERNAL_ERROR — partial failure must not be silently acked.
+            // A failed catalog not re-queued is permanently lost; retry allows recovery.
+            long errorCount = results.stream().filter(r -> r.status() == ProcessingStatus.INTERNAL_ERROR).count();
+            if (!results.isEmpty() && errorCount > 0) {
+                log.error("event={} op={} topic={} offset={} errorCount={} totalCount={} — retrying",
+                        LogEvent.CONSUMER_ERROR, operation, topic, offset, errorCount, results.size());
+                throw new RuntimeException(errorCount + " of " + results.size() + " catalog(s) returned INTERNAL_ERROR");
             }
 
             responsePublisher.publishResponse(outcome.context().contextNode(), results);
@@ -107,9 +112,9 @@ public class CatalogPublishConsumer {
     }
 
     /** UTF-8 byte length; if char length already &gt; max, skips allocation and returns max+1. */
-    private int payloadSizeBytes(String raw) {
+    private long payloadSizeBytes(String raw) {
         if (raw == null) return 0;
-        return raw.length() > maxPayloadSize ? (int) maxPayloadSize + 1 : raw.getBytes(StandardCharsets.UTF_8).length;
+        return raw.length() > maxPayloadSize ? maxPayloadSize + 1 : raw.getBytes(StandardCharsets.UTF_8).length;
     }
 
     private void rejectAndAck(String raw, String reason, CatalogOperation operation, Acknowledgment ack) {

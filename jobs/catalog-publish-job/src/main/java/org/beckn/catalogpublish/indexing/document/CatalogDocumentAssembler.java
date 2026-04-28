@@ -10,10 +10,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.StreamSupport;
+import java.util.Set;
 
 @Component
 @ConditionalOnProperty(name = "app.catalog.elasticsearch.enabled", havingValue = "true")
@@ -27,45 +29,38 @@ public class CatalogDocumentAssembler {
         this.geoShapeExtractor = geoShapeExtractor;
     }
 
-    /** Called from ElasticIndexStep — Item carries bppId/bppUri directly. */
+    /** Called from ElasticIndexStep — builds the ES document from the Item and its payload. */
     public Map<String, Object> assemble(Item item, JsonNode payloadNode, String schemaType, List<String> networkIds) {
-        return build(payloadNode, schemaType, networkIds, item.getId(), item.getBppId(), item.getBppUri(),
-                item.getSchemaVersion());
+        return build(payloadNode, schemaType, networkIds, item.getId());
     }
 
     /** Called from EsFailureConsumer — all fields extracted from stored payload. */
     public Map<String, Object> assemble(JsonNode payloadNode, String indexKey) {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
-        JsonNode itemNode = catalog.path(BecknFields.RESOURCES).path(0);
-        JsonNode netNode = itemNode.path(BecknFields.NETWORK_ID);
+        JsonNode resourceNode = catalog.path(BecknFields.RESOURCES).path(0);
+        JsonNode netNode = payloadNode.path(BecknFields.CONTEXT).path(BecknFields.NETWORK_ID);
+        if (netNode.isMissingNode()) netNode = catalog.path(BecknFields.NETWORK_ID);
         List<String> networkIds;
         if (netNode.isArray()) {
             networkIds = new ArrayList<>();
             netNode.forEach(n -> {
                 String v = n.asText(null);
-                if (v != null && !v.isBlank())
-                    networkIds.add(v);
+                if (v != null && !v.isBlank()) networkIds.add(v);
             });
         } else {
             String single = netNode.asText(null);
             networkIds = (single != null && !single.isBlank()) ? List.of(single) : List.of();
         }
-        // schema_version not available from payload alone — default to "2.0" for retry
-        // path
-        return build(payloadNode, indexKey, networkIds,
-                text(itemNode, BecknFields.ID),
-                text(catalog, BecknFields.BPP_ID),
-                text(catalog, BecknFields.BPP_URI),
-                "2.0");
+        return build(payloadNode, indexKey, networkIds, text(resourceNode, BecknFields.ID));
     }
 
     // ── Core builder ─────────────────────────────────────────────────────────
 
     private Map<String, Object> build(JsonNode payloadNode, String schemaType, List<String> networkIds,
-            String itemId, String bppId, String bppUri, String schemaVersion) {
+            String resourceId) {
         JsonNode catalog = payloadNode.path(BecknFields.CATALOGS).path(0);
-        JsonNode itemNode = catalog.path(BecknFields.RESOURCES).path(0);
-        JsonNode desc = itemNode.path(BecknFields.DESCRIPTOR);
+        JsonNode resourceNode = catalog.path(BecknFields.RESOURCES).path(0);
+        JsonNode desc = resourceNode.path(BecknFields.DESCRIPTOR);
 
         Map<String, Object> doc = new LinkedHashMap<>();
         doc.put("catalog_id", text(catalog, BecknFields.ID));
@@ -82,55 +77,48 @@ public class CatalogDocumentAssembler {
         doc.put("catalog_provider_name",
                 text(catalog.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
         putIfPresent(doc, "catalog_is_active", boolOrNull(catalog, "isActive"));
-        doc.put("bpp_id", bppId);
-        doc.put("bpp_uri", bppUri);
         doc.put("network_id", networkIds);
         JsonNode validityNode = catalog.path(BecknFields.VALIDITY);
         if (!validityNode.isMissingNode() && validityNode.isObject()) {
             doc.put("catalog_validity", objectMapper.convertValue(validityNode, Map.class));
         }
         doc.put("schema_type", schemaType);
-        doc.put("resource_context", text(itemNode, BecknFields.JSON_LD_CONTEXT));
-        doc.put("resource_type", text(itemNode, BecknFields.JSON_LD_TYPE));
-        doc.put("resource_id", itemId);
+        doc.put("resource_context", text(resourceNode, BecknFields.JSON_LD_CONTEXT));
+        doc.put("resource_type", text(resourceNode, BecknFields.JSON_LD_TYPE));
+        doc.put("resource_id", resourceId);
         doc.put("resource_name", text(desc, BecknFields.NAME));
         doc.put("resource_short_desc", text(desc, BecknFields.SHORT_DESC));
         doc.put("resource_long_desc", text(desc, BecknFields.LONG_DESC));
-        doc.put("resource_category_code", text(itemNode.path("category"), "codeValue"));
-        doc.put("resource_category_name", text(itemNode.path("category"), BecknFields.NAME));
-        putIfPresent(doc, "resource_rateable", boolOrNull(itemNode, "rateable"));
-        putIfPresent(doc, "resource_is_active", boolOrNull(itemNode, "isActive"));
-        JsonNode ratingNode = itemNode.path("rating");
+        doc.put("resource_category_code", text(resourceNode.path("category"), "codeValue"));
+        doc.put("resource_category_name", text(resourceNode.path("category"), BecknFields.NAME));
+        putIfPresent(doc, "resource_rateable", boolOrNull(resourceNode, "rateable"));
+        putIfPresent(doc, "resource_is_active", boolOrNull(resourceNode, "isActive"));
+        JsonNode ratingNode = resourceNode.path("rating");
         putIfPresent(doc, "resource_rating_value", dblOrNull(ratingNode, "ratingValue"));
         putIfPresent(doc, "resource_rating_count", intOrNull(ratingNode, "ratingCount"));
-        doc.put("resource_provider_id", text(itemNode.path(BecknFields.PROVIDER), BecknFields.ID));
+        doc.put("resource_provider_id", text(resourceNode.path(BecknFields.PROVIDER), BecknFields.ID));
         doc.put("resource_provider_name",
-                text(itemNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+                text(resourceNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
         doc.put("resource_descriptor_thumbnail_image", text(desc, "thumbnailImage"));
         doc.put("resource_descriptor_docs", convertToList(desc.path("docs")));
         doc.put("resource_descriptor_media_file", convertToList(desc.path("mediaFile")));
-        doc.put("resource_rating_review_text", text(itemNode.path("rating"), "reviewText"));
-        // Internal metadata — never returned in API responses
-        doc.put("schema_version", schemaVersion != null ? schemaVersion : "2.0");
+        doc.put("resource_rating_review_text", text(resourceNode.path("rating"), "reviewText"));
         doc.put("indexed_at", Instant.now().toString());
 
         geoShapeExtractor.extractGeoShapes(payloadNode).forEach(doc::put);
 
-        JsonNode attrs = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+        JsonNode attrs = resourceNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         if (!attrs.isMissingNode() && attrs.isObject()) {
             doc.put("resource_attributes", flattenJsonLd(attrs));
-            // Dedicated top-level ES fields for @type and @context so they can be
-            // filtered as keywords without navigating into the nested object.
             doc.put("resource_attributes_type", text(attrs, BecknFields.JSON_LD_TYPE));
             doc.put("resource_attributes_context", text(attrs, BecknFields.JSON_LD_CONTEXT));
         }
 
-        // v2.1 fields: constraints and policies
-        JsonNode constraintsNode = itemNode.path(BecknFields.CONSTRAINTS);
+        JsonNode constraintsNode = resourceNode.path(BecknFields.CONSTRAINTS);
         if (!constraintsNode.isMissingNode() && constraintsNode.isArray()) {
             doc.put("constraints", objectMapper.convertValue(constraintsNode, List.class));
         }
-        JsonNode policiesNode = itemNode.path(BecknFields.POLICIES);
+        JsonNode policiesNode = resourceNode.path(BecknFields.POLICIES);
         if (!policiesNode.isMissingNode() && policiesNode.isArray()) {
             doc.put("policies", objectMapper.convertValue(policiesNode, List.class));
         }
@@ -138,27 +126,21 @@ public class CatalogDocumentAssembler {
         JsonNode offersNode = catalog.path(BecknFields.OFFERS);
         List<Map<String, Object>> offers = buildOffers(offersNode);
         doc.put("offers", offers);
-        doc.put("full_text_blob", buildTextBlob(doc, offersNode, itemNode));
+        doc.put("full_text_blob", buildTextBlob(doc, offersNode, resourceNode));
         return doc;
     }
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> buildOffers(JsonNode offersNode) {
-        if (!offersNode.isArray())
-            return List.of();
+        if (!offersNode.isArray()) return List.of();
         List<Map<String, Object>> result = new ArrayList<>();
         for (JsonNode offer : offersNode) {
-            // Preserve the full original offer structure with all field names
             Map<String, Object> o = objectMapper.convertValue(offer, Map.class);
             result.add(o);
         }
         return result;
     }
 
-    /**
-     * Flattens a JSON-LD node into a plain Map, preserving all fields
-     * including @context and @type.
-     */
     private Map<String, Object> flattenJsonLd(JsonNode node) {
         Map<String, Object> result = new LinkedHashMap<>();
         node.fields().forEachRemaining(e -> {
@@ -167,48 +149,28 @@ public class CatalogDocumentAssembler {
         return result;
     }
 
-    private String buildTextBlob(Map<String, Object> doc, JsonNode offersNode, JsonNode itemNode) {
-        List<String> parts = new ArrayList<>();
-
-        // Core item fields
+    private String buildTextBlob(Map<String, Object> doc, JsonNode offersNode, JsonNode resourceNode) {
+        Set<String> parts = new LinkedHashSet<>();
         for (String key : List.of("resource_name", "resource_short_desc", "resource_long_desc",
                 "resource_category_name", "resource_provider_name")) {
             if (doc.get(key) instanceof String s && !s.isBlank())
                 parts.add(s);
         }
-
-        // Text from all location objects anywhere in itemNode (any key, any depth)
-        collectLocationText(itemNode, parts);
-
-        // All text from resourceAttributes — recursive deep walk
-        JsonNode attrsForText = itemNode.path(BecknFields.RESOURCE_ATTRIBUTES);
+        collectLocationText(resourceNode, parts);
+        JsonNode attrsForText = resourceNode.path(BecknFields.RESOURCE_ATTRIBUTES);
         collectStrings(attrsForText, parts);
-
-        // v2.1: text from constraints and policies
-        collectStrings(itemNode.path(BecknFields.CONSTRAINTS), parts);
-        collectStrings(itemNode.path(BecknFields.POLICIES), parts);
-
-        // Descriptor docs and mediaFile text
-        collectStrings(itemNode.path(BecknFields.DESCRIPTOR).path("docs"), parts);
-        collectStrings(itemNode.path(BecknFields.DESCRIPTOR).path("mediaFile"), parts);
-
-        // All text fields from offers (names, descriptions, terms, eligibility, etc.)
+        collectStrings(resourceNode.path(BecknFields.CONSTRAINTS), parts);
+        collectStrings(resourceNode.path(BecknFields.POLICIES), parts);
+        collectStrings(resourceNode.path(BecknFields.DESCRIPTOR).path("docs"), parts);
+        collectStrings(resourceNode.path(BecknFields.DESCRIPTOR).path("mediaFile"), parts);
         collectStrings(offersNode, parts);
-
         return String.join(" ", parts);
     }
 
-    /**
-     * Walks the entire itemNode tree. When it finds a Location object
-     * (any object containing a geo/gps/polygon field at any depth, any key name),
-     * collects all non-geo string values from it (address fields, etc.).
-     */
-    private static void collectLocationText(JsonNode node, List<String> parts) {
-        if (node == null || node.isMissingNode())
-            return;
+    private static void collectLocationText(JsonNode node, Collection<String> parts) {
+        if (node == null || node.isMissingNode()) return;
         if (node.isObject()) {
             if (node.has("geo") || node.has("gps") || node.has("polygon")) {
-                // This is a Location object — collect all non-geo text fields
                 node.fields().forEachRemaining(e -> {
                     if (!e.getKey().equals("geo") && !e.getKey().equals("gps")
                             && !e.getKey().equals("polygon") && !e.getKey().startsWith("@"))
@@ -222,87 +184,51 @@ public class CatalogDocumentAssembler {
         }
     }
 
-    /**
-     * Recursively collects all non-blank string leaf values from a JsonNode tree.
-     * Skips JSON-LD metadata keys (@context, @type) and URL strings.
-     */
-    private static void collectStrings(JsonNode node, List<String> parts) {
-        if (node == null || node.isMissingNode())
-            return;
+    private static void collectStrings(JsonNode node, Collection<String> parts) {
+        if (node == null || node.isMissingNode()) return;
         if (node.isTextual()) {
             String val = node.asText();
-            if (!val.isBlank() && !val.startsWith("http") && !val.startsWith("@"))
+            if (!val.isBlank() && !val.startsWith("http://") && !val.startsWith("https://"))
                 parts.add(val);
+        } else if (node.isNumber()) {
+            parts.add(node.asText());
         } else if (node.isObject()) {
             node.fields().forEachRemaining(e -> {
                 String key = e.getKey();
-                if (!key.startsWith("@") && !key.equals("geo") && !key.equals("gps") && !key.equals("polygon"))
+                if (!key.startsWith("@") && !key.equals("geo") && !key.equals("gps") && !key.equals("polygon")) {
+                    if (e.getValue().isBoolean() && e.getValue().booleanValue()) parts.add(key);
                     collectStrings(e.getValue(), parts);
+                }
             });
         } else if (node.isArray()) {
             node.forEach(child -> collectStrings(child, parts));
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
     @SuppressWarnings("unchecked")
     private List<Object> convertToList(JsonNode n) {
-        if (n == null || n.isMissingNode() || !n.isArray())
-            return null;
+        if (n == null || n.isMissingNode() || !n.isArray()) return null;
         return objectMapper.convertValue(n, List.class);
     }
 
-    private String text(JsonNode n, String f) {
-        return n.path(f).asText(null);
-    }
+    private String text(JsonNode n, String f) { return n.path(f).asText(null); }
 
-    /**
-     * Returns the boolean value of a field only when it is explicitly present and
-     * boolean-typed.
-     * Returns null when the field is missing — prevents indexing a false default
-     * for absent fields.
-     */
     private Boolean boolOrNull(JsonNode n, String f) {
         JsonNode field = n.path(f);
         return field.isBoolean() ? field.booleanValue() : null;
     }
 
-    /**
-     * Returns the double value of a field only when it is explicitly present and
-     * numeric.
-     * Returns null when the field is missing — prevents indexing a 0.0 default for
-     * absent fields.
-     */
     private Double dblOrNull(JsonNode n, String f) {
         JsonNode field = n.path(f);
         return field.isNumber() ? field.doubleValue() : null;
     }
 
-    /**
-     * Returns the int value of a field only when it is explicitly present and
-     * numeric.
-     * Returns null when the field is missing — prevents indexing a 0 default for
-     * absent fields.
-     */
     private Integer intOrNull(JsonNode n, String f) {
         JsonNode field = n.path(f);
         return field.isNumber() ? field.intValue() : null;
     }
 
-    /**
-     * Puts a key into the document map only when the value is non-null.
-     * This avoids storing ES fields with null/default values that would be
-     * misread as real data during search result assembly.
-     */
     private static void putIfPresent(Map<String, Object> doc, String key, Object value) {
-        if (value != null)
-            doc.put(key, value);
-    }
-
-    private List<String> arrayToList(JsonNode n) {
-        if (!n.isArray())
-            return List.of();
-        return StreamSupport.stream(n.spliterator(), false).map(JsonNode::asText).toList();
+        if (value != null) doc.put(key, value);
     }
 }

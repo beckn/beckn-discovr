@@ -1,7 +1,7 @@
 package org.beckn.discover.common;
 
 /**
- * Beckn Protocol v2.0 field name constants.
+ * Beckn Protocol v2.1 field name constants.
  * Single source of truth for all JSON field names used across the job.
  * Use in @JsonProperty annotations, JsonNode path traversal, and test assertions.
  */
@@ -12,16 +12,12 @@ public final class BecknFields {
     public static final String CONTEXT         = "context";
     public static final String MESSAGE         = "message";
 
-    // ── Context fields (Beckn Protocol v2.0 camelCase) ───────────────────────
+    // ── Context fields (Beckn Protocol v2.1 camelCase) ───────────────────────
     public static final String DOMAIN          = "domain";
     public static final String ACTION          = "action";
     public static final String VERSION         = "version";
     public static final String TRANSACTION_ID  = "transactionId";
     public static final String MESSAGE_ID      = "messageId";
-    public static final String BAP_ID          = "bapId";
-    public static final String BAP_URI         = "bapUri";
-    public static final String BPP_ID          = "bppId";
-    public static final String BPP_URI         = "bppUri";
     public static final String NETWORK_ID      = "networkId";
     public static final String SCHEMA_CONTEXT  = "schemaContext";
     public static final String TTL             = "ttl";
@@ -39,22 +35,19 @@ public final class BecknFields {
     public static final String AT_CONTEXT      = "@context";
     public static final String AT_TYPE         = "@type";
 
-    // ── Catalog / Item fields (v2.0 — no beckn: prefix) ─────────────────────
+    // ── Catalog / Resource fields (v2.1 — no beckn: prefix) ─────────────────
     public static final String ID              = "id";
     public static final String TYPE            = "type";
-    /** @deprecated Retained only for excluding legacy field from copies. All new writes use RESOURCES. */
-    @Deprecated
-    public static final String ITEMS           = "items";
     public static final String OFFERS          = "offers";
     public static final String DESCRIPTOR      = "descriptor";
     public static final String PROVIDER        = "provider";
     public static final String NAME            = "name";
     public static final String SHORT_DESC      = "shortDesc";
     public static final String LONG_DESC       = "longDesc";
-    public static final String IMAGES          = "images";
+    public static final String CODE            = "code";
     public static final String PROVIDER_ID     = "providerId";
 
-    // ── v2.0 Resource fields (alias for Item with resourceAttributes) ─────────
+    // ── v2.1 Resource fields ───────────────────────────────────────────────────
     public static final String RESOURCES           = "resources";
     public static final String RESOURCE_ATTRIBUTES = "resourceAttributes";
 
@@ -68,16 +61,13 @@ public final class BecknFields {
     public static final String SPATIAL         = "spatial";
     public static final String CATALOGS        = "catalogs";
 
-    // ── Action values (v2.0 slash notation) ─────────────────────────────────
+    // ── Action values (v2.1 slash notation) ─────────────────────────────────
     public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
     public static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
 
-    // ── Context V1.0 field names (snake_case — legacy Beckn v1.x) ────────────
-    public static final String BAP_ID_V1         = "bap_id";
-    public static final String BAP_URI_V1        = "bap_uri";
-    public static final String BPP_ID_V1         = "bpp_id";
-    public static final String BPP_URI_V1        = "bpp_uri";
-    public static final String MESSAGE_ID_V1     = "message_id";
-    public static final String TRANSACTION_ID_V1 = "transaction_id";
-    public static final String DOMAIN_V1         = "domain";
+    // ── Auth / ownership (MDC keys) ──────────────────────────────────────────
+    /** MDC key: org-level identity from auth header keyId first segment. */
+    public static final String AUTH_SUBSCRIBER_ID = "auth.subscriberId";
+    /** MDC key: key-level identity from auth header keyId second segment. */
+    public static final String AUTH_RECORD_ID     = "auth.recordId";
 }

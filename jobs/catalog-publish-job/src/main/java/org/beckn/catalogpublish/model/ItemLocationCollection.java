@@ -15,8 +15,8 @@ public class ItemLocationCollection {
 
     protected ItemLocationCollection() {}
 
-    public ItemLocationCollection(String itemId, String path, Geometry geom) {
-        this.id = new ItemLocationId(itemId, path);
+    public ItemLocationCollection(String itemId, String catalogId, String path, Geometry geom) {
+        this.id = new ItemLocationId(itemId, catalogId, path);
         this.geom = geom;
     }
 

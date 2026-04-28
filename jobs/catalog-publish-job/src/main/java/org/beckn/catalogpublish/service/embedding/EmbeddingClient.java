@@ -2,10 +2,14 @@ package org.beckn.catalogpublish.service.embedding;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.catalogpublish.config.AppProperties;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -42,8 +46,6 @@ public class EmbeddingClient {
     private final String       model;
     private final String       apiKey;
     private final Duration     timeout;
-    private final int          retries;
-    private final long         retryDelayMs;
 
     public EmbeddingClient(ObjectMapper objectMapper, AppProperties props) {
         this.objectMapper = objectMapper;
@@ -52,10 +54,8 @@ public class EmbeddingClient {
         this.model        = emb.name();
         this.apiKey       = emb.apiKey();
         this.timeout      = Duration.ofMillis(emb.timeoutMs());
-        this.retries      = Math.max(0, emb.retries());
-        this.retryDelayMs = emb.retryDelayMs();
         this.httpClient   = HttpClient.newBuilder().connectTimeout(this.timeout).build();
-        log.info("embedding.client.init url={} model={} retries={}", this.embedUrl, this.model, this.retries);
+        log.info("event={} url={} model={}", LogEvent.EMBEDDING_CLIENT_INIT, this.embedUrl, this.model);
     }
 
     /**
@@ -66,25 +66,27 @@ public class EmbeddingClient {
      * @param text text to embed (typically {@code full_text_blob})
      * @return embedding as {@code List<Float>}, or empty if all attempts fail
      */
+    @Retryable(
+        retryFor = RuntimeException.class,
+        maxAttemptsExpression = "${app.catalog.text-search.embedding-model.retries:3}",
+        backoff = @Backoff(
+            delayExpression = "${app.catalog.text-search.embedding-model.retry-delay-ms:1000}",
+            multiplier = 2),
+        recover = "embedRecover"
+    )
     public Optional<List<Float>> embed(String text) {
-        Exception lastError = null;
-        for (int attempt = 0; attempt <= retries; attempt++) {
-            if (attempt > 0) {
-                try { Thread.sleep(retryDelayMs); } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-                log.warn("embedding.retry attempt={}/{} model={}", attempt, retries, model);
-            }
-            try {
-                return doEmbed(text);
-            } catch (Exception e) {
-                lastError = e;
-                log.warn("embedding.attempt.failed attempt={}/{} model={} error={}", attempt, retries, model, e.getMessage());
-            }
+        try {
+            return doEmbed(text);
+        } catch (Exception e) {
+            log.warn("event={} model={} error={}", LogEvent.EMBEDDING_ATTEMPT_FAILED, model, e.getMessage());
+            throw new RuntimeException("Embedding provider unavailable: " + e.getMessage(), e);
         }
-        log.error("embedding.failed.all-attempts model={} retries={} error={} — item will be indexed without vector",
-                model, retries, lastError != null ? lastError.getMessage() : "unknown");
+    }
+
+    @org.springframework.retry.annotation.Recover
+    public Optional<List<Float>> embedRecover(RuntimeException e, String text) {
+        log.error("event={} model={} error={} — item will be indexed without vector",
+                LogEvent.EMBEDDING_FAILED, model, e.getMessage(), e);
         return Optional.empty();
     }
 
@@ -108,12 +110,12 @@ public class EmbeddingClient {
         Map<String, Object> result = objectMapper.readValue(response.body(), Map.class);
         List<Map<String, Object>> data = (List<Map<String, Object>>) result.get("data");
         if (data == null || data.isEmpty()) {
-            log.warn("embedding.empty model={} reason=empty-data-array", model);
+            log.warn("event={} model={} reason=empty-data-array", LogEvent.EMBEDDING_EMPTY, model);
             return Optional.empty();
         }
         List<Double> embedding = (List<Double>) data.get(0).get("embedding");
         if (embedding == null || embedding.isEmpty()) {
-            log.warn("embedding.empty model={} reason=empty-embedding-vector", model);
+            log.warn("event={} model={} reason=empty-embedding-vector", LogEvent.EMBEDDING_EMPTY, model);
             return Optional.empty();
         }
         return Optional.of(embedding.stream().map(Double::floatValue).toList());

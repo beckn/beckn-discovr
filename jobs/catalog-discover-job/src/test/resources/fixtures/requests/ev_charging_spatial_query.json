@@ -2,8 +2,6 @@
   "context": {
     "action": "discover",
     "version": "2.0.0",
-    "bapId": "https://evcharging-bap.example.com",
-    "bapUri": "https://evcharging-bap.example.com/callback",
     "networkId": "bap.net/ev-charging",
     "transactionId": "22c8d7b5-d1cd-4e3d-8f1d-f6b9b8c167df",
     "messageId": "8b1e4cb2-01f1-4ab6-a6ea-2a2d30fd8e0d",

@@ -8,7 +8,13 @@ public interface ItemStore {
 
     List<Item> saveAll(List<Item> items);
 
-    List<Item> findAllByIdInAndBppId(List<String> itemIds, String bppId);
+    List<Item> findAllByIdInAndCatalogId(List<String> itemIds, String catalogId);
 
-    List<Item> findAllByBppIdAndAnyOfferId(String bppId, List<String> offerIds);
+    List<Item> findAllByCatalogIdAndAnyOfferId(String catalogId, List<String> offerIds);
+
+    /** Finds items by their IDs across all catalogs. Used by Phase 3 cross-catalog offer resolution. */
+    List<Item> findAllByIdIn(List<String> itemIds);
+
+    /** Deletes all items belonging to the given catalog. Used by FULL replace mode. Returns count of deleted rows. */
+    int deleteByCatalogId(String catalogId);
 }

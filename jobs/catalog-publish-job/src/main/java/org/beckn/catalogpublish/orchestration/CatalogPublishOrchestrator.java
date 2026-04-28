@@ -40,7 +40,7 @@ public class CatalogPublishOrchestrator {
     private static final Logger log = LoggerFactory.getLogger(CatalogPublishOrchestrator.class);
 
     /** True on pool threads (set by TaskDecorator); unset when CallerRunsPolicy runs inline so we don't clear consumer MDC. */
-    public static final ThreadLocal<Boolean> CATALOG_PROC_THREAD = new ThreadLocal<>();
+    public static final ThreadLocal<Boolean> CATALOG_PROCESSING_THREAD = new ThreadLocal<>();
 
     private final TransactionTemplate txTemplate;
     private final ParseStep parseStep;
@@ -77,9 +77,12 @@ public class CatalogPublishOrchestrator {
         String messageId = parsed.context().contextNode().path(BecknFields.MESSAGE_ID).asText(null);
         correlationContext.populate(parsed.context(), messageId);
         validateStep.validate(parsed);
+        // Pass the message node so PersistenceStep can read message-level publishDirectives array.
+        JsonNode messageNode = parsed.rootNode().path(BecknFields.MESSAGE);
         List<ProcessingResult> results = processInParallel(parsed.catalogs(), parsed.context(),
                 (node, ctx) -> executeInTransaction(node, ctx,
-                        (n, c) -> persistenceStep.persistItemsAndLocations(n, c, PUBLISH), "catalog.publish"));
+                        (n, c) -> persistenceStep.persistResourcesAndLocations(n, c, PUBLISH, messageNode),
+                        "catalog.publish"));
         return new PublishOutcome(parsed.context(), results);
     }
 
@@ -104,7 +107,7 @@ public class CatalogPublishOrchestrator {
                     String catalogId = parseStep.extractCatalogIdSafe(catalogNode);
                     return CompletableFuture.supplyAsync(
                             () -> MdcSupport.runWithSnapshot(mdcSnapshot,
-                                    Boolean.TRUE.equals(CATALOG_PROC_THREAD.get()),
+                                    Boolean.TRUE.equals(CATALOG_PROCESSING_THREAD.get()),
                                     () -> handler.apply(catalogNode, ctx)),
                             catalogProcessingExecutor)
                             .orTimeout(4, TimeUnit.MINUTES)
@@ -131,8 +134,8 @@ public class CatalogPublishOrchestrator {
         try {
             ProcessingResult result = txTemplate.execute(status -> {
                 CatalogBatch batch = persistFn.apply(catalogNode, ctx);
-                eventCoordinator.schedulePostCommitPublish(batch);
-                return resultStep.buildResult(batch);
+                eventCoordinator.publishPersistedEvent(batch);
+                return resultStep.toProcessingResult(batch);
             });
             if (result == null) {
                 log.error("event={} opLabel={} catalogId={}", LogEvent.PERSIST_FAILED, opLabel, catalogId);

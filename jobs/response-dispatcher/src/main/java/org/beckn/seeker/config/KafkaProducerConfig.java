@@ -2,6 +2,7 @@ package org.beckn.seeker.config;
 
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.beckn.seeker.util.TagsProducerInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,6 +28,8 @@ public class KafkaProducerConfig {
         configProps.put(ProducerConfig.RETRIES_CONFIG, 3);
         configProps.put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, 1000);
         configProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 120000);
+        // Forward tags MDC field as Kafka header on every outbound message.
+        configProps.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, TagsProducerInterceptor.class.getName());
         return new DefaultKafkaProducerFactory<>(configProps);
     }
 

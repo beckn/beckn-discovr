@@ -1,77 +1,159 @@
-name: Docker Build
+name: Build & Push to GCP Artifact Registry
+
+# ═════════════════════════════════════════════════════════════════════════════════
+# PREREQUISITES: GCP Workload Identity Federation (OIDC) Setup Required
+# ═════════════════════════════════════════════════════════════════════════════════
+# This workflow requires GCP OIDC setup to be completed BEFORE merging:
+#
+# Required GitHub Secrets (must be configured in repository settings):
+#   1. GCP_WORKLOAD_IDENTITY_PROVIDER
+#      - Format: projects/{PROJECT_NUMBER}/locations/global/workloadIdentityPools/{POOL_ID}/providers/{PROVIDER_ID}
+#
+#   2. GCP_SERVICE_ACCOUNT
+#      - Format: {SERVICE_ACCOUNT_NAME}@{PROJECT_ID}.iam.gserviceaccount.com
+#
+# If these secrets are NOT configured:
+#   - Workflow will fail at the "Authenticate to Google Cloud (OIDC)" step
+#   - Error: "Unable to generate Google Cloud federated token"
+#   - All tag pushes will be blocked until secrets are configured
+#
+# Setup Instructions: See docs/GITHUB_ACTIONS_GCP_AR_SETUP.md
+# ═════════════════════════════════════════════════════════════════════════════════
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'                    # All services: v1.5.0
+      - 'discover/v*'           # Only catalog-discover-job: discover/v1.5.0
+      - 'publish/v*'            # Only catalog-publish-job: publish/v1.5.0
+      - 'dispatcher/v*'         # Only response-dispatcher: dispatcher/v1.5.0
 
 jobs:
   build-and-push:
+    name: Build & Push — ${{ matrix.name }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      # ─────────────────────────────────────────────────────────────────────────────
+      # id-token: write
+      # ─────────────────────────────────────────────────────────────────────────────
+      # Generates OpenID Connect (OIDC) token from GitHub Actions that can be used
+      # for keyless authentication with GCP. This token is sent to GCP's Workload
+      # Identity Federation endpoint, where it is verified and exchanged for temporary
+      # service account credentials. These credentials allow access to GCP Artifact
+      # Registry and other GCP resources without storing long-lived secrets.
+      # ─────────────────────────────────────────────────────────────────────────────
+      id-token: write
 
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: catalog-discover-job
-            context: jobs/catalog-discover-job
             dockerfile: jobs/catalog-discover-job/Dockerfile
+            tag_prefix: 'discover'
           - name: catalog-publish-job
-            context: jobs/catalog-publish-job
             dockerfile: jobs/catalog-publish-job/Dockerfile
+            tag_prefix: 'publish'
           - name: response-dispatcher
-            context: jobs/response-dispatcher
             dockerfile: jobs/response-dispatcher/Dockerfile
+            tag_prefix: 'dispatcher'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check if this service should build
+        id: should_build
+        run: |
+          TAG="${{ github.ref_name }}"
+          PREFIX="${{ matrix.tag_prefix }}"
+
+          # Check if tag matches this service
+          if [[ "$TAG" == "v"* && ! "$TAG" == *"/"* ]]; then
+            # Universal tag (v1.0.0) - build all services
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "is_universal=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG" == "${PREFIX}/"* ]]; then
+            # Service-specific tag (discover/v1.0.0) - build only this service
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "is_universal=false" >> "$GITHUB_OUTPUT"
+          else
+            # Tag doesn't match this service
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "is_universal=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve version tag (remove prefix for selective tags)
+        id: resolve
+        if: steps.should_build.outputs.build == 'true'
+        run: |
+          TAG="${{ github.ref_name }}"
+          IS_UNIVERSAL="${{ steps.should_build.outputs.is_universal }}"
+
+          # If tag contains '/', remove prefix (discover/, publish/, dispatcher/)
+          if [[ "$TAG" == *"/"* ]]; then
+            VERSION="${TAG#*/}"
+          else
+            VERSION="$TAG"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # Build image tags: always include version tag, only add latest for universal tags
+          {
+            echo "tags<<EOF"
+            echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${VERSION}"
+            if [[ "$IS_UNIVERSAL" == "true" ]]; then
+              echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
+        if: steps.should_build.outputs.build == 'true'
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Authenticate to Google Cloud (OIDC)
+        if: steps.should_build.outputs.build == 'true'
+        id: auth
+        uses: google-github-actions/auth@v2
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+      - name: Configure Docker for Artifact Registry
+        if: steps.should_build.outputs.build == 'true'
+        run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
+      # ─────────────────────────────────────────────────────────────────────────────
+      # Build Context: Repository Root (.)
+      # ─────────────────────────────────────────────────────────────────────────────
+      # Build context is set to repository root (.) because Dockerfiles use absolute
+      # paths to access shared dependencies:
+      #   - COPY sdks/beckn-auth-java-sdk/      (shared SDK)
+      #   - COPY jobs/<job-name>/               (service-specific files)
+      #
+      # If context were set to jobs/<job>/ subdirectory, these COPY commands would
+      # fail because the sdks/ directory would be outside the build context.
+      # ─────────────────────────────────────────────────────────────────────────────
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        if: steps.should_build.outputs.build == 'true'
+        uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          context: .
+          file:    ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.resolve.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Determine image ref for scanning
-        id: image-ref
-        run: |
-          set -euo pipefail
-          first="$(printf "%s\n" "${{ steps.meta.outputs.tags }}" | head -n 1)"
-          echo "ref=${first#ref=}" >> "$GITHUB_OUTPUT"
-
       - name: Run Trivy image scan (HIGH,CRITICAL) [non-blocking]
-        uses: aquasecurity/trivy-action@0.24.0
+        if: steps.should_build.outputs.build == 'true'
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: image
-          image-ref: ${{ steps.image-ref.outputs.ref }}
+          image-ref: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${{ steps.resolve.outputs.version }}
           format: json
           output: trivy-image-report.json
           severity: HIGH,CRITICAL
@@ -79,7 +161,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy image report
-        if: always()
+        if: always() && steps.should_build.outputs.build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: trivy-image-report-${{ matrix.name }}

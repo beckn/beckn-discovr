@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.beckn.seeker.common.BecknFields;
 import org.slf4j.MDC;
 
-import java.util.UUID;
-
 /**
  * Populates and clears SLF4J MDC from a Beckn v2.0 context node.
  * Call {@link #populate(JsonNode)} at the start of each Kafka message handler
@@ -16,15 +14,45 @@ public final class BecknMdcContext {
     private BecknMdcContext() {}
 
     public static void populate(JsonNode contextNode) {
-        MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
         putIfPresent(contextNode, BecknFields.TRANSACTION_ID, MdcField.TRANSACTION_ID);
         putIfPresent(contextNode, BecknFields.MESSAGE_ID,     MdcField.MESSAGE_ID);
-        putIfPresent(contextNode, BecknFields.BAP_ID,         MdcField.BAP_ID);
-        putIfPresent(contextNode, BecknFields.BAP_URI,        MdcField.BAP_URI);
-        putIfPresent(contextNode, BecknFields.BPP_ID,         MdcField.BPP_ID);
-        putIfPresent(contextNode, BecknFields.BPP_URI,        MdcField.BPP_URI);
         putIfPresent(contextNode, BecknFields.NETWORK_ID,     MdcField.NETWORK_ID);
-        putIfPresent(contextNode, BecknFields.ACTION,         MdcField.ACTION);
+        // auth identity fields — set by Catalg API from auth header keyId
+        putIfPresent(contextNode, BecknFields.AUTH_SUBSCRIBER_ID, MdcField.AUTH_SUBSCRIBER_ID);
+        putIfPresent(contextNode, BecknFields.AUTH_RECORD_ID,     MdcField.AUTH_RECORD_ID);
+    }
+
+    /**
+     * Sets auth identity fields explicitly (e.g. when parsed from a separate auth object).
+     *
+     * @param subscriberId org-level identity (keyId first segment); may be null
+     * @param recordId     key-level identity (keyId second segment); may be null
+     */
+    public static void setAuthFields(String subscriberId, String recordId) {
+        if (subscriberId != null && !subscriberId.isBlank()) {
+            MDC.put(MdcField.AUTH_SUBSCRIBER_ID, subscriberId);
+        }
+        if (recordId != null && !recordId.isBlank()) {
+            MDC.put(MdcField.AUTH_RECORD_ID, recordId);
+        }
+    }
+
+    /**
+     * Sets the {@code tags} MDC field from a raw Kafka header byte array.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader raw bytes from the {@code tags} Kafka record header
+     */
+    private static final int MAX_TAGS_LENGTH = 256;
+
+    public static void setTags(byte[] tagsHeader) {
+        if (tagsHeader != null && tagsHeader.length > 0) {
+            var raw = new String(tagsHeader, java.nio.charset.StandardCharsets.UTF_8);
+            var tags = raw.replaceAll("[\\r\\n\\t]", "").strip();
+            if (!tags.isBlank() && tags.length() <= MAX_TAGS_LENGTH) {
+                MDC.put(MdcField.TAGS, tags);
+            }
+        }
     }
 
     public static void clear() {

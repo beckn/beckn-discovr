@@ -138,12 +138,11 @@ public class NLWebAssembler {
             }
         }
 
-        log.debug(LogEvent.NLWEB_SEARCH_COMPLETED + ".extract",
+        log.debug(LogEvent.NLWEB_SEARCH_COMPLETED,
                 value("accepted", collected.size()),
-                value("skipped", skipped.size()),
-                value("transactionId", txId));
+                value("skipped", skipped.size()));
         if (!skipped.isEmpty()) {
-            skipped.forEach(s -> log.debug("nlweb.item.skipped reason={} transactionId={}", s, txId));
+            skipped.forEach(s -> log.debug("event={} reason={}", LogEvent.NLWEB_ITEM_SKIPPED, s));
         }
         return collected;
     }
@@ -203,7 +202,7 @@ public class NLWebAssembler {
         for (NLWebResponse.ContentItem item : items) {
             try {
                 for (Catalog raw : item.getSchemaObject().getCatalogs()) {
-                    Catalog processed = catalogProcessor.processCatalog(raw);
+                    Catalog processed = catalogProcessor.normalizeCatalog(raw);
                     if (processed != null) all.add(processed);
                 }
             } catch (Exception e) {

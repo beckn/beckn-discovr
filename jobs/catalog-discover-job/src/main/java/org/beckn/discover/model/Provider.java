@@ -1,5 +1,7 @@
 package org.beckn.discover.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -7,11 +9,16 @@ import jakarta.validation.constraints.NotNull;
 import org.beckn.discover.common.BecknFields;
 
 import java.util.List;
-import java.util.Map;
 
 /**
- * Provider DTO — Beckn Protocol v2.0 (no beckn: prefix on field names).
+ * Provider DTO — Beckn Protocol v2.0.
+ *
+ * <p>Aligned with {@code components/schemas/Provider} in beckn.yaml:
+ * {@code id} (required), {@code descriptor} (required), {@code availableAt},
+ * {@code providerAttributes}. {@code additionalProperties: false} in the spec.</p>
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Provider {
 
     @NotBlank(message = "id is required")
@@ -23,26 +30,11 @@ public class Provider {
     @JsonProperty(BecknFields.DESCRIPTOR)
     private Descriptor descriptor;
 
-    @JsonProperty("validity")
-    private TimePeriod validity;
-
-    @JsonProperty("locations")
-    private List<Location> locations;
-
-    @JsonProperty("rateable")
-    private Boolean rateable;
-
-    @JsonProperty("rating")
-    private Rating rating;
+    @JsonProperty("availableAt")
+    private List<Location> availableAt;
 
     @JsonProperty("providerAttributes")
     private Attributes providerAttributes;
-
-    @JsonProperty("alerts")
-    private List<Map<String, Object>> alerts;
-
-    @JsonProperty("policies")
-    private List<Policy> policies;
 
     // Default constructor
     public Provider() {}
@@ -60,26 +52,11 @@ public class Provider {
     public Descriptor getDescriptor() { return descriptor; }
     public void setDescriptor(Descriptor descriptor) { this.descriptor = descriptor; }
 
-    public TimePeriod getValidity() { return validity; }
-    public void setValidity(TimePeriod validity) { this.validity = validity; }
-
-    public List<Location> getLocations() { return locations; }
-    public void setLocations(List<Location> locations) { this.locations = locations; }
-
-    public Boolean getRateable() { return rateable; }
-    public void setRateable(Boolean rateable) { this.rateable = rateable; }
-
-    public Rating getRating() { return rating; }
-    public void setRating(Rating rating) { this.rating = rating; }
+    public List<Location> getAvailableAt() { return availableAt; }
+    public void setAvailableAt(List<Location> availableAt) { this.availableAt = availableAt; }
 
     public Attributes getProviderAttributes() { return providerAttributes; }
     public void setProviderAttributes(Attributes providerAttributes) { this.providerAttributes = providerAttributes; }
-
-    public List<Map<String, Object>> getAlerts() { return alerts; }
-    public void setAlerts(List<Map<String, Object>> alerts) { this.alerts = alerts; }
-
-    public List<Policy> getPolicies() { return policies; }
-    public void setPolicies(List<Policy> policies) { this.policies = policies; }
 
     @Override
     public String toString() {

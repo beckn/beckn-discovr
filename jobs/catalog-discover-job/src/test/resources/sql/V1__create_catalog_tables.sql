@@ -8,79 +8,56 @@ CREATE SCHEMA IF NOT EXISTS public;
 ALTER SCHEMA public OWNER TO catalog_user;
 ALTER DATABASE catalog_db OWNER TO catalog_user;
 
-CREATE TABLE IF NOT EXISTS catalog (
-    id TEXT PRIMARY KEY,
-    name TEXT,
-    context_url TEXT,
-    type TEXT,
-    bpp_id TEXT,
-    bpp_uri TEXT,
-    network_id TEXT,
-    payload JSONB,
-    created_by TEXT,
-    updated_by TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS provider (
-    id TEXT PRIMARY KEY,
-    name TEXT,
-    context_url TEXT,
-    type TEXT,
-    bpp_id TEXT,
-    bpp_uri TEXT,
-    network_id TEXT,
-    catalog_id TEXT REFERENCES catalog(id),
-    payload JSONB,
-    created_by TEXT,
-    updated_by TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS item (
-    id TEXT PRIMARY KEY,
-    name TEXT,
+    id          TEXT          NOT NULL,
+    catalog_id  TEXT          NOT NULL,
     context_url TEXT,
-    type TEXT,
-    bpp_id TEXT,
-    bpp_uri TEXT,
-    network_id TEXT[],
-    provider_id TEXT REFERENCES provider(id),
-    catalog_id TEXT REFERENCES catalog(id),
-    payload JSONB,
-    schema_version VARCHAR(4) NOT NULL DEFAULT '2.0',
-    created_by TEXT,
-    updated_by TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    type        TEXT,
+    network_id  TEXT[],
+    offer_ids   TEXT[]        NOT NULL DEFAULT '{}',
+    payload     JSONB,
+    created_by  TEXT,
+    updated_by  TEXT,
+    created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id, catalog_id)
 );
-
-
--- Catalog indexes used by discovery-service JSONPath + metadata lookups
-CREATE INDEX IF NOT EXISTS idx_catalog_context_url ON catalog(context_url);
-CREATE INDEX IF NOT EXISTS idx_catalog_type ON catalog(type);
-CREATE INDEX IF NOT EXISTS idx_catalog_payload_gin ON catalog USING GIN (payload jsonb_path_ops);
-
--- Provider indexes supporting joins from items -> providers -> catalogs
-CREATE INDEX IF NOT EXISTS idx_provider_catalog_id ON provider(catalog_id);
-CREATE INDEX IF NOT EXISTS idx_provider_context_url ON provider(context_url);
-CREATE INDEX IF NOT EXISTS idx_provider_type ON provider(type);
 
 -- Item indexes aligned with runtime filters
-CREATE INDEX IF NOT EXISTS idx_item_catalog_id ON item(catalog_id);
-CREATE INDEX IF NOT EXISTS idx_item_provider_id ON item(provider_id);
-CREATE INDEX IF NOT EXISTS idx_item_type ON item(type);
+CREATE INDEX IF NOT EXISTS idx_item_catalog_id  ON item(catalog_id);
+CREATE INDEX IF NOT EXISTS idx_item_type        ON item(type);
 CREATE INDEX IF NOT EXISTS idx_item_context_url ON item(context_url);
+CREATE INDEX IF NOT EXISTS idx_item_updated_at  ON item(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_item_payload_gin ON item USING GIN (payload jsonb_path_ops);
 
 -- Pre-parsed geometry rows written by catalog-publish-job / GeometryExtractor.
 -- path format: $.catalogs[*].resources[*].availableAt[*].geo (absolute path from request targets).
+-- catalog_id scopes each row to the owning catalog, preventing cross-catalog contamination
+-- when the same item_id exists in multiple catalogs (item PK is (id, catalog_id)).
 CREATE TABLE IF NOT EXISTS item_location_collection (
-    item_id TEXT NOT NULL REFERENCES item(id) ON DELETE CASCADE,
-    path    TEXT NOT NULL,
-    geom    GEOMETRY(Geometry, 4326) NOT NULL,
-    PRIMARY KEY (item_id, path)
+    item_id    TEXT NOT NULL,
+    catalog_id TEXT NOT NULL DEFAULT '',
+    path       TEXT NOT NULL,
+    geom       GEOMETRY(Geometry, 4326) NOT NULL,
+    PRIMARY KEY (item_id, catalog_id, path)
 );
 CREATE INDEX IF NOT EXISTS idx_ilc_geom_gist ON item_location_collection USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_ilc_geog_gist ON item_location_collection USING GIST ((geom::geography));
+CREATE INDEX IF NOT EXISTS idx_ilc_catalog_id ON item_location_collection (catalog_id);
+
+-- Provider-level offers: offers published without resourceIds.
+-- Stored once per (offer_id, catalog_id) — resolved at search time by provider_id lookup.
+CREATE TABLE IF NOT EXISTS provider_offer (
+    offer_id        TEXT          NOT NULL,
+    catalog_id      TEXT          NOT NULL,
+    provider_id     TEXT          NOT NULL,
+    payload         JSONB         NOT NULL,
+    created_by      VARCHAR(255),
+    updated_by      VARCHAR(255),
+    subscriber_id   VARCHAR(255),
+    created_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (offer_id, catalog_id)
+);
+CREATE INDEX IF NOT EXISTS idx_provider_offer_provider ON provider_offer(provider_id);
+CREATE INDEX IF NOT EXISTS idx_provider_offer_catalog ON provider_offer(catalog_id);

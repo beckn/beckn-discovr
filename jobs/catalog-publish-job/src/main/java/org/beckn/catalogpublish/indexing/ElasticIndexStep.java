@@ -11,6 +11,7 @@ import org.beckn.catalogpublish.indexing.document.CatalogDocumentAssembler;
 import org.beckn.catalogpublish.indexing.failure.EsFailurePublisher;
 import org.beckn.catalogpublish.model.Item;
 import org.beckn.catalogpublish.logging.LogEvent;
+import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.beckn.catalogpublish.service.embedding.EmbeddingClient;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.beckn.catalogpublish.util.MdcSupport;
@@ -25,7 +26,6 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import io.micrometer.core.instrument.Timer;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +52,7 @@ public class ElasticIndexStep {
     private final BulkIndexService bulkIndexService;
     private final EsFailurePublisher failurePublisher;
     private final EsIndexerMetrics metrics;
+    private final CatalogPublishMetrics publishMetrics;
     private final ObjectMapper mapper;
     private final int batchSize;
     private final Optional<EmbeddingClient> embeddingClient;
@@ -60,6 +61,7 @@ public class ElasticIndexStep {
             BulkIndexService bulkIndexService,
             EsFailurePublisher failurePublisher,
             EsIndexerMetrics metrics,
+            CatalogPublishMetrics publishMetrics,
             ObjectMapper mapper,
             AppProperties props,
             Optional<EmbeddingClient> embeddingClient) {
@@ -67,6 +69,7 @@ public class ElasticIndexStep {
         this.bulkIndexService = bulkIndexService;
         this.failurePublisher = failurePublisher;
         this.metrics = metrics;
+        this.publishMetrics = publishMetrics;
         this.mapper = mapper;
         this.batchSize = props.catalog().elasticsearch().bulkBatchSize();
         this.embeddingClient = embeddingClient;
@@ -79,11 +82,32 @@ public class ElasticIndexStep {
     }
 
     private void doIndex(CatalogBatch batch) {
-        if (!batch.hasItems())
+        if (!batch.hasResources())
             return;
 
+        // FULL replace: delete all existing ES documents for this catalog before indexing fresh ones.
+        // This runs after the DB transaction has committed, so the DB is already clean.
+        // Failure is non-fatal: stale docs will remain until the next FULL replace; new docs are still indexed.
+        // TODO: PG + ES are NOT transactional. If ES delete/index fails, PG and ES diverge.
+        // Consider: (1) retry ES delete via EsFailureConsumer, (2) periodic reconciliation job
+        // that compares PG item_ids with ES doc_ids per catalog and removes orphans.
+        if (batch.fullReplace()) {
+            try {
+                // Collect schema types from items to target specific indices (no wildcard)
+                var schemaTypes = batch.savedResources().stream()
+                        .map(Item::getType)
+                        .filter(t -> t != null && !t.isBlank())
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                long esDeleted = bulkIndexService.deleteByCatalog(batch.catalogId(), schemaTypes);
+                publishMetrics.recordFullReplaceEsDeleted(esDeleted);
+            } catch (Exception e) {
+                log.error("event={} reason=es-delete-failed catalogId={} error={}",
+                        LogEvent.ES_FAILED, batch.catalogId(), ErrorSanitizer.sanitize(e));
+            }
+        }
+
         Map<String, List<Map<String, Object>>> bySchemaType = new LinkedHashMap<>();
-        for (Item item : batch.savedItems()) {
+        for (Item item : batch.savedResources()) {
             JsonNode payloadNode = batch.payloadNodes().get(item.getId());
             if (payloadNode == null) {
                 log.warn("event={} reason=payload-missing itemId={}", LogEvent.ES_FAILED, item.getId());
@@ -94,16 +118,18 @@ public class ElasticIndexStep {
                 log.warn("event={} reason=schema-type-missing itemId={}", LogEvent.ES_FAILED, item.getId());
                 continue;
             }
-            String[] networkIdsArr = item.getNetworkIds();
-            List<String> networkIds = networkIdsArr.length > 0 ? Arrays.asList(networkIdsArr) : List.of();
+            List<String> networkIds = item.getNetworkIds();
             Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkIds);
+            // TODO (M8): Embedding currently serializes the full denormalized payload (catalog
+            // envelope + item). For better search quality, extract only the resource node:
+            //   payloadNode.path("catalogs").path(0).path("resources").path(0)
+            // This avoids diluting the embedding with shared catalog metadata.
             embeddingClient.ifPresent(client -> {
                 try {
-                    JsonNode catalogNode = payloadNode.path("catalogs").path(0);
-                    String itemJson = mapper.writeValueAsString(catalogNode);
+                    String itemJson = mapper.writeValueAsString(payloadNode);
                     client.embed(itemJson).ifPresent(vec -> doc.put("resource_vector", vec));
                 } catch (Exception e) {
-                    log.warn("event={} reason=embedding-serialize-failed itemId={} error={}", LogEvent.ES_FAILED, item.getId(), e.getMessage());
+                    log.warn("event={} itemId={} error={}", LogEvent.EMBEDDING_SERIALIZE_FAILED, item.getId(), e.getMessage());
                 }
             });
             bySchemaType.computeIfAbsent(schemaType, k -> new ArrayList<>()).add(doc);
@@ -135,10 +161,11 @@ public class ElasticIndexStep {
     }
 
     private void publishFailures(String schemaType, BulkIndexResult result, CatalogBatch batch) {
+        // O(1) lookup per failure instead of O(n) linear scan
+        Map<String, Item> itemById = batch.savedResources().stream()
+                .collect(java.util.stream.Collectors.toMap(Item::getId, i -> i, (a, b) -> a));
         result.failed().forEach(failedDoc -> {
-            Item item = batch.savedItems().stream()
-                    .filter(i -> failedDoc.itemId().equals(i.getId()))
-                    .findFirst().orElse(null);
+            Item item = itemById.get(failedDoc.resourceId());
             JsonNode payloadNode = item != null ? batch.payloadNodes().get(item.getId()) : null;
             String payloadJson = toJson(payloadNode);
             failurePublisher.publishFailures(schemaType, payloadJson, List.of(failedDoc));

@@ -31,7 +31,11 @@ import java.net.URI;
 import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
- * Service for sending HTTP requests to BAP endpoints.
+ * Service for sending HTTP requests to BAP/BPP endpoints.
+ *
+ * <p>Resolves callback URLs exclusively from the DeDi Registry via
+ * {@link BecknAuth#getRegistryEntry} using subscriber identity propagated
+ * as Kafka headers. No context-based fallback — registry must be configured.</p>
  */
 @Slf4j
 @Service
@@ -53,10 +57,14 @@ public class HttpService {
 
     /**
      * Sends the callback response to the appropriate endpoint (BAP or BPP).
+     * Resolves callback URL from the DeDi Registry when subscriber identity is available.
      * This method is retryable based on configuration.
      *
-     * @param eventJson The full response event as a JSON string.
-     * @return true if the callback was successful, false otherwise.
+     * @param eventJson    the full response event as a JSON string
+     * @param subscriberId org-level identity from Kafka header; must not be null or blank
+     * @param recordId     key-level identity from Kafka header; must not be null or blank
+     * @return true if the callback was successful, false otherwise
+     * @throws CallbackDeliveryException if subscriberId or recordId is null/blank, or delivery fails
      */
     @Retryable(
             value = { RestClientException.class },
@@ -67,7 +75,7 @@ public class HttpService {
                     multiplierExpression = "${http.retry.multiplier}"
             )
     )
-    public boolean sendCallback(String eventJson) {
+    public boolean sendCallback(String eventJson, String subscriberId, String recordId) {
         try {
             JsonNode rootNode = objectMapper.readTree(eventJson);
             JsonNode context = rootNode.path(BecknFields.CONTEXT);
@@ -79,37 +87,24 @@ public class HttpService {
                 throw new IllegalArgumentException("Invalid event structure for BAP notification");
             }
 
-            String targetUrl = null;
             String action = context.path(BecknFields.ACTION).asText();
-            JsonNode bapUriNode = context.path(BecknFields.BAP_URI);
-            JsonNode bppUriNode = context.path(BecknFields.BPP_URI);
+            String targetUrl = resolveTargetUrl(action, subscriberId, recordId);
 
-            if (ACTION_ON_DISCOVER.equals(action)) {
-                if (bapUriNode.isMissingNode() || bapUriNode.asText().isEmpty()) {
-                    throw new IllegalArgumentException("Action is " + ACTION_ON_DISCOVER + " but bapUri is missing");
-                }
-                targetUrl = normalizeBaseUrl(bapUriNode.asText()) + ON_DISCOVER_ENDPOINT;
-            } else if (ACTION_ON_CATALOG_PUBLISH.equals(action)) {
-                if (bppUriNode.isMissingNode() || bppUriNode.asText().isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Action is " + ACTION_ON_CATALOG_PUBLISH + " but bppUri is missing");
-                }
-                targetUrl = normalizeBaseUrl(bppUriNode.asText()) + ON_PUBLISH_ENDPOINT;
-            } else {
-                log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
-                        value("reason", "unknown action"),
-                        value("action", action));
-                throw new IllegalArgumentException("Unknown or unsupported action: " + action);
-            }
-
-            // SSRF guard — validate before any outbound HTTP call
+            // SSRF guard — defense-in-depth even for registry-resolved URLs
             if (httpClientProperties.urlValidationEnabled()) {
-                validateCallbackUrl(targetUrl);
+                try {
+                    validateCallbackUrl(targetUrl);
+                } catch (IllegalArgumentException ssrfEx) {
+                    dispatcherMetrics.recordSsrfBlocked();
+                    throw ssrfEx;
+                }
             }
 
+            // Log after SSRF check passes — avoid leaking blocked URLs at INFO level
             log.info("{}", value("event", LogEvent.CALLBACK_RESOLVED),
                     value("action", action),
-                    value("targetUrl", targetUrl));
+                    value("targetUrl", targetUrl),
+                    value("subscriberId", sanitize(subscriberId)));
 
             // Normalize JSON to compact format for consistent signature validation
             String requestBody = objectMapper.writeValueAsString(rootNode);
@@ -118,27 +113,31 @@ public class HttpService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
-            // Add signature if enabled
+            // Propagate tags from MDC to outbound HTTP
+            String tags = org.slf4j.MDC.get("tags");
+            if (tags != null && !tags.isBlank()) {
+                headers.set("X-Tags", tags);
+            }
+
+            // Sign payload using SDK
             if (signingProperties.enabled()) {
-                log.info("{}", value("event", LogEvent.SIGNATURE_INIT),
+                log.debug("{}", value("event", LogEvent.SIGNATURE_INIT),
                         value("targetUrl", targetUrl),
                         value("action", action));
-                headers.set("Authorization", becknAuth.generateAuthHeader(requestBody));
-                log.info("{}", value("event", LogEvent.SIGNATURE_GENERATED),
+                headers.set("Authorization", becknAuth.signPayload(requestBody));
+                log.debug("{}", value("event", LogEvent.SIGNATURE_GENERATED),
                         value("targetUrl", targetUrl));
             }
 
             HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
-
-            final String resolvedUrl = targetUrl;
             Timer.Sample sample = Timer.start();
 
             try {
                 log.info("{}", value("event", LogEvent.CALLBACK_SENT),
-                        value("targetUrl", resolvedUrl));
+                        value("targetUrl", targetUrl));
 
                 ResponseEntity<String> response = restTemplate.exchange(
-                        resolvedUrl, HttpMethod.POST, entity, String.class);
+                        targetUrl, HttpMethod.POST, entity, String.class);
 
                 sample.stop(dispatcherMetrics.callbackTimerSuccess());
                 parseAckResponse(response, targetUrl);
@@ -175,12 +174,73 @@ public class HttpService {
      * Called by Spring Retry after all retry attempts for {@link RestClientException} are exhausted.
      */
     @Recover
-    public boolean recoverSendCallback(RestClientException e, String eventJson) {
+    public boolean recoverSendCallback(RestClientException e, String eventJson,
+                                       String subscriberId, String recordId) {
         log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
                 value("reason", "all retry attempts exhausted"),
                 value("errorMessage", e.getMessage()), e);
         dispatcherMetrics.incrementFailure();
         throw new CallbackDeliveryException("Callback delivery failed after all retries", e);
+    }
+
+    /**
+     * Fallback for non-retryable exceptions (registry failures, auth errors, etc.).
+     */
+    @Recover
+    public boolean recoverSendCallback(Exception e, String eventJson,
+                                       String subscriberId, String recordId) {
+        log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                value("reason", "non-retryable failure"),
+                value("errorMessage", e.getMessage()), e);
+        dispatcherMetrics.incrementFailure();
+        throw new CallbackDeliveryException("Callback delivery failed: " + e.getMessage(), e);
+    }
+
+    /**
+     * Resolves the target callback URL from the DeDi Registry.
+     *
+     * <p>Subscriber identity (subscriberId + recordId) must be present as Kafka headers.
+     * No context-based fallback — registry is the single source of truth for callback URLs.</p>
+     */
+    private String resolveTargetUrl(String action, String subscriberId, String recordId) {
+        String endpoint = resolveEndpointPath(action);
+
+        if (subscriberId == null || subscriberId.isBlank()
+                || recordId == null || recordId.isBlank()) {
+            log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                    value("reason", "missing subscriber identity — cannot resolve callback URL"),
+                    value("action", action),
+                    value("subscriberId", sanitize(subscriberId)),
+                    value("recordId", sanitize(recordId)));
+            throw new IllegalArgumentException(
+                    "Subscriber identity required for callback URL resolution: subscriberId="
+                    + sanitize(subscriberId) + " recordId=" + sanitize(recordId));
+        }
+
+        var entry = becknAuth.getRegistryEntry(subscriberId, recordId);
+        String baseUrl = entry.subscriberUrl();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            log.error("{}", value("event", LogEvent.REGISTRY_FAILED),
+                    value("subscriberId", sanitize(subscriberId)),
+                    value("recordId", sanitize(recordId)),
+                    value("reason", "registry returned blank URL"));
+            throw new IllegalArgumentException(
+                    "Registry returned blank URL for subscriberId=" + sanitize(subscriberId)
+                    + " recordId=" + sanitize(recordId));
+        }
+        log.info("{}", value("event", LogEvent.REGISTRY_RESOLVED),
+                value("subscriberId", sanitize(subscriberId)),
+                value("recordId", sanitize(recordId)));
+        return normalizeBaseUrl(baseUrl) + endpoint;
+    }
+
+    private String resolveEndpointPath(String action) {
+        if (ACTION_ON_DISCOVER.equals(action)) {
+            return ON_DISCOVER_ENDPOINT;
+        } else if (ACTION_ON_CATALOG_PUBLISH.equals(action)) {
+            return ON_PUBLISH_ENDPOINT;
+        }
+        throw new IllegalArgumentException("Unknown or unsupported action: " + action);
     }
 
     /**
@@ -204,6 +264,12 @@ public class HttpService {
             throw new IllegalArgumentException("Invalid callback URL: no host");
         }
 
+        // TODO (DNS TOCTOU): this DNS resolution is for SSRF validation only. The HTTP
+        //  client resolves the hostname again at connection time, so a DNS rebinding
+        //  attack could swap a public IP for a private one between these two calls.
+        //  A production-grade fix requires a custom ClientHttpRequestFactory that pins
+        //  the resolved IP into the socket connection (i.e., resolve-once and connect
+        //  to the IP directly).
         try {
             InetAddress addr = InetAddress.getByName(host);
             if (addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress()) {
@@ -211,14 +277,18 @@ public class HttpService {
                         "Callback URL points to private/loopback address: " + host);
             }
         } catch (java.net.UnknownHostException e) {
-            log.warn("{}", value("event", LogEvent.CALLBACK_ERROR),
-                    value("reason", "callback URL host unresolvable during SSRF check — proceeding"),
+            // Fail-closed: if the host cannot be resolved we cannot verify it is safe.
+            // Proceeding would allow an attacker to register an unresolvable hostname
+            // that bypasses the SSRF guard.
+            log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
+                    value("reason", "callback URL host unresolvable — rejecting request"),
                     value("host", host));
+            throw new IllegalArgumentException("Callback URL host cannot be resolved: " + host, e);
         }
     }
 
     /**
-     * Parses the Beckn v2.1 ACK/NACK response body.
+     * Parses the Beckn v2.0 ACK/NACK response body.
      */
     private void parseAckResponse(ResponseEntity<String> response, String targetUrl) {
         var statusCode = response.getStatusCode();
@@ -267,5 +337,11 @@ public class HttpService {
     private static String truncate(String s, int maxLen) {
         if (s == null) return null;
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...[truncated]";
+    }
+
+    /** Strips control characters to prevent log injection from user-supplied strings. */
+    private static String sanitize(String s) {
+        if (s == null) return null;
+        return s.replaceAll("[\\p{Cc}]", "");
     }
 }

@@ -33,6 +33,8 @@ services:
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+      # synonyms_path in ES template is relative to ES config dir (/usr/share/elasticsearch/config/)
+      - ./config/es-synonyms.txt:/usr/share/elasticsearch/config/config/es-synonyms.txt
     networks:
       - beckn-network
     healthcheck:
@@ -44,36 +46,36 @@ services:
 
   # Ollama — local LLM server for generating vector embeddings
   # No host port binding — only accessible within beckn-network
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - beckn-network
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 20s
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - beckn-network
+  #   healthcheck:
+  #     test: ["CMD", "ollama", "list"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 10
+  #     start_period: 20s
 
   # Pulls required models once after Ollama is healthy — skips if already cached
   # OLLAMA_NOPRINTER=1 disables the TUI progress display so it works without a TTY
-  ollama-init:
-    image: ollama/ollama:latest
-    container_name: ollama-init
-    entrypoint: ["/bin/bash", "-c"]
-    command: "ollama pull nomic-embed-text 2>&1 | cat && ollama pull llama3.2:1b 2>&1 | cat"
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_NOPRINTER=1
-    depends_on:
-      ollama:
-        condition: service_healthy
-    networks:
-      - beckn-network
-    restart: "no"
+  # ollama-init:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama-init
+  #   entrypoint: ["/bin/bash", "-c"]
+  #   command: "ollama pull nomic-embed-text 2>&1 | cat && ollama pull llama3.2:1b 2>&1 | cat"
+  #   environment:
+  #     - OLLAMA_HOST=http://ollama:11434
+  #     - OLLAMA_NOPRINTER=1
+  #   depends_on:
+  #     ollama:
+  #       condition: service_healthy
+  #   networks:
+  #     - beckn-network
+  #   restart: "no"
 
   # on-discovery-api removed — catalog push is now handled by catalog-publish service (POST /catalog/push)
 
@@ -166,8 +168,8 @@ services:
         condition: service_healthy
       postgres-discovery:
         condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
+      # ollama-init:
+      #   condition: service_completed_successfully
     networks:
       - beckn-network
     restart: unless-stopped
@@ -177,6 +179,7 @@ services:
     build:
       context: .
       dockerfile: jobs/catalog-discover-job/Dockerfile
+    image: beckn/catalog-discover:1.0
     container_name: catalog-discover-job
     ports:
       - "8082:8080"
@@ -192,7 +195,7 @@ services:
       - POSTGRES_PASSWORD=catalog123
       - POSTGRES_MAX_POOL_SIZE=10
       - MAX_ITEMS_PER_CATALOG=100
-      - SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml
+      - BECKN_PROTOCOL_API_SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/publish-directive-changes/api/v2.0.0/beckn.yaml
       - SCHEMA_CACHE_TTL_HOURS=24
       - LOGGING_LEVEL_ORG_BECKN_DISCOVER=INFO
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA=ERROR
@@ -261,8 +264,8 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
+      # ollama-init:
+      #   condition: service_completed_successfully
     networks:
       - beckn-network
     restart: unless-stopped
@@ -290,6 +293,9 @@ services:
       - TOPICS_DLT=discovr.dispatcher.dlt.responses
       - SPRING_KAFKA_CONSUMER_GROUP_ID=seeker-notifier-group
       - SPRING_KAFKA_LISTENER_CONCURRENCY=1
+      # DeDi Registry — callback URL resolution (resolves subscriber base URL at delivery time)
+      - REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - REGISTRY_NAME=subscribers.beckn.one
       # Beckn HTTP Signature — outgoing signing for on_discover callbacks to BAP
       # Set SIGNING_ENABLED=true and provide key details to sign outbound callbacks
       - SIGNING_ENABLED=false
@@ -297,6 +303,8 @@ services:
       - SIGNING_KEY_ID_SUFFIX=
       - SIGNING_PRIVATE_KEY=
       - SIGNING_EXPIRY_SECONDS=3600
+      # SSRF validation — disable for local/Docker development (no public DNS)
+      - CALLBACK_URL_VALIDATION_ENABLED=false
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
@@ -334,8 +342,8 @@ volumes:
     driver: local
   elasticsearch_data:
     driver: local
-  ollama_data:
-    driver: local
+  # ollama_data:
+  #   driver: local
 
 networks:
   beckn-network:

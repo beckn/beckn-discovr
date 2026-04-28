@@ -2,6 +2,7 @@ package org.beckn.discover.service.elasticsearch;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
@@ -12,6 +13,7 @@ import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.engine.TextSearchEngine;
+import org.beckn.discover.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Conditional;
@@ -57,6 +59,8 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
     private final int                       knnCandidates;
     private final Optional<EmbeddingClient> embeddingClient;
     private final Optional<QueryEnricher>   queryEnricher;
+    private final List<String>              multiMatchFields;
+    private final double                    relativeScoreThreshold;
 
     public ElasticsearchTextSearchEngine(ElasticsearchClient esClient,
                                          EsSearchAssembler assembler,
@@ -69,20 +73,38 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         this.objectMapper    = objectMapper;
         this.embeddingClient = embeddingClient;
         this.queryEnricher   = queryEnricher;
-        DiscoveryProperties.Elasticsearch es = props.getElasticsearch();
-        this.aliasName     = es.getAliasName();
-        this.resultLimit   = es.getResultLimit();
-        this.minScore      = es.getMinScore();
-        this.knnCandidates = Math.max(props.getTextSearch().getEmbeddingModel().getKnnCandidates(), this.resultLimit);
+        DiscoveryProperties.Elasticsearch esConfig = props.getElasticsearch();
+        this.aliasName              = esConfig.getAliasName();
+        this.resultLimit            = esConfig.getResultLimit();
+        this.minScore               = esConfig.getMinScore();
+        this.knnCandidates          = Math.max(props.getTextSearch().getEmbeddingModel().getKnnCandidates(), this.resultLimit);
+        this.relativeScoreThreshold = esConfig.getRelativeScoreThreshold();
+        List<String> fields = esConfig.getMultiMatchFields();
+        if (fields == null || fields.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "discovery.elasticsearch.multiMatchFields must not be empty");
+        }
+        this.multiMatchFields = List.copyOf(fields);
+    }
+
+    /**
+     * Returns {@code true}: this engine injects schema context filters directly
+     * into ES queries (both BM25 and KNN paths), so
+     * {@link org.beckn.discover.service.response.CatalogPipeline} step 1 can
+     * be safely skipped for this engine.
+     */
+    @Override
+    public boolean appliesSchemaFilter() {
+        return true;
     }
 
     @Override
     @SuppressWarnings({"rawtypes", "unchecked"})
-    public List<Catalog> search(String text, QueryRequest context) throws Exception {
+    public List<Catalog> search(String text, QueryRequest queryRequest) throws Exception {
         if (text == null || text.isBlank())
             throw new IllegalArgumentException("Text search query cannot be null or empty");
 
-        String txId  = context.transactionId();
+        String txId  = queryRequest.transactionId();
         Instant start = Instant.now();
 
         // ── Semantic search path (engine=els-semantic-search) ───────────────────────
@@ -104,24 +126,31 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
             }
 
             List<Float> vec = queryVector.get();
+            List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(queryRequest);
             log.debug(LogEvent.ES_SEARCH_STARTED + ".knn",
                     value("index", aliasName),
                     value("k", resultLimit),
                     value("numCandidates", knnCandidates),
                     value("minScore", minScore),
+                    value("schemaFilters", schemaFilters.size()),
                     value("transactionId", txId));
             try {
                 SearchResponse<Map> response = esClient.search(s -> s
                         .index(aliasName)
                         .minScore(minScore)
                         .size(resultLimit)
-                        .knn(k -> k
-                                .field("resource_vector")
-                                .queryVector(vec)
-                                .k(resultLimit)
-                                .numCandidates(knnCandidates)),
+                        .knn(k -> {
+                            var kb = k.field("resource_vector")
+                                    .queryVector(vec)
+                                    .k(resultLimit)
+                                    .numCandidates(knnCandidates);
+                            schemaFilters.forEach(kb::filter);
+                            return kb;
+                        }),
                         Map.class);
-                return assembleAndLog(response, txId, start, "knn");
+                // knn cosine scores are already normalized to a tight range by minScore;
+                // relative filtering is unnecessary and could over-prune.
+                return assembleAndLog(response.hits().hits(), txId, start, "knn");
             } catch (ElasticsearchException e) {
                 if ("index_not_found_exception".equals(e.error().type())) {
                     log.info(LogEvent.ES_SEARCH_COMPLETED + ".knn-index-not-found",
@@ -140,21 +169,28 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         }
 
         // ── Keyword search path (engine=native-els only) ──────────────────────
+        List<Query> keywordSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(queryRequest);
         log.info(LogEvent.ES_SEARCH_STARTED + ".keyword",
                 value("transactionId", txId),
-                value("query", buildTextSearchJson(text)));
+                value("schemaFilters", keywordSchemaFilters.size()),
+                value("query", buildTextSearchJson(ErrorSanitizer.sanitize(text))));
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                     .index(aliasName)
-                    .query(q -> q.multiMatch(mm -> mm
-                            .query(text)
-                            .fields("full_text_blob", "resource_name^2", "resource_rating_review_text")
-                            .type(TextQueryType.BestFields)
-                            .fuzziness("AUTO")))
+                    .query(q -> q.bool(b -> {
+                        b.must(Query.of(mq -> mq.multiMatch(mm -> mm
+                                .query(text)
+                                .fields(multiMatchFields)
+                                .type(TextQueryType.BestFields)
+                                .fuzziness("AUTO"))));
+                        keywordSchemaFilters.forEach(b::filter);
+                        return b;
+                    }))
                     .minScore(minScore)
                     .size(resultLimit),
                     Map.class);
-            return assembleAndLog(response, txId, start, "keyword");
+            var filteredHits = filterByRelativeScore(response.hits().hits(), txId);
+            return assembleAndLog(filteredHits, txId, start, "keyword");
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ElasticsearchException e) {
@@ -182,9 +218,9 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private List<Catalog> assembleAndLog(SearchResponse<Map> response, String txId, Instant start, String mode) {
-        List<Map<String, Object>> hits = response.hits().hits().stream()
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private List<Catalog> assembleAndLog(List<Hit<Map>> rawHits, String txId, Instant start, String mode) {
+        List<Map<String, Object>> hits = rawHits.stream()
                 .map(Hit::source)
                 .filter(Objects::nonNull)
                 .map(m -> (Map<String, Object>) m)
@@ -205,10 +241,36 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         return catalogs;
     }
 
+    @SuppressWarnings("rawtypes")
+    private List<Hit<Map>> filterByRelativeScore(List<Hit<Map>> hits, String txId) {
+        if (relativeScoreThreshold <= 0.0 || hits.isEmpty()) {
+            return hits;
+        }
+        Double topScore = hits.get(0).score();
+        if (topScore == null || topScore <= 0.0) {
+            return hits;
+        }
+        double cutoff = topScore * relativeScoreThreshold;
+        var filtered = hits.stream()
+                .filter(h -> h.score() != null && h.score() >= cutoff)
+                .toList();
+        int dropped = hits.size() - filtered.size();
+        if (dropped > 0) {
+            log.debug(LogEvent.ES_SEARCH_COMPLETED + ".relative-score-filter",
+                    value("dropped", dropped),
+                    value("kept", filtered.size()),
+                    value("topScore", topScore),
+                    value("cutoff", cutoff),
+                    value("threshold", relativeScoreThreshold),
+                    value("transactionId", txId));
+        }
+        return filtered;
+    }
+
     private String buildTextSearchJson(String text) {
         Map<String, Object> multiMatch = new LinkedHashMap<>();
         multiMatch.put("query", text);
-        multiMatch.put("fields", List.of("full_text_blob", "resource_name^2", "resource_rating_review_text"));
+        multiMatch.put("fields", multiMatchFields);
         multiMatch.put("type", "best_fields");
         multiMatch.put("fuzziness", "AUTO");
         Map<String, Object> body = new LinkedHashMap<>();

@@ -15,8 +15,8 @@ import java.util.StringJoiner;
  */
 public class LatencyTracker {
 
-    private static final Logger logger = LoggerFactory.getLogger(LatencyTracker.class);
-    private static final Logger performanceLogger = LoggerFactory.getLogger("org.beckn.discover.performance");
+    private static final Logger log = LoggerFactory.getLogger(LatencyTracker.class);
+    private static final Logger perfLog = LoggerFactory.getLogger("org.beckn.discover.performance");
 
     private final Instant startTime;
     private Instant lastCheckpoint;
@@ -73,9 +73,9 @@ public class LatencyTracker {
         long total = totalElapsedMillis();
         String breakdown = formatSummary();
         String status = success ? "SUCCESS" : "FAILED";
-        logger.info("Discovery flow completed - TransactionId: {}, Status: {}, TotalDuration: {}ms, Breakdown: {}",
+        log.info("Discovery flow completed - TransactionId: {}, Status: {}, TotalDuration: {}ms, Breakdown: {}",
                 transactionId, status, total, breakdown);
-        performanceLogger.info("Latency breakdown: transaction={} status={} total={}ms steps=[{}]",
+        perfLog.info("Latency breakdown: transaction={} status={} total={}ms steps=[{}]",
                 transactionId, status, total, breakdown);
     }
 }

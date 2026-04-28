@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.service.geometry;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.model.ItemLocationCollection;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -17,10 +18,10 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Extracts all geometry values from a denormalized item payload and returns them with absolute paths.
+ * Extracts all geometry values from a denormalized resource payload and returns them with absolute paths.
  * Traverses every property in the JSON tree (objects and arrays), and for each occurrence of
  * {@code gps}, {@code geo} (GeoJSON Point/Polygon), or {@code polygon}, records
- * (itemId, absolutePath, geom) for storage in {@code item_location_collection}.
+ * (resourceId, absolutePath, geom) for storage in {@code item_location_collection}.
  * Paths use JSONPath-style with {@code [*]} for array indices so they match discovery API targets,
  * e.g. {@code $.catalogs[*].resources[*].availableAt[*].geo}.
  */
@@ -34,7 +35,7 @@ public class GeometryExtractor {
 
     @FunctionalInterface
     private interface GeometryParser {
-        Optional<Geometry> parse(JsonNode value, String itemId, String path);
+        Optional<Geometry> parse(JsonNode value, String resourceId, String catalogId, String path);
     }
 
     /**
@@ -42,9 +43,9 @@ public class GeometryExtractor {
      * Drives both dispatch in walkJsonTree and the skip-recursion guard — single source of truth.
      */
     private static final Map<String, GeometryParser> GEOMETRY_PARSERS = Map.of(
-            "gps",     (n, id, p) -> tryParseGps(n.asText(), id, p),
-            "geo",     GeometryExtractor::tryParseGeoJson,
-            "polygon", GeometryExtractor::tryParsePolygon
+            "gps",     (n, id, catId, p) -> tryParseGps(n.asText(), id, p),
+            "geo",     (n, id, catId, p) -> tryParseGeoJson(n, id, p),
+            "polygon", (n, id, catId, p) -> tryParsePolygon(n, id, p)
     );
 
     private final ObjectMapper objectMapper;
@@ -59,32 +60,32 @@ public class GeometryExtractor {
      * Accepts a pre-parsed JsonNode to avoid redundant deserialization when the caller
      * already holds the payload as a JsonNode.
      */
-    public List<ItemLocationCollection> extractLocations(String itemId, JsonNode payloadRoot) {
+    public List<ItemLocationCollection> extractLocations(String resourceId, String catalogId, JsonNode payloadRoot) {
         try {
             List<ItemLocationCollection> result = new ArrayList<>();
-            walkJsonTree(itemId, payloadRoot, "$", 0, result);
+            walkJsonTree(resourceId, catalogId, payloadRoot, "$", 0, result);
             return List.copyOf(result);
         } catch (Exception e) {
-            log.warn("geometry.extract.failed itemId={}", itemId);
+            log.warn("event={} resourceId={}", LogEvent.GEO_EXTRACT_FAILED, resourceId);
             return List.of();
         }
     }
 
     /** Convenience overload — parses the payload JSON string before walking the tree. */
-    public List<ItemLocationCollection> extractLocations(String itemId, String payloadJson) {
+    public List<ItemLocationCollection> extractLocations(String resourceId, String catalogId, String payloadJson) {
         try {
-            return extractLocations(itemId, objectMapper.readTree(payloadJson));
+            return extractLocations(resourceId, catalogId, objectMapper.readTree(payloadJson));
         } catch (Exception e) {
-            log.warn("geometry.extract.parse-failed itemId={}: {}", itemId, e.getMessage());
+            log.warn("event={} resourceId={} error={}", LogEvent.GEO_EXTRACT_PARSE_FAILED, resourceId, e.getMessage());
             return List.of();
         }
     }
 
-    private void walkJsonTree(String itemId, JsonNode node, String path, int depth,
+    private void walkJsonTree(String resourceId, String catalogId, JsonNode node, String path, int depth,
             List<ItemLocationCollection> accumulator) {
         if (node == null || node.isMissingNode()) return;
         if (depth > MAX_DEPTH) {
-            log.warn("geometry.max-depth-exceeded itemId={} path={}", itemId, path);
+            log.warn("event={} resourceId={} path={}", LogEvent.GEO_MAX_DEPTH_EXCEEDED, resourceId, path);
             return;
         }
         if (node.isObject()) {
@@ -95,18 +96,18 @@ public class GeometryExtractor {
                 String segPath = pathSegment(path, key);
                 GeometryParser parser = GEOMETRY_PARSERS.get(key);
                 if (parser != null) {
-                    parser.parse(entry.getValue(), itemId, segPath)
-                            .map(geom -> new ItemLocationCollection(itemId, segPath, geom))
+                    parser.parse(entry.getValue(), resourceId, catalogId, segPath)
+                            .map(geom -> new ItemLocationCollection(resourceId, catalogId, segPath, geom))
                             .ifPresent(accumulator::add);
                 } else {
-                    walkJsonTree(itemId, entry.getValue(), segPath, depth + 1, accumulator);
+                    walkJsonTree(resourceId, catalogId, entry.getValue(), segPath, depth + 1, accumulator);
                 }
             });
         }
         if (node.isArray()) {
             // Always use [*] so stored paths match the discovery API's JSONPath wildcard queries.
             for (int i = 0; i < node.size(); i++)
-                walkJsonTree(itemId, node.get(i), path + "[*]", depth + 1, accumulator);
+                walkJsonTree(resourceId, catalogId, node.get(i), path + "[*]", depth + 1, accumulator);
         }
     }
 
@@ -118,7 +119,7 @@ public class GeometryExtractor {
         return "$".equals(path) ? "$." + key : path + "." + key;
     }
 
-    private static Optional<Geometry> tryParseGps(String gps, String itemId, String path) {
+    private static Optional<Geometry> tryParseGps(String gps, String resourceId, String path) {
         try {
             if (gps == null || gps.isBlank()) return Optional.empty();
             String[] parts = gps.strip().split(",", 2);
@@ -126,12 +127,12 @@ public class GeometryExtractor {
             double lat = Double.parseDouble(parts[0].strip());
             double lon = Double.parseDouble(parts[1].strip());
             if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-                log.warn("geometry.gps.out-of-range itemId={} path={} gps={}", itemId, path, truncate(gps, TRUNCATE_LEN));
+                log.warn("event={} resourceId={} path={} gps={}", LogEvent.GEO_GPS_OUT_OF_RANGE, resourceId, path, truncate(gps, TRUNCATE_LEN));
                 return Optional.empty();
             }
             return Optional.of(GEOMETRY_FACTORY.createPoint(new Coordinate(lon, lat)));
         } catch (NumberFormatException e) {
-            log.warn("geometry.gps.parse-failed itemId={} path={} gps={}", itemId, path, truncate(gps, TRUNCATE_LEN));
+            log.warn("event={} resourceId={} path={} gps={}", LogEvent.GEO_GPS_PARSE_FAILED, resourceId, path, truncate(gps, TRUNCATE_LEN));
             return Optional.empty();
         }
     }
@@ -141,7 +142,7 @@ public class GeometryExtractor {
      * Point:   {"type":"Point","coordinates":[lon, lat]}
      * Polygon: {"type":"Polygon","coordinates":[[[lon,lat],...]]}
      */
-    private static Optional<Geometry> tryParseGeoJson(JsonNode geo, String itemId, String path) {
+    private static Optional<Geometry> tryParseGeoJson(JsonNode geo, String resourceId, String path) {
         try {
             if (geo == null || !geo.isObject()) return Optional.empty();
             String type = geo.has("type") ? geo.get("type").asText(null) : null;
@@ -149,27 +150,27 @@ public class GeometryExtractor {
             JsonNode coords = geo.get("coordinates");
             if (coords == null || coords.isMissingNode()) return Optional.empty();
             return switch (type) {
-                case "Point"   -> tryParseGeoJsonPoint(coords, itemId, path);
+                case "Point"   -> tryParseGeoJsonPoint(coords, resourceId, path);
                 case "Polygon" -> (coords.isArray() && !coords.isEmpty())
                         ? ringToPolygon(coords.get(0))
                         : Optional.empty();
                 default        -> {
-                    log.debug("geometry.geojson.unsupported-type itemId={} path={} type={}", itemId, path, type);
+                    log.debug("event={} resourceId={} path={} type={}", LogEvent.GEO_GEOJSON_UNSUPPORTED_TYPE, resourceId, path, type);
                     yield Optional.empty();
                 }
             };
         } catch (Exception e) {
-            log.warn("geometry.geojson.parse-failed itemId={} path={}: {}", itemId, path, e.getMessage());
+            log.warn("event={} resourceId={} path={} error={}", LogEvent.GEO_GEOJSON_PARSE_FAILED, resourceId, path, e.getMessage());
             return Optional.empty();
         }
     }
 
-    private static Optional<Geometry> tryParseGeoJsonPoint(JsonNode coordinates, String itemId, String path) {
+    private static Optional<Geometry> tryParseGeoJsonPoint(JsonNode coordinates, String resourceId, String path) {
         if (!coordinates.isArray() || coordinates.size() < 2) return Optional.empty();
         double lon = coordinates.get(0).asDouble();
         double lat = coordinates.get(1).asDouble();
         if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-            log.warn("geometry.geojson.point.out-of-range itemId={} path={} lon={} lat={}", itemId, path, lon, lat);
+            log.warn("event={} resourceId={} path={} lon={} lat={}", LogEvent.GEO_GEOJSON_POINT_OUT_OF_RANGE, resourceId, path, lon, lat);
             return Optional.empty();
         }
         return Optional.of(GEOMETRY_FACTORY.createPoint(new Coordinate(lon, lat)));
@@ -190,11 +191,11 @@ public class GeometryExtractor {
         return Optional.of(GEOMETRY_FACTORY.createPolygon(GEOMETRY_FACTORY.createLinearRing(coords)));
     }
 
-    private static Optional<Geometry> tryParsePolygon(JsonNode polygonNode, String itemId, String path) {
+    private static Optional<Geometry> tryParsePolygon(JsonNode polygonNode, String resourceId, String path) {
         try {
             return ringToPolygon(polygonNode);
         } catch (Exception e) {
-            log.warn("geometry.polygon.parse-failed itemId={} path={}: {}", itemId, path, e.getMessage());
+            log.warn("event={} resourceId={} path={} error={}", LogEvent.GEO_POLYGON_PARSE_FAILED, resourceId, path, e.getMessage());
             return Optional.empty();
         }
     }

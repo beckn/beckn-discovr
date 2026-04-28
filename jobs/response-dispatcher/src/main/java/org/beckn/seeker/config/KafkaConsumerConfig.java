@@ -25,14 +25,18 @@ import static net.logstash.logback.argument.StructuredArguments.value;
 @Configuration
 public class KafkaConsumerConfig {
 
-    @Value("${spring.kafka.bootstrap-servers}")
-    private String bootstrapServers;
+    private final String bootstrapServers;
+    private final String groupId;
+    private final int listenerConcurrency;
 
-    @Value("${spring.kafka.consumer.group-id}")
-    private String groupId;
-
-    @Value("${spring.kafka.listener.concurrency:1}")
-    private String listenerConcurrency;
+    public KafkaConsumerConfig(
+            @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
+            @Value("${spring.kafka.consumer.group-id}") String groupId,
+            @Value("${spring.kafka.listener.concurrency:1}") int listenerConcurrency) {
+        this.bootstrapServers = bootstrapServers;
+        this.groupId = groupId;
+        this.listenerConcurrency = listenerConcurrency;
+    }
 
     @Bean
     public ConsumerFactory<String, String> consumerFactory() {
@@ -52,6 +56,7 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, String> factory =
             new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
+        factory.setConcurrency(listenerConcurrency);
         factory.setCommonErrorHandler(errorHandler);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
         log.info("{}", value("event", "KAFKA_CONSUMER_CONFIGURED"),

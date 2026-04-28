@@ -8,6 +8,8 @@ import org.beckn.catalogpublish.dto.CatalogContext;
 import org.beckn.catalogpublish.dto.OfferIndex;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ItemPayloadBuilderTest {
@@ -16,15 +18,33 @@ class ItemPayloadBuilderTest {
     private final ItemPayloadBuilder builder = new ItemPayloadBuilder(mapper);
 
     @Test
-    void buildCatalogMetadataSlice_removesItemsAndOffers() {
+    void buildCatalogMetadataSlice_removesItemsOffersAndBppFields() {
         ObjectNode catalog = mapper.createObjectNode();
         catalog.put("id", "c1");
         catalog.putArray("resources").add(mapper.createObjectNode());
-        CatalogContext ctx = new CatalogContext("b1", "http://b1", new String[0], null);
+        CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null, null);
         JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
         assertThat(slice.has("resources")).isFalse();
         assertThat(slice.has("offers")).isFalse();
-        assertThat(slice.path("bppId").asText()).isEqualTo("b1");
+        assertThat(slice.has("bppId")).isFalse();
+        assertThat(slice.has("bppUri")).isFalse();
+        assertThat(slice.path("id").asText()).isEqualTo("c1");
+    }
+
+    @Test
+    void buildCatalogMetadataSlice_stripsBppIdAndBppUriFromCatalog() {
+        // bppId/bppUri in the catalog body must be stripped — never stored per the schema redesign
+        ObjectNode catalog = mapper.createObjectNode();
+        catalog.put("id", "c1");
+        catalog.put("bppId", "catalog-bpp");
+        catalog.put("bppUri", "http://catalog-bpp");
+        catalog.putArray("resources").add(mapper.createObjectNode());
+        CatalogContext ctx = new CatalogContext(List.of(), "sub-ctx", null, null);
+        JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
+        // bppId/bppUri must NOT appear in the stored payload
+        assertThat(slice.has("bppId")).isFalse();
+        assertThat(slice.has("bppUri")).isFalse();
+        assertThat(slice.path("id").asText()).isEqualTo("c1");
     }
 
     @Test
@@ -40,12 +60,27 @@ class ItemPayloadBuilderTest {
     }
 
     @Test
-    void offerIndex_getOffersForItem_returnsCatalogWideOffers() {
+    void offerIndex_getOffersForResource_excludesProviderOffers() {
+        // Offer without resourceIds is a provider-level offer — NOT returned by getOffersForResource
         ArrayNode offers = mapper.createArrayNode();
-        ObjectNode o = mapper.createObjectNode();
-        o.put("id", "off1");
-        offers.add(o);
+        ObjectNode provOffer = mapper.createObjectNode();
+        provOffer.put("id", "prov-off1");
+        offers.add(provOffer);
         OfferIndex index = OfferIndex.build(offers, mapper);
-        assertThat(index.getOffersForItem("any", mapper)).hasSize(1);
+        assertThat(index.getOffersForResource("any", mapper)).isEmpty();
+        assertThat(index.providerOffers()).hasSize(1);
+    }
+
+    @Test
+    void offerIndex_getOffersForResource_returnsItemSpecificOffers() {
+        // Offer with resourceIds is item-level — returned by getOffersForResource
+        ArrayNode offers = mapper.createArrayNode();
+        ObjectNode itemOffer = mapper.createObjectNode();
+        itemOffer.put("id", "item-off1");
+        itemOffer.set("resourceIds", mapper.createArrayNode().add("item-123"));
+        offers.add(itemOffer);
+        OfferIndex index = OfferIndex.build(offers, mapper);
+        assertThat(index.getOffersForResource("item-123", mapper)).hasSize(1);
+        assertThat(index.providerOffers()).isEmpty();
     }
 }

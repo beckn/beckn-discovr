@@ -109,8 +109,8 @@ logging:
     org.apache.kafka: ${LOGGING_LEVEL_ORG_APACHE_KAFKA:ERROR}
     root: ${LOGGING_LEVEL_ROOT:INFO}
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{bapId},%X{transactionId}] %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{bapId},%X{transactionId}] %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{transactionId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{messageId},%X{transactionId}] %logger{36} - %msg%n"
   file:
     name: /app/logs/discovery-service.log
 

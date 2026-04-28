@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.service.geometry;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -56,7 +57,7 @@ public class GeoShapeExtractor {
                               Map<String, List<Object>> accumulator) {
         if (node == null || node.isMissingNode()) return;
         if (depth > MAX_DEPTH) {
-            log.warn("geo-shape.max-depth-exceeded path={}", path);
+            log.warn("event={} path={}", LogEvent.GEO_MAX_DEPTH_EXCEEDED, path);
             return;
         }
         if (node.isObject()) {
@@ -107,51 +108,6 @@ public class GeoShapeExtractor {
         String fieldName = toFieldName(path);
         if (fieldName != null)
             accumulator.computeIfAbsent(fieldName, k -> new ArrayList<>()).add(locationObj);
-    }
-
-    /**
-     * Converts "lat,lon" GPS string to GeoJSON Point.
-     */
-    private static Optional<Map<String, Object>> gpsToGeoJson(String gps, String path) {
-        try {
-            if (gps == null || gps.isBlank()) return Optional.empty();
-            String[] parts = gps.strip().split(",", 2);
-            if (parts.length != 2) return Optional.empty();
-            double lat = Double.parseDouble(parts[0].strip());
-            double lon = Double.parseDouble(parts[1].strip());
-            if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-                log.warn("geo-shape.gps.out-of-range path={} gps={}", path, gps);
-                return Optional.empty();
-            }
-            Map<String, Object> point = new LinkedHashMap<>();
-            point.put("type", "Point");
-            point.put("coordinates", List.of(lon, lat));
-            return Optional.of(point);
-        } catch (NumberFormatException e) {
-            log.warn("geo-shape.gps.parse-failed path={} gps={}", path, gps);
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * Converts polygon array ([[lon,lat],...]) to GeoJSON Polygon.
-     */
-    private static Optional<Map<String, Object>> polygonToGeoJson(JsonNode polygon, String path) {
-        try {
-            if (!polygon.isArray() || polygon.size() < 4) return Optional.empty();
-            List<List<Double>> ring = new ArrayList<>();
-            for (JsonNode point : polygon) {
-                if (!point.isArray() || point.size() < 2) return Optional.empty();
-                ring.add(List.of(point.get(0).asDouble(), point.get(1).asDouble()));
-            }
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("type", "Polygon");
-            result.put("coordinates", List.of(ring));
-            return Optional.of(result);
-        } catch (Exception e) {
-            log.warn("geo-shape.polygon.parse-failed path={}: {}", path, e.getMessage());
-            return Optional.empty();
-        }
     }
 
     /**

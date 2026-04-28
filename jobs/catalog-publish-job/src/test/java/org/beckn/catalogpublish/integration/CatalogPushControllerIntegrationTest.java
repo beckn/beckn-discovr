@@ -36,6 +36,11 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 .andExpect(status().isAccepted());
+
+        // Wait for async pipeline to drain so this test doesn't pollute later tests
+        await().atMost(10, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isGreaterThanOrEqualTo(1));
     }
 
     @Test
@@ -47,6 +52,11 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .content(fixture))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.status").value("ACK"));
+
+        // Wait for async pipeline to drain so this test doesn't pollute later tests
+        await().atMost(10, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isGreaterThanOrEqualTo(1));
     }
 
     // ── Async persistence ─────────────────────────────────────────────────────
@@ -95,6 +105,11 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
         // Response should arrive before persistence completes (< 2 s as a generous bound)
         assertThat(elapsed).isLessThan(2_000);
+
+        // Wait for async pipeline to drain so this test doesn't pollute later tests
+        await().atMost(10, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isGreaterThanOrEqualTo(1));
     }
 
     // ── Payload size enforcement ──────────────────────────────────────────────
@@ -112,51 +127,52 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void push_oversizedPayload_doesNotPersistAnything() throws Exception {
-        long countBefore = itemRepository.count();
-
+    void push_oversizedPayload_doesNotEnqueueToKafka() throws Exception {
         byte[] oversized = new byte[5 * 1024 * 1024 + 1];
         Arrays.fill(oversized, (byte) 'x');
+
+        // 413 is returned synchronously — nothing is enqueued to Kafka
+        // Capture count immediately before AND after; they must be equal since the
+        // oversized request never reaches the pipeline (rejected at the HTTP layer)
+        long countBefore = itemRepository.count();
 
         mockMvc.perform(post("/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(oversized))
                 .andExpect(status().isPayloadTooLarge());
 
-        // Count must not increase — oversized payload must not reach the pipeline
-        await().atMost(5, TimeUnit.SECONDS)
-                .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+        // Synchronous check: the 413 response guarantees nothing was enqueued
+        long countAfter = itemRepository.count();
+        assertThat(countAfter).isEqualTo(countBefore);
     }
 
     // ── Async failure cases (202 returned, no DB row) ─────────────────────────
 
     @Test
-    void push_invalidJson_returns202ButDoesNotPersist() throws Exception {
+    void push_invalidJson_returns400NackDoesNotPersist() throws Exception {
         long countBefore = itemRepository.count();
 
         mockMvc.perform(post("/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{this is not valid json}"))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value("NACK"));
 
-        // Async pipeline will fail at ParseStep; count must not increase
-        await().atMost(5, TimeUnit.SECONDS)
-                .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+        // Invalid JSON rejected at controller level — nothing persisted
+        assertThat(itemRepository.count()).isEqualTo(countBefore);
     }
 
     @Test
     void push_missingBppId_returns202ButDoesNotPersist() throws Exception {
         long countBefore = itemRepository.count();
 
-        // context present but bppId missing → controller should enrich context and pipeline should run
+        // context present, empty resources array → pipeline runs but nothing to persist
         String payload = """
                 {
                   "context": {
                     "bppUri": "https://example.com",
-                    "networkId": "test-net"
+                    "networkId": "test-net",
+                    "messageId": "msg-missing-bpp"
                   },
                   "message": {
                     "catalogs": [{
@@ -179,21 +195,24 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void push_missingBppFields_enrichedFromCatalogAndPersists() throws Exception {
+    void push_resourceWithDescriptorAndContextFields_persistsItem() throws Exception {
         long countBefore = itemRepository.count();
 
+        // bppId/bppUri in context are valid Beckn fields for logging/MDC — catalog-level bppId is ignored
         String payload = """
                 {
                   "context": {
-                    "networkId": "test-net"
+                    "bppId": "bpp.test",
+                    "bppUri": "https://bpp.example.com",
+                    "networkId": "test-net",
+                    "messageId": "msg-ctx-fields"
                   },
                   "message": {
                     "catalogs": [{
                       "id": "cat-1",
-                      "bppId": "bpp.test",
-                      "bppUri": "https://bpp.example.com",
                       "resources": [{
-                        "id": "item-1"
+                        "id": "item-1",
+                        "descriptor": {"name": "Item One"}
                       }]
                     }]
                   }
@@ -212,6 +231,79 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void push_resourceWithDescriptor_persistsItemWithCatalogId() throws Exception {
+        String payload = """
+                {
+                  "context": {
+                    "networkId": "test-net",
+                    "messageId": "msg-catalog-id-test"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-derive",
+                      "resources": [{
+                        "id": "item-derived-1",
+                        "descriptor": { "name": "Derived Item" }
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/catalog/push")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("ACK"));
+
+        await().atMost(10, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    var items = itemRepository.findAll();
+                    assertThat(items).hasSize(1);
+                    var item = items.get(0);
+                    assertThat(item.getCatalogId()).isEqualTo("cat-derive");
+                    assertThat(item.getId()).isEqualTo("item-derived-1");
+                });
+    }
+
+    @Test
+    void push_emptyCatalogsResourceList_doesNotPersist() throws Exception {
+        // resources list is empty — no items to persist
+        // A valid catalog with a resource that has no descriptor (fails isRealResource check) — no persistence
+        long countBefore = itemRepository.count();
+
+        String payload = """
+                {
+                  "context": {
+                    "networkId": "test-net",
+                    "messageId": "msg-no-desc"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-no-desc",
+                      "resources": [{
+                        "id": "item-no-desc",
+                        "resourceAttributes": {"@context": "https://schema.org/", "@type": "Thing"}
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/catalog/push")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("ACK"));
+
+        // Resource has no descriptor — isRealResource returns false, pipeline skips it
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+    }
+
+    @Test
     void push_emptyCatalogsList_returns202ButDoesNotPersist() throws Exception {
         long countBefore = itemRepository.count();
 
@@ -220,7 +312,8 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                   "context": {
                     "bppId": "bpp.test",
                     "bppUri": "https://example.com",
-                    "networkId": "test-net"
+                    "networkId": "test-net",
+                    "messageId": "msg-empty-catalogs"
                   },
                   "message": {
                     "catalogs": []
@@ -236,6 +329,42 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         await().atMost(5, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+    }
+
+    @Test
+    void push_bppIdMissingFromContextButPresentInCatalog_returns400Nack() throws Exception {
+        // bppId only in catalog body (not context), and no messageId/transactionId in context.
+        // hasRequiredContext() rejects payloads without a correlation ID — returns 400 NACK.
+        long countBefore = itemRepository.count();
+
+        String payload = """
+                {
+                  "context": {
+                    "bppUri": "https://example.com",
+                    "networkId": "test-net"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-no-ctx",
+                      "bppId": "bpp-from-catalog",
+                      "resources": [{
+                        "id": "item-1",
+                        "descriptor": {"name": "Item One"}
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/catalog/push")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value("NACK"))
+                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"));
+
+        // Rejected synchronously — nothing persisted
+        assertThat(itemRepository.count()).isEqualTo(countBefore);
     }
 
     // ── Auth ──────────────────────────────────────────────────────────────────

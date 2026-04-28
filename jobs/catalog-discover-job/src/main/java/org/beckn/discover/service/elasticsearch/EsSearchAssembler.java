@@ -66,7 +66,7 @@ public class EsSearchAssembler {
 
         for (Map<String, Object> doc : hits) {
             try {
-                String catalogId = str(doc, "catalog_id");
+                String catalogId = extractString(doc,"catalog_id");
                 if (catalogId == null) {
                     log.warn(LogEvent.ES_SEARCH_COMPLETED + ".assembler-missing-catalog-id",
                             value("transactionId", transactionId));
@@ -85,7 +85,7 @@ public class EsSearchAssembler {
 
         List<Catalog> result = new ArrayList<>(byCatalogId.size());
         for (Catalog raw : byCatalogId.values()) {
-            Catalog processed = catalogProcessor.processCatalog(raw);
+            Catalog processed = catalogProcessor.normalizeCatalog(raw);
             if (processed != null)
                 result.add(processed);
         }
@@ -103,10 +103,14 @@ public class EsSearchAssembler {
     private static Catalog buildCatalog(String catalogId, Map<String, Object> doc) {
         Catalog catalog = new Catalog();
         catalog.setId(catalogId);
-        catalog.setBppId(str(doc, "bpp_id"));
-        catalog.setBppUri(str(doc, "bpp_uri"));
         catalog.setDescriptor(buildCatalogDescriptor(doc));
-        catalog.setProviderId(str(doc, "catalog_provider_id"));
+        // Build catalog-level provider from ES doc fields
+        String catalogProviderId = extractString(doc, "catalog_provider_id");
+        if (catalogProviderId != null) {
+            Descriptor providerDesc = new Descriptor();
+            providerDesc.setName(extractString(doc, "catalog_provider_name"));
+            catalog.setProvider(new Provider(catalogProviderId, providerDesc));
+        }
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         Object validityRaw = doc.get("catalog_validity");
@@ -119,10 +123,10 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Descriptor buildCatalogDescriptor(Map<String, Object> doc) {
         Descriptor d = new Descriptor();
-        d.setName(str(doc, "catalog_name"));
-        d.setShortDesc(str(doc, "catalog_short_desc"));
-        d.setLongDesc(str(doc, "catalog_long_desc"));
-        d.setThumbnailImage(str(doc, "catalog_descriptor_thumbnail_image"));
+        d.setName(extractString(doc,"catalog_name"));
+        d.setShortDesc(extractString(doc,"catalog_short_desc"));
+        d.setLongDesc(extractString(doc,"catalog_long_desc"));
+        d.setThumbnailImage(extractString(doc,"catalog_descriptor_thumbnail_image"));
         Object docsRaw = doc.get("catalog_descriptor_docs");
         if (docsRaw instanceof List<?> list && !list.isEmpty())
             d.setDocs((List<Map<String, Object>>) list);
@@ -169,21 +173,21 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Resource buildResource(Map<String, Object> doc) {
         Resource resource = new Resource();
-        resource.setId(str(doc, "resource_id"));
+        resource.setId(extractString(doc,"resource_id"));
         resource.setDescriptor(buildDescriptor(doc));
         resource.setCategory(buildCategory(doc));
         resource.setRating(buildRating(doc));
-        resource.setRateable(bool(doc, "resource_rateable"));
-        resource.setIsActive(bool(doc, "resource_is_active"));
+        resource.setRateable(extractBoolean(doc,"resource_rateable"));
+        resource.setIsActive(extractBoolean(doc,"resource_is_active"));
         Provider provider = buildProvider(doc);
         if (provider != null) {
-            provider.setLocations(collectProviderLocations(doc));
+            provider.setAvailableAt(collectProviderLocations(doc));
         }
         resource.setProvider(provider);
         resource.setResourceAttributes(buildAttributes(doc));
 
         // Reconstruct direct resource-level locations from loc_* fields
-        resource.setAvailableAt(collectItemLocations(doc));
+        resource.setAvailableAt(collectResourceLocations(doc));
 
         // v2.1: constraints and policies — present only when indexed
         Object constraintsRaw = doc.get("constraints");
@@ -216,7 +220,7 @@ public class EsSearchAssembler {
      * (e.g. {@code availableAt}, {@code location}, or any spec-extended
      * location field) should be collected here.</p>
      */
-    private static List<Location> collectItemLocations(Map<String, Object> doc) {
+    private static List<Location> collectResourceLocations(Map<String, Object> doc) {
         return collectLocFields(doc, key ->
                 key.contains("_resources_")
                         && !key.contains("_provider_")
@@ -228,7 +232,7 @@ public class EsSearchAssembler {
     /**
      * Collects provider-level location fields (e.g.
      * {@code loc_catalogs_resources_provider_locations})
-     * for {@link Provider#setLocations}.
+     * for {@link Provider#setAvailableAt}.
      */
     private static List<Location> collectProviderLocations(Map<String, Object> doc) {
         return collectLocFields(doc, key ->
@@ -290,10 +294,10 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Descriptor buildDescriptor(Map<String, Object> doc) {
         Descriptor d = new Descriptor();
-        d.setName(str(doc, "resource_name"));
-        d.setShortDesc(str(doc, "resource_short_desc"));
-        d.setLongDesc(str(doc, "resource_long_desc"));
-        d.setThumbnailImage(str(doc, "resource_descriptor_thumbnail_image"));
+        d.setName(extractString(doc,"resource_name"));
+        d.setShortDesc(extractString(doc,"resource_short_desc"));
+        d.setLongDesc(extractString(doc,"resource_long_desc"));
+        d.setThumbnailImage(extractString(doc,"resource_descriptor_thumbnail_image"));
         Object docsRaw = doc.get("resource_descriptor_docs");
         if (docsRaw instanceof List<?> list && !list.isEmpty())
             d.setDocs((List<Map<String, Object>>) list);
@@ -304,18 +308,18 @@ public class EsSearchAssembler {
     }
 
     private static CategoryCode buildCategory(Map<String, Object> doc) {
-        String code = str(doc, "resource_category_code");
+        String code = extractString(doc,"resource_category_code");
         if (code == null)
             return null;
         CategoryCode cat = new CategoryCode(code);
-        cat.setName(str(doc, "resource_category_name"));
+        cat.setName(extractString(doc,"resource_category_name"));
         return cat;
     }
 
     private static Rating buildRating(Map<String, Object> doc) {
         Object ratingValue = doc.get("resource_rating_value");
         Object ratingCount = doc.get("resource_rating_count");
-        String reviewText = str(doc, "resource_rating_review_text");
+        String reviewText = extractString(doc,"resource_rating_review_text");
         if (ratingValue == null && ratingCount == null && reviewText == null)
             return null;
         Rating r = new Rating();
@@ -328,11 +332,11 @@ public class EsSearchAssembler {
     }
 
     private static Provider buildProvider(Map<String, Object> doc) {
-        String providerId = str(doc, "resource_provider_id");
+        String providerId = extractString(doc,"resource_provider_id");
         if (providerId == null)
             return null;
         Descriptor desc = new Descriptor();
-        desc.setName(str(doc, "resource_provider_name"));
+        desc.setName(extractString(doc,"resource_provider_name"));
         return new Provider(providerId, desc);
     }
 
@@ -383,12 +387,12 @@ public class EsSearchAssembler {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static String str(Map<String, Object> doc, String key) {
+    private static String extractString(Map<String, Object> doc, String key) {
         Object v = doc.get(key);
         return v instanceof String s && !s.isBlank() ? s : null;
     }
 
-    private static Boolean bool(Map<String, Object> doc, String key) {
+    private static Boolean extractBoolean(Map<String, Object> doc, String key) {
         Object v = doc.get(key);
         return v instanceof Boolean b ? b : null;
     }

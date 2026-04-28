@@ -1,21 +1,19 @@
 {
-    "context": {
-        "action": "discover",
-        "version": "2.0.0",
-        "bapId": "https://evcharging-bap.example.com",
-        "bapUri": "https://evcharging-bap.example.com/callback",
-        "networkId": "bap.net/ev-charging",
-        "transactionId": "not-a-valid-uuid",
-        "messageId": "also-not-valid",
-        "ttl": "PT10M",
-        "timestamp": "2025-10-14T10:30:00.000Z"
-    },
-    "message": {
-        "intent": {
-            "filters": {
-                "type": "jsonpath",
-                "expression": "$.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"CCS2\")"
-            }
-        }
+  "context": {
+    "action": "discover",
+    "version": "2.0.0",
+    "networkId": "bap.net/ev-charging",
+    "transactionId": "not-a-valid-uuid",
+    "messageId": "also-not-valid",
+    "ttl": "PT10M",
+    "timestamp": "2025-10-14T10:30:00.000Z"
+  },
+  "message": {
+    "intent": {
+      "filters": {
+        "type": "jsonpath",
+        "expression": "$.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"CCS2\")"
+      }
     }
+  }
 }

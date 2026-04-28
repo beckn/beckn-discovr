@@ -4,8 +4,6 @@
     "version": "2.0.0",
     "messageId": "550e8400-e29b-41d4-a716-446655440000",
     "transactionId": "a9aaecca-10b7-4d19-b640-b047a7c62196",
-    "bapId": "example-bap.com",
-    "bapUri": "https://example-bap.com",
     "timestamp": "2024-01-15T10:30:00Z"
   },
   "message": {

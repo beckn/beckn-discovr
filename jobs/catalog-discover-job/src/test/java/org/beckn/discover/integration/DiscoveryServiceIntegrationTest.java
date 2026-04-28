@@ -70,10 +70,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertCatalogValid(catalog);
         Assertions.assertThat(catalog.getDescriptor()).isNotNull();
         Assertions.assertThat(catalog.getDescriptor().getName()).isEqualTo("EV Charging Services Network");
-        Assertions.assertThat(catalog.getDescriptor().getImage()).hasSize(2);
-        Assertions.assertThat(catalog.getDescriptor().getImage()).containsExactly(
-                "https://example.com/images/ev-charging-network.jpg",
-                "https://example.com/images/charging-station-banner.png");
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile()).hasSize(2);
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile())
+                .extracting(m -> m.get("uri"))
+                .containsExactly(
+                        "https://example.com/images/ev-charging-network.jpg",
+                        "https://example.com/images/charging-station-banner.png");
 
         // Validate items
         List<String> itemIds = catalog.getResources().stream()
@@ -84,10 +86,12 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         var firstItem = catalog.getResources().get(0);
         Assertions.assertThat(firstItem.getDescriptor().getName())
                 .isEqualTo("DC Fast Charger - CCS2 (60kW)");
-        Assertions.assertThat(firstItem.getDescriptor().getImage()).hasSize(2);
-        Assertions.assertThat(firstItem.getDescriptor().getImage()).containsExactly(
-                "https://example.com/images/ev-charger-ccs2-60kw.jpg",
-                "https://example.com/images/charging-station-ccs2.png");
+        Assertions.assertThat(firstItem.getDescriptor().getMediaFile()).hasSize(2);
+        Assertions.assertThat(firstItem.getDescriptor().getMediaFile())
+                .extracting(m -> m.get("uri"))
+                .containsExactly(
+                        "https://example.com/images/ev-charger-ccs2-60kw.jpg",
+                        "https://example.com/images/charging-station-ccs2.png");
         
         // Validate provider
         Assertions.assertThat(firstItem.getProvider().getId()).isEqualTo("ecopower-charging");
@@ -257,11 +261,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 .extracting(Resource::getId)
                 .containsExactly("ev-charger-ccs2-001");
         Assertions.assertThat(catalog.getDescriptor().getName()).contains("EV Charging");
-        Assertions.assertThat(catalog.getDescriptor().getImage()).isNotNull();
-        Assertions.assertThat(catalog.getDescriptor().getImage()).hasSize(2);
-        Assertions.assertThat(catalog.getDescriptor().getImage()).containsExactly(
-                "https://example.com/images/ev-charging-network.jpg",
-                "https://example.com/images/charging-station-banner.png");
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile()).isNotNull();
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile()).hasSize(2);
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile())
+                .extracting(m -> m.get("uri"))
+                .containsExactly(
+                        "https://example.com/images/ev-charging-network.jpg",
+                        "https://example.com/images/charging-station-banner.png");
     }
 
     private static final String NLWEB_SAMPLE_RESPONSE = loadNlwebSampleResponse();
@@ -383,7 +389,7 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getId()).isEqualTo("catalog-ev-charging-001");
         Assertions.assertThat(catalog.getDescriptor()).isNotNull();
         Assertions.assertThat(catalog.getDescriptor().getName()).isEqualTo("EV Charging Services Network");
-        Assertions.assertThat(catalog.getDescriptor().getImage()).hasSize(2);
+        Assertions.assertThat(catalog.getDescriptor().getMediaFile()).hasSize(2);
         Assertions.assertThat(catalog.getResources()).isNotEmpty();
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
         Assertions.assertThat(catalog.getProviderId()).isNotNull();
@@ -395,13 +401,11 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         assertRequestValid(request);
         String expectedTxnId = request.getContext().getTransactionId();
         String expectedMsgId = request.getContext().getMessageId();
-        String expectedBapId = request.getContext().getBapId();
 
         DiscoverResponse response = discoveryService.processDiscoveryRequest(request);
 
         Assertions.assertThat(response.getContext().getTransactionId()).isEqualTo(expectedTxnId);
         Assertions.assertThat(response.getContext().getMessageId()).isEqualTo(expectedMsgId);
-        Assertions.assertThat(response.getContext().getBapId()).isEqualTo(expectedBapId);
         Assertions.assertThat(response.getContext().getAction()).isEqualTo("on_discover");
         Assertions.assertThat(response.getContext().getTimestamp()).isNotNull();
     }
@@ -824,13 +828,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Map<String, Object> row1 = new HashMap<>();
         row1.put("id", "item-1");
         row1.put("catalog_id", catalogId);
-        row1.put("item_payload", objectMapper.readTree("{\"catalogs\": [" + item1Json + "]}"));
+        row1.put("resource_payload", objectMapper.readTree("{\"catalogs\": [" + item1Json + "]}"));
         rows.add(row1);
 
         Map<String, Object> row2 = new HashMap<>();
         row2.put("id", "item-2");
         row2.put("catalog_id", catalogId);
-        row2.put("item_payload", objectMapper.readTree("{\"catalogs\": [" + item2Json + "]}"));
+        row2.put("resource_payload", objectMapper.readTree("{\"catalogs\": [" + item2Json + "]}"));
         rows.add(row2);
 
         DiscoverRequest requestContext = new DiscoverRequest();
@@ -1363,18 +1367,18 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 String offerId = (String) offer.get("id");
 
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("resourceIds");
+                List<String> offerResourceIds = (List<String>) offer.get("resourceIds");
 
-                Assertions.assertThat(offerItemIds)
+                Assertions.assertThat(offerResourceIds)
                         .as("Offer %s must have resourceIds array", offerId)
                         .isNotNull()
                         .isNotEmpty();
 
-                // Assert: All offer item references are valid (exist in returned items)
-                for (String offerItemId : offerItemIds) {
+                // Assert: All offer resource references are valid (exist in returned resources)
+                for (String offerResourceId : offerResourceIds) {
                     Assertions.assertThat(returnedItemIds)
-                            .as("Offer %s references item %s which must be in catalog", offerId, offerItemId)
-                            .contains(offerItemId);
+                            .as("Offer %s references resource %s which must be in catalog", offerId, offerResourceId)
+                            .contains(offerResourceId);
                 }
             }
         }
@@ -1519,13 +1523,13 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
                 Map<String, Object> offer = (Map<String, Object>) offerObj;
                 
                 @SuppressWarnings("unchecked")
-                List<String> offerItemIds = (List<String>) offer.get("resourceIds");
+                List<String> offerResourceIds = (List<String>) offer.get("resourceIds");
 
-                // Assert: Offer items belong to this catalog
-                for (String offerItemId : offerItemIds) {
+                // Assert: Offer resources belong to this catalog
+                for (String offerResourceId : offerResourceIds) {
                     Assertions.assertThat(catalogItemIds)
-                            .as("Offer item %s must belong to catalog %s", offerItemId, catalog.getId())
-                            .contains(offerItemId);
+                            .as("Offer resource %s must belong to catalog %s", offerResourceId, catalog.getId())
+                            .contains(offerResourceId);
                 }
             }
         }

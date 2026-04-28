@@ -3,10 +3,13 @@ package org.beckn.discover.controller;
 import java.nio.charset.StandardCharsets;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.logging.MdcField;
 import org.beckn.discover.model.AckResponse;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
@@ -15,10 +18,10 @@ import org.beckn.discover.service.validation.DiscoveryValidationService;
 import org.beckn.discover.service.authorization.AuthorizationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,7 +31,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.beckn.discover.util.ContextNormalizer;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
@@ -50,7 +52,6 @@ import static net.logstash.logback.argument.StructuredArguments.value;
  * NACK responses even when an exception is thrown before the request is parsed
  * into a {@link DiscoverRequest}.</p>
  */
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 @RestController
 @RequestMapping("/beckn")
 public class DiscoveryController {
@@ -58,7 +59,7 @@ public class DiscoveryController {
     /** Request attribute key used to propagate the transaction ID to the exception handler. */
     public static final String TRANSACTION_ID_ATTR = "beckn.transactionId";
 
-    private static final Logger logger = LoggerFactory.getLogger(DiscoveryController.class);
+    private static final Logger log = LoggerFactory.getLogger(DiscoveryController.class);
 
     private final DiscoveryService discoveryService;
     private final ObjectMapper objectMapper;
@@ -114,8 +115,8 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
 
+        BecknMdcContext.setTagsFromHttp(httpRequest.getHeader("X-Tags"));
         JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
         BecknMdcContext.populate(contextNode);
 
@@ -125,12 +126,12 @@ public class DiscoveryController {
                 httpRequest.setAttribute(TRANSACTION_ID_ATTR, txnNode.asText());
             }
 
-            logger.info(LogEvent.REQUEST_RECEIVED,
-                    value("method", "GET"),
+            log.info(LogEvent.REQUEST_RECEIVED,
+                    value("method", httpRequest.getMethod()),
                     value("transactionId", txnNode.asText("")));
 
             authorizationService.authorizeRequest(rawBody, headers);
-            logger.info(LogEvent.AUTH_PASSED);
+            log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
 
@@ -148,8 +149,8 @@ public class DiscoveryController {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
         JsonNode requestNode = objectMapper.readTree(rawBody);
-        ContextNormalizer.normalize(requestNode.path(BecknFields.CONTEXT));
 
+        BecknMdcContext.setTagsFromHttp(httpRequest.getHeader("X-Tags"));
         JsonNode contextNode = requestNode.path(BecknFields.CONTEXT);
         BecknMdcContext.populate(contextNode);
 
@@ -161,12 +162,12 @@ public class DiscoveryController {
                 httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
             }
 
-            logger.info(LogEvent.REQUEST_RECEIVED,
+            log.info(LogEvent.REQUEST_RECEIVED,
                     value("method", "POST"),
                     value("transactionId", transactionId));
 
             authorizationService.authorizeRequest(rawBody, headers);
-            logger.info(LogEvent.AUTH_PASSED);
+            log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
 
@@ -180,16 +181,22 @@ public class DiscoveryController {
             final String logTxnId = transactionId;
             final String logMsgId = messageId;
             try {
-                kafkaTemplate.send(requestTopic, kafkaKey, rawBody)
+                var kafkaHeaders = new RecordHeaders();
+                addHeaderIfPresent(kafkaHeaders, "subscriber_id", MDC.get(MdcField.AUTH_SUBSCRIBER_ID));
+                addHeaderIfPresent(kafkaHeaders, "record_id", MDC.get(MdcField.AUTH_RECORD_ID));
+                addHeaderIfPresent(kafkaHeaders, "tags", MDC.get(MdcField.TAGS));
+
+                var record = new ProducerRecord<>(requestTopic, null, kafkaKey, rawBody, kafkaHeaders);
+                kafkaTemplate.send(record)
                         .whenComplete((result, ex) -> {
                             if (ex != null) {
-                                logger.error(LogEvent.KAFKA_QUEUE_FAILED,
+                                log.error(LogEvent.KAFKA_QUEUE_FAILED,
                                         value("transactionId", logTxnId),
                                         value("messageId", logMsgId),
                                         value("topic", requestTopic),
                                         ex);
                             } else {
-                                logger.debug(LogEvent.KAFKA_QUEUED,
+                                log.debug(LogEvent.KAFKA_QUEUED,
                                         value("transactionId", logTxnId),
                                         value("messageId", logMsgId),
                                         value("topic", requestTopic),
@@ -198,17 +205,12 @@ public class DiscoveryController {
                             }
                         });
             } catch (Exception kafkaEx) {
-                logger.error(LogEvent.KAFKA_QUEUE_FAILED,
+                log.error(LogEvent.KAFKA_QUEUE_FAILED,
                         value("transactionId", logTxnId),
                         value("messageId", logMsgId),
                         value("topic", requestTopic),
                         value("error", kafkaEx.getMessage()));
             }
-
-            logger.info(LogEvent.KAFKA_QUEUED,
-                    value("transactionId", transactionId),
-                    value("messageId", messageId),
-                    value("topic", requestTopic));
 
             return ResponseEntity.ok(AckResponse.ack());
         } finally {
@@ -217,22 +219,28 @@ public class DiscoveryController {
     }
 
     private void validateSchema(JsonNode requestNode, String rawBody) {
-        logger.info(LogEvent.VALIDATE_PASSED + ".starting");
+        log.info(LogEvent.VALIDATE_PASSED + ".starting");
         DiscoveryValidationService.ValidationResult result = validationService.validateDiscoverRequest(requestNode);
         if (!result.isValid()) {
             String paths = result.getPaths().isEmpty() ? "root" : String.join(", ", result.getPaths());
             String msg = "Schema validation failed: " + String.join("; ", result.getErrors()) + " (paths: " + paths + ")";
-            logger.warn(LogEvent.VALIDATE_FAILED,
+            log.warn(LogEvent.VALIDATE_FAILED,
                     value("errors", result.getErrors()),
                     value("paths", result.getPaths()),
                     value("requestBody", truncate(rawBody, 2000)));
             throw new IllegalArgumentException(msg);
         }
-        logger.info(LogEvent.VALIDATE_PASSED);
+        log.info(LogEvent.VALIDATE_PASSED);
     }
 
     private static String truncate(String s, int maxLen) {
         if (s == null) return null;
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...[truncated]";
+    }
+
+    private static void addHeaderIfPresent(RecordHeaders headers, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            headers.add(key, value.getBytes(StandardCharsets.UTF_8));
+        }
     }
 }

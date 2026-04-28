@@ -32,8 +32,9 @@ public class BecknAuthFilter extends OncePerRequestFilter {
         this.becknAuth = becknAuth;
         this.authProperties = authProperties;
         this.objectMapper = objectMapper;
-        log.info("beckn.auth.verification {} | whitelistedEndpoints={}",
-                authProperties.enabled() ? "ENABLED" : "DISABLED",
+        log.info("event={} enabled={} whitelistedEndpoints={}",
+                LogEvent.AUTH_INIT,
+                authProperties.enabled(),
                 authProperties.whitelistedEndpoints());
     }
 
@@ -82,10 +83,10 @@ public class BecknAuthFilter extends OncePerRequestFilter {
         log.info("{} path={}", LogEvent.AUTH_VERIFY_START, request.getServletPath());
         try {
             var parsed = becknAuth.verifySignature(authHeader, rawBody);
-            log.info("{} path={} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, request.getServletPath(), parsed.subscriberId());
+            log.info("{} path={} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, request.getServletPath(), parsed.parsedHeader().subscriberId());
         } catch (BecknAuthException e) {
-            log.error("{} path={} code={} message={} authHeader={}",
-                    LogEvent.AUTH_VERIFY_FAILED, request.getServletPath(), e.getCode(), e.getMessage(), authHeader);
+            log.error("{} path={} code={} message={}",
+                    LogEvent.AUTH_VERIFY_FAILED, request.getServletPath(), e.getCode(), e.getMessage());
             sendNack(response, e.getHttpStatus(), e.getCode(), e.getMessage());
             return;
         }

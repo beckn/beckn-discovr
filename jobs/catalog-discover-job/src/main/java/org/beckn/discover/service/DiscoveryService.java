@@ -11,6 +11,7 @@ import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.engine.QueryEngine;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.engine.TextSearchEngine;
+import org.beckn.discover.service.postgresql.ProviderOfferEnricher;
 import org.beckn.discover.service.response.CatalogPipeline;
 import org.beckn.discover.service.response.ResponseProcessor;
 import org.beckn.discover.util.LatencyTracker;
@@ -79,6 +80,7 @@ public class DiscoveryService {
     private final TextSearchEngine   textSearchEngine;
     private final CatalogPipeline    catalogPipeline;
     private final ResponseProcessor  responseProcessor;
+    private final ProviderOfferEnricher providerOfferEnricher;
     private final DiscoveryMetrics   metrics;
     private final DiscoveryProperties properties;
     private final ExecutorService    queryExecutor;
@@ -88,6 +90,7 @@ public class DiscoveryService {
             TextSearchEngine                       textSearchEngine,
             CatalogPipeline                        catalogPipeline,
             ResponseProcessor                      responseProcessor,
+            ProviderOfferEnricher                   providerOfferEnricher,
             DiscoveryMetrics                       metrics,
             DiscoveryProperties                    properties,
             @Qualifier("discoveryQueryExecutor") ExecutorService queryExecutor) {
@@ -95,6 +98,7 @@ public class DiscoveryService {
         this.textSearchEngine = textSearchEngine;
         this.catalogPipeline  = catalogPipeline;
         this.responseProcessor = responseProcessor;
+        this.providerOfferEnricher = providerOfferEnricher;
         this.metrics           = metrics;
         this.properties        = properties;
         this.queryExecutor     = queryExecutor;
@@ -115,21 +119,23 @@ public class DiscoveryService {
         LatencyTracker tracker = properties.isLatencyTrackingEnabled() ? new LatencyTracker() : null;
 
         try {
-            log.info(LogEvent.QUERY_STARTED,
-                    value("transactionId", request.getContext().getTransactionId()),
-                    value("messageId", request.getContext().getMessageId()));
+            log.info(LogEvent.QUERY_STARTED);
 
             QueryRequest qr = QueryRequest.from(request);
+
+            // Track schema filter metric when ES path will apply schema push-down
+            if (qr.hasSchemaFilters() && textSearchEngine.appliesSchemaFilter()) {
+                metrics.incrementSchemaFilterApplied();
+            }
+
             DiscoverResponse response = route(qr, request.getContext(), tracker);
 
             long ms = Duration.between(start, Instant.now()).toMillis();
             metrics.recordSuccess(start);
             log.info(LogEvent.QUERY_COMPLETED,
-                    value("durationMs", ms),
-                    value("transactionId", qr.transactionId()));
+                    value("durationMs", ms));
             perfLog.info(LogEvent.QUERY_COMPLETED,
-                    value("durationMs", ms),
-                    value("transactionId", qr.transactionId()));
+                    value("durationMs", ms));
 
             return response;
 
@@ -140,14 +146,15 @@ public class DiscoveryService {
         } catch (Exception e) {
             metrics.recordFailure(start, e, request.getContext().getTransactionId());
             log.error(LogEvent.QUERY_FAILED,
-                    value("transactionId", request.getContext().getTransactionId()),
                     value("error", e.getMessage()),
                     e);
             throw new RuntimeException("Failed to process discovery request", e);
         } finally {
             if (tracker != null) tracker.logSummary(request.getContext().getTransactionId(),
                     metrics.getProcessingStats().successfulRequests() > 0);
-            clearMDC();
+            // MDC lifecycle is owned by the caller (controller finally-block or consumer
+            // finally-block). The service must not clear MDC here — doing so would erase
+            // correlation fields before the caller's own cleanup and logging run.
         }
     }
 
@@ -173,34 +180,29 @@ public class DiscoveryService {
             throws Exception {
 
         if (qr.hasFilters() && qr.hasSpatial()) {
-            log.info(LogEvent.QUERY_STARTED + ".path-A", value("transactionId", qr.transactionId()));
-            return pathA(qr, context, tracker);
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "jsonpath-spatial"));
+            return executeJsonPathWithSpatialQuery(qr, context, tracker);
         }
         if (qr.hasFilters()) {
-            log.info(LogEvent.QUERY_STARTED + ".path-B", value("transactionId", qr.transactionId()));
-            return pathB(qr, context, tracker);
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "jsonpath"));
+            return executeJsonPathFilterQuery(qr, context, tracker);
         }
         if (qr.hasSpatial()) {
-            log.info(LogEvent.QUERY_STARTED + ".path-C", value("transactionId", qr.transactionId()));
-            return pathC(qr, context, tracker);
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "spatial"));
+            return executeSpatialOnlyQuery(qr, context, tracker);
         }
-        log.info(LogEvent.QUERY_STARTED + ".path-D", value("transactionId", qr.transactionId()));
-        return pathD(qr, context, tracker);
+        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "text-search"));
+        return executeTextSearchQuery(qr, context, tracker);
     }
 
-    // ── Path A: combined filter + spatial ─────────────────────────────────────
+    // ── JSONPath + Spatial combined query ──────────────────────────────────────
 
     /**
-     * Attempts a single-round-trip combined query.  Falls back to parallel
-     * B ∥ C when the engine signals that no spatial conditions could be built
-     * ({@code Optional.empty()}).
-     *
-     * <p><b>Bug fix</b>: the previous implementation fell back on an empty
-     * result list, which incorrectly re-ran queries when a combined query
-     * returned zero valid matches.  Using {@code Optional} correctly
-     * distinguishes the two outcomes.</p>
+     * Attempts a single-round-trip combined JSONPath + spatial query.
+     * Falls back to parallel execution when the engine signals that no
+     * spatial conditions could be built ({@code Optional.empty()}).
      */
-    private DiscoverResponse pathA(QueryRequest qr, Context context, LatencyTracker tracker)
+    private DiscoverResponse executeJsonPathWithSpatialQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
 
         Instant engineStart = Instant.now();
@@ -214,24 +216,23 @@ public class DiscoveryService {
 
         if (combined.isEmpty()) {
             // Engine could not build spatial conditions → fall back to parallel
-            log.info(LogEvent.QUERY_STARTED + ".path-A-fallback",
-                    value("reason", "no-spatial-conditions"),
-                    value("transactionId", qr.transactionId()));
-            return pathAParallel(qr, context, tracker);
+            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", "no-spatial-conditions"));
+            return executeJsonPathAndSpatialParallel(qr, context, tracker);
         }
 
         // combined.get() may be an empty list — that is a valid "no results" response
-        List<Catalog> processed = catalogPipeline.process(combined.get(), qr);
+        // Path A uses PostgreSQL (schema already filtered in SQL WHERE)
+        List<Catalog> processed = catalogPipeline.process(combined.get(), qr, true);
         recordStep(tracker, "path-a.pipeline");
 
         return buildResponse(processed, context);
     }
 
     /**
-     * Fallback for Path A: runs filter and spatial queries concurrently,
-     * then intersects results by item ID in Java.
+     * Fallback: runs JSONPath filter and spatial queries concurrently,
+     * then intersects results by resource ID.
      */
-    private DiscoverResponse pathAParallel(QueryRequest qr, Context context, LatencyTracker tracker)
+    private DiscoverResponse executeJsonPathAndSpatialParallel(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
 
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
@@ -252,10 +253,14 @@ public class DiscoveryService {
 
         try {
             CompletableFuture.allOf(filterFuture, spatialFuture).get(timeoutSec, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            filterFuture.cancel(true);
+            spatialFuture.cancel(true);
+            throw new RuntimeException("Interrupted during parallel query", e);
         } catch (Exception e) {
             log.error(LogEvent.QUERY_TIMEOUT,
                     value("path", "A-parallel"),
-                    value("transactionId", qr.transactionId()),
                     value("timeoutSec", timeoutSec),
                     e);
             filterFuture.cancel(true);
@@ -263,31 +268,31 @@ public class DiscoveryService {
             throw new Exception("Parallel queries timed out after " + timeoutSec + "s", e);
         }
 
-        List<Catalog> filterResult  = filterFuture.join();
-        List<Catalog> spatialResult = spatialFuture.join();
+        List<Catalog> filterQueryResult  = filterFuture.join();
+        List<Catalog> spatialQueryResult = spatialFuture.join();
         recordStep(tracker, "path-a.parallel.queries");
 
-        log.info(LogEvent.QUERY_COMPLETED + ".path-A-parallel",
-                value("filterCatalogs", filterResult.size()),
-                value("spatialCatalogs", spatialResult.size()),
-                value("transactionId", qr.transactionId()));
+        log.debug(LogEvent.QUERY_PARALLEL_DONE,
+                value("filterCatalogs", filterQueryResult.size()),
+                value("spatialCatalogs", spatialQueryResult.size()));
 
-        List<Catalog> intersected = intersectByItemId(filterResult, spatialResult, qr.transactionId());
+        List<Catalog> intersected = intersectByResourceId(filterQueryResult, spatialQueryResult);
         recordStep(tracker, "path-a.parallel.intersect");
 
         if (intersected.isEmpty()) {
             return responseProcessor.buildEmptyResponse(context);
         }
 
-        List<Catalog> processed = catalogPipeline.process(intersected, qr);
+        // Path A-parallel: PostgreSQL filter + ES spatial — schema filtered in SQL
+        List<Catalog> processed = catalogPipeline.process(intersected, qr, true);
         recordStep(tracker, "path-a.parallel.pipeline");
 
         return buildResponse(processed, context);
     }
 
-    // ── Path B: filter only ───────────────────────────────────────────────────
+    // ── JSONPath filter only ───────────────────────────────────────────────────
 
-    private DiscoverResponse pathB(QueryRequest qr, Context context, LatencyTracker tracker)
+    private DiscoverResponse executeJsonPathFilterQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
         Instant engineStart = Instant.now();
         List<Catalog> catalogs = queryEngine.executeFilterQuery(qr);
@@ -295,15 +300,16 @@ public class DiscoveryService {
         metrics.recordResultCount("postgres", catalogs.size());
         recordStep(tracker, "path-b.query");
 
-        List<Catalog> processed = catalogPipeline.process(catalogs, qr);
+        // Path B: PostgreSQL — schema already filtered in SQL WHERE clause
+        List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
         recordStep(tracker, "path-b.pipeline");
 
         return buildResponse(processed, context);
     }
 
-    // ── Path C: spatial only ──────────────────────────────────────────────────
+    // ── Spatial only ──────────────────────────────────────────────────────────
 
-    private DiscoverResponse pathC(QueryRequest qr, Context context, LatencyTracker tracker)
+    private DiscoverResponse executeSpatialOnlyQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
         Instant engineStart = Instant.now();
         List<Catalog> catalogs = queryEngine.executeSpatialQuery(qr);
@@ -311,20 +317,20 @@ public class DiscoveryService {
         metrics.recordResultCount("postgres", catalogs.size());
         recordStep(tracker, "path-c.query");
 
-        List<Catalog> processed = catalogPipeline.process(catalogs, qr);
+        // Path C: ES spatial or PostgreSQL spatial — schema filtered in ES knn.filter or SQL
+        List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
         recordStep(tracker, "path-c.pipeline");
 
         return buildResponse(processed, context);
     }
 
-    // ── Path D: text search ────────────────────────────────────────────────────
+    // ── Text search ────────────────────────────────────────────────────────────
 
     /**
      * Runs the text-search engine on the dedicated I/O executor so the blocking
-     * HTTP call inside {@code NLWebService.queryNLWeb()} does not tie up servlet
-     * threads under concurrent load.
+     * HTTP call does not tie up servlet threads under concurrent load.
      */
-    private DiscoverResponse pathD(QueryRequest qr, Context context, LatencyTracker tracker)
+    private DiscoverResponse executeTextSearchQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
         String engine = properties.getTextSearch().getEngine();
@@ -338,7 +344,6 @@ public class DiscoveryService {
             searchFuture.cancel(true);
             log.error(LogEvent.QUERY_TIMEOUT,
                     value("path", "D"),
-                    value("transactionId", qr.transactionId()),
                     value("timeoutSec", timeoutSec),
                     e);
             throw new Exception("Text search timed out after " + timeoutSec + "s", e);
@@ -356,7 +361,9 @@ public class DiscoveryService {
         metrics.recordResultCount(engine, catalogs.size());
         recordStep(tracker, "path-d.search");
 
-        List<Catalog> processed = catalogPipeline.process(catalogs, qr);
+        // Path D: use appliesSchemaFilter() to decide if pipeline step 1 can be skipped.
+        // ElasticsearchTextSearchEngine returns true; NLWebTextSearchEngine returns false.
+        List<Catalog> processed = catalogPipeline.process(catalogs, qr, textSearchEngine.appliesSchemaFilter());
         recordStep(tracker, "path-d.pipeline");
 
         return buildResponse(processed, context);
@@ -365,19 +372,17 @@ public class DiscoveryService {
     // ── Intersection (Path A parallel fallback) ───────────────────────────────
 
     /**
-     * Intersects two catalog lists by item ID.  Retains catalogs / items from
-     * {@code filterResult} whose item IDs also appear in {@code spatialResult}.
-     * Filter-result catalogs carry {@code matching_offers} data and therefore
-     * take precedence.
+     * Intersects two catalog lists by resource ID.  Retains catalogs / resources
+     * from {@code filterResult} whose resource IDs also appear in
+     * {@code spatialResult}. Filter-result catalogs carry {@code matching_offers}
+     * data and therefore take precedence.
      */
-    private List<Catalog> intersectByItemId(
+    private List<Catalog> intersectByResourceId(
             List<Catalog> filterResult,
-            List<Catalog> spatialResult,
-            String transactionId) {
+            List<Catalog> spatialResult) {
 
         if (filterResult.isEmpty() || spatialResult.isEmpty()) {
-            log.info(LogEvent.QUERY_COMPLETED + ".intersect-empty",
-                    value("transactionId", transactionId));
+            log.debug(LogEvent.QUERY_INTERSECT_EMPTY);
             return List.of();
         }
 
@@ -405,25 +410,22 @@ public class DiscoveryService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        log.info(LogEvent.QUERY_COMPLETED + ".intersect-done",
+        log.debug(LogEvent.QUERY_INTERSECT_DONE,
                 value("filterCatalogs", filterResult.size()),
                 value("spatialResourceIds", spatialResourceIds.size()),
-                value("intersectedCatalogs", intersected.size()),
-                value("transactionId", transactionId));
+                value("intersectedCatalogs", intersected.size()));
         return intersected;
     }
 
     /**
      * Creates a shallow copy of a catalog preserving all metadata fields but
-     * leaving items / offers as new empty lists (caller must populate them).
+     * leaving resources / offers as new empty lists (caller must populate them).
      */
     private static Catalog shallowCopyCatalog(Catalog src) {
         Catalog copy = new Catalog();
         copy.setId(src.getId());
         copy.setDescriptor(src.getDescriptor());
-        copy.setProviderId(src.getProviderId());
-        copy.setBppId(src.getBppId());
-        copy.setBppUri(src.getBppUri());
+        copy.setProvider(src.getProvider());
         copy.setValidity(src.getValidity());
         copy.setOffers(src.getOffers() != null ? new java.util.ArrayList<>(src.getOffers()) : new java.util.ArrayList<>());
         copy.setResources(new java.util.ArrayList<>());
@@ -433,10 +435,29 @@ public class DiscoveryService {
     // ── Response building ─────────────────────────────────────────────────────
 
     private DiscoverResponse buildResponse(List<Catalog> processed, Context context) {
-        if (processed.isEmpty()) {
-            return responseProcessor.buildEmptyResponse(context);
+        // Provider-level offers: enrich AFTER pipeline so filterOffersByResourceIds never sees them
+        providerOfferEnricher.enrich(processed);
+
+        // Drop catalogs with no offers when require-offers flag is enabled
+        if (properties.getFilter().isDiscardCatalogsWithoutOffers()) {
+            var discarded = processed.stream()
+                    .filter(c -> c.getOffers() == null || c.getOffers().isEmpty())
+                    .toList();
+            if (!discarded.isEmpty()) {
+                processed.removeAll(discarded);
+                log.info(LogEvent.CATALOG_DISCARDED_NO_OFFERS,
+                        value("discardedCount", discarded.size()),
+                        value("discardedCatalogIds", discarded.stream()
+                                .map(Catalog::getId)
+                                .toList()),
+                        value("remainingCount", processed.size()));
+            }
         }
-        return responseProcessor.buildResponse(processed, context);
+
+        metrics.recordResultCount(processed.size());
+        return processed.isEmpty()
+                ? responseProcessor.buildEmptyResponse(context)
+                : responseProcessor.buildResponse(processed, context);
     }
 
     // ── Validation ────────────────────────────────────────────────────────────
@@ -469,10 +490,6 @@ public class DiscoveryService {
 
     private static void restoreMDC(Map<String, String> snapshot) {
         if (snapshot != null) MDC.setContextMap(snapshot);
-    }
-
-    private static void clearMDC() {
-        BecknMdcContext.clear();
     }
 
     // ── Latency tracking ──────────────────────────────────────────────────────

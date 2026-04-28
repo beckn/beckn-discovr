@@ -5,7 +5,6 @@ import org.beckn.discover.model.Context;
 import org.slf4j.MDC;
 
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Static utility for populating SLF4J MDC with Beckn context fields.
@@ -24,41 +23,73 @@ public final class BecknMdcContext {
 
     /**
      * Populates MDC from a {@code context} JSON node.
-     * A new {@code correlationId} UUID is generated for every call.
      *
      * @param contextNode the {@code context} object from the Beckn request
      */
     public static void populate(JsonNode contextNode) {
-        MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
         putIfPresent(contextNode, "transactionId",  MdcField.TRANSACTION_ID);
         putIfPresent(contextNode, "messageId",      MdcField.MESSAGE_ID);
-        putIfPresent(contextNode, "bapId",          MdcField.BAP_ID);
-        putIfPresent(contextNode, "bapUri",         MdcField.BAP_URI);
-        putIfPresent(contextNode, "bppId",          MdcField.BPP_ID);
-        putIfPresent(contextNode, "bppUri",         MdcField.BPP_URI);
         putIfPresent(contextNode, "networkId",      MdcField.NETWORK_ID);
-        putIfPresent(contextNode, "action",         MdcField.ACTION);
-        putIfPresent(contextNode, "version",        MdcField.VERSION);
     }
 
     /**
      * Populates MDC from a deserialized {@link Context} model object.
-     * A new {@code correlationId} UUID is generated for every call.
      *
      * @param context the Beckn {@link Context} POJO
      */
     public static void populate(Context context) {
         if (context == null) return;
-        MDC.put(MdcField.CORRELATION_ID, UUID.randomUUID().toString());
         putIfNotBlank(MdcField.TRANSACTION_ID, context.getTransactionId());
         putIfNotBlank(MdcField.MESSAGE_ID,     context.getMessageId());
-        putIfNotBlank(MdcField.BAP_ID,         context.getBapId());
-        putIfNotBlank(MdcField.BAP_URI,        context.getBapUri());
-        putIfNotBlank(MdcField.BPP_ID,         context.getBppId());
-        putIfNotBlank(MdcField.BPP_URI,        context.getBppUri());
         putIfNotBlank(MdcField.NETWORK_ID,     context.getNetworkId());
-        putIfNotBlank(MdcField.ACTION,         context.getAction());
-        putIfNotBlank(MdcField.VERSION,        context.getVersion());
+    }
+
+    /**
+     * Sets auth identity fields from a parsed auth principal.
+     *
+     * @param subscriberId org-level identity (keyId first segment); may be null
+     * @param recordId     key-level identity (keyId second segment); may be null
+     */
+    public static void setAuthFields(String subscriberId, String recordId) {
+        if (subscriberId != null && !subscriberId.isBlank()) {
+            MDC.put(MdcField.AUTH_SUBSCRIBER_ID, subscriberId);
+        }
+        if (recordId != null && !recordId.isBlank()) {
+            MDC.put(MdcField.AUTH_RECORD_ID, recordId);
+        }
+    }
+
+    /**
+     * Sets the {@code tags} MDC field from a raw Kafka header byte array.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader raw bytes from the {@code tags} Kafka record header
+     */
+    private static final int MAX_TAGS_LENGTH = 256;
+
+    public static void setTags(byte[] tagsHeader) {
+        if (tagsHeader != null && tagsHeader.length > 0) {
+            var raw = new String(tagsHeader, java.nio.charset.StandardCharsets.UTF_8);
+            var tags = raw.replaceAll("[\\r\\n\\t]", "").strip();
+            if (!tags.isBlank() && tags.length() <= MAX_TAGS_LENGTH) {
+                MDC.put(MdcField.TAGS, tags);
+            }
+        }
+    }
+
+    /**
+     * Sets the {@code tags} MDC field from an HTTP header string value.
+     * No-op when {@code tagsHeader} is null or blank.
+     *
+     * @param tagsHeader value of the {@code X-Tags} HTTP request header
+     */
+    public static void setTagsFromHttp(String tagsHeader) {
+        if (tagsHeader != null && !tagsHeader.isBlank()) {
+            var tags = tagsHeader.replaceAll("[\\r\\n\\t]", "").strip();
+            if (!tags.isBlank() && tags.length() <= MAX_TAGS_LENGTH) {
+                MDC.put(MdcField.TAGS, tags);
+            }
+        }
     }
 
     /**
@@ -66,16 +97,12 @@ public final class BecknMdcContext {
      * Must be called in a {@code finally} block after each request or message.
      */
     public static void clear() {
-        MDC.remove(MdcField.CORRELATION_ID);
         MDC.remove(MdcField.TRANSACTION_ID);
         MDC.remove(MdcField.MESSAGE_ID);
-        MDC.remove(MdcField.BAP_ID);
-        MDC.remove(MdcField.BAP_URI);
-        MDC.remove(MdcField.BPP_ID);
-        MDC.remove(MdcField.BPP_URI);
         MDC.remove(MdcField.NETWORK_ID);
-        MDC.remove(MdcField.ACTION);
-        MDC.remove(MdcField.VERSION);
+        MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
+        MDC.remove(MdcField.AUTH_RECORD_ID);
+        MDC.remove(MdcField.TAGS);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
