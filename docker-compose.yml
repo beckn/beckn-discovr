@@ -79,14 +79,14 @@ services:
 
   # on-discovery-api removed — catalog push is now handled by catalog-publish service (POST /catalog/push)
 
-  # Catalog Publish Job (Persistence Only - Distribution Disabled)
-  # This job acts as the bridge for discovery ingestion
-  catalog-publish:
+  # ── Discovr Ingestion ──────────────────────────────────────────────────────
+  # Receives catalog/push from Catalg Delivery and persists to Discovr's DB + ES.
+  discovr-ingestion:
     build:
       context: .
       dockerfile: jobs/catalog-publish-job/Dockerfile
     image: beckn/catalog-publish-job:1.0
-    container_name: catalog-publish
+    container_name: discovr-ingestion
     ports:
       - "8085:8080"
     environment:
@@ -104,11 +104,12 @@ services:
       - APP_MESSAGING_TOPICS_RESPONSES=discovr.publish.out.responses
       - APP_MESSAGING_TOPICS_FAILED=discovr.publish.dlt.requests
       - APP_CATALOG_VALIDATION_ENABLED=false
+      - BECKN_PROTOCOL_API_SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/schema-update/api/v2.0.0/beckn.yaml
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - JAVA_TOOL_OPTIONS=
       # Beckn Auth SDK — signature verification for /catalog/push
-      - SIGNATURE_AUTH_ENABLED=false
-      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
       - SIGNATURE_CLOCK_SKEW_SECONDS=30
@@ -174,7 +175,8 @@ services:
       - beckn-network
     restart: unless-stopped
 
-  # Catalog Discover Job (formerly discovery-service)
+  # ── Discovr Search ───────────────────────────────────────────────────────
+  # Handles discover requests from Buyers (BAPs). Searches PostgreSQL + ES.
   catalog-discover-job:
     build:
       context: .
@@ -195,15 +197,15 @@ services:
       - POSTGRES_PASSWORD=catalog123
       - POSTGRES_MAX_POOL_SIZE=10
       - MAX_ITEMS_PER_CATALOG=100
-      - BECKN_PROTOCOL_API_SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/publish-directive-changes/api/v2.0.0/beckn.yaml
+      - BECKN_PROTOCOL_API_SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/schema-update/api/v2.0.0/beckn.yaml
       - SCHEMA_CACHE_TTL_HOURS=24
       - LOGGING_LEVEL_ORG_BECKN_DISCOVER=INFO
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA=ERROR
       - LOGGING_LEVEL_ORG_APACHE_KAFKA=ERROR
       - OTEL_TRACES_EXPORTER=none
       # Beckn Auth SDK — signature verification for /beckn/discover
-      - SIGNATURE_AUTH_ENABLED=false
-      - SIGNATURE_REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - SIGNATURE_AUTH_ENABLED=true
+      - SIGNATURE_REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - SIGNATURE_REGISTRY_NAME=subscribers.beckn.one
       - SIGNATURE_REGISTRY_TOKEN=
       - SIGNATURE_CLOCK_SKEW_SECONDS=30
@@ -233,6 +235,7 @@ services:
       # els-semantic-search — vector knn via Elasticsearch + optional LLM enrichment
       #                       requires embedding-model and llm-model config below
       # nlweb             — delegates to an external NLWeb service
+      - DISCOVERY_FILTER_DISCARD_CATALOGS_WITHOUT_OFFERS=true
       - DISCOVERY_TEXT_SEARCH_ENGINE=native-els
       # ── Embedding model (required when engine=els-semantic-search) ───────────
       # Supports any OpenAI-compatible /v1/embeddings provider.
@@ -276,8 +279,8 @@ services:
       retries: 5
       start_period: 60s
 
-  # Response Dispatcher Job (seeker-notifier)
-  # Consumes discovery responses and notifies the BAP; failures go to a DLT topic.
+  # ── Discovr Dispatcher ──────────────────────────────────────────────────
+  # Delivers on_discover callbacks to Buyers (BAPs); failures go to DLT topic.
   response-dispatcher:
     build:
       context: .
@@ -294,14 +297,14 @@ services:
       - SPRING_KAFKA_CONSUMER_GROUP_ID=seeker-notifier-group
       - SPRING_KAFKA_LISTENER_CONCURRENCY=1
       # DeDi Registry — callback URL resolution (resolves subscriber base URL at delivery time)
-      - REGISTRY_BASE_URL=https://api.testnet.beckn.one/registry/dedi/lookup
+      - REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - REGISTRY_NAME=subscribers.beckn.one
       # Beckn HTTP Signature — outgoing signing for on_discover callbacks to BAP
       # Set SIGNING_ENABLED=true and provide key details to sign outbound callbacks
-      - SIGNING_ENABLED=false
-      - SIGNING_SUBSCRIBER_ID=
-      - SIGNING_KEY_ID_SUFFIX=
-      - SIGNING_PRIVATE_KEY=
+      - SIGNING_ENABLED=true
+      - SIGNING_SUBSCRIBER_ID=${SIGNING_SUBSCRIBER_ID:-}
+      - SIGNING_KEY_ID_SUFFIX=${SIGNING_KEY_ID_SUFFIX:-}
+      - SIGNING_PRIVATE_KEY=${SIGNING_PRIVATE_KEY:-}
       - SIGNING_EXPIRY_SECONDS=3600
       # SSRF validation — disable for local/Docker development (no public DNS)
       - CALLBACK_URL_VALIDATION_ENABLED=false
@@ -320,6 +323,79 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+
+  # ── NP Signer + Buyer Signer ────────────────────────────────────────────
+  # Two signing services are needed because each DeDi registry record holds
+  # only one base URL, and there are two distinct callback destinations:
+  #
+  #   NP Signer (port 3031) — Network Participant who hosts this Discovr instance
+  #     Registry record → base URL points to Discovr Ingestion (discovr-ingestion:8085)
+  #     Used when: managing subscriptions (catalog/subscription CRUD)
+  #     Catalg Delivery resolves this record → sends catalog/push to Discovr Ingestion
+  #
+  #   Buyer Signer (port 3032) — Buyer app within the NP's network
+  #     Registry record → base URL points to Buyer Callbacks (buyer-callbacks:8097)
+  #     Used when: sending discover or catalog/pull requests
+  #     Discovr Dispatcher + Catalg Delivery resolve this → deliver on_discover / on_pull
+  #
+  # In Postman: use port 3031 for subscription, port 3032 for discover/pull.
+
+  # ── NP Signer — Network Participant signs subscription CRUD requests
+  # Actor: NP who hosts this Discovr instance. Subscribes to Catalg so that
+  # catalog/push deliveries flow into Discovr Ingestion.
+  np-signer:
+    image: node:20-alpine
+    container_name: np-signer
+    working_dir: /app
+    volumes:
+      - ./dev-kit:/app
+    command: sh -c "npm install --silent && node scripts/get-signature.js"
+    ports:
+      - "3031:3031"
+    environment:
+      - SUBSCRIBER_ID=${BAP_SUBSCRIBER_ID:-}
+      - RECORD_ID=${BAP_RECORD_ID:-}
+      - PRIVATE_KEY=${BAP_PRIVATE_KEY:-}
+      - PORT=3031
+    networks:
+      - beckn-network
+    restart: unless-stopped
+
+  # ── Buyer Signer — Buyer app signs discover and pull requests
+  # Actor: Buyer (BAP) within the NP's network. Calls discover API to find catalogs.
+  # on_discover and on_pull callbacks are delivered to buyer-callbacks (port 8097).
+  buyer-signer:
+    image: node:20-alpine
+    container_name: buyer-signer
+    working_dir: /app
+    volumes:
+      - ./dev-kit:/app
+    command: sh -c "npm install --silent && node scripts/get-signature.js"
+    ports:
+      - "3032:3032"
+    environment:
+      - SUBSCRIBER_ID=${BAP2_SUBSCRIBER_ID:-}
+      - RECORD_ID=${BAP2_RECORD_ID:-}
+      - PRIVATE_KEY=${BAP2_PRIVATE_KEY:-}
+      - PORT=3032
+    networks:
+      - beckn-network
+    restart: unless-stopped
+
+  # ── Buyer Callbacks — receives on_discover and on_pull callbacks for local testing
+  # Actor: Buyer (BAP). Lightweight HTTP server that prints received callbacks to stdout.
+  # In production this would be the Buyer's actual application server.
+  buyer-callbacks:
+    image: python:3-alpine
+    container_name: buyer-callbacks
+    ports:
+      - "8097:8097"
+    volumes:
+      - ./dev-kit/scripts/receive-discover-callbacks.sh:/scripts/receive-discover-callbacks.sh:ro
+    command: sh /scripts/receive-discover-callbacks.sh
+    networks:
+      - beckn-network
+    restart: unless-stopped
 
   # Beckn Demo UI
   # beckn-demo-ui:
