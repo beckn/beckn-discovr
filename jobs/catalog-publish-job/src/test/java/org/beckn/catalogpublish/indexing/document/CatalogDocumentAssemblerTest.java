@@ -148,9 +148,8 @@ class CatalogDocumentAssemblerTest {
 
     @Test
     void assemble_itemViaItemOverload_setsCatalogIdNotBppId() throws Exception {
-        // Item entity built with subscriber identity — no bpp_id stored
         org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
-                "item-v21", "{}", new String[0], null, "sub-1", "cat-1",
+                "item-v21", "{}", new String[0], "cat-1",
                 "SmartMeter", null, new String[]{"net-1"});
 
         JsonNode payload = buildPayload("""
@@ -361,7 +360,7 @@ class CatalogDocumentAssemblerTest {
     @Test
     void assemble_itemWithArrayNetworkIds_populatesNetworkIdAsList() throws Exception {
         org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
-                "item-multi-net", "{}", new String[0], null, "sub-1", "cat-1",
+                "item-multi-net", "{}", new String[0], "cat-1",
                 "GenericItem", null, new String[]{"net-a", "net-b"});
 
         JsonNode payload = buildPayload("""
@@ -384,7 +383,7 @@ class CatalogDocumentAssemblerTest {
     @Test
     void assemble_itemWithSingleNetworkId_populatesNetworkIdAsListOfOne() throws Exception {
         org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
-                "item-single-net", "{}", new String[0], null, "sub-1", "cat-1",
+                "item-single-net", "{}", new String[0], "cat-1",
                 "GenericItem", null, new String[]{"net-only"});
 
         JsonNode payload = buildPayload("""

@@ -150,8 +150,7 @@ public class PersistenceStep {
                         : (resourceContextUrl != null ? resourceContextUrl : catalogContextUrl);
                 built.add(new ResourceWithNode(
                         Item.from(resourceId, payload.toString(), offerIds,
-                                ctx.recordId(), ctx.subscriberId(), catalogId,
-                                type, contextUrl, ctx.networkIds().toArray(new String[0])),
+                                catalogId, type, contextUrl, ctx.networkIds().toArray(new String[0])),
                         payload));
             } catch (Exception e) {
                 String sanitized = ErrorSanitizer.sanitize(e);
@@ -187,7 +186,6 @@ public class PersistenceStep {
                         String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
                         built.add(new ResourceWithNode(
                                 Item.from(linkedItem.getId(), payload.toString(), offerIds,
-                                        linkedItem.getCreatedBy(), linkedItem.getSubscriberId(),
                                         linkedItem.getCatalogId(),
                                         linkedItem.getType(), linkedItem.getContextUrl(),
                                         linkedItem.getNetworkIds().toArray(new String[0])),
@@ -329,8 +327,7 @@ public class PersistenceStep {
             if (offerId == null || offerId.isBlank()) continue;
             try {
                 String payload = objectMapper.writeValueAsString(offerNode);
-                entities.add(ProviderOffer.from(offerId, catalogId, providerId,
-                        payload, ctx.recordId(), ctx.subscriberId()));
+                entities.add(ProviderOffer.from(offerId, catalogId, providerId, payload));
             } catch (Exception e) {
                 log.warn("event={} offerId={} catalogId={} error={}",
                         LogEvent.PERSIST_FAILED, offerId, catalogId, ErrorSanitizer.sanitize(e));

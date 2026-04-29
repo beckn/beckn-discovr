@@ -190,47 +190,6 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
-     * Audit fields: first publish sets createdBy and updatedBy.
-     * On republish, createdBy must be unchanged (updatable=false), updatedBy may be updated.
-     */
-    @Test
-    void auditFields_createdByNotOverwrittenOnRepublish() {
-        String round1 = """
-                {
-                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
-                               "messageId":"m1","transactionId":"t1",
-                               "networkId":"net-1"},
-                  "message": {"catalogs": [{"id": "cat-audit",
-                    "resources": [{"id": "audit-item", "descriptor": {"name": "Audit Item"}}],
-                    "offers": []}]}
-                }""";
-        orchestrator.processPublish(round1);
-
-        Item afterFirstPublish = itemRepository.findById(new ItemId("audit-item", "cat-audit")).orElseThrow();
-        assertThat(afterFirstPublish.getCreatedBy()).isNotBlank();
-        assertThat(afterFirstPublish.getUpdatedBy()).isNotBlank();
-        String originalCreatedBy = afterFirstPublish.getCreatedBy();
-
-        // Round 2: same catalog, same item — createdBy must NOT change
-        String round2 = """
-                {
-                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
-                               "messageId":"m2","transactionId":"t2",
-                               "networkId":"net-1"},
-                  "message": {"catalogs": [{"id": "cat-audit",
-                    "resources": [{"id": "audit-item", "descriptor": {"name": "Audit Item Updated"}}],
-                    "offers": []}]}
-                }""";
-        orchestrator.processPublish(round2);
-
-        Item afterSecondPublish = itemRepository.findById(new ItemId("audit-item", "cat-audit")).orElseThrow();
-        assertThat(afterSecondPublish.getCreatedBy())
-                .as("createdBy must not change on republish")
-                .isEqualTo(originalCreatedBy);
-        assertThat(afterSecondPublish.getPayload()).contains("Audit Item Updated");
-    }
-
-    /**
      * Location isolation: FULL replace on catalog-A must not delete locations of items
      * with the same id in catalog-B.
      *

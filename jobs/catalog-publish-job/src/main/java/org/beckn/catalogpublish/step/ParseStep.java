@@ -49,13 +49,8 @@ public class ParseStep {
 
     private CatalogContext extractContext(JsonNode root) {
         JsonNode ctx = FieldExtractor.requireNode(root, BecknFields.CONTEXT);
-        // Extract networkIds (may be string or array)
         var networkIds = Arrays.asList(FieldExtractor.extractNetworkIds(ctx));
-        // Extract subscriberId — org-level identity injected by Catalg API from auth; defaults to "anonymous"
-        var subscriberId = FieldExtractor.extractString(ctx, "subscriberId").orElse("anonymous");
-        // Extract recordId — specific key holder (second segment of Beckn keyId); null when absent
-        var recordId = FieldExtractor.extractString(ctx, "recordId").orElse(null);
-        return new CatalogContext(networkIds, subscriberId, recordId, ctx);
+        return new CatalogContext(networkIds, ctx);
     }
 
     private List<JsonNode> extractCatalogs(JsonNode root) {
