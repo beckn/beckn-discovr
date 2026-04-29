@@ -75,7 +75,7 @@ class AuthHeaderParserTest {
         void parseAuthorizationHeader_Null() {
             assertThatThrownBy(() -> parser.parseAuthorizationHeader(null))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Missing Authorization");
+                    .hasMessageContaining("Authorization header is missing");
         }
 
         @Test
@@ -83,7 +83,7 @@ class AuthHeaderParserTest {
         void parseAuthorizationHeader_Blank() {
             assertThatThrownBy(() -> parser.parseAuthorizationHeader("   "))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Missing Authorization");
+                    .hasMessageContaining("Authorization header is missing");
         }
 
         @Test
@@ -91,7 +91,7 @@ class AuthHeaderParserTest {
         void parseAuthorizationHeader_BearerPrefix() {
             assertThatThrownBy(() -> parser.parseAuthorizationHeader("Bearer some-token"))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Invalid Beckn HTTP Signature format");
+                    .hasMessageContaining("Authorization header format is invalid");
         }
 
         @Test
@@ -100,7 +100,7 @@ class AuthHeaderParserTest {
             String header = "Signature keyId=\"example-bap.com|key-1|ed25519\",algorithm=\"ed25519\"";
             assertThatThrownBy(() -> parser.parseAuthorizationHeader(header))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Signature incomplete");
+                    .hasMessageContaining("Authorization header is incomplete");
         }
 
         @Test
@@ -109,7 +109,7 @@ class AuthHeaderParserTest {
             String header = validHeader("example-bap.com|key-1", "ed25519", 1700000000L, 1700003600L);
             assertThatThrownBy(() -> parser.parseAuthorizationHeader(header))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Invalid Beckn HTTP Signature format");
+                    .hasMessageContaining("Authorization header format is invalid");
         }
 
         @Test
@@ -118,7 +118,7 @@ class AuthHeaderParserTest {
             String header = validHeader("|key-1|ed25519", "ed25519", 1700000000L, 1700003600L);
             assertThatThrownBy(() -> parser.parseAuthorizationHeader(header))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Subscriber ID missing");
+                    .hasMessageContaining("Could not identify the requester");
         }
 
         @Test
@@ -209,7 +209,7 @@ class AuthHeaderParserTest {
                     now + 60, now + 3600, "h", "s");
             assertThatThrownBy(() -> parser.validateTimestamps(parsed, 30))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Signature created in the future");
+                    .hasMessageContaining("Request timestamp is in the future");
         }
 
         @Test
@@ -221,7 +221,7 @@ class AuthHeaderParserTest {
                     now - 3600, now - 40, "h", "s");
             assertThatThrownBy(() -> parser.validateTimestamps(parsed, 30))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Signature has expired");
+                    .hasMessageContaining("Authorization has expired");
         }
 
         @Test

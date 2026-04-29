@@ -20,6 +20,7 @@ public final class LogEvent {
     public static final String AUTH_VERIFY_START       = "discover.auth.verify.start";
     public static final String AUTH_VERIFY_DONE        = "discover.auth.verify.done";
     public static final String VALIDATE_PASSED         = "discover.validate.passed";
+    public static final String VALIDATE_STARTING       = "discover.validate.starting";
     public static final String VALIDATE_FAILED         = "discover.validate.failed";
     public static final String KAFKA_QUEUED            = "discover.kafka.queued";
     public static final String KAFKA_QUEUE_FAILED      = "discover.kafka.queue.failed";

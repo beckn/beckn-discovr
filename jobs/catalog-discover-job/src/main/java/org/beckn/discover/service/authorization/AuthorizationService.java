@@ -81,8 +81,8 @@ public class AuthorizationService {
             logger.info("{} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, parsed.subscriberId());
             BecknMdcContext.setAuthFields(parsed.subscriberId(), parsed.uniqueKeyId());
         } catch (BecknAuthException e) {
-            logger.error("{} code={} message={} authHeader={}",
-                    LogEvent.AUTH_FAILED, e.getCode(), e.getMessage(), authHeader);
+            logger.error("{} code={} message={}",
+                    LogEvent.AUTH_FAILED, e.getCode(), e.getMessage());
             ProblemDetail pd = ProblemDetail.forStatus(e.getHttpStatus());
             pd.setDetail(e.getMessage());
             pd.setProperty("code", e.getCode());
