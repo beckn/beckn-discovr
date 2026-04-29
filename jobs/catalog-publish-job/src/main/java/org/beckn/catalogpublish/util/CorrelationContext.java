@@ -41,20 +41,8 @@ public class CorrelationContext {
             } else {
                 MDC.remove(MdcField.CATALOG_ID);
             }
-            // auth.subscriberId — org-level identity from auth header, injected by Catalg API
-            String subscriberId = ctx.subscriberId();
-            if (subscriberId != null && !subscriberId.isBlank() && !"anonymous".equals(subscriberId)) {
-                MDC.put(MdcField.AUTH_SUBSCRIBER_ID, subscriberId);
-            } else {
-                MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
-            }
-            // auth.recordId — key-level identity from auth header
-            String recordId = ctx.recordId();
-            if (recordId != null && !recordId.isBlank()) {
-                MDC.put(MdcField.AUTH_RECORD_ID, recordId);
-            } else {
-                MDC.remove(MdcField.AUTH_RECORD_ID);
-            }
+            MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
+            MDC.remove(MdcField.AUTH_RECORD_ID);
             // publishTimestamp — epoch millis from distribution envelope context
             String publishTimestamp = ctx.contextNode().path("publishTimestamp").asText(null);
             if (publishTimestamp != null && !publishTimestamp.isBlank()) {

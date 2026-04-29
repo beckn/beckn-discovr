@@ -141,8 +141,6 @@ public class OfferResolutionStep {
                         existingItem.getId(),
                         payload.toString(),
                         mergedOfferIds.toArray(new String[0]),
-                        existingItem.getCreatedBy(),
-                        existingItem.getSubscriberId(),
                         existingItem.getCatalogId(),
                         existingItem.getType(),
                         existingItem.getContextUrl(),
