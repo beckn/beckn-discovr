@@ -176,7 +176,7 @@ public class DiscoveryController {
             String kafkaKey = transactionId != null ? transactionId : messageId;
             String requestTopic = discoveryProperties.getKafka().getRequestTopic();
             if (requestTopic == null || requestTopic.isBlank()) {
-                throw new IllegalStateException(ErrorMessages.SERVICE_MISCONFIGURED);
+                throw new IllegalStateException(ErrorMessages.NET_INTERNAL_ERROR);
             }
 
             final String logTxnId = transactionId;
@@ -220,7 +220,7 @@ public class DiscoveryController {
     }
 
     private void validateSchema(JsonNode requestNode, String rawBody) {
-        log.info(LogEvent.VALIDATE_PASSED + ".starting");
+        log.info(LogEvent.VALIDATE_STARTING);
         DiscoveryValidationService.ValidationResult result = validationService.validateDiscoverRequest(requestNode);
         if (!result.isValid()) {
             String msg = "Schema validation failed: " + String.join("; ", result.getErrors());

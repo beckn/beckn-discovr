@@ -1,5 +1,6 @@
 package org.beckn.catalogpublish.integration;
 
+import org.beckn.catalogpublish.common.ErrorCodes;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -361,7 +362,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .content(payload))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value("NACK"))
-                .andExpect(jsonPath("$.error.errorCode").value("INVALID_REQUEST"));
+                .andExpect(jsonPath("$.error.errorCode").value(ErrorCodes.CTX_INVALID_FIELD));
 
         // Rejected synchronously — nothing persisted
         assertThat(itemRepository.count()).isEqualTo(countBefore);

@@ -56,11 +56,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler({ SemanticSearchException.class })
     public ResponseEntity<Object> handleSemanticSearchFailure(SemanticSearchException ex, WebRequest request) {
         log.error(LogEvent.NACK_RESPONSE,
-                value("errorCode", ErrorCodes.NET_INTERNAL_ERROR),
+                value("errorCode", ErrorCodes.NET_SERVICE_UNAVAILABLE),
                 value("error", ex.getMessage()),
                 value("cause", ex.getCause() != null ? ex.getCause().getMessage() : "none"),
                 ex);
-        AckResponse ackResponse = AckResponse.nack(ErrorCodes.NET_INTERNAL_ERROR, ErrorMessages.INTERNAL_SERVER_ERROR);
+        AckResponse ackResponse = AckResponse.nack(ErrorCodes.NET_SERVICE_UNAVAILABLE,
+                ErrorMessages.NET_SEARCH_SERVICE_UNAVAILABLE);
+        return new ResponseEntity<>(ackResponse, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    @ExceptionHandler({ SchemaNotInitializedException.class })
+    public ResponseEntity<Object> handleSchemaNotInitialized(SchemaNotInitializedException ex, WebRequest request) {
+        log.error(LogEvent.NACK_RESPONSE,
+                value("errorCode", ErrorCodes.NET_SERVICE_UNAVAILABLE),
+                value("error", ex.getMessage()));
+        AckResponse ackResponse = AckResponse.nack(ErrorCodes.NET_SERVICE_UNAVAILABLE,
+                ErrorMessages.NET_SERVICE_UNAVAILABLE);
         return new ResponseEntity<>(ackResponse, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
@@ -84,14 +95,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             ProblemDetail pd = ere.getBody();
             Map<String, Object> props = pd.getProperties();
             code = props != null && props.containsKey("code") ? (String) props.get("code")
-                    : ErrorCodes.INTERNAL_ERROR;
-            message = pd.getDetail();
+                    : ErrorCodes.NET_INTERNAL_ERROR;
+            message = safeMessageForCode(code);
         } else if (status == HttpStatus.BAD_REQUEST || ex instanceof IllegalArgumentException) {
-            code = ErrorCodes.INVALID_REQUEST;
+            code = ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED;
             message = sanitizeValidationMessage(ex.getMessage());
         } else {
-            code = ErrorCodes.INTERNAL_ERROR;
-            message = ErrorMessages.INTERNAL_SERVER_ERROR;
+            code = ErrorCodes.NET_INTERNAL_ERROR;
+            message = ErrorMessages.NET_INTERNAL_ERROR;
         }
 
         log.warn(LogEvent.NACK_RESPONSE,
@@ -104,15 +115,41 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
+     * Maps an error code to a controlled, user-facing message constant.
+     * Prevents raw SDK/internal messages from leaking to clients.
+     */
+    private static String safeMessageForCode(String code) {
+        if (code == null) return ErrorMessages.NET_INTERNAL_ERROR;
+        return switch (code) {
+            case ErrorCodes.SEC_SIGNATURE_MISSING -> ErrorMessages.SEC_SIGNATURE_MISSING;
+            case ErrorCodes.SEC_SIGNATURE_INVALID -> ErrorMessages.SEC_SIGNATURE_INVALID;
+            case ErrorCodes.SEC_SUBSCRIBER_NOT_FOUND -> ErrorMessages.SEC_SUBSCRIBER_NOT_FOUND;
+            case ErrorCodes.SEC_KEY_NOT_FOUND -> ErrorMessages.SEC_KEY_NOT_FOUND;
+            case ErrorCodes.SEC_KEY_EXPIRED_OR_REVOKED -> ErrorMessages.SEC_KEY_EXPIRED_OR_REVOKED;
+            case ErrorCodes.SEC_UNAUTHORIZED_ACTION -> ErrorMessages.SEC_UNAUTHORIZED_ACTION;
+            case ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED -> ErrorMessages.SCH_SCHEMA_VALIDATION_FAILED;
+            case ErrorCodes.SCH_REQUIRED_FIELD_MISSING -> ErrorMessages.SCH_REQUIRED_FIELD_MISSING;
+            case ErrorCodes.CTX_INVALID_FIELD -> ErrorMessages.CTX_INVALID_FIELD;
+            case ErrorCodes.NET_INTERNAL_ERROR -> ErrorMessages.NET_INTERNAL_ERROR;
+            default -> ErrorMessages.NET_INTERNAL_ERROR;
+        };
+    }
+
+    /**
      * Strips internal implementation details from validation error messages
-     * before they reach the client. Removes "(paths: ...)" suffixes and
-     * replaces null/empty messages with a generic fallback.
+     * before they reach the client. Removes Spring method signatures, schema paths,
+     * and replaces null/empty messages with a generic fallback.
      */
     private static String sanitizeValidationMessage(String raw) {
-        if (raw == null || raw.isBlank()) return ErrorMessages.VALIDATION_FAILED;
+        if (raw == null || raw.isBlank()) return ErrorMessages.SCH_SCHEMA_VALIDATION_FAILED;
+        // Spring appends the full controller method signature after ":"  — never expose it
+        int colonIdx = raw.indexOf(':');
+        if (colonIdx > 0 && raw.substring(colonIdx).contains("org.")) {
+            return ErrorMessages.SCH_REQUIRED_FIELD_MISSING;
+        }
         // Strip "(paths: $.context, $.message)" suffix that leaks internal schema paths
         String cleaned = raw.replaceAll("\\s*\\(paths?:.*\\)$", "");
-        return cleaned.isBlank() ? ErrorMessages.VALIDATION_FAILED : cleaned;
+        return cleaned.isBlank() ? ErrorMessages.SCH_SCHEMA_VALIDATION_FAILED : cleaned;
     }
 
 }
