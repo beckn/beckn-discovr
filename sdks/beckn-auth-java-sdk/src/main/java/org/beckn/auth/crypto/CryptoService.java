@@ -155,8 +155,15 @@ public final class CryptoService {
      *                            occurs (as opposed to a simple mismatch)
      */
     public boolean verifyEd25519Signature(String signingString, String signatureBase64, PublicKey publicKey) {
+        byte[] signatureBytes;
         try {
-            byte[] signatureBytes = Base64.getDecoder().decode(signatureBase64);
+            signatureBytes = Base64.getDecoder().decode(signatureBase64);
+        } catch (IllegalArgumentException exception) {
+            logger.error("Signature value is not valid Base64 — rejecting as invalid signature", exception);
+            throw BecknAuthException.signatureVerificationFailed(
+                    "Signature is not valid Base64", org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_INVALID);
+        }
+        try {
             Signature signatureInstance = Signature.getInstance(ALGORITHM_ED25519);
             signatureInstance.initVerify(publicKey);
             signatureInstance.update(signingString.getBytes(StandardCharsets.UTF_8));
