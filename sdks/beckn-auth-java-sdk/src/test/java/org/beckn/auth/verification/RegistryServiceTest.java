@@ -214,7 +214,7 @@ class RegistryServiceTest {
 
             assertThatThrownBy(() -> registryService.getPublicKey("bap1", "key-fail"))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Registry connection failed");
+                    .hasMessageContaining("Could not verify your credentials");
 
             wireMockServer.verify(3, getRequestedFor(urlEqualTo("/subscribers/bap1/keys/key-fail")));
         }
@@ -232,7 +232,7 @@ class RegistryServiceTest {
 
             assertThatThrownBy(() -> registryService.getPublicKey("bap1", "key4"))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Public key not found in registry");
+                    .hasMessageContaining("Credentials not found");
 
             // Only 1 request — no retries for client errors
             wireMockServer.verify(1, getRequestedFor(urlEqualTo("/subscribers/bap1/keys/key4")));
@@ -246,7 +246,7 @@ class RegistryServiceTest {
 
             assertThatThrownBy(() -> registryService.getPublicKey("bap1", "key-401"))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Public key not found in registry");
+                    .hasMessageContaining("Credentials not found");
 
             wireMockServer.verify(1, getRequestedFor(urlEqualTo("/subscribers/bap1/keys/key-401")));
         }
@@ -302,7 +302,7 @@ class RegistryServiceTest {
 
             assertThatThrownBy(() -> registryService.getPublicKey("bap1", "key-nofield"))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Public key not found in registry");
+                    .hasMessageContaining("Credentials not found");
         }
     }
 }

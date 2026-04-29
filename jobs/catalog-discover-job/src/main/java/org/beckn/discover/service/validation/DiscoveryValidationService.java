@@ -95,7 +95,7 @@ public class DiscoveryValidationService {
                     .path("schema");
 
             if (endpointSchema.isMissingNode()) {
-                throw new RuntimeException(ErrorMessages.SCHEMA_CONFIG_ERROR);
+                throw new RuntimeException(ErrorMessages.NET_INTERNAL_ERROR);
             }
 
             var envelopeSchema = buildSelfContainedSchema(rootSchemaNode, endpointSchema);
@@ -235,7 +235,8 @@ public class DiscoveryValidationService {
         try {
             if (discoverActionSchema == null) {
                 logger.error(LogEvent.VALIDATE_FAILED, value("reason", LogMessages.REASON_SCHEMA_NOT_INITIALIZED));
-                return new ValidationResult(false, List.of(ErrorMessages.SERVICE_STARTING_UP), List.of("root"));
+                throw new org.beckn.discover.exception.SchemaNotInitializedException(
+                        ErrorMessages.NET_SERVICE_UNAVAILABLE);
             }
 
             // Presence checks — these always run and give clearer error messages than schema failures
@@ -343,7 +344,7 @@ public class DiscoveryValidationService {
                     value("reason", LogMessages.REASON_UNEXPECTED_ERROR),
                     value("error", e.getMessage()),
                     e);
-            return new ValidationResult(false, List.of(ErrorMessages.VALIDATION_FAILED), List.of("root"));
+            return new ValidationResult(false, List.of(ErrorMessages.SCH_SCHEMA_VALIDATION_FAILED), List.of("root"));
         }
     }
 
@@ -355,7 +356,7 @@ public class DiscoveryValidationService {
             UUID.fromString(node.asText());
             return java.util.Optional.empty();
         } catch (IllegalArgumentException e) {
-            return java.util.Optional.of("$.context." + field + ": " + ErrorMessages.INVALID_UUID);
+            return java.util.Optional.of("$.context." + field + ": " + ErrorMessages.CTX_INVALID_FIELD);
         }
     }
 

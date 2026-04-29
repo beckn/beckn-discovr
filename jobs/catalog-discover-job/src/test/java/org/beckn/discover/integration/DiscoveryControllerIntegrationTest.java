@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.beckn.discover.common.BecknFields;
+import org.beckn.discover.common.ErrorCodes;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -106,7 +107,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
         }
 
@@ -120,7 +121,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
         }
 
@@ -135,7 +136,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"));
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
         }
 
         @Test
@@ -148,7 +149,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, anyOf(
                                                 containsString(BecknFields.TRANSACTION_ID),
                                                 containsString(BecknFields.MESSAGE_ID),
@@ -165,7 +166,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"));
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
         }
 
         @Test
@@ -206,7 +207,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
         }
 
@@ -233,7 +234,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                 containsString("absolute JSONPath")));
         }
@@ -339,7 +340,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_MISSING"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
-                                                        containsString("Missing Authorization")));
+                                                        containsString("Authorization header is missing")));
                 }
 
                 @Test
@@ -375,7 +376,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
-                                                        containsString("Invalid Beckn HTTP Signature format")));
+                                                        containsString("Authorization header format is invalid")));
                 }
 
                 @Test
