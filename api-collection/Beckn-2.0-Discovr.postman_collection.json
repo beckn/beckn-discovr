@@ -49,44 +49,82 @@
 							"name": "Success - Catalogs Found",
 							"originalRequest": {
 								"method": "GET",
-								"header": [{ "key": "Content-Type", "value": "application/json" }],
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
 								"body": {
 									"mode": "raw",
 									"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"f421fed9-94bf-4000-b265-82b8ac71964d\",\n        \"transactionId\": \"45c2f8ee-7b51-4e9e-bf77-f290bca06719\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"instant coffee powder\"\n        }\n    }\n}",
-									"options": { "raw": { "language": "json" } }
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
 								},
 								"url": {
 									"raw": "{{discover-host}}/beckn/discover",
-									"host": ["{{discover-host}}"],
-									"path": ["beckn", "discover"]
+									"host": [
+										"{{discover-host}}"
+									],
+									"path": [
+										"beckn",
+										"discover"
+									]
 								}
 							},
 							"status": "OK",
 							"code": 200,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"context\": {\n        \"action\": \"on_discover\",\n        \"messageId\": \"f421fed9-94bf-4000-b265-82b8ac71964d\",\n        \"transactionId\": \"45c2f8ee-7b51-4e9e-bf77-f290bca06719\",\n        \"timestamp\": \"2026-04-28T10:30:01Z\",\n        \"version\": \"2.0.0\"\n    },\n    \"message\": {\n        \"catalogs\": [\n            {\n                \"id\": \"CAT-GROCERY-FRESHMART-005\",\n                \"descriptor\": {\n                    \"name\": \"FreshMart Grocery Catalog\",\n                    \"shortDesc\": \"Daily essentials — tea, coffee & beverages\"\n                },\n                \"provider\": {\n                    \"id\": \"PROV-FRESHMART-05\",\n                    \"descriptor\": { \"name\": \"FreshMart Pvt Ltd\" }\n                },\n                \"resources\": [\n                    {\n                        \"id\": \"RES-GROCERY-BRU-GOLD-INSTANT-COFFEE-200GRAMS\",\n                        \"descriptor\": {\n                            \"name\": \"Bru Gold Instant Coffee Powder\",\n                            \"shortDesc\": \"Rich and aromatic instant coffee powder, 200g\"\n                        },\n                        \"resourceAttributes\": {\n                            \"@context\": \"https://schema.beckn.io/GroceryResource/v2.1/context.jsonld\",\n                            \"@type\": \"GroceryResource\"\n                        }\n                    }\n                ]\n            }\n        ]\n    }\n}"
 						},
 						{
 							"name": "Error - Validation Failed",
 							"originalRequest": {
 								"method": "GET",
-								"header": [{ "key": "Content-Type", "value": "application/json" }],
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
 								"body": {
 									"mode": "raw",
 									"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\"\n    },\n    \"message\": {}\n}",
-									"options": { "raw": { "language": "json" } }
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
 								},
 								"url": {
 									"raw": "{{discover-host}}/beckn/discover",
-									"host": ["{{discover-host}}"],
-									"path": ["beckn", "discover"]
+									"host": [
+										"{{discover-host}}"
+									],
+									"path": [
+										"beckn",
+										"discover"
+									]
 								}
 							},
 							"status": "Bad Request",
 							"code": 400,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"status\": \"NACK\",\n    \"error\": {\n        \"errorCode\": \"INVALID_REQUEST\",\n        \"errorMessage\": \"context.messageId is required\"\n    }\n}"
 						}
 					]
@@ -273,14 +311,24 @@
 								"method": "POST",
 								"url": {
 									"raw": "{{discover-host}}/beckn/discover",
-									"host": ["{{discover-host}}"],
-									"path": ["beckn", "discover"]
+									"host": [
+										"{{discover-host}}"
+									],
+									"path": [
+										"beckn",
+										"discover"
+									]
 								}
 							},
 							"status": "OK",
 							"code": 200,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"status\": \"ACK\"\n}"
 						}
 					]
@@ -323,14 +371,24 @@
 								"method": "POST",
 								"url": {
 									"raw": "{{discover-host}}/beckn/discover",
-									"host": ["{{discover-host}}"],
-									"path": ["beckn", "discover"]
+									"host": [
+										"{{discover-host}}"
+									],
+									"path": [
+										"beckn",
+										"discover"
+									]
 								}
 							},
 							"status": "OK",
 							"code": 200,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"status\": \"ACK\"\n}"
 						}
 					]
@@ -359,9 +417,10 @@
 							"    requestBody = resolveVariables(requestBody);",
 							"}",
 							"",
+							"// Sign even when no body (GET/DELETE) — use empty string for digest",
 							"if (!requestBody) {",
-							"    console.log('No request body found - skipping signing process');",
-							"    return;",
+							"    requestBody = '';",
+							"    console.log('No request body — signing empty string for GET/DELETE');",
 							"}",
 							"",
 							"console.log('Body to sign:', requestBody);",
@@ -436,14 +495,24 @@
 								"method": "POST",
 								"url": {
 									"raw": "{{publish-host}}/catalog/push",
-									"host": ["{{publish-host}}"],
-									"path": ["catalog", "push"]
+									"host": [
+										"{{publish-host}}"
+									],
+									"path": [
+										"catalog",
+										"push"
+									]
 								}
 							},
 							"status": "Accepted",
 							"code": 202,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"status\": \"ACK\"\n}"
 						},
 						{
@@ -452,14 +521,24 @@
 								"method": "POST",
 								"url": {
 									"raw": "{{publish-host}}/catalog/push",
-									"host": ["{{publish-host}}"],
-									"path": ["catalog", "push"]
+									"host": [
+										"{{publish-host}}"
+									],
+									"path": [
+										"catalog",
+										"push"
+									]
 								}
 							},
 							"status": "Bad Request",
 							"code": 400,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"status\": \"NACK\",\n    \"error\": {\n        \"errorCode\": \"INVALID_REQUEST\",\n        \"errorMessage\": \"Missing or invalid context object\"\n    }\n}"
 						},
 						{
@@ -468,14 +547,24 @@
 								"method": "POST",
 								"url": {
 									"raw": "{{publish-host}}/catalog/push",
-									"host": ["{{publish-host}}"],
-									"path": ["catalog", "push"]
+									"host": [
+										"{{publish-host}}"
+									],
+									"path": [
+										"catalog",
+										"push"
+									]
 								}
 							},
 							"status": "Payload Too Large",
 							"code": 413,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"status\": \"NACK\",\n    \"error\": {\n        \"errorCode\": \"INVALID_REQUEST\",\n        \"errorMessage\": \"Payload exceeds maximum allowed size\"\n    }\n}"
 						}
 					]
@@ -518,14 +607,24 @@
 								"method": "POST",
 								"url": {
 									"raw": "{{publish-host}}/catalog/push",
-									"host": ["{{publish-host}}"],
-									"path": ["catalog", "push"]
+									"host": [
+										"{{publish-host}}"
+									],
+									"path": [
+										"catalog",
+										"push"
+									]
 								}
 							},
 							"status": "Accepted",
 							"code": 202,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"status\": \"ACK\"\n}"
 						}
 					]
@@ -554,9 +653,10 @@
 							"    requestBody = resolveVariables(requestBody);",
 							"}",
 							"",
+							"// Sign even when no body (GET/DELETE) — use empty string for digest",
 							"if (!requestBody) {",
-							"    console.log('No request body found - skipping signing process');",
-							"    return;",
+							"    requestBody = '';",
+							"    console.log('No request body — signing empty string for GET/DELETE');",
 							"}",
 							"",
 							"console.log('Body to sign:', requestBody);",
@@ -617,14 +717,24 @@
 								"method": "GET",
 								"url": {
 									"raw": "{{discover-host}}/actuator/health",
-									"host": ["{{discover-host}}"],
-									"path": ["actuator", "health"]
+									"host": [
+										"{{discover-host}}"
+									],
+									"path": [
+										"actuator",
+										"health"
+									]
 								}
 							},
 							"status": "OK",
 							"code": 200,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"status\": \"UP\"\n}"
 						}
 					]
@@ -673,14 +783,25 @@
 								"method": "POST",
 								"url": {
 									"raw": "{{discover-host}}/discovery-service/health/reset-stats",
-									"host": ["{{discover-host}}"],
-									"path": ["discovery-service", "health", "reset-stats"]
+									"host": [
+										"{{discover-host}}"
+									],
+									"path": [
+										"discovery-service",
+										"health",
+										"reset-stats"
+									]
 								}
 							},
 							"status": "OK",
 							"code": 200,
 							"_postman_previewlanguage": "json",
-							"header": [{ "key": "Content-Type", "value": "application/json" }],
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
 							"body": "{\n    \"message\": \"Statistics reset successfully\",\n    \"timestamp\": \"2026-04-28T10:00:00Z\"\n}"
 						}
 					]
