@@ -48,7 +48,7 @@ dependencies {
     implementation 'org.json:json:20230227'
     
     // Beckn Auth SDK (composite build — verification via Ed25519 + BLAKE-512)
-    implementation 'org.beckn:beckn-auth-sdk'
+    implementation 'org.beckn:auth-sdk-java'
     implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
     
     

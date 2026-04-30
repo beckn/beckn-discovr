@@ -16,7 +16,7 @@ WORKDIR /app/jobs/catalog-discover-job
 
 # Step 1: SDK + build descriptor files only.
 # Cache is invalidated only when build.gradle, settings.gradle, or the SDK change.
-COPY sdks/beckn-auth-java-sdk/ /app/sdks/beckn-auth-java-sdk/
+COPY sdks/auth-sdk/java/ /app/sdks/auth-sdk/java/
 COPY jobs/catalog-discover-job/build.gradle jobs/catalog-discover-job/settings.gradle jobs/catalog-discover-job/gradlew ./
 COPY jobs/catalog-discover-job/gradle/ gradle/
 RUN chmod +x gradlew

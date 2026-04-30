@@ -16,7 +16,7 @@ WORKDIR /app/jobs/response-dispatcher
 
 # Step 1: SDK + build descriptor files only.
 # Cache is invalidated only when build.gradle, settings.gradle, or the SDK change.
-COPY sdks/beckn-auth-java-sdk/ /app/sdks/beckn-auth-java-sdk/
+COPY sdks/auth-sdk/java/ /app/sdks/auth-sdk/java/
 COPY jobs/response-dispatcher/build.gradle jobs/response-dispatcher/settings.gradle jobs/response-dispatcher/gradlew ./
 COPY jobs/response-dispatcher/gradle/ gradle/
 RUN chmod +x gradlew

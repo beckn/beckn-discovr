@@ -74,6 +74,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.BECKN_SDK_PAT }}
 
       - name: Resolve DEPS_BASE build arg
         id: deps_base
@@ -149,7 +152,7 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────────────
       # Build context is set to repository root (.) because Dockerfiles use absolute
       # paths to access shared dependencies:
-      #   - COPY sdks/beckn-auth-java-sdk/      (shared SDK)
+      #   - COPY sdks/auth-sdk/java/            (shared SDK)
       #   - COPY jobs/<job-name>/               (service-specific files)
       #
       # If context were set to jobs/<job>/ subdirectory, these COPY commands would

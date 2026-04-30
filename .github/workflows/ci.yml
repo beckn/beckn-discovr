@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.BECKN_SDK_PAT }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -57,6 +60,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.BECKN_SDK_PAT }}
 
       - name: Compute weekly Trivy cache key
         id: trivy-cache-key

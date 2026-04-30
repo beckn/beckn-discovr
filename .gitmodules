@@ -1,0 +1,4 @@
+[submodule "sdks/auth-sdk"]
+	path = sdks/auth-sdk
+	url = https://github.com/beckn/auth-sdk.git
+	branch = main
