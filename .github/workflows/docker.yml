@@ -23,10 +23,7 @@ name: Build & Push to GCP Artifact Registry
 on:
   push:
     tags:
-      - 'v*'                    # All services: v1.5.0
-      - 'discover/v*'           # Only catalog-discover-job: discover/v1.5.0
-      - 'publish/v*'            # Only catalog-publish-job: publish/v1.5.0
-      - 'dispatcher/v*'         # Only response-dispatcher: dispatcher/v1.5.0
+      - 'v*'
   workflow_dispatch:
     inputs:
       deps_base_tag:
@@ -34,41 +31,31 @@ on:
         required: false
         default: '1.0'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-push:
     name: Build & Push — ${{ matrix.name }}
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
-      # ─────────────────────────────────────────────────────────────────────────────
-      # id-token: write
-      # ─────────────────────────────────────────────────────────────────────────────
-      # Generates OpenID Connect (OIDC) token from GitHub Actions that can be used
-      # for keyless authentication with GCP. This token is sent to GCP's Workload
-      # Identity Federation endpoint, where it is verified and exchanged for temporary
-      # service account credentials. These credentials allow access to GCP Artifact
-      # Registry and other GCP resources without storing long-lived secrets.
-      # ─────────────────────────────────────────────────────────────────────────────
       id-token: write
 
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
-          # build_args: passes DEPS_BASE to each job so ./gradlew dependencies
-          # hits the pre-populated ~/.gradle/ cache instead of downloading from
-          # Maven Central.
           - name: catalog-discover-job
             dockerfile: jobs/catalog-discover-job/Dockerfile
-            tag_prefix: 'discover'
             build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
           - name: catalog-publish-job
             dockerfile: jobs/catalog-publish-job/Dockerfile
-            tag_prefix: 'publish'
             build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
           - name: response-dispatcher
             dockerfile: jobs/response-dispatcher/Dockerfile
-            tag_prefix: 'dispatcher'
             build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
 
     steps:
@@ -81,59 +68,28 @@ jobs:
           TAG="${{ inputs.deps_base_tag || '1.0' }}"
           echo "value=${{ matrix.build_args }}:${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Check if this service should build
-        id: should_build
-        run: |
-          TAG="${{ github.ref_name }}"
-          PREFIX="${{ matrix.tag_prefix }}"
-
-          # Check if tag matches this service
-          if [[ "$TAG" == "v"* && ! "$TAG" == *"/"* ]]; then
-            # Universal tag (v1.0.0) - build all services
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "is_universal=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$TAG" == "${PREFIX}/"* ]]; then
-            # Service-specific tag (discover/v1.0.0) - build only this service
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "is_universal=false" >> "$GITHUB_OUTPUT"
-          else
-            # Tag doesn't match this service
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            echo "is_universal=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Resolve version tag (remove prefix for selective tags)
+      - name: Resolve version tag and tags
         id: resolve
-        if: steps.should_build.outputs.build == 'true'
         run: |
           TAG="${{ github.ref_name }}"
-          IS_UNIVERSAL="${{ steps.should_build.outputs.is_universal }}"
-
-          # If tag contains '/', remove prefix (discover/, publish/, dispatcher/)
-          if [[ "$TAG" == *"/"* ]]; then
-            VERSION="${TAG#*/}"
-          else
-            VERSION="$TAG"
-          fi
+          
+          # Since we only use universal tags (v*), version is the tag name
+          VERSION="$TAG"
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # Build image tags: always include version tag, only add latest for universal tags
+          # Build image tags (version + latest)
           {
             echo "tags<<EOF"
             echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${VERSION}"
-            if [[ "$IS_UNIVERSAL" == "true" ]]; then
-              echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
-            fi
+            echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        if: steps.should_build.outputs.build == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Authenticate to Google Cloud (OIDC)
-        if: steps.should_build.outputs.build == 'true'
         id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -141,22 +97,9 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Configure Docker for Artifact Registry
-        if: steps.should_build.outputs.build == 'true'
         run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
-      # ─────────────────────────────────────────────────────────────────────────────
-      # Build Context: Repository Root (.)
-      # ─────────────────────────────────────────────────────────────────────────────
-      # Build context is set to repository root (.) because Dockerfiles use absolute
-      # paths to access shared dependencies:
-      #   - COPY sdks/beckn-auth-java-sdk/      (shared SDK)
-      #   - COPY jobs/<job-name>/               (service-specific files)
-      #
-      # If context were set to jobs/<job>/ subdirectory, these COPY commands would
-      # fail because the sdks/ directory would be outside the build context.
-      # ─────────────────────────────────────────────────────────────────────────────
       - name: Build and push Docker image
-        if: steps.should_build.outputs.build == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -167,22 +110,3 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run Trivy image scan (HIGH,CRITICAL) [non-blocking]
-        if: steps.should_build.outputs.build == 'true'
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          scan-type: image
-          image-ref: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${{ steps.resolve.outputs.version }}
-          format: json
-          output: trivy-image-report.json
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '0'
-
-      - name: Upload Trivy image report
-        if: always() && steps.should_build.outputs.build == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-image-report-${{ matrix.name }}
-          path: trivy-image-report.json
-          retention-days: 30
