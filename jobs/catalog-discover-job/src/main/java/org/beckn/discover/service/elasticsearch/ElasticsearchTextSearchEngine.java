@@ -184,10 +184,32 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                     // H1: exclude large fields not used by EsSearchAssembler
                     .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
                     .query(q -> q.bool(b -> {
-                        // H8: apply fuzziness only to resource_name (short exact-match field);
-                        // use a plain match on full_text_blob to avoid Levenshtein on the large blob
-                        b.must(Query.of(mq -> mq.match(m -> m.field("full_text_blob").query(text))))
-                         .must(Query.of(mq -> mq.match(m -> m.field("resource_name").query(text).fuzziness("AUTO").boost(2f))));
+                        // H8: avoid Levenshtein (fuzziness) on the large full_text_blob field —
+                        // it is expensive and unnecessary since the blob is already a concat of all terms.
+                        // Split multiMatchFields into blob fields (exact match, no fuzz) and
+                        // non-blob fields (fuzzy, boosted). Both are `should` clauses so a match
+                        // in ANY configured field qualifies the document (OR semantics, same as the
+                        // original multi_match). minimumShouldMatch=1 enforces at least one clause hits.
+                        List<String> blobFields = multiMatchFields.stream()
+                                .filter(f -> f.startsWith("full_text_blob"))
+                                .toList();
+                        List<String> nonBlobFields = multiMatchFields.stream()
+                                .filter(f -> !f.startsWith("full_text_blob"))
+                                .toList();
+                        if (!blobFields.isEmpty()) {
+                            b.should(Query.of(mq -> mq.multiMatch(mm -> mm
+                                    .query(text)
+                                    .fields(blobFields)
+                                    .type(TextQueryType.BestFields))));
+                        }
+                        if (!nonBlobFields.isEmpty()) {
+                            b.should(Query.of(mq -> mq.multiMatch(mm -> mm
+                                    .query(text)
+                                    .fields(nonBlobFields)
+                                    .type(TextQueryType.BestFields)
+                                    .fuzziness("AUTO"))));
+                        }
+                        b.minimumShouldMatch("1");
                         keywordSchemaFilters.forEach(b::filter);
                         return b;
                     }))
