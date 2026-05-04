@@ -2,6 +2,7 @@ package org.beckn.discover.controller;
 
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -149,8 +150,8 @@ public class DiscoveryController {
 
             // Move Ed25519 signature verification off the Tomcat thread so the server
             // thread is free during the crypto/registry-lookup operation (M9).
-            CompletableFuture.runAsync(() -> authorizationService.authorizeRequest(rawBody, headers),
-                    queryExecutor).join();
+            joinUnwrapped(CompletableFuture.runAsync(
+                    () -> authorizationService.authorizeRequest(rawBody, headers), queryExecutor));
             log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
@@ -188,8 +189,8 @@ public class DiscoveryController {
 
             // Move Ed25519 signature verification off the Tomcat thread so the server
             // thread is free during the crypto/registry-lookup operation (M9).
-            CompletableFuture.runAsync(() -> authorizationService.authorizeRequest(rawBody, headers),
-                    queryExecutor).join();
+            joinUnwrapped(CompletableFuture.runAsync(
+                    () -> authorizationService.authorizeRequest(rawBody, headers), queryExecutor));
             log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
@@ -280,6 +281,25 @@ public class DiscoveryController {
     private static void addHeaderIfPresent(RecordHeaders headers, String key, String value) {
         if (value != null && !value.isBlank()) {
             headers.add(key, value.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    /**
+     * Joins a {@link CompletableFuture} and rethrows any exception unwrapped from
+     * {@link CompletionException}, so that the original exception type (e.g. {@link
+     * org.springframework.web.ErrorResponseException}) reaches the
+     * {@link org.beckn.discover.exception.GlobalExceptionHandler} with the correct
+     * HTTP status code instead of being swallowed into a 500.
+     */
+    private static void joinUnwrapped(CompletableFuture<?> future) throws Exception {
+        try {
+            future.join();
+        } catch (CompletionException ce) {
+            Throwable cause = ce.getCause();
+            if (cause instanceof Exception e) {
+                throw e;
+            }
+            throw ce;
         }
     }
 }
