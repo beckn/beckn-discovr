@@ -1,6 +1,12 @@
 package org.beckn.discover.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -19,6 +25,7 @@ import org.beckn.discover.service.authorization.AuthorizationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -67,6 +74,9 @@ public class DiscoveryController {
     private final AuthorizationService authorizationService;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final DiscoveryProperties discoveryProperties;
+    private final ExecutorService queryExecutor;
+    /** Short-lived cache keyed on messageId — suppresses duplicate Kafka publishes on BAP retries (M10). */
+    private final Cache<String, Boolean> messageIdDedupCache;
 
     public DiscoveryController(
             DiscoveryService discoveryService,
@@ -74,13 +84,20 @@ public class DiscoveryController {
             DiscoveryValidationService validationService,
             AuthorizationService authorizationService,
             KafkaTemplate<String, String> kafkaTemplate,
-            DiscoveryProperties discoveryProperties) {
+            DiscoveryProperties discoveryProperties,
+            @Qualifier("discoveryQueryExecutor") ExecutorService queryExecutor) {
         this.discoveryService = discoveryService;
         this.objectMapper = objectMapper;
         this.validationService = validationService;
         this.authorizationService = authorizationService;
         this.kafkaTemplate = kafkaTemplate;
         this.discoveryProperties = discoveryProperties;
+        this.queryExecutor = queryExecutor;
+        long dedupTtl = discoveryProperties.getKafka().getDedupCacheTtlSeconds();
+        this.messageIdDedupCache = Caffeine.newBuilder()
+                .expireAfterWrite(dedupTtl, TimeUnit.SECONDS)
+                .maximumSize(10_000)
+                .build();
     }
 
     /** GET endpoint for Beckn discovery. */
@@ -130,7 +147,10 @@ public class DiscoveryController {
                     value("method", httpRequest.getMethod()),
                     value("transactionId", txnNode.asText("")));
 
-            authorizationService.authorizeRequest(rawBody, headers);
+            // Move Ed25519 signature verification off the Tomcat thread so the server
+            // thread is free during the crypto/registry-lookup operation (M9).
+            CompletableFuture.runAsync(() -> authorizationService.authorizeRequest(rawBody, headers),
+                    queryExecutor).join();
             log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
@@ -166,12 +186,26 @@ public class DiscoveryController {
                     value("method", "POST"),
                     value("transactionId", transactionId));
 
-            authorizationService.authorizeRequest(rawBody, headers);
+            // Move Ed25519 signature verification off the Tomcat thread so the server
+            // thread is free during the crypto/registry-lookup operation (M9).
+            CompletableFuture.runAsync(() -> authorizationService.authorizeRequest(rawBody, headers),
+                    queryExecutor).join();
             log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
 
             String messageId = contextNode.path(BecknFields.MESSAGE_ID).asText();
+
+            // M10: Idempotency check — if same messageId was seen within dedupCacheTtlSeconds,
+            // return ACK immediately without re-publishing to Kafka.
+            if (messageId != null && !messageId.isBlank()
+                    && messageIdDedupCache.getIfPresent(messageId) != null) {
+                log.info(LogEvent.REQUEST_RECEIVED + ".duplicate-suppressed",
+                        value("messageId", messageId),
+                        value("transactionId", transactionId));
+                return ResponseEntity.ok(AckResponse.ack());
+            }
+
             String kafkaKey = transactionId != null ? transactionId : messageId;
             String requestTopic = discoveryProperties.getKafka().getRequestTopic();
             if (requestTopic == null || requestTopic.isBlank()) {
@@ -187,6 +221,11 @@ public class DiscoveryController {
                 addHeaderIfPresent(kafkaHeaders, "tags", MDC.get(MdcField.TAGS));
 
                 var record = new ProducerRecord<>(requestTopic, null, kafkaKey, rawBody, kafkaHeaders);
+                // Record the messageId before sending — ensures the cache entry is set before
+                // any concurrent retry arrives, even if the send completes asynchronously.
+                if (logMsgId != null && !logMsgId.isBlank()) {
+                    messageIdDedupCache.put(logMsgId, Boolean.TRUE);
+                }
                 kafkaTemplate.send(record)
                         .whenComplete((result, ex) -> {
                             if (ex != null) {

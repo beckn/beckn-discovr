@@ -139,6 +139,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         .index(aliasName)
                         .minScore(minScore)
                         .size(resultLimit)
+                        .trackTotalHits(t -> t.enabled(false))
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
@@ -187,7 +188,8 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         return b;
                     }))
                     .minScore(minScore)
-                    .size(resultLimit),
+                    .size(resultLimit)
+                    .trackTotalHits(t -> t.enabled(false)),
                     Map.class);
             var filteredHits = filterByRelativeScore(response.hits().hits(), txId);
             return assembleAndLog(filteredHits, txId, start, "keyword");
