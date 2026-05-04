@@ -15,8 +15,6 @@ import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
 
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -155,17 +153,17 @@ public class DiscoveryEventConsumer {
     }
 
     /**
-     * Publishes the discovery response to the Kafka response topic.
+     * Publishes the discovery response to the Kafka response topic asynchronously.
      *
-     * <p>This method blocks until the send completes so that the caller can decide
-     * whether to acknowledge the inbound message.  If the send fails, a
-     * {@link RuntimeException} is thrown — the caller's catch block will
-     * rethrow it, keeping the inbound message un-acked so the container
-     * error handler can retry or route it to the DLT.</p>
+     * <p>Uses {@code whenComplete} — never {@code .get()} — so the Kafka I/O thread
+     * is never blocked. The send result (success or failure) is logged via the
+     * callback. Because we cannot propagate a publish failure back to the inbound
+     * message from the callback thread, we capture MDC context before sending so
+     * that error logs carry the correct correlation fields.</p>
      *
-     * <p>If the response topic is not configured, the failure is logged as a
-     * warning and the method returns normally (misconfiguration is an ops issue,
-     * not a message-level retry candidate).</p>
+     * <p>If the response topic is not configured the failure is logged as a warning
+     * and the method returns normally — misconfiguration is an ops issue, not a
+     * message-level retry candidate.</p>
      */
     private void publishResponse(DiscoverResponse response, DiscoverRequest request,
                                   byte[] subscriberIdHeader, byte[] recordIdHeader) {
@@ -191,29 +189,34 @@ public class DiscoveryEventConsumer {
                 headers.add("tags", tags.getBytes(StandardCharsets.UTF_8));
             }
 
+            // Capture MDC snapshot for use inside the async callback
+            java.util.Map<String, String> mdcSnapshot = org.slf4j.MDC.getCopyOfContextMap();
+            final String topicForCallback = responseTopic;
+
             var record = new ProducerRecord<>(responseTopic, null, transactionId, responseJson, headers);
-            // Block until Kafka broker confirms receipt so that any send failure propagates
-            // before the inbound offset is acknowledged. Timeout prevents indefinite hang.
-            kafkaTemplate.send(record).get(30, TimeUnit.SECONDS);
-            log.info(LogEvent.RESPONSE_PUBLISHED,
-                    value("topic", responseTopic));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
-                    value("topic", responseTopic),
-                    e);
-            throw new RuntimeException("Interrupted while publishing response", e);
-        } catch (TimeoutException e) {
-            log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
-                    value("topic", responseTopic),
-                    value("reason", LogMessages.REASON_PUBLISH_TIMED_OUT),
-                    e);
-            throw new RuntimeException("Kafka publish timed out", e);
+            kafkaTemplate.send(record).whenComplete((result, ex) -> {
+                // Restore MDC so callback log lines carry the same correlation IDs
+                if (mdcSnapshot != null) org.slf4j.MDC.setContextMap(mdcSnapshot);
+                try {
+                    if (ex != null) {
+                        log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
+                                value("topic", topicForCallback),
+                                ex);
+                    } else {
+                        log.info(LogEvent.RESPONSE_PUBLISHED,
+                                value("topic", topicForCallback),
+                                value("partition", result.getRecordMetadata().partition()),
+                                value("offset", result.getRecordMetadata().offset()));
+                    }
+                } finally {
+                    org.slf4j.MDC.clear();
+                }
+            });
         } catch (Exception e) {
             log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),
                     e);
-            throw new RuntimeException("Failed to publish on_discover response", e);
+            throw new RuntimeException("Failed to serialize/enqueue on_discover response", e);
         }
     }
 

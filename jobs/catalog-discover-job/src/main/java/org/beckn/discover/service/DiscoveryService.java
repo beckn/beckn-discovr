@@ -295,10 +295,31 @@ public class DiscoveryService {
 
     private DiscoverResponse executeJsonPathFilterQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
+        int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
         Instant engineStart = Instant.now();
-        List<Catalog> catalogs = queryEngine.executeFilterQuery(qr);
-        metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
-        metrics.recordResultCount("postgres", catalogs.size());
+        CompletableFuture<List<Catalog>> queryFuture = runAsyncWithMdc(() -> {
+            List<Catalog> r = queryEngine.executeFilterQuery(qr);
+            metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
+            metrics.recordResultCount("postgres", r.size());
+            return r;
+        });
+
+        List<Catalog> catalogs;
+        try {
+            catalogs = queryFuture.get(timeoutSec, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            queryFuture.cancel(true);
+            log.error(LogEvent.QUERY_TIMEOUT,
+                    value("path", "B"),
+                    value("timeoutSec", timeoutSec),
+                    e);
+            throw new Exception("Filter query timed out after " + timeoutSec + "s", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+            throw new Exception("Filter query failed: " + cause.getMessage(), cause);
+        }
+
         recordStep(tracker, "path-b.query");
 
         // Path B: PostgreSQL — schema already filtered in SQL WHERE clause
@@ -312,10 +333,31 @@ public class DiscoveryService {
 
     private DiscoverResponse executeSpatialOnlyQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
+        int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
         Instant engineStart = Instant.now();
-        List<Catalog> catalogs = queryEngine.executeSpatialQuery(qr);
-        metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
-        metrics.recordResultCount("postgres", catalogs.size());
+        CompletableFuture<List<Catalog>> queryFuture = runAsyncWithMdc(() -> {
+            List<Catalog> r = queryEngine.executeSpatialQuery(qr);
+            metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
+            metrics.recordResultCount("postgres", r.size());
+            return r;
+        });
+
+        List<Catalog> catalogs;
+        try {
+            catalogs = queryFuture.get(timeoutSec, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            queryFuture.cancel(true);
+            log.error(LogEvent.QUERY_TIMEOUT,
+                    value("path", "C"),
+                    value("timeoutSec", timeoutSec),
+                    e);
+            throw new Exception("Spatial query timed out after " + timeoutSec + "s", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+            throw new Exception("Spatial query failed: " + cause.getMessage(), cause);
+        }
+
         recordStep(tracker, "path-c.query");
 
         // Path C: ES spatial or PostgreSQL spatial — schema filtered in ES knn.filter or SQL

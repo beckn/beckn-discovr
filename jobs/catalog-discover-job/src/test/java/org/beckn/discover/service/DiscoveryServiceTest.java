@@ -20,11 +20,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.beckn.discover.model.DiscoverRequest;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -141,7 +145,104 @@ class DiscoveryServiceTest {
         verify(responseProcessor).buildEmptyResponse(any());
     }
 
+    // ── C5: Path B timeout tests ──────────────────────────────────────────────
+
+    @Test
+    void pathB_slowFilterQuery_throwsAfterTimeout() throws Exception {
+        // GIVEN: timeout of 1 second, filter query that hangs for 10 seconds
+        properties.getPostgresql().setParallelQueryTimeoutSeconds(1);
+
+        CountDownLatch blocker = new CountDownLatch(1);
+        when(queryEngine.executeFilterQuery(any())).thenAnswer(inv -> {
+            blocker.await(); // hangs until test completes
+            return List.of();
+        });
+
+        var request = buildFilterOnlyRequest("{\"name\":\"slow\"}");
+
+        // WHEN / THEN: should throw within ~2 seconds (generous upper bound)
+        long start = System.currentTimeMillis();
+        assertThatThrownBy(() -> discoveryService.processDiscoveryRequest(request))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Failed to process discovery request");
+        long elapsed = System.currentTimeMillis() - start;
+
+        blocker.countDown(); // release the blocked query thread
+        // Verify timeout fired well before 5 seconds
+        assertThat(elapsed).isLessThan(5000);
+    }
+
+    @Test
+    void pathC_slowSpatialQuery_throwsAfterTimeout() throws Exception {
+        // GIVEN: timeout of 1 second, spatial query that hangs for 10 seconds
+        properties.getPostgresql().setParallelQueryTimeoutSeconds(1);
+
+        CountDownLatch blocker = new CountDownLatch(1);
+        when(queryEngine.executeSpatialQuery(any())).thenAnswer(inv -> {
+            blocker.await(); // hangs until test completes
+            return List.of();
+        });
+
+        var request = buildSpatialOnlyRequest();
+
+        // WHEN / THEN
+        long start = System.currentTimeMillis();
+        assertThatThrownBy(() -> discoveryService.processDiscoveryRequest(request))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Failed to process discovery request");
+        long elapsed = System.currentTimeMillis() - start;
+
+        blocker.countDown();
+        assertThat(elapsed).isLessThan(5000);
+    }
+
+    @Test
+    void pathB_fastFilterQuery_returnsNormally() throws Exception {
+        properties.getPostgresql().setParallelQueryTimeoutSeconds(10);
+        properties.getFilter().setDiscardCatalogsWithoutOffers(false);
+
+        var catalog = buildCatalog("cat-1", null);
+        when(queryEngine.executeFilterQuery(any())).thenReturn(List.of(catalog));
+        when(catalogPipeline.process(anyList(), any(), anyBoolean())).thenReturn(List.of(catalog));
+        when(responseProcessor.buildResponse(anyList(), any())).thenAnswer(inv -> {
+            List<Catalog> cats = inv.getArgument(0);
+            return new DiscoverResponse(inv.getArgument(1), new DiscoverResponse.ResponseMessage(cats));
+        });
+
+        DiscoverResponse response = discoveryService.processDiscoveryRequest(buildFilterOnlyRequest("{\"name\":\"fast\"}"));
+
+        assertThat(response.getCatalogs()).hasSize(1);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static DiscoverRequest buildFilterOnlyRequest(String filters) {
+        var context = new Context();
+        context.setAction("discover");
+        context.setMessageId(UUID.randomUUID().toString());
+        context.setTransactionId(UUID.randomUUID().toString());
+
+        var request = new DiscoverRequest();
+        request.setContext(context);
+        request.setFilters(filters);
+        return request;
+    }
+
+    private static DiscoverRequest buildSpatialOnlyRequest() {
+        var context = new Context();
+        context.setAction("discover");
+        context.setMessageId(UUID.randomUUID().toString());
+        context.setTransactionId(UUID.randomUUID().toString());
+
+        var constraint = new DiscoverRequest.SpatialConstraint();
+        constraint.setOperation("s_dwithin");
+        constraint.setDistanceMeters(5000.0);
+
+        var request = new DiscoverRequest();
+        request.setContext(context);
+        request.setSpatial(List.of(constraint));
+        return request;
+    }
 
     private static Catalog buildCatalog(String id, List<Object> offers) {
         var catalog = new Catalog();

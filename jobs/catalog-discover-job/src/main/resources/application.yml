@@ -144,7 +144,7 @@ discovery:
     password: ${POSTGRES_PASSWORD:postgres}
     connection-timeout: ${POSTGRES_CONNECTION_TIMEOUT:30000}
     result-limit: ${MAX_ITEMS_PER_CATALOG:100}
-    log-explain-analyze: ${POSTGRES_LOG_EXPLAIN_ANALYZE:true}
+    log-explain-analyze: ${POSTGRES_LOG_EXPLAIN_ANALYZE:false}
     parallel-query-timeout-seconds: ${DISCOVERY_PARALLEL_QUERY_TIMEOUT_SECONDS:10}
     # Catalog-level attributes to extract from catalog.payload
     # These attributes will be merged into catalog objects in the response
