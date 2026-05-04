@@ -1,0 +1,73 @@
+# =============================================================================
+# Gradle Dependencies Base Image
+# =============================================================================
+# Pre-resolves all Maven/Gradle dependencies for all Discovr Java jobs into
+# the Gradle local cache (~/.gradle/). Job Dockerfiles reference this image
+# via the DEPS_BASE build argument; the ./gradlew dependencies step in each
+# job becomes a fast cache-check (~10 s) instead of a full Maven download
+# (~4–7 min).
+#
+# This image is rebuilt ONLY when build.gradle, settings.gradle, or
+# gradle-wrapper.properties changes — not on every code push.
+# A separate CI workflow (docker-base.yml) handles rebuilds.
+#
+# Build:
+#   docker build -f deps/Dockerfile.gradle-deps \
+#     -t localhost/beckn-discovr/gradle-deps-base:1.0 .
+#
+# Use in a job Dockerfile:
+#   docker build --build-arg DEPS_BASE=localhost/beckn-discovr/gradle-deps-base:1.0 \
+#     -f jobs/catalog-discover-job/Dockerfile .
+# =============================================================================
+FROM eclipse-temurin:17-jdk-jammy
+
+# =============================================================================
+# Beckn Auth SDK
+# Required by all three Discovr jobs via:
+#   settings.gradle: includeBuild '../../sdks/beckn-auth-java-sdk'
+#
+# Placed at /sdks/ so the relative path resolves correctly when
+# ./gradlew runs from /deps/discover/, /deps/publish/, or /deps/dispatcher/:
+#   /deps/discover/../../sdks/beckn-auth-java-sdk  →  /sdks/beckn-auth-java-sdk
+# =============================================================================
+COPY sdks/beckn-auth-java-sdk/ /sdks/beckn-auth-java-sdk/
+
+# =============================================================================
+# catalog-discover-job
+# =============================================================================
+COPY jobs/catalog-discover-job/build.gradle \
+     jobs/catalog-discover-job/settings.gradle \
+     jobs/catalog-discover-job/gradlew \
+     /deps/discover/
+COPY jobs/catalog-discover-job/gradle/ /deps/discover/gradle/
+RUN chmod +x /deps/discover/gradlew
+
+# First ./gradlew invocation also downloads the Gradle 8.9 distribution
+# (~135 MB) into ~/.gradle/wrapper/dists/ — shared by all subsequent calls.
+RUN cd /deps/discover && ./gradlew dependencies --no-daemon
+
+# =============================================================================
+# catalog-publish-job
+# =============================================================================
+COPY jobs/catalog-publish-job/build.gradle \
+     jobs/catalog-publish-job/settings.gradle \
+     jobs/catalog-publish-job/gradlew \
+     /deps/publish/
+COPY jobs/catalog-publish-job/gradle/ /deps/publish/gradle/
+RUN chmod +x /deps/publish/gradlew
+
+# Gradle distribution already cached; only publish-job-specific JARs downloaded.
+RUN cd /deps/publish && ./gradlew dependencies --no-daemon
+
+# =============================================================================
+# response-dispatcher
+# =============================================================================
+COPY jobs/response-dispatcher/build.gradle \
+     jobs/response-dispatcher/settings.gradle \
+     jobs/response-dispatcher/gradlew \
+     /deps/dispatcher/
+COPY jobs/response-dispatcher/gradle/ /deps/dispatcher/gradle/
+RUN chmod +x /deps/dispatcher/gradlew
+
+# Dispatcher-specific JARs downloaded here.
+RUN cd /deps/dispatcher && ./gradlew dependencies --no-daemon

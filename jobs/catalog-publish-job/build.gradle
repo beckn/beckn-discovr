@@ -104,6 +104,12 @@ tasks.register('integrationTest', Test) {
 
 check.dependsOn integrationTest
 
+bootJar {
+    layered {
+        enabled = true
+    }
+}
+
 jacoco {
     toolVersion = "0.8.12"
 }
