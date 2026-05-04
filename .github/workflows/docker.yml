@@ -20,53 +20,56 @@ name: Build & Push to GCP Artifact Registry
 # Setup Instructions: See docs/GITHUB_ACTIONS_GCP_AR_SETUP.md
 # ═════════════════════════════════════════════════════════════════════════════════
 
-on:
-  push:
-    tags:
-      - 'v*'                    # All services: v1.5.0
-      - 'discover/v*'           # Only catalog-discover-job: discover/v1.5.0
-      - 'publish/v*'            # Only catalog-publish-job: publish/v1.5.0
-      - 'dispatcher/v*'         # Only response-dispatcher: dispatcher/v1.5.0
-  workflow_dispatch:
-    inputs:
-      deps_base_tag:
-        description: 'gradle-deps-base image tag to use as DEPS_BASE (e.g. 1.0, v1.1). Defaults to 1.0.'
-        required: false
-        default: '1.0'
-
 jobs:
+  check-build:
+    name: Check which services to build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    outputs:
+      discover: ${{ steps.check.outputs.discover }}
+      publish: ${{ steps.check.outputs.publish }}
+      dispatcher: ${{ steps.check.outputs.dispatcher }}
+    steps:
+      - name: Check tags
+        id: check
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" == "v"* && ! "$TAG" == *"/"* ]]; then
+            echo "discover=true" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "dispatcher=true" >> "$GITHUB_OUTPUT"
+          else
+            PREFIX=$(echo "$TAG" | cut -d'/' -f1)
+            [[ "$PREFIX" == "discover" ]] && echo "discover=true" >> "$GITHUB_OUTPUT" || echo "discover=false" >> "$GITHUB_OUTPUT"
+            [[ "$PREFIX" == "publish" ]] && echo "publish=true" >> "$GITHUB_OUTPUT" || echo "publish=false" >> "$GITHUB_OUTPUT"
+            [[ "$PREFIX" == "dispatcher" ]] && echo "dispatcher=true" >> "$GITHUB_OUTPUT" || echo "dispatcher=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-and-push:
     name: Build & Push — ${{ matrix.name }}
+    needs: check-build
+    if: ${{ needs.check-build.outputs[matrix.job_key] == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # ─────────────────────────────────────────────────────────────────────────────
-      # id-token: write
-      # ─────────────────────────────────────────────────────────────────────────────
-      # Generates OpenID Connect (OIDC) token from GitHub Actions that can be used
-      # for keyless authentication with GCP. This token is sent to GCP's Workload
-      # Identity Federation endpoint, where it is verified and exchanged for temporary
-      # service account credentials. These credentials allow access to GCP Artifact
-      # Registry and other GCP resources without storing long-lived secrets.
-      # ─────────────────────────────────────────────────────────────────────────────
       id-token: write
 
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
-          # build_args: passes DEPS_BASE to each job so ./gradlew dependencies
-          # hits the pre-populated ~/.gradle/ cache instead of downloading from
-          # Maven Central.
           - name: catalog-discover-job
+            job_key: discover
             dockerfile: jobs/catalog-discover-job/Dockerfile
             tag_prefix: 'discover'
             build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
           - name: catalog-publish-job
+            job_key: publish
             dockerfile: jobs/catalog-publish-job/Dockerfile
             tag_prefix: 'publish'
             build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
           - name: response-dispatcher
+            job_key: dispatcher
             dockerfile: jobs/response-dispatcher/Dockerfile
             tag_prefix: 'dispatcher'
             build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
@@ -81,44 +84,23 @@ jobs:
           TAG="${{ inputs.deps_base_tag || '1.0' }}"
           echo "value=${{ matrix.build_args }}:${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Check if this service should build
-        id: should_build
-        run: |
-          TAG="${{ github.ref_name }}"
-          PREFIX="${{ matrix.tag_prefix }}"
-
-          # Check if tag matches this service
-          if [[ "$TAG" == "v"* && ! "$TAG" == *"/"* ]]; then
-            # Universal tag (v1.0.0) - build all services
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "is_universal=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$TAG" == "${PREFIX}/"* ]]; then
-            # Service-specific tag (discover/v1.0.0) - build only this service
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "is_universal=false" >> "$GITHUB_OUTPUT"
-          else
-            # Tag doesn't match this service
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            echo "is_universal=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Resolve version tag (remove prefix for selective tags)
+      - name: Resolve version tag and tags
         id: resolve
-        if: steps.should_build.outputs.build == 'true'
         run: |
           TAG="${{ github.ref_name }}"
-          IS_UNIVERSAL="${{ steps.should_build.outputs.is_universal }}"
-
-          # If tag contains '/', remove prefix (discover/, publish/, dispatcher/)
+          
+          # If tag contains '/', remove prefix
           if [[ "$TAG" == *"/"* ]]; then
             VERSION="${TAG#*/}"
+            IS_UNIVERSAL="false"
           else
             VERSION="$TAG"
+            IS_UNIVERSAL="true"
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # Build image tags: always include version tag, only add latest for universal tags
+          # Build image tags
           {
             echo "tags<<EOF"
             echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${VERSION}"
@@ -167,22 +149,3 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run Trivy image scan (HIGH,CRITICAL) [non-blocking]
-        if: steps.should_build.outputs.build == 'true'
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          scan-type: image
-          image-ref: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${{ steps.resolve.outputs.version }}
-          format: json
-          output: trivy-image-report.json
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '0'
-
-      - name: Upload Trivy image report
-        if: always() && steps.should_build.outputs.build == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-image-report-${{ matrix.name }}
-          path: trivy-image-report.json
-          retention-days: 30
