@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +29,8 @@ class ProviderOfferEnricherTest {
 
     @BeforeEach
     void setUp() {
+        // H2: clear the static Caffeine cache so tests are independent of each other
+        ProviderOfferEnricher.clearCacheForTesting();
         repository = mock(ProviderOfferRepository.class);
         enricher = new ProviderOfferEnricher(repository, objectMapper);
     }
@@ -143,6 +146,37 @@ class ProviderOfferEnricherTest {
         enricher.enrich(catalogs);
 
         assertThat(catalog.getOffers()).isEmpty();
+    }
+
+    /**
+     * H2: Calling enrich() twice for the same provider IDs must result in only one
+     * DB round-trip — the second call should be served entirely from the Caffeine cache.
+     */
+    @Test
+    void enrich_calledTwiceForSameProvider_dbQueriedOnlyOnce() {
+        var catalog1 = buildCatalog("cat-1", "provider-abc");
+        var catalog2 = buildCatalog("cat-2", "provider-abc");
+
+        when(repository.findByProviderIds(Set.of("provider-abc")))
+                .thenReturn(List.of(
+                        Map.of("offer_id", "o1", "provider_id", "provider-abc",
+                                "payload", "{\"id\":\"o1\",\"descriptor\":{\"name\":\"10% Off\"}}")
+                ));
+
+        // First call — hits the DB and populates the cache
+        enricher.enrich(new ArrayList<>(List.of(catalog1)));
+        // Second call — same provider ID should be served from cache
+        enricher.enrich(new ArrayList<>(List.of(catalog2)));
+
+        // Repository must have been called only once despite two enrich() invocations
+        verify(repository, times(1)).findByProviderIds(Set.of("provider-abc"));
+
+        // Both catalogs should have the offer appended
+        assertThat(catalog1.getOffers()).hasSize(1);
+        assertThat(catalog2.getOffers()).hasSize(1);
+        @SuppressWarnings("unchecked")
+        var offer1 = (Map<String, Object>) catalog1.getOffers().get(0);
+        assertThat(offer1.get("id")).isEqualTo("o1");
     }
 
     private Catalog buildCatalog(String id, String providerId) {

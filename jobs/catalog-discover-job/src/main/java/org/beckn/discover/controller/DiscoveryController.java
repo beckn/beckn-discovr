@@ -22,7 +22,6 @@ import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -83,9 +82,16 @@ public class DiscoveryController {
         this.discoveryProperties = discoveryProperties;
     }
 
-    /** GET endpoint for Beckn discovery. */
-    @GetMapping("/discover")
-    public ResponseEntity<DiscoverResponse> discover(
+    /**
+     * Synchronous discovery endpoint — returns the full on_discover response inline.
+     *
+     * <p>H9: Changed from {@code GET /beckn/discover} to {@code POST /beckn/discover/sync}.
+     * RFC 7231 §4.3.1 defines GET bodies as having no defined semantics; many proxies
+     * (nginx, AWS ALB, Cloudflare) silently strip the request body. Using POST avoids
+     * this proxy compatibility issue while keeping a distinct path from the async variant.</p>
+     */
+    @PostMapping("/discover/sync")
+    public ResponseEntity<DiscoverResponse> discoverSync(
             @RequestBody byte[] rawBytes,
             @RequestHeader HttpHeaders headers,
             HttpServletRequest httpRequest) throws Exception {

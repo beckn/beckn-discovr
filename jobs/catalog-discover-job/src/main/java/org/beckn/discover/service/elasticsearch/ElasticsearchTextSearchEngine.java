@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * {@link TextSearchEngine} backed by Elasticsearch.
@@ -139,6 +140,8 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         .index(aliasName)
                         .minScore(minScore)
                         .size(resultLimit)
+                        // H1: exclude large fields not used by EsSearchAssembler
+                        .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
@@ -170,19 +173,21 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
 
         // ── Keyword search path (engine=native-els only) ──────────────────────
         List<Query> keywordSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(queryRequest);
-        log.info(LogEvent.ES_SEARCH_STARTED + ".keyword",
+        // H7: Move serialization to DEBUG with a lazy Supplier — avoids Jackson cost on every request
+        log.debug(LogEvent.ES_SEARCH_STARTED + ".keyword",
                 value("transactionId", txId),
                 value("schemaFilters", keywordSchemaFilters.size()),
-                value("query", buildTextSearchJson(ErrorSanitizer.sanitize(text))));
+                value("query", (Supplier<String>) () -> buildTextSearchJson(ErrorSanitizer.sanitize(text))));
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                     .index(aliasName)
+                    // H1: exclude large fields not used by EsSearchAssembler
+                    .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
                     .query(q -> q.bool(b -> {
-                        b.must(Query.of(mq -> mq.multiMatch(mm -> mm
-                                .query(text)
-                                .fields(multiMatchFields)
-                                .type(TextQueryType.BestFields)
-                                .fuzziness("AUTO"))));
+                        // H8: apply fuzziness only to resource_name (short exact-match field);
+                        // use a plain match on full_text_blob to avoid Levenshtein on the large blob
+                        b.must(Query.of(mq -> mq.match(m -> m.field("full_text_blob").query(text))))
+                         .must(Query.of(mq -> mq.match(m -> m.field("resource_name").query(text).fuzziness("AUTO").boost(2f))));
                         keywordSchemaFilters.forEach(b::filter);
                         return b;
                     }))
