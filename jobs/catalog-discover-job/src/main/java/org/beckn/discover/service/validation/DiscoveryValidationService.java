@@ -356,7 +356,7 @@ public class DiscoveryValidationService {
             UUID.fromString(node.asText());
             return java.util.Optional.empty();
         } catch (IllegalArgumentException e) {
-            return java.util.Optional.of("$.context." + field + ": " + ErrorMessages.CTX_INVALID_FIELD);
+            return java.util.Optional.of("$.context." + field + ": invalid uuid format — " + ErrorMessages.CTX_INVALID_FIELD);
         }
     }
 
