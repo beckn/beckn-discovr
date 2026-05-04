@@ -20,36 +20,26 @@ name: Build & Push to GCP Artifact Registry
 # Setup Instructions: See docs/GITHUB_ACTIONS_GCP_AR_SETUP.md
 # ═════════════════════════════════════════════════════════════════════════════════
 
-jobs:
-  check-build:
-    name: Check which services to build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    outputs:
-      discover: ${{ steps.check.outputs.discover }}
-      publish: ${{ steps.check.outputs.publish }}
-      dispatcher: ${{ steps.check.outputs.dispatcher }}
-    steps:
-      - name: Check tags
-        id: check
-        run: |
-          TAG="${{ github.ref_name }}"
-          if [[ "$TAG" == "v"* && ! "$TAG" == *"/"* ]]; then
-            echo "discover=true" >> "$GITHUB_OUTPUT"
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "dispatcher=true" >> "$GITHUB_OUTPUT"
-          else
-            PREFIX=$(echo "$TAG" | cut -d'/' -f1)
-            [[ "$PREFIX" == "discover" ]] && echo "discover=true" >> "$GITHUB_OUTPUT" || echo "discover=false" >> "$GITHUB_OUTPUT"
-            [[ "$PREFIX" == "publish" ]] && echo "publish=true" >> "$GITHUB_OUTPUT" || echo "publish=false" >> "$GITHUB_OUTPUT"
-            [[ "$PREFIX" == "dispatcher" ]] && echo "dispatcher=true" >> "$GITHUB_OUTPUT" || echo "dispatcher=false" >> "$GITHUB_OUTPUT"
-          fi
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      deps_base_tag:
+        description: 'gradle-deps-base image tag to use as DEPS_BASE (e.g. 1.0, v1.1). Defaults to 1.0.'
+        required: false
+        default: '1.0'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
   build-and-push:
     name: Build & Push — ${{ matrix.name }}
-    needs: check-build
-    if: ${{ needs.check-build.outputs[matrix.job_key] == 'true' }}
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
       id-token: write
@@ -59,19 +49,13 @@ jobs:
       matrix:
         include:
           - name: catalog-discover-job
-            job_key: discover
             dockerfile: jobs/catalog-discover-job/Dockerfile
-            tag_prefix: 'discover'
             build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
           - name: catalog-publish-job
-            job_key: publish
             dockerfile: jobs/catalog-publish-job/Dockerfile
-            tag_prefix: 'publish'
             build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
           - name: response-dispatcher
-            job_key: dispatcher
             dockerfile: jobs/response-dispatcher/Dockerfile
-            tag_prefix: 'dispatcher'
             build_args: 'DEPS_BASE=asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base'
 
     steps:
@@ -89,33 +73,23 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           
-          # If tag contains '/', remove prefix
-          if [[ "$TAG" == *"/"* ]]; then
-            VERSION="${TAG#*/}"
-            IS_UNIVERSAL="false"
-          else
-            VERSION="$TAG"
-            IS_UNIVERSAL="true"
-          fi
+          # Since we only use universal tags (v*), version is the tag name
+          VERSION="$TAG"
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # Build image tags
+          # Build image tags (version + latest)
           {
             echo "tags<<EOF"
             echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${VERSION}"
-            if [[ "$IS_UNIVERSAL" == "true" ]]; then
-              echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
-            fi
+            echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        if: steps.should_build.outputs.build == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Authenticate to Google Cloud (OIDC)
-        if: steps.should_build.outputs.build == 'true'
         id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -123,22 +97,9 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Configure Docker for Artifact Registry
-        if: steps.should_build.outputs.build == 'true'
         run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
-      # ─────────────────────────────────────────────────────────────────────────────
-      # Build Context: Repository Root (.)
-      # ─────────────────────────────────────────────────────────────────────────────
-      # Build context is set to repository root (.) because Dockerfiles use absolute
-      # paths to access shared dependencies:
-      #   - COPY sdks/beckn-auth-java-sdk/      (shared SDK)
-      #   - COPY jobs/<job-name>/               (service-specific files)
-      #
-      # If context were set to jobs/<job>/ subdirectory, these COPY commands would
-      # fail because the sdks/ directory would be outside the build context.
-      # ─────────────────────────────────────────────────────────────────────────────
       - name: Build and push Docker image
-        if: steps.should_build.outputs.build == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
