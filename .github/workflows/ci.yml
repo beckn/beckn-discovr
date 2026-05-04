@@ -69,17 +69,17 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: 'gradle'
+          cache-dependency-path: ${{ matrix.path }}/build.gradle
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
         working-directory: ${{ matrix.path }}
 
-      - name: Run unit tests
-        run: ./gradlew test --no-daemon
+      - name: Run tests (Unit & Integration)
+        run: |
+          if [ "${{ matrix.run_integration_tests }}" = "true" ]; then
+            ./gradlew test integrationTest --no-daemon
+          else
+            ./gradlew test --no-daemon
+          fi
         working-directory: ${{ matrix.path }}
-
-      - name: Run integration tests
-        if: ${{ matrix.run_integration_tests }}
-        run: ./gradlew integrationTest --no-daemon
-        working-directory: ${{ matrix.path }}
-
