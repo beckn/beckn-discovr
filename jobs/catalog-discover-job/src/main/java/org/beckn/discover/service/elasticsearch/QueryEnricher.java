@@ -17,6 +17,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Enriches a raw search query using an LLM before embedding, improving semantic
@@ -64,6 +65,11 @@ public class QueryEnricher {
     /**
      * Enriches the raw user query with related terms and domain vocabulary.
      *
+     * <p>Uses {@link HttpClient#sendAsync} so the calling thread is returned to the
+     * pool during network I/O. The result is joined via {@link CompletableFuture#join}
+     * — callers already run inside {@code runAsyncWithMdc()} on the
+     * {@code discoveryQueryExecutor} pool, not on a Tomcat thread.</p>
+     *
      * @param rawQuery original query from the discover request
      * @return enriched query text, or the raw query if the LLM returned empty content
      * @throws SemanticSearchException if the provider is unreachable or returns a non-200 status
@@ -85,16 +91,18 @@ public class QueryEnricher {
             throw new SemanticSearchException("Failed to serialize query enricher request", e);
         }
 
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(chatUrl))
+                .header("Content-Type", "application/json")
+                .timeout(timeout)
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody));
+        if (apiKey != null && !apiKey.isBlank())
+            builder.header("Authorization", "Bearer " + apiKey);
+
         HttpResponse<String> response;
         try {
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(URI.create(chatUrl))
-                    .header("Content-Type", "application/json")
-                    .timeout(timeout)
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody));
-            if (apiKey != null && !apiKey.isBlank())
-                builder.header("Authorization", "Bearer " + apiKey);
-            response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            response = httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
+                    .join();
         } catch (Exception e) {
             log.error("event={} model={} error={}", LogEvent.QUERY_ENRICHER_FAILED, model, e.getMessage());
             throw new SemanticSearchException("Query enricher provider unavailable or timed out", e);
