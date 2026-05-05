@@ -56,6 +56,9 @@ discovery:
   kafka:
     request-topic: ${KAFKA_REQUEST_TOPIC:discovr.discover.in.requests}
     response-topic: ${KAFKA_RESPONSE_TOPIC:discovr.discover.out.responses}
+    # TTL for the messageId idempotency cache (M10). Duplicate POST requests within
+    # this window are ACK'd immediately without re-publishing to Kafka.
+    dedup-cache-ttl-seconds: ${DISCOVERY_DEDUP_CACHE_TTL_SECONDS:60}
   
   nlweb:
     base-url: ${NLWEB_BASE_URL:http://localhost:8000}
@@ -96,7 +99,13 @@ discovery:
       base-url: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_BASE_URL:http://localhost:11434}
       api-key: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_API_KEY:}
       timeout-ms: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_TIMEOUT_MS:10000}
-      # knn search candidate pool — higher = more accurate but slower
+      # knn search candidate pool — higher = more accurate but slower.
+      # Tuning guidance: set to 2-4x the expected filtered result set size.
+      # When narrow schema-context filters are present the effective corpus shrinks;
+      # keeping knn-candidates at 500 when the filtered index has only ~50 docs
+      # wastes latency by visiting all documents. Lower this value (e.g. 100-200)
+      # in single-schema deployments with small per-schema corpora.
+      # The actual value used per search is logged at DEBUG level (numCandidates=...).
       knn-candidates: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_KNN_CANDIDATES:500}
       retries: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_RETRIES:3}
       retry-delay-ms: ${DISCOVERY_TEXT_SEARCH_EMBEDDING_RETRY_DELAY_MS:1000}
@@ -144,7 +153,7 @@ discovery:
     password: ${POSTGRES_PASSWORD:postgres}
     connection-timeout: ${POSTGRES_CONNECTION_TIMEOUT:30000}
     result-limit: ${MAX_ITEMS_PER_CATALOG:100}
-    log-explain-analyze: ${POSTGRES_LOG_EXPLAIN_ANALYZE:true}
+    log-explain-analyze: ${POSTGRES_LOG_EXPLAIN_ANALYZE:false}
     parallel-query-timeout-seconds: ${DISCOVERY_PARALLEL_QUERY_TIMEOUT_SECONDS:10}
     # Catalog-level attributes to extract from catalog.payload
     # These attributes will be merged into catalog objects in the response
@@ -215,14 +224,12 @@ server:
     enabled: true
     mime-types: application/json,application/ld+json,application/xml,text/plain,text/xml,text/html
     min-response-size: 2KB
-  # tomcat:
-  #   threads:
-  #     max: ${SERVER_TOMCAT_MAX_THREADS:50}
-  #     min-spare: ${SERVER_TOMCAT_MIN_SPARE_THREADS:10}
-  #     # Guidance: keep max ≈ 5x CPU cores (50 for 1 vCPU) so threads don't thrash
-  #   accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:100}
-  #   # When worker threads are busy, up to 100 new requests queue before being rejected
-  #   max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:2000}
+  tomcat:
+    threads:
+      max: ${SERVER_TOMCAT_MAX_THREADS:50}
+      min-spare: ${SERVER_TOMCAT_MIN_SPARE_THREADS:10}
+      # Guidance: keep max ≈ 5x CPU cores (50 for 1 vCPU) so threads don't thrash
+    accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:100}
+    # When worker threads are busy, up to 100 new requests queue before being rejected
+    max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:2000}
     # Cap simultaneous keep-alive connections to avoid exhausting file descriptors
-  # servlet:
-  #   context-path: /discovery-service

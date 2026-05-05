@@ -121,6 +121,9 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .index(alias)
                         .size(limit)
                         .minScore(minScore)
+                        // H1: exclude large fields not used by EsSearchAssembler
+                        .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
+                        .trackTotalHits(t -> t.enabled(false))
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
@@ -144,21 +147,25 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             }
         }
 
-        // ── BM25 text + spatial OR spatial only: geo_shape in bool.must ──────
-        List<Query> mustQueries = new ArrayList<>(geoQueries);
+        // ── BM25 text + spatial OR spatial only ───────────────────────────────
+        // H4: geo-shape queries always go to bool.filter — no scoring contribution.
+        // Only the text multi-match belongs in bool.must so BM25 scores are not
+        // diluted by binary geo inclusion/exclusion.
         List<Query> spatialSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(request);
         double applyMinScore = 0.0;
+        final Query textMustQuery;
 
         if (hasText) {
             String text = request.textSearch();
-            mustQueries.add(Query.of(q -> q.multiMatch(mm -> mm
+            textMustQuery = Query.of(q -> q.multiMatch(mm -> mm
                     .query(text)
                     .fields("full_text_blob", "resource_name^2")
                     .type(TextQueryType.BestFields)
-                    .fuzziness("AUTO"))));
+                    .fuzziness("AUTO")));
             applyMinScore = discoveryProperties.getElasticsearch().getMinScore();
             log.debug("event={} schemaFilters={}", LogEvent.ES_ENGINE_SPATIAL_REQUEST, spatialSchemaFilters.size());
         } else {
+            textMustQuery = null;
             log.debug("event={} schemaFilters={}", LogEvent.ES_ENGINE_SPATIAL_REQUEST, spatialSchemaFilters.size());
         }
 
@@ -168,7 +175,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                     value("schemaFilters", spatialSchemaFilters.size()));
         }
 
-        final List<Query> finalQueries = mustQueries;
+        final List<Query> finalGeoFilters = geoQueries;
         final List<Query> finalSchemaFilters = spatialSchemaFilters;
         final double finalMinScore = applyMinScore;
 
@@ -176,9 +183,15 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             SearchResponse<Map> response = esClient.search(s -> {
                 var b = s.index(alias)
                         .size(limit)
+                        // H1: exclude large fields not used by EsSearchAssembler
+                        .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
+                        .trackTotalHits(t -> t.enabled(false))
                         .query(q -> q.bool(bq -> {
-                            finalQueries.forEach(bq::must);
+                            // geo-shape queries in filter — no scoring, cache-friendly
+                            finalGeoFilters.forEach(bq::filter);
                             finalSchemaFilters.forEach(bq::filter);
+                            // only text match goes in must (scoring contribution)
+                            if (textMustQuery != null) bq.must(textMustQuery);
                             return bq;
                         }));
                 return finalMinScore > 0 ? b.minScore(finalMinScore) : b;

@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * {@link TextSearchEngine} backed by Elasticsearch.
@@ -139,6 +140,9 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         .index(aliasName)
                         .minScore(minScore)
                         .size(resultLimit)
+                        // H1: exclude large fields not used by EsSearchAssembler
+                        .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
+                        .trackTotalHits(t -> t.enabled(false))
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
@@ -170,24 +174,49 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
 
         // ── Keyword search path (engine=native-els only) ──────────────────────
         List<Query> keywordSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(queryRequest);
-        log.info(LogEvent.ES_SEARCH_STARTED + ".keyword",
+        // H7: Move serialization to DEBUG with a lazy Supplier — avoids Jackson cost on every request
+        log.debug(LogEvent.ES_SEARCH_STARTED + ".keyword",
                 value("transactionId", txId),
                 value("schemaFilters", keywordSchemaFilters.size()),
-                value("query", buildTextSearchJson(ErrorSanitizer.sanitize(text))));
+                value("query", (Supplier<String>) () -> buildTextSearchJson(ErrorSanitizer.sanitize(text))));
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                     .index(aliasName)
+                    // H1: exclude large fields not used by EsSearchAssembler
+                    .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
                     .query(q -> q.bool(b -> {
-                        b.must(Query.of(mq -> mq.multiMatch(mm -> mm
-                                .query(text)
-                                .fields(multiMatchFields)
-                                .type(TextQueryType.BestFields)
-                                .fuzziness("AUTO"))));
+                        // H8: avoid Levenshtein (fuzziness) on the large full_text_blob field —
+                        // it is expensive and unnecessary since the blob is already a concat of all terms.
+                        // Split multiMatchFields into blob fields (exact match, no fuzz) and
+                        // non-blob fields (fuzzy, boosted). Both are `should` clauses so a match
+                        // in ANY configured field qualifies the document (OR semantics, same as the
+                        // original multi_match). minimumShouldMatch=1 enforces at least one clause hits.
+                        List<String> blobFields = multiMatchFields.stream()
+                                .filter(f -> f.startsWith("full_text_blob"))
+                                .toList();
+                        List<String> nonBlobFields = multiMatchFields.stream()
+                                .filter(f -> !f.startsWith("full_text_blob"))
+                                .toList();
+                        if (!blobFields.isEmpty()) {
+                            b.should(Query.of(mq -> mq.multiMatch(mm -> mm
+                                    .query(text)
+                                    .fields(blobFields)
+                                    .type(TextQueryType.BestFields))));
+                        }
+                        if (!nonBlobFields.isEmpty()) {
+                            b.should(Query.of(mq -> mq.multiMatch(mm -> mm
+                                    .query(text)
+                                    .fields(nonBlobFields)
+                                    .type(TextQueryType.BestFields)
+                                    .fuzziness("AUTO"))));
+                        }
+                        b.minimumShouldMatch("1");
                         keywordSchemaFilters.forEach(b::filter);
                         return b;
                     }))
                     .minScore(minScore)
-                    .size(resultLimit),
+                    .size(resultLimit)
+                    .trackTotalHits(t -> t.enabled(false)),
                     Map.class);
             var filteredHits = filterByRelativeScore(response.hits().hits(), txId);
             return assembleAndLog(filteredHits, txId, start, "keyword");
