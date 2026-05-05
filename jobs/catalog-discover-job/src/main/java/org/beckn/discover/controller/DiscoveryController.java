@@ -84,7 +84,9 @@ public class DiscoveryController {
         this.discoveryProperties = discoveryProperties;
     }
 
-    /** GET endpoint for Beckn discovery. */
+    /**
+     * Synchronous discovery endpoint — returns the full on_discover response inline.
+     */
     @GetMapping("/discover")
     public ResponseEntity<DiscoverResponse> discover(
             @RequestBody byte[] rawBytes,

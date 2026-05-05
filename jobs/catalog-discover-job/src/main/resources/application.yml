@@ -215,14 +215,12 @@ server:
     enabled: true
     mime-types: application/json,application/ld+json,application/xml,text/plain,text/xml,text/html
     min-response-size: 2KB
-  # tomcat:
-  #   threads:
-  #     max: ${SERVER_TOMCAT_MAX_THREADS:50}
-  #     min-spare: ${SERVER_TOMCAT_MIN_SPARE_THREADS:10}
-  #     # Guidance: keep max ≈ 5x CPU cores (50 for 1 vCPU) so threads don't thrash
-  #   accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:100}
-  #   # When worker threads are busy, up to 100 new requests queue before being rejected
-  #   max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:2000}
+  tomcat:
+    threads:
+      max: ${SERVER_TOMCAT_MAX_THREADS:50}
+      min-spare: ${SERVER_TOMCAT_MIN_SPARE_THREADS:10}
+      # Guidance: keep max ≈ 5x CPU cores (50 for 1 vCPU) so threads don't thrash
+    accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:100}
+    # When worker threads are busy, up to 100 new requests queue before being rejected
+    max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:2000}
     # Cap simultaneous keep-alive connections to avoid exhausting file descriptors
-  # servlet:
-  #   context-path: /discovery-service
