@@ -94,15 +94,31 @@ public class DiscoveryMetrics {
                 .register(meterRegistry);
 
         this.searchTimers = Map.of(
-                ENGINE_POSTGRES,      Timer.builder("discovr.discover.search.duration").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
-                ENGINE_ELASTICSEARCH, Timer.builder("discovr.discover.search.duration").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
-                ENGINE_NLWEB,         Timer.builder("discovr.discover.search.duration").tag("engine", ENGINE_NLWEB).register(meterRegistry)
+                ENGINE_POSTGRES,      buildSearchDurationTimer(ENGINE_POSTGRES, meterRegistry),
+                ENGINE_ELASTICSEARCH, buildSearchDurationTimer(ENGINE_ELASTICSEARCH, meterRegistry),
+                ENGINE_NLWEB,         buildSearchDurationTimer(ENGINE_NLWEB, meterRegistry)
         );
         this.resultSummaries = Map.of(
                 ENGINE_POSTGRES,      DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_POSTGRES).register(meterRegistry),
                 ENGINE_ELASTICSEARCH, DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
                 ENGINE_NLWEB,         DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_NLWEB).register(meterRegistry)
         );
+    }
+
+    private static Timer buildSearchDurationTimer(String engine, MeterRegistry registry) {
+        return Timer.builder("discovr.discover.search.duration")
+                .tag("engine", engine)
+                .description("ES/PG/NLWeb search latency per engine")
+                .serviceLevelObjectives(
+                        Duration.ofMillis(10),
+                        Duration.ofMillis(50),
+                        Duration.ofMillis(100),
+                        Duration.ofMillis(200),
+                        Duration.ofMillis(500),
+                        Duration.ofSeconds(1),
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(30))
+                .register(registry);
     }
 
     // ── Recording ────────────────────────────────────────────────────────────
