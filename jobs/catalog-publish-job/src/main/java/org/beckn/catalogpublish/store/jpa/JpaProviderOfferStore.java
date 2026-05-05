@@ -22,7 +22,10 @@ public class JpaProviderOfferStore implements ProviderOfferStore {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public List<ProviderOffer> saveAll(List<ProviderOffer> offers) {
-        return repo.saveAll(offers);
+        for (var offer : offers) {
+            repo.upsert(offer.getOfferId(), offer.getCatalogId(), offer.getProviderId(), offer.getPayload());
+        }
+        return offers;
     }
 
     @Override
