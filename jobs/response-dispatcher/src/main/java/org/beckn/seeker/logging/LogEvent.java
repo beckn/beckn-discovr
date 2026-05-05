@@ -4,9 +4,10 @@ public final class LogEvent {
     private LogEvent() {}
 
     // Consumer lifecycle
-    public static final String CONSUMER_RECEIVED  = "consumer.received";
-    public static final String CONSUMER_PROCESSED = "consumer.processed";
-    public static final String CONSUMER_ERROR     = "consumer.error";
+    public static final String CONSUMER_RECEIVED              = "consumer.received";
+    public static final String CONSUMER_PROCESSED             = "consumer.processed";
+    public static final String CONSUMER_ERROR                 = "consumer.error";
+    public static final String CONSUMER_ENVELOPE_PARSE_FAILED = "consumer.envelope.parse.failed";
 
     // Callback delivery
     public static final String CALLBACK_RESOLVED         = "callback.resolved";

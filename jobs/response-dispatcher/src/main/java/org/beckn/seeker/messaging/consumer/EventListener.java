@@ -9,13 +9,12 @@ import org.apache.kafka.common.header.Header;
 import org.beckn.seeker.common.BecknFields;
 import org.beckn.seeker.logging.BecknMdcContext;
 import org.beckn.seeker.logging.LogEvent;
+import org.beckn.seeker.logging.MdcField;
 import org.beckn.seeker.messaging.producer.EventProducer;
 import org.beckn.seeker.service.MessageProcessingService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
@@ -38,24 +37,48 @@ public class EventListener {
         String key = record.key();
 
         // Extract tags header first so it is set for all subsequent log lines
-        Header tagsHeader = record.headers().lastHeader("tags");
+        Header tagsHeader = record.headers().lastHeader(MdcField.TAGS);
         BecknMdcContext.setTags(tagsHeader != null ? tagsHeader.value() : null);
 
-        // Extract subscriber identity headers (set by catalog-discover-job from auth header)
-        String subscriberId = extractHeader(record.headers().lastHeader("subscriber_id"));
-        String recordId = extractHeader(record.headers().lastHeader("record_id"));
-
-        // Populate MDC from Beckn context if the message is parseable JSON
+        // Read identity and MDC context from the JSON meta envelope.
+        // Format: { "meta": { "subscriber_id": "...", "record_id": "..." }, "payload": { <Beckn response> } }
+        // Identity lives in meta (consistent with Catalg PullResponsePublisher pattern) — no Kafka headers.
+        String subscriberId = null;
+        String recordId = null;
         try {
             if (rawValue != null) {
                 JsonNode root = objectMapper.readTree(rawValue);
-                JsonNode context = root.path(BecknFields.CONTEXT);
-                if (!context.isMissingNode()) {
-                    BecknMdcContext.populate(context);
+                JsonNode meta = root.path(BecknFields.META);
+                if (!meta.isMissingNode()) {
+                    subscriberId = meta.path(BecknFields.SUBSCRIBER_ID).asText(null);
+                    recordId = meta.path(BecknFields.RECORD_ID).asText(null);
+                }
+                // MDC context lives inside payload.context (the Beckn response)
+                JsonNode contextNode = root.path(BecknFields.PAYLOAD).path(BecknFields.CONTEXT);
+                if (!contextNode.isMissingNode()) {
+                    BecknMdcContext.populate(contextNode);
                 }
             }
-        } catch (Exception ignored) {
-            // Non-JSON messages still get processed; MDC will just lack context fields
+        } catch (Exception e) {
+            log.error("{}", value("event", LogEvent.CONSUMER_ENVELOPE_PARSE_FAILED),
+                    value("rawValue", truncate(rawValue, 200)),
+                    value("errorMessage", e.getMessage()));
+            // Short-circuit — non-parseable envelope cannot be processed; route directly to DLT
+            // without traversing the full service stack on every retry.
+            String messageKey = key != null ? key : "unknown";
+            try {
+                eventProducer.sendToDlt(messageKey, rawValue, record.topic(),
+                        record.partition(), record.offset(), e.getMessage(), e.getClass().getName());
+                log.warn("{}", value("event", LogEvent.DLT_SENT), value("key", messageKey));
+                ack.acknowledge();
+            } catch (Exception dltEx) {
+                log.error("{}", value("event", LogEvent.DLT_FAILED),
+                        value("errorMessage", dltEx.getMessage()), dltEx);
+                throw new RuntimeException("DLT publish failed — offset not committed", dltEx);
+            } finally {
+                BecknMdcContext.clear();
+            }
+            return;
         }
 
         try {
@@ -106,10 +129,9 @@ public class EventListener {
         }
     }
 
-    private static String extractHeader(Header header) {
-        if (header == null || header.value() == null || header.value().length == 0) {
-            return null;
-        }
-        return new String(header.value(), StandardCharsets.UTF_8);
+    private static String truncate(String s, int maxLen) {
+        if (s == null) return null;
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...[truncated]";
     }
+
 }

@@ -52,8 +52,9 @@ class DiscoveryControllerDedupTest {
         props.getKafka().setResponseTopic("test.discover.responses");
         props.getKafka().setDedupCacheTtlSeconds(60);
 
-        // Auth is disabled (default) — authorizeRequest is a no-op
-        doNothing().when(authorizationService).authorizeRequest(any(), any());
+        // Auth is disabled (default) — authorizeRequest returns anonymous identity
+        doReturn(AuthorizationService.AuthIdentity.anonymous())
+                .when(authorizationService).authorizeRequest(any(), any());
 
         // Schema validation always passes
         var validResult = mock(DiscoveryValidationService.ValidationResult.class);

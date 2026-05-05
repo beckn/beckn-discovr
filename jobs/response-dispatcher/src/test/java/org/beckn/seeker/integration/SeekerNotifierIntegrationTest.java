@@ -104,28 +104,37 @@ class SeekerNotifierIntegrationTest {
 
     @Test
     void shouldProcessMessageAndSendToBapEndpoint() {
-        // Given — on_discover response; registry resolves BAP base URL
+        // Given — on_discover response in dispatcher envelope format; registry resolves BAP base URL.
+        // catalog-discover-job wraps every response: { "meta": { identity }, "payload": { Beckn response } }
         String testMessage = """
                 {
-                  "context": {
-                    "messageId": "msg-123",
-                    "action": "on_discover"
+                  "meta": {
+                    "subscriber_id": "%s",
+                    "record_id": "%s"
                   },
-                  "catalog": {
-                    "providers": []
+                  "payload": {
+                    "context": {
+                      "messageId": "msg-123",
+                      "action": "on_discover"
+                    },
+                    "catalog": {
+                      "providers": []
+                    }
                   }
                 }
-                """;
+                """.formatted(TEST_SUBSCRIBER_ID, TEST_RECORD_ID);
         String inputTopic = "test.seeker.requests";
         String expectedUrl = BAP_BASE_URL + "/on_discover";
 
+        // HttpService POSTs the unwrapped payload — assert on payload.context fields
         mockServer.expect(requestTo(expectedUrl))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.context.messageId").value("msg-123"))
+                .andExpect(jsonPath("$.meta").doesNotExist())
                 .andRespond(withSuccess("{\"status\":\"ACK\"}", MediaType.APPLICATION_JSON));
 
-        // When — send with identity headers
+        // When — send with identity headers (headers take priority over meta)
         sendWithIdentityHeaders(inputTopic, "test-key", testMessage);
 
         // Then
@@ -137,7 +146,7 @@ class SeekerNotifierIntegrationTest {
 
     @Test
     void shouldProcessMessageAndSendToBppEndpoint() {
-        // Given — catalog/on_publish response; registry resolves BPP base URL
+        // Given — catalog/on_publish response in envelope format; registry resolves BPP base URL
         String bppSubscriberId = "bpp.example.com";
         String bppRecordId = "key-002";
         when(becknAuth.getRegistryEntry(bppSubscriberId, bppRecordId))
@@ -145,25 +154,33 @@ class SeekerNotifierIntegrationTest {
 
         String testMessage = """
                 {
-                  "context": {
-                    "messageId": "msg-456",
-                    "action": "catalog/on_publish"
+                  "meta": {
+                    "subscriber_id": "%s",
+                    "record_id": "%s"
                   },
-                  "catalog": {
-                    "providers": []
+                  "payload": {
+                    "context": {
+                      "messageId": "msg-456",
+                      "action": "catalog/on_publish"
+                    },
+                    "catalog": {
+                      "providers": []
+                    }
                   }
                 }
-                """;
+                """.formatted(bppSubscriberId, bppRecordId);
         String inputTopic = "test.seeker.requests";
         String expectedUrl = BPP_BASE_URL + "/catalog/on_publish";
 
+        // HttpService POSTs the unwrapped payload — assert on payload.context fields
         mockServer.expect(requestTo(expectedUrl))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.context.messageId").value("msg-456"))
+                .andExpect(jsonPath("$.meta").doesNotExist())
                 .andRespond(withSuccess("{\"status\":\"ACK\"}", MediaType.APPLICATION_JSON));
 
-        // When — send with BPP identity headers
+        // When — send with BPP identity headers (headers take priority over meta)
         var record = new ProducerRecord<String, String>(inputTopic, "test-key-bpp", testMessage);
         record.headers().add(new RecordHeader("subscriber_id", bppSubscriberId.getBytes(StandardCharsets.UTF_8)));
         record.headers().add(new RecordHeader("record_id", bppRecordId.getBytes(StandardCharsets.UTF_8)));
@@ -213,7 +230,7 @@ class SeekerNotifierIntegrationTest {
 
     @Test
     void shouldHandleMultipleMessagesCorrectly() {
-        // Given
+        // Given — multiple on_discover responses in envelope format
         String inputTopic = "test.seeker.requests";
         int messageCount = 3;
         String expectedUrl = BAP_BASE_URL + "/on_discover";
@@ -223,22 +240,29 @@ class SeekerNotifierIntegrationTest {
                     .andExpect(method(HttpMethod.POST))
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.context.messageId").value("msg-" + i))
+                    .andExpect(jsonPath("$.meta").doesNotExist())
                     .andRespond(withSuccess("{\"status\":\"ACK\"}", MediaType.APPLICATION_JSON));
         }
 
-        // When — send multiple messages with identity headers
+        // When — send multiple envelope messages with identity headers
         for (int i = 0; i < messageCount; i++) {
             String message = """
                     {
-                      "context": {
-                        "messageId": "msg-%d",
-                        "action": "on_discover"
+                      "meta": {
+                        "subscriber_id": "%s",
+                        "record_id": "%s"
                       },
-                      "catalog": {
-                        "providers": []
+                      "payload": {
+                        "context": {
+                          "messageId": "msg-%d",
+                          "action": "on_discover"
+                        },
+                        "catalog": {
+                          "providers": []
+                        }
                       }
                     }
-                    """.formatted(i);
+                    """.formatted(TEST_SUBSCRIBER_ID, TEST_RECORD_ID, i);
             sendWithIdentityHeaders(inputTopic, "key-" + i, message);
         }
 
@@ -250,16 +274,60 @@ class SeekerNotifierIntegrationTest {
     }
 
     @Test
-    void shouldSendToDltWhenIdentityHeadersMissing() {
-        // Given — message without identity headers should fail (no context fallback)
+    void shouldDeliverCallbackUsingJsonMetaFallbackWhenHeadersAbsent() {
+        // Given — envelope message with identity in meta but NO Kafka headers.
+        // The dispatcher must fall back to meta.subscriber_id / meta.record_id.
         String testMessage = """
                 {
-                  "context": {
-                    "messageId": "msg-no-identity",
-                    "action": "on_discover"
+                  "meta": {
+                    "subscriber_id": "%s",
+                    "record_id": "%s"
                   },
-                  "catalog": {
-                    "providers": []
+                  "payload": {
+                    "context": {
+                      "messageId": "msg-meta-fallback",
+                      "action": "on_discover"
+                    },
+                    "catalog": {
+                      "providers": []
+                    }
+                  }
+                }
+                """.formatted(TEST_SUBSCRIBER_ID, TEST_RECORD_ID);
+        String inputTopic = "test.seeker.requests";
+        String expectedUrl = BAP_BASE_URL + "/on_discover";
+
+        mockServer.expect(requestTo(expectedUrl))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.context.messageId").value("msg-meta-fallback"))
+                .andExpect(jsonPath("$.meta").doesNotExist())
+                .andRespond(withSuccess("{\"status\":\"ACK\"}", MediaType.APPLICATION_JSON));
+
+        // When — send WITHOUT Kafka identity headers; identity comes only from JSON meta
+        kafkaTemplate.send(inputTopic, "meta-fallback-key", testMessage);
+        kafkaTemplate.flush();
+
+        // Then — delivery succeeds via meta fallback; message never reaches DLT
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(500))
+                .untilAsserted(mockServer::verify);
+    }
+
+    @Test
+    void shouldSendToDltWhenBothHeadersAndMetaIdentityAbsent() {
+        // Given — message with neither Kafka headers nor meta identity; no context fallback
+        String testMessage = """
+                {
+                  "payload": {
+                    "context": {
+                      "messageId": "msg-no-identity",
+                      "action": "on_discover"
+                    },
+                    "catalog": {
+                      "providers": []
+                    }
                   }
                 }
                 """;
@@ -270,11 +338,11 @@ class SeekerNotifierIntegrationTest {
         // Trigger partition assignment before producing the DLT-bound message
         testConsumer.poll(Duration.ofSeconds(5));
 
-        // When — send WITHOUT identity headers
+        // When — send WITHOUT identity headers and without meta.subscriber_id/record_id
         kafkaTemplate.send(inputTopic, "no-identity-key", testMessage);
         kafkaTemplate.flush();
 
-        // Then — message should end up in DLT
+        // Then — message should end up in DLT because identity cannot be resolved
         Awaitility.await()
                 .atMost(Duration.ofSeconds(30))
                 .pollInterval(Duration.ofMillis(500))
