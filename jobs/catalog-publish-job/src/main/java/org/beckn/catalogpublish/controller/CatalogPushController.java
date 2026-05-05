@@ -36,8 +36,8 @@ public class CatalogPushController {
             Map.of("status", "ACK");
     private static final Map<String, Object> NACK_MISSING_CONTEXT = Map.of(
             "status", "NACK",
-            "error", Map.of("errorCode", ErrorCodes.SCH_REQUIRED_FIELD_MISSING,
-                    "errorMessage", ErrorMessages.SCH_MISSING_CONTEXT));
+            "error", Map.of("errorCode", ErrorCodes.CTX_INVALID_FIELD,
+                    "errorMessage", ErrorMessages.CTX_INVALID_FIELD));
 
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
