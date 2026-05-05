@@ -142,6 +142,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         .size(resultLimit)
                         // H1: exclude large fields not used by EsSearchAssembler
                         .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
+                        .trackTotalHits(t -> t.enabled(false))
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
@@ -214,7 +215,8 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         return b;
                     }))
                     .minScore(minScore)
-                    .size(resultLimit),
+                    .size(resultLimit)
+                    .trackTotalHits(t -> t.enabled(false)),
                     Map.class);
             var filteredHits = filterByRelativeScore(response.hits().hits(), txId);
             return assembleAndLog(filteredHits, txId, start, "keyword");

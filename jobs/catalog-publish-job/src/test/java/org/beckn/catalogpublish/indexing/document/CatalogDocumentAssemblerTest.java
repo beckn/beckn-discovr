@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.indexing.document;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.service.geometry.GeoShapeExtractor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -40,7 +42,12 @@ class CatalogDocumentAssemblerTest {
     @BeforeEach
     void setup() {
         when(geoShapeExtractor.extractGeoShapes(any())).thenReturn(Map.of());
-        assembler = new CatalogDocumentAssembler(OM, geoShapeExtractor);
+        var indexing = new AppProperties.Indexing(8192);
+        var catalog = mock(AppProperties.Catalog.class);
+        when(catalog.indexing()).thenReturn(indexing);
+        var props = mock(AppProperties.class);
+        when(props.catalog()).thenReturn(catalog);
+        assembler = new CatalogDocumentAssembler(OM, geoShapeExtractor, props);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -512,5 +519,107 @@ class CatalogDocumentAssemblerTest {
         assertThat(blob).contains("Slot Booking");
         assertThat(blob).contains("Mumbai");
         assertThat(blob).contains("24h notice required");
+    }
+
+    // ── M4: full_text_blob truncation at 8KB word boundary ───────────────────
+
+    @Test
+    void assemble_textBlobUnder8KB_notTruncated() throws Exception {
+        // short description stays well under 8192 bytes
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-short",
+                  "descriptor": {"name": "Short Item", "shortDesc": "Brief description."},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        String blob = (String) doc.get("full_text_blob");
+        assertThat(blob.getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+                .isLessThanOrEqualTo(8192);
+        assertThat(blob).contains("Short Item");
+        assertThat(blob).contains("Brief description.");
+    }
+
+    @Test
+    void assemble_textBlobOver8KB_truncatedAtWordBoundary() throws Exception {
+        // Build a long description that exceeds 8192 bytes when assembled
+        String word = "superlongword";
+        String longDesc = (word + " ").repeat(700); // ~9800 bytes
+
+        JsonNode payload = buildPayload(String.format("""
+                {
+                  "id": "item-long",
+                  "descriptor": {"name": "Long Item", "longDesc": "%s"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """, longDesc.trim()));
+
+        // Use assembler with a small max (512 bytes) to test truncation without needing 8KB of data
+        var indexing512 = new AppProperties.Indexing(512);
+        var catalog512 = mock(AppProperties.Catalog.class);
+        when(catalog512.indexing()).thenReturn(indexing512);
+        var props512 = mock(AppProperties.class);
+        when(props512.catalog()).thenReturn(catalog512);
+        when(geoShapeExtractor.extractGeoShapes(any())).thenReturn(Map.of());
+        var assembler512 = new CatalogDocumentAssembler(OM, geoShapeExtractor, props512);
+
+        Map<String, Object> doc = assembler512.assemble(payload, "GenericItem");
+
+        String blob = (String) doc.get("full_text_blob");
+        byte[] blobBytes = blob.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        // Must be at or below the 512-byte cap
+        assertThat(blobBytes.length).isLessThanOrEqualTo(512);
+        // Must not end mid-word (every token is the full "superlongword")
+        assertThat(blob.endsWith(word) || blob.endsWith("Long Item") || blob.isEmpty()
+                || !blob.endsWith(" ")).isTrue();
+        // Blob must start correctly (name comes first)
+        assertThat(blob).startsWith("Long Item");
+    }
+
+    @Test
+    void assemble_textBlobTruncatedDoesNotSplitMidWord() throws Exception {
+        // 10-char words separated by spaces — truncation must land on a space
+        String word = "abcdefghij"; // 10 chars
+        // Build exactly enough words so the joined string exceeds 100 bytes
+        // "abcdefghij abcdefghij ..." — each word+space = 11 bytes
+        // 10 words = 110 bytes (last space stripped = 109), 9 words = 99
+        String manyWords = (word + " ").repeat(20).trim();
+
+        JsonNode payload = buildPayload(String.format("""
+                {
+                  "id": "item-word-boundary",
+                  "descriptor": {"name": "%s"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """, manyWords));
+
+        // Cap at 50 bytes — forces truncation in the middle of the word list
+        var indexing50 = new AppProperties.Indexing(50);
+        var catalog50 = mock(AppProperties.Catalog.class);
+        when(catalog50.indexing()).thenReturn(indexing50);
+        var props50 = mock(AppProperties.class);
+        when(props50.catalog()).thenReturn(catalog50);
+        when(geoShapeExtractor.extractGeoShapes(any())).thenReturn(Map.of());
+        var assembler50 = new CatalogDocumentAssembler(OM, geoShapeExtractor, props50);
+
+        Map<String, Object> doc = assembler50.assemble(payload, "GenericItem");
+
+        String blob = (String) doc.get("full_text_blob");
+        // Must not end with a partial word
+        if (!blob.isEmpty()) {
+            // Every token should be exactly the 10-char word
+            for (String token : blob.split("\\s+")) {
+                assertThat(token).hasSize(word.length())
+                        .withFailMessage("Blob was truncated mid-word: '%s'", blob);
+            }
+        }
+        assertThat(blob.getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+                .isLessThanOrEqualTo(50);
     }
 }

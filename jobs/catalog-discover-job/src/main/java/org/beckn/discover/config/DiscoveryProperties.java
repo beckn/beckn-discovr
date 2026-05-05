@@ -259,6 +259,9 @@ public class DiscoveryProperties {
         private String requestTopic;
         @NotBlank(message = "discovery.kafka.response-topic must not be blank")
         private String responseTopic;
+        /** TTL in seconds for the messageId dedup cache. Requests replayed within this window
+         *  are returned ACK immediately without re-publishing to Kafka (M10). */
+        private long dedupCacheTtlSeconds = 60;
 
         public String getRequestTopic() {
             return requestTopic;
@@ -274,6 +277,14 @@ public class DiscoveryProperties {
 
         public void setResponseTopic(String responseTopic) {
             this.responseTopic = responseTopic;
+        }
+
+        public long getDedupCacheTtlSeconds() {
+            return dedupCacheTtlSeconds;
+        }
+
+        public void setDedupCacheTtlSeconds(long dedupCacheTtlSeconds) {
+            this.dedupCacheTtlSeconds = dedupCacheTtlSeconds;
         }
     }
 
