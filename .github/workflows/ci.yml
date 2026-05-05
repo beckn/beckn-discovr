@@ -1,4 +1,4 @@
-name: Code Quality & Security Tests
+name: Discovr CI
 
 on:
   pull_request:
@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # dorny/paths-filter uses the GitHub API on pull_request events — no checkout needed.
   check-changes:
     name: Check Modified Files
     runs-on: ubuntu-latest
@@ -21,8 +22,6 @@ jobs:
       dispatcher: ${{ steps.filter.outputs.dispatcher }}
       shared: ${{ steps.filter.outputs.shared }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
       - name: Path Filter
         uses: dorny/paths-filter@v3
         id: filter
@@ -35,51 +34,112 @@ jobs:
               - 'sdks/**'
               - '.github/workflows/ci.yml'
 
-  gradle-tests:
-    name: Gradle Tests
+  # ── Java Jobs — each runs only when its own code (or shared) changed ─────────
+
+  test-discover:
+    name: catalog-discover-job
     needs: check-changes
-    if: ${{ needs.check-changes.outputs[matrix.job_key] == 'true' || needs.check-changes.outputs.shared == 'true' }}
+    if: ${{ needs.check-changes.outputs.discover == 'true' || needs.check-changes.outputs.shared == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - name: catalog-discover-job
-            job_key: discover
-            path: jobs/catalog-discover-job
-            run_integration_tests: false
-          - name: catalog-publish-job
-            job_key: publish
-            path: jobs/catalog-publish-job
-            run_integration_tests: true
-          - name: response-dispatcher
-            job_key: dispatcher
-            path: jobs/response-dispatcher
-            run_integration_tests: false
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+        working-directory: jobs/catalog-discover-job
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: 'gradle'
-          cache-dependency-path: ${{ matrix.path }}/build.gradle
+          cache-dependency-path: jobs/catalog-discover-job/build.gradle
+      - name: Test and Coverage
+        run: ./gradlew test jacocoTestReport --no-daemon
+        working-directory: jobs/catalog-discover-job
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-discover-job-test-results
+          path: jobs/catalog-discover-job/build/test-results/**/*.xml
+          retention-days: 1
+      - name: Upload coverage report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-discover-job-coverage
+          path: jobs/catalog-discover-job/build/reports/jacoco/**
+          retention-days: 1
 
+  test-publish:
+    name: catalog-indexer-job
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.publish == 'true' || needs.check-changes.outputs.shared == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-        working-directory: ${{ matrix.path }}
+        working-directory: jobs/catalog-publish-job
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+          cache-dependency-path: jobs/catalog-publish-job/build.gradle
+      - name: Test and Coverage
+        run: ./gradlew test integrationTest jacocoTestReport --no-daemon
+        working-directory: jobs/catalog-publish-job
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-indexer-job-test-results
+          path: jobs/catalog-publish-job/build/test-results/**/*.xml
+          retention-days: 1
+      - name: Upload coverage report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-indexer-job-coverage
+          path: jobs/catalog-publish-job/build/reports/jacoco/**
+          retention-days: 1
 
-      - name: Run tests (Unit & Integration)
-        run: |
-          if [ "${{ matrix.run_integration_tests }}" = "true" ]; then
-            ./gradlew test integrationTest --no-daemon
-          else
-            ./gradlew test --no-daemon
-          fi
-        working-directory: ${{ matrix.path }}
+  test-dispatcher:
+    name: response-dispatcher
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.dispatcher == 'true' || needs.check-changes.outputs.shared == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+        working-directory: jobs/response-dispatcher
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+          cache-dependency-path: jobs/response-dispatcher/build.gradle
+      - name: Test and Coverage
+        run: ./gradlew test jacocoTestReport --no-daemon
+        working-directory: jobs/response-dispatcher
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: response-dispatcher-test-results
+          path: jobs/response-dispatcher/build/test-results/**/*.xml
+          retention-days: 1
+      - name: Upload coverage report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: response-dispatcher-coverage
+          path: jobs/response-dispatcher/build/reports/jacoco/**
+          retention-days: 1
