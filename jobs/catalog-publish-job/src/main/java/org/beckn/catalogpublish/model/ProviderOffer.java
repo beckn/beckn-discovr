@@ -5,7 +5,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
@@ -35,9 +37,11 @@ public class ProviderOffer {
     @Column(name = "payload", columnDefinition = "jsonb", nullable = false)
     private String payload;
 
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
@@ -49,9 +53,6 @@ public class ProviderOffer {
         po.catalogId = catalogId;
         po.providerId = providerId;
         po.payload = payload;
-        var now = LocalDateTime.now();
-        po.createdAt = now;
-        po.updatedAt = now;
         return po;
     }
 
