@@ -70,4 +70,14 @@ public final class BecknFields {
     public static final String AUTH_SUBSCRIBER_ID = "auth.subscriberId";
     /** MDC key: key-level identity from auth header keyId second segment. */
     public static final String AUTH_RECORD_ID     = "auth.recordId";
+
+    // ── Response envelope (dispatcher / discover transport) ─────────────────
+    /** Wrapper field added around every outbound response for durable identity transport. */
+    public static final String META             = "meta";
+    /** Kafka-durable subscriber identity inside {@code meta}. */
+    public static final String SUBSCRIBER_ID    = "subscriber_id";
+    /** Kafka-durable record (key) identity inside {@code meta}. */
+    public static final String RECORD_ID        = "record_id";
+    /** The actual Beckn response payload inside the envelope. */
+    public static final String PAYLOAD          = "payload";
 }

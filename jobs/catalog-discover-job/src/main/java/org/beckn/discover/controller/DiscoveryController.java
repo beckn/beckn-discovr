@@ -40,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
@@ -151,10 +152,10 @@ public class DiscoveryController {
                     value("method", httpRequest.getMethod()),
                     value("transactionId", txnNode.asText("")));
 
-            // Move Ed25519 signature verification off the Tomcat thread so the server
-            // thread is free during the crypto/registry-lookup operation (M9).
-            joinUnwrapped(CompletableFuture.runAsync(
-                    () -> authorizationService.authorizeRequest(rawBody, headers), queryExecutor));
+            // Direct call on the GET path — the return value is not needed here (no Kafka
+            // headers to set), and wrapping a blocking join in supplyAsync provides no
+            // benefit when we have to wait for the result anyway.
+            authorizationService.authorizeRequest(rawBody, headers);
             log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
@@ -192,8 +193,12 @@ public class DiscoveryController {
 
             // Move Ed25519 signature verification off the Tomcat thread so the server
             // thread is free during the crypto/registry-lookup operation (M9).
-            joinUnwrapped(CompletableFuture.runAsync(
+            // Capture the returned identity on the Tomcat thread — MDC is thread-local and
+            // cannot be read across the executor-thread boundary (would always be null).
+            var identity = joinUnwrapped(CompletableFuture.supplyAsync(
                     () -> authorizationService.authorizeRequest(rawBody, headers), queryExecutor));
+            // Also apply to MDC on this thread so downstream log statements include auth fields.
+            BecknMdcContext.setAuthFields(identity.subscriberId(), identity.recordId());
             log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
@@ -220,11 +225,21 @@ public class DiscoveryController {
             final String logMsgId = messageId;
             try {
                 var kafkaHeaders = new RecordHeaders();
-                addHeaderIfPresent(kafkaHeaders, "subscriber_id", MDC.get(MdcField.AUTH_SUBSCRIBER_ID));
-                addHeaderIfPresent(kafkaHeaders, "record_id", MDC.get(MdcField.AUTH_RECORD_ID));
-                addHeaderIfPresent(kafkaHeaders, "tags", MDC.get(MdcField.TAGS));
+                // Tags travel as Kafka header (standard cross-job propagation); identity travels
+                // in JSON meta body — consistent with Catalg catalogService.publishCatalog pattern.
+                addHeaderIfPresent(kafkaHeaders, MdcField.TAGS, MDC.get(MdcField.TAGS));
 
-                var record = new ProducerRecord<>(requestTopic, null, kafkaKey, rawBody, kafkaHeaders);
+                // Wrap the discover request in an envelope carrying caller identity in meta.
+                // Format: { "meta": { "subscriber_id": "...", "record_id": "..." }, "payload": { <discover request> } }
+                // meta is internal routing only — stripped by DiscoveryEventConsumer before processing.
+                ObjectNode envelope = objectMapper.createObjectNode();
+                ObjectNode metaNode = envelope.putObject(BecknFields.META);
+                metaNode.put(BecknFields.SUBSCRIBER_ID, identity.subscriberId());
+                metaNode.put(BecknFields.RECORD_ID, identity.recordId());
+                envelope.set(BecknFields.PAYLOAD, requestNode);
+                String kafkaBody = objectMapper.writeValueAsString(envelope);
+
+                var record = new ProducerRecord<>(requestTopic, null, kafkaKey, kafkaBody, kafkaHeaders);
                 // Record the messageId before sending — ensures the cache entry is set before
                 // any concurrent retry arrives, even if the send completes asynchronously.
                 if (logMsgId != null && !logMsgId.isBlank()) {
@@ -293,9 +308,9 @@ public class DiscoveryController {
      * {@link org.beckn.discover.exception.GlobalExceptionHandler} with the correct
      * HTTP status code instead of being swallowed into a 500.
      */
-    private static void joinUnwrapped(CompletableFuture<?> future) throws Exception {
+    private static <T> T joinUnwrapped(CompletableFuture<T> future) throws Exception {
         try {
-            future.join();
+            return future.join();
         } catch (CompletionException ce) {
             Throwable cause = ce.getCause();
             if (cause instanceof Exception e) {

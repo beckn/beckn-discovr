@@ -10,7 +10,9 @@ import org.beckn.seeker.common.BecknFields;
 import org.beckn.seeker.config.HttpClientProperties;
 import org.beckn.seeker.config.SigningProperties;
 import org.beckn.seeker.logging.LogEvent;
+import org.beckn.seeker.logging.MdcField;
 import org.beckn.seeker.metrics.DispatcherMetrics;
+import org.slf4j.MDC;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -78,7 +80,17 @@ public class HttpService {
     public boolean sendCallback(String eventJson, String subscriberId, String recordId) {
         try {
             JsonNode rootNode = objectMapper.readTree(eventJson);
-            JsonNode context = rootNode.path(BecknFields.CONTEXT);
+
+            // Unwrap the dispatcher envelope.
+            // Format: { "meta": { "subscriber_id": "...", "record_id": "..." }, "payload": { <Beckn response> } }
+            // The Beckn response is always under "payload". Messages without a "payload" key
+            // are treated as bare Beckn responses — resolveTargetUrl rejects them immediately
+            // (null subscriber identity) and they go to DLT via EventListener's error path.
+            JsonNode becknNode = rootNode.path(BecknFields.PAYLOAD).isMissingNode()
+                    ? rootNode
+                    : rootNode.path(BecknFields.PAYLOAD);
+
+            JsonNode context = becknNode.path(BecknFields.CONTEXT);
 
             if (context.isMissingNode()) {
                 log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
@@ -106,15 +118,16 @@ public class HttpService {
                     value("targetUrl", targetUrl),
                     value("subscriberId", sanitize(subscriberId)));
 
-            // Normalize JSON to compact format for consistent signature validation
-            String requestBody = objectMapper.writeValueAsString(rootNode);
+            // Normalize JSON to compact format for consistent signature validation.
+            // Use becknNode (the unwrapped payload) — never the envelope with meta.
+            String requestBody = objectMapper.writeValueAsString(becknNode);
 
             // Prepare headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             // Propagate tags from MDC to outbound HTTP
-            String tags = org.slf4j.MDC.get("tags");
+            String tags = MDC.get(MdcField.TAGS);
             if (tags != null && !tags.isBlank()) {
                 headers.set("X-Tags", tags);
             }

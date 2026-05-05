@@ -141,26 +141,29 @@ class EventListenerTest {
 
 
     @Test
-    void shouldExtractIdentityHeadersAndPassToProcessing() {
-        // Given — Kafka record with subscriber_id and record_id headers
+    void shouldExtractIdentityFromJsonMetaAndPassToProcessing() {
+        // Given — envelope message with identity in JSON meta (new design: no identity in Kafka headers)
         String testMessage = """
             {
-              "context": {
-                "messageId": "msg-789",
-                "action": "on_discover"
+              "meta": {
+                "subscriber_id": "bap.example.com",
+                "record_id": "key-001"
               },
-              "catalog": {
-                "providers": []
+              "payload": {
+                "context": {
+                  "messageId": "msg-789",
+                  "action": "on_discover"
+                },
+                "catalog": {
+                  "providers": []
+                }
               }
             }
             """;
 
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 "catalog.discovery.response", 0, 0L, "key", testMessage);
-        record.headers().add(new RecordHeader("subscriber_id",
-                "bap.example.com".getBytes(StandardCharsets.UTF_8)));
-        record.headers().add(new RecordHeader("record_id",
-                "key-001".getBytes(StandardCharsets.UTF_8)));
+        // No subscriber_id or record_id Kafka headers — identity lives in JSON meta only
 
         when(messageProcessingService.processMessage(
                 eq(testMessage), eq("bap.example.com"), eq("key-001")))
@@ -169,9 +172,89 @@ class EventListenerTest {
         // When
         eventListener.listen(record, acknowledgment);
 
-        // Then — identity headers extracted and forwarded
+        // Then — identity extracted from JSON meta and forwarded
         verify(messageProcessingService).processMessage(
                 eq(testMessage), eq("bap.example.com"), eq("key-001"));
+        verify(acknowledgment).acknowledge();
+        verifyNoMoreInteractions(eventProducer);
+    }
+
+    @Test
+    void shouldExtractIdentityFromJsonMetaWhenHeadersAbsent() {
+        // Given — envelope message with identity in meta but no Kafka headers
+        String testMessage = """
+            {
+              "meta": {
+                "subscriber_id": "bap.meta.com",
+                "record_id": "meta-key-001"
+              },
+              "payload": {
+                "context": {
+                  "messageId": "msg-meta-only",
+                  "action": "on_discover"
+                },
+                "catalog": {}
+              }
+            }
+            """;
+
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(
+                "catalog.discovery.response", 0, 0L, "key", testMessage);
+        // No subscriber_id or record_id headers added
+
+        when(messageProcessingService.processMessage(
+                eq(testMessage), eq("bap.meta.com"), eq("meta-key-001")))
+                .thenReturn("SUCCESS");
+
+        // When
+        eventListener.listen(record, acknowledgment);
+
+        // Then — identity extracted from JSON meta, not from absent headers
+        verify(messageProcessingService).processMessage(
+                eq(testMessage), eq("bap.meta.com"), eq("meta-key-001"));
+        verify(acknowledgment).acknowledge();
+        verifyNoMoreInteractions(eventProducer);
+    }
+
+    @Test
+    void shouldUseJsonMetaIdentityWhenKafkaHeadersAlsoPresent() {
+        // Given — envelope with meta identity AND extraneous Kafka headers present.
+        // New design: identity travels exclusively in JSON meta on the response topic;
+        // Kafka identity headers are not read here, so meta values are always used.
+        String testMessage = """
+            {
+              "meta": {
+                "subscriber_id": "meta.subscriber.com",
+                "record_id": "meta-key"
+              },
+              "payload": {
+                "context": {
+                  "messageId": "msg-header-wins",
+                  "action": "on_discover"
+                },
+                "catalog": {}
+              }
+            }
+            """;
+
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(
+                "catalog.discovery.response", 0, 0L, "key", testMessage);
+        // Add Kafka headers — these are ignored; identity comes from JSON meta only
+        record.headers().add(new RecordHeader("subscriber_id",
+                "header.subscriber.com".getBytes(StandardCharsets.UTF_8)));
+        record.headers().add(new RecordHeader("record_id",
+                "header-key".getBytes(StandardCharsets.UTF_8)));
+
+        when(messageProcessingService.processMessage(
+                eq(testMessage), eq("meta.subscriber.com"), eq("meta-key")))
+                .thenReturn("SUCCESS");
+
+        // When
+        eventListener.listen(record, acknowledgment);
+
+        // Then — meta identity used; Kafka identity headers ignored on response topic
+        verify(messageProcessingService).processMessage(
+                eq(testMessage), eq("meta.subscriber.com"), eq("meta-key"));
         verify(acknowledgment).acknowledge();
         verifyNoMoreInteractions(eventProducer);
     }
