@@ -60,28 +60,26 @@ class EsSchemaFilterBuilderTest {
     }
 
     @Test
-    void rawUrls_singleUrlWithFragment_isDirectBoolMustNoBoolShouldWrapper() {
-        // M7: single-pair short-circuit — no outer bool.should, just a direct bool.must pair
+    void rawUrls_singleUrlWithFragment_outerQueryIsBoolShould() {
         var filters = buildRaw("https://schema.org/Product#GroceryItem");
-        var direct  = requireBool(filters.get(0));
+        var outer   = requireBool(filters.get(0));
 
-        // Direct bool.must — NOT wrapped in bool.should
-        assertThat(direct.should()).isEmpty();
-        assertThat(direct.must()).hasSize(2);
+        assertThat(outer.should()).hasSize(1);
+        assertThat(outer.minimumShouldMatch()).isEqualTo("1");
     }
 
     @Test
-    void rawUrls_singleUrlWithFragment_directPairHasContextAndType() {
+    void rawUrls_singleUrlWithFragment_innerPairHasContextAndType() {
         var filters = buildRaw("https://schema.org/Product#GroceryItem");
-        var direct  = requireBool(filters.get(0));
+        var inner   = requireBool(requireBool(filters.get(0)).should().get(0));
 
-        assertThat(direct.must()).hasSize(2);
+        assertThat(inner.must()).hasSize(2);
 
-        var ctxTerm = requireTerm(direct.must().get(0));
+        var ctxTerm = requireTerm(inner.must().get(0));
         assertThat(ctxTerm.field()).isEqualTo(EsSchemaFilterBuilder.FIELD_CONTEXT);
         assertThat(ctxTerm.value().stringValue()).isEqualTo("https://schema.org/Product");
 
-        var typeTerm = requireTerm(direct.must().get(1));
+        var typeTerm = requireTerm(inner.must().get(1));
         assertThat(typeTerm.field()).isEqualTo(EsSchemaFilterBuilder.FIELD_TYPE);
         assertThat(typeTerm.value().stringValue()).isEqualTo("GroceryItem");
     }
@@ -90,12 +88,12 @@ class EsSchemaFilterBuilderTest {
 
     @Test
     void rawUrls_urlWithoutFragment_contextOnlyTermQuery() {
-        // Single URL without fragment: short-circuits to a plain term query (no bool wrapper)
         var filters = buildRaw("https://schema.org/Product");
+        var outer   = requireBool(filters.get(0));
 
-        assertThat(filters).hasSize(1);
-        // Single context-only pair → direct term query (no bool.should, no bool.must)
-        var ctxTerm = requireTerm(filters.get(0));
+        assertThat(outer.should()).hasSize(1);
+        // Should clause must be a plain term (not a bool.must pair)
+        var ctxTerm = requireTerm(outer.should().get(0));
         assertThat(ctxTerm.field()).isEqualTo(EsSchemaFilterBuilder.FIELD_CONTEXT);
         assertThat(ctxTerm.value().stringValue()).isEqualTo("https://schema.org/Product");
     }
@@ -104,9 +102,9 @@ class EsSchemaFilterBuilderTest {
     void rawUrls_urlWithHashButEmptyFragment_contextOnlyTermQuery() {
         // "https://schema.org/Product#" — hash present but fragment is empty string
         var filters = buildRaw("https://schema.org/Product#");
+        var outer   = requireBool(filters.get(0));
 
-        assertThat(filters).hasSize(1);
-        var ctxTerm = requireTerm(filters.get(0));
+        var ctxTerm = requireTerm(outer.should().get(0));
         assertThat(ctxTerm.field()).isEqualTo(EsSchemaFilterBuilder.FIELD_CONTEXT);
         assertThat(ctxTerm.value().stringValue()).isEqualTo("https://schema.org/Product");
     }
@@ -166,7 +164,6 @@ class EsSchemaFilterBuilderTest {
 
     @Test
     void rawUrls_mixedUrlsWithAndWithoutFragment_bothHandledCorrectly() {
-        // Two URLs → bool.should wrapper with two clauses
         var filters = buildRaw(
                 "https://schema.org/Product#GroceryItem",   // paired
                 "https://beckn.org/Base");                   // context-only
@@ -215,32 +212,34 @@ class EsSchemaFilterBuilderTest {
 
     @Test
     void queryRequest_singleContextAndType_buildsPairedFilter() {
-        // M7: single pair short-circuits to a direct bool.must — no outer bool.should
+        // schemaContextUrls = ["https://schema.org/Product"], schemaTypes = ["GroceryItem"]
         var req = queryRequest(List.of("https://schema.org/Product"), List.of("GroceryItem"));
 
         var filters = EsSchemaFilterBuilder.buildSchemaFilters(req);
 
         assertThat(filters).hasSize(1);
-        // Direct bool.must pair — no outer bool.should wrapper
-        var direct = requireBool(filters.get(0));
-        assertThat(direct.should()).isEmpty();
-        assertThat(direct.must()).hasSize(2);
-        assertThat(requireTerm(direct.must().get(0)).value().stringValue())
+        var outer = requireBool(filters.get(0));
+        assertThat(outer.should()).hasSize(1);
+        // Inner should be a paired bool.must (context+type)
+        var inner = requireBool(outer.should().get(0));
+        assertThat(inner.must()).hasSize(2);
+        assertThat(requireTerm(inner.must().get(0)).value().stringValue())
                 .isEqualTo("https://schema.org/Product");
-        assertThat(requireTerm(direct.must().get(1)).value().stringValue())
+        assertThat(requireTerm(inner.must().get(1)).value().stringValue())
                 .isEqualTo("GroceryItem");
     }
 
     @Test
     void queryRequest_contextOnlyNoTypes_buildsContextOnlyFilter() {
-        // M7: single context-only pair short-circuits to a direct plain term query
+        // schemaContextUrls = ["https://schema.org/Product"], schemaTypes = []
         var req = queryRequest(List.of("https://schema.org/Product"), List.of());
 
         var filters = EsSchemaFilterBuilder.buildSchemaFilters(req);
 
         assertThat(filters).hasSize(1);
-        // Direct term query — no bool wrapper at all
-        var ctxTerm = requireTerm(filters.get(0));
+        var outer = requireBool(filters.get(0));
+        // Context-only — should be a plain term query
+        var ctxTerm = requireTerm(outer.should().get(0));
         assertThat(ctxTerm.field()).isEqualTo(EsSchemaFilterBuilder.FIELD_CONTEXT);
     }
 

@@ -121,7 +121,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .index(alias)
                         .size(limit)
                         .minScore(minScore)
-                        .trackTotalHits(t -> t.enabled(false))
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
@@ -177,7 +176,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             SearchResponse<Map> response = esClient.search(s -> {
                 var b = s.index(alias)
                         .size(limit)
-                        .trackTotalHits(t -> t.enabled(false))
                         .query(q -> q.bool(bq -> {
                             finalQueries.forEach(bq::must);
                             finalSchemaFilters.forEach(bq::filter);
