@@ -80,7 +80,7 @@
         "resource_rateable":      { "type": "boolean" },
         "resource_attributes": {
           "type": "object",
-          "dynamic": true,
+          "dynamic": false,
           "properties": {
             "@context": { "type": "keyword" },
             "@type":    { "type": "keyword" }
@@ -108,14 +108,33 @@
           "dynamic": false,
           "properties": {
             "id":          { "type": "keyword" },
-            "descriptor":  {
+            "descriptor": {
               "type": "object",
               "dynamic": false,
               "properties": {
+                "name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                "shortDesc": { "type": "text" },
+                "longDesc":  { "type": "text" },
+                "code":      { "type": "keyword" }
+              }
+            },
+            "provider": {
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "id":   { "type": "keyword" },
                 "name": { "type": "text", "fields": { "raw": { "type": "keyword" } } }
               }
             },
             "resourceIds": { "type": "keyword" },
+            "addOns": {
+              "type": "nested",
+              "dynamic": false
+            },
+            "considerations": {
+              "type": "nested",
+              "dynamic": false
+            },
             "validity": {
               "type": "object",
               "dynamic": false,
@@ -123,6 +142,18 @@
                 "startDate": { "type": "date" },
                 "endDate":   { "type": "date" }
               }
+            },
+            "availableTo": {
+              "type": "nested",
+              "dynamic": false,
+              "properties": {
+                "type": { "type": "keyword" },
+                "id":   { "type": "keyword" }
+              }
+            },
+            "offerAttributes": {
+              "type": "nested",
+              "dynamic": false
             }
           }
         },
