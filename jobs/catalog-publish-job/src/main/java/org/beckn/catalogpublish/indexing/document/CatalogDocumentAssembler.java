@@ -3,6 +3,7 @@ package org.beckn.catalogpublish.indexing.document;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.catalogpublish.common.BecknFields;
+import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.model.Item;
 import org.beckn.catalogpublish.service.geometry.GeoShapeExtractor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,12 +22,19 @@ import java.util.Set;
 @ConditionalOnProperty(name = "app.catalog.elasticsearch.enabled", havingValue = "true")
 public class CatalogDocumentAssembler {
 
+    private static final int DEFAULT_MAX_TEXT_BLOB_BYTES = 8192;
+
     private final ObjectMapper objectMapper;
     private final GeoShapeExtractor geoShapeExtractor;
+    private final int maxTextBlobBytes;
 
-    public CatalogDocumentAssembler(ObjectMapper objectMapper, GeoShapeExtractor geoShapeExtractor) {
+    public CatalogDocumentAssembler(ObjectMapper objectMapper,
+                                    GeoShapeExtractor geoShapeExtractor,
+                                    AppProperties appProperties) {
         this.objectMapper = objectMapper;
         this.geoShapeExtractor = geoShapeExtractor;
+        var indexing = appProperties.catalog().indexing();
+        this.maxTextBlobBytes = (indexing != null) ? indexing.maxTextBlobBytes() : DEFAULT_MAX_TEXT_BLOB_BYTES;
     }
 
     /** Called from ElasticIndexStep — builds the ES document from the Item and its payload. */
@@ -164,7 +172,28 @@ public class CatalogDocumentAssembler {
         collectStrings(resourceNode.path(BecknFields.DESCRIPTOR).path("docs"), parts);
         collectStrings(resourceNode.path(BecknFields.DESCRIPTOR).path("mediaFile"), parts);
         collectStrings(offersNode, parts);
-        return String.join(" ", parts);
+        String blob = String.join(" ", parts);
+        return truncateAtWordBoundary(blob, maxTextBlobBytes);
+    }
+
+    /**
+     * Truncates {@code text} to at most {@code maxBytes} bytes (UTF-8), breaking
+     * only at a word boundary (space) so no token is split mid-word.
+     */
+    private static String truncateAtWordBoundary(String text, int maxBytes) {
+        if (text == null) return null;
+        byte[] bytes = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (bytes.length <= maxBytes) return text;
+        // Walk back from maxBytes until we hit a space or start of string
+        int cut = maxBytes;
+        while (cut > 0 && bytes[cut] != ' ') {
+            cut--;
+        }
+        if (cut == 0) {
+            // No space found — hard cut at maxBytes (avoids empty string for long tokens)
+            cut = maxBytes;
+        }
+        return new String(bytes, 0, cut, java.nio.charset.StandardCharsets.UTF_8).stripTrailing();
     }
 
     private static void collectLocationText(JsonNode node, Collection<String> parts) {

@@ -123,6 +123,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .minScore(minScore)
                         // H1: exclude large fields not used by EsSearchAssembler
                         .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
+                        .trackTotalHits(t -> t.enabled(false))
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
@@ -184,6 +185,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .size(limit)
                         // H1: exclude large fields not used by EsSearchAssembler
                         .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
+                        .trackTotalHits(t -> t.enabled(false))
                         .query(q -> q.bool(bq -> {
                             // geo-shape queries in filter — no scoring, cache-friendly
                             finalGeoFilters.forEach(bq::filter);
