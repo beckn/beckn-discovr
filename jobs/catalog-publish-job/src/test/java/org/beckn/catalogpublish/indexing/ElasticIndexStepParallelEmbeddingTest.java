@@ -164,13 +164,13 @@ class ElasticIndexStepParallelEmbeddingTest {
 
         for (int i = 0; i < itemCount; i++) {
             String id = "item-" + i;
-            Item item = Item.from(id, "{}", new String[0], "owner", "sub", "cat-1",
+            Item item = Item.from(id, "{}", new String[0], "cat-1",
                     "TestType", "https://schema.org", new String[]{"test-net"});
             items.add(item);
             payloadNodes.put(id, MAPPER.readTree("{\"id\":\"" + id + "\"}"));
         }
 
-        CatalogContext context = new CatalogContext(List.of("test-net"), "sub", "owner", null);
+        CatalogContext context = new CatalogContext(List.of("test-net"), null);
         return new CatalogBatch(
                 "cat-1", context, "TestType", CatalogOperation.PUBLISH,
                 items, List.of(), payloadNodes, false);
@@ -183,10 +183,11 @@ class ElasticIndexStepParallelEmbeddingTest {
         var esConfig = new org.beckn.catalogpublish.config.AppProperties.Elasticsearch(
                 true, "http://localhost:9200", "beckn-catalog", "beckn-catalog",
                 "fail-topic", "dlq-topic", batchSize, 3, 1000L, 4, 100, 5, null);
+        var indexing = new org.beckn.catalogpublish.config.AppProperties.Indexing(8192);
         var catalog = new org.beckn.catalogpublish.config.AppProperties.Catalog(
                 10_000_000L, true,
                 "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml",
-                1, 4, esConfig, textSearch);
+                1, 4, esConfig, textSearch, indexing);
         var datasource = new org.beckn.catalogpublish.config.AppProperties.Datasource(
                 "jdbc:postgresql://localhost:5432/test", "org.postgresql.Driver",
                 "test", "test",
