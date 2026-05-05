@@ -165,8 +165,6 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void push_missingBppId_returns202ButDoesNotPersist() throws Exception {
-        long countBefore = itemRepository.count();
-
         // context present, empty resources array → pipeline runs but nothing to persist
         String payload = """
                 {
@@ -190,9 +188,16 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.status").value("ACK"));
 
+        // Assert that no item was persisted for catalog "cat-x" specifically.
+        // Checking the global count is unreliable because in-flight Kafka consumers
+        // from prior tests can insert rows for other catalog IDs after @BeforeEach clears.
         await().atMost(5, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+                .untilAsserted(() -> {
+                    long catXCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-x");
+                    assertThat(catXCount).isZero();
+                });
     }
 
     @Test
