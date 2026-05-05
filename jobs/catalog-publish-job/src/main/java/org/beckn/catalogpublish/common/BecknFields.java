@@ -74,7 +74,7 @@ public final class BecknFields {
 
     // ── Action values (v2.1 slash notation) ─────────────────────────────────
     public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
-    public static final String ACTION_ON_CATALOG_PUBLISH = "catalog/on_publish";
+    public static final String ACTION_ON_CATALOG_PUBLISH = "on_catalog_publish";
 
 
     // ── Context v2.1 fields ───────────────────────────────────────────────────
