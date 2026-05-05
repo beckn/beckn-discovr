@@ -38,7 +38,7 @@ services:
     networks:
       - beckn-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:9200 | grep -q 200 || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9200' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
