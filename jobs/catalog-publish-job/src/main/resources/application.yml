@@ -54,13 +54,6 @@ app:
         retries: ${CATALOG_TEXT_SEARCH_EMBEDDING_RETRIES:3}
         retry-delay-ms: ${CATALOG_TEXT_SEARCH_EMBEDDING_RETRY_DELAY_MS:1000}
 
-    # ─── Indexing ──────────────────────────────────────────────────────────
-    indexing:
-      # Maximum size of the full_text_blob field in bytes (UTF-8, word-boundary truncation).
-      # Larger blobs increase index size and BM25 scoring overhead without proportional
-      # recall gains. Default: 8192 bytes (8KB).
-      max-text-blob-bytes: ${CATALOG_INDEXING_MAX_TEXT_BLOB_BYTES:8192}
-
     elasticsearch:
       enabled: false
       hosts: ${ES_HOSTS:http://localhost:9200}

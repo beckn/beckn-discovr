@@ -26,9 +26,6 @@ public class EsSearchConfig {
                 .setRequestConfigCallback(cfg -> cfg
                         .setConnectTimeout(es.getConnectTimeoutMs())
                         .setSocketTimeout(es.getSocketTimeoutMs()))
-                .setHttpClientConfigCallback(cfg -> cfg
-                        .setMaxConnPerRoute(20)
-                        .setMaxConnTotal(40))
                 .build();
     }
 
