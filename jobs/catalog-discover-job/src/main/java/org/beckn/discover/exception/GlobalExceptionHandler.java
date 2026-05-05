@@ -96,7 +96,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             Map<String, Object> props = pd.getProperties();
             code = props != null && props.containsKey("code") ? (String) props.get("code")
                     : ErrorCodes.NET_INTERNAL_ERROR;
-            message = safeMessageForCode(code);
+            // Use the SDK-provided detail message when available — it contains the specific,
+            // controlled format error message (e.g. "Authorization header format is invalid",
+            // "Invalid keyId format"). Fall back to the generic constant for unknown codes.
+            String detail = pd.getDetail();
+            message = (detail != null && !detail.isBlank()) ? detail : safeMessageForCode(code);
         } else if (status == HttpStatus.BAD_REQUEST || ex instanceof IllegalArgumentException) {
             code = ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED;
             message = sanitizeValidationMessage(ex.getMessage());
