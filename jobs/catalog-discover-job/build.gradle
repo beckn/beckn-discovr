@@ -135,4 +135,7 @@ bootJar {
     archiveBaseName = 'discovery-service'
     archiveVersion = '1.0.0'
     archiveClassifier = ''
+    layered {
+        enabled = true
+    }
 }

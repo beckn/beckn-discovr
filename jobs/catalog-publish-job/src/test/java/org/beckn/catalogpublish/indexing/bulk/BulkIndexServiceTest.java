@@ -1,6 +1,9 @@
 package org.beckn.catalogpublish.indexing.bulk;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.ErrorCause;
+import co.elastic.clients.elasticsearch._types.ErrorResponse;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
@@ -14,10 +17,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.net.ConnectException;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -94,5 +99,71 @@ class BulkIndexServiceTest {
         ArgumentCaptor<BulkRequest> captor = ArgumentCaptor.forClass(BulkRequest.class);
         verify(esClient).bulk(captor.capture());
         assertThat(item.id()).isEqualTo("cat-1:null");
+    }
+
+    // ── C4: 429 rate-limit retry tests ────────────────────────────────────────
+
+    @Test
+    void index_elasticsearch429_throwsEsRateLimitException() throws Exception {
+        // GIVEN: ES returns 429 — should be re-thrown as EsRateLimitException (retryable)
+        Map<String, Object> doc = Map.of("catalog_id", "cat-1", "resource_id", "res-1");
+        when(indexManager.resolveIndexName("test")).thenReturn("test-index");
+
+        ElasticsearchException e429 = buildElasticsearchException(429);
+        when(esClient.bulk(any(BulkRequest.class))).thenThrow(e429);
+
+        // WHEN / THEN: EsRateLimitException surfaces so @Retryable can intercept it
+        assertThatThrownBy(() -> bulkIndexService.index("test", List.of(doc)))
+                .isInstanceOf(EsRateLimitException.class)
+                .hasMessageContaining("429");
+
+        verify(metrics).incrementRetried();
+    }
+
+    @Test
+    void index_elasticsearchNon429_returnsAllFailed_noRetry() throws Exception {
+        // GIVEN: ES returns 403 (auth) — must NOT be wrapped as EsRateLimitException
+        Map<String, Object> doc = Map.of("catalog_id", "cat-1", "resource_id", "res-1");
+        when(indexManager.resolveIndexName("test")).thenReturn("test-index");
+
+        ElasticsearchException e403 = buildElasticsearchException(403);
+        when(esClient.bulk(any(BulkRequest.class))).thenThrow(e403);
+
+        // WHEN
+        BulkIndexResult result = bulkIndexService.index("test", List.of(doc));
+
+        // THEN: marked as failed, no retry counter incremented
+        assertThat(result.hasFailures()).isTrue();
+        assertThat(result.succeeded()).isEmpty();
+        verify(metrics, never()).incrementRetried();
+    }
+
+    @Test
+    void index_connectException_incrementsRetryMetricAndRethrows() throws Exception {
+        // GIVEN: connection refused (transient) — must rethrow for @Retryable
+        Map<String, Object> doc = Map.of("catalog_id", "cat-1", "resource_id", "res-1");
+        when(indexManager.resolveIndexName("test")).thenReturn("test-index");
+        when(esClient.bulk(any(BulkRequest.class))).thenThrow(new ConnectException("Connection refused"));
+
+        assertThatThrownBy(() -> bulkIndexService.index("test", List.of(doc)))
+                .isInstanceOf(ConnectException.class);
+
+        verify(metrics).incrementRetried();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Builds a mock {@link ElasticsearchException} that reports a specific HTTP status.
+     *
+     * <p>The ES client library does not expose a public constructor for setting
+     * arbitrary status codes on {@link ElasticsearchException}, but the class has
+     * a constructor that takes an {@link ErrorResponse} object. We create a minimal
+     * version using Mockito rather than fighting the sealed hierarchy.</p>
+     */
+    private static ElasticsearchException buildElasticsearchException(int statusCode) {
+        var errorCause = ErrorCause.of(ec -> ec.type("status_exception").reason("HTTP " + statusCode));
+        var errorResponse = ErrorResponse.of(er -> er.status(statusCode).error(errorCause));
+        return new ElasticsearchException("test-url", errorResponse);
     }
 }

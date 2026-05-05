@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
@@ -52,6 +54,17 @@ public class EsIndexManager {
     private final String              templateFile;
     private final AtomicBoolean       templateCreated = new AtomicBoolean(false);
 
+    /**
+     * H5: In-memory set of index names confirmed to exist (and have the alias).
+     *
+     * <p>Before each bulk operation, {@link #ensureIndex} previously made 2–4 HTTP
+     * round-trips (exists + create + existsAlias + putAlias). Once an index is
+     * confirmed to exist here, all subsequent calls skip those network calls entirely.
+     * The set is never persisted — it is cleared on application restart, which is the
+     * only time a new ES index might need to be created anyway.</p>
+     */
+    private final Set<String> confirmedIndexes = ConcurrentHashMap.newKeySet();
+
     public EsIndexManager(ElasticsearchClient esClient,
                           EsIndexerMetrics metrics,
                           AppProperties props) {
@@ -78,15 +91,19 @@ public class EsIndexManager {
 
     /** Ensures the index (and alias) exist. Called on-demand before each bulk. */
     public void ensureIndex(String indexName) throws Exception {
+        // H5: skip all HTTP round-trips if this index was previously confirmed
+        if (confirmedIndexes.contains(indexName)) return;
+
         ensureTemplateOnce();
         if (esClient.indices().exists(r -> r.index(indexName)).value()) {
             ensureAlias(indexName);
-            return;
+        } else {
+            esClient.indices().create(r -> r.index(indexName));
+            ensureAlias(indexName);
+            metrics.incrementIndexCreated();
+            log.info("event={} name={} alias={}", LogEvent.ES_INDEX_CREATED, indexName, aliasName);
         }
-        esClient.indices().create(r -> r.index(indexName));
-        ensureAlias(indexName);
-        metrics.incrementIndexCreated();
-        log.info("event={} name={} alias={}", LogEvent.ES_INDEX_CREATED, indexName, aliasName);
+        confirmedIndexes.add(indexName);
     }
 
     // ── Private ──────────────────────────────────────────────────────────────
