@@ -148,23 +148,17 @@ public final class EsSchemaFilterBuilder {
             return List.of();
         }
 
-        log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
-                value("schemaContextCount", rawSchemaContextUrls.size()),
-                value("pairsBuilt", pairs.size()),
-                value("transactionId", transactionId));
-
-        // Short-circuit: single pair — return directly without the bool.should wrapper.
-        // This is the common case and improves node query cache hit rates.
-        if (pairs.size() == 1) {
-            return List.of(pairs.get(0));
-        }
-
-        // Multiple pairs: wrap in bool.should so any matching pair qualifies the document
+        // Wrap all pairs in a bool.should so any matching pair qualifies the document
         Query schemaFilter = Query.of(q -> q.bool(b -> {
             pairs.forEach(b::should);
             b.minimumShouldMatch("1");
             return b;
         }));
+
+        log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
+                value("schemaContextCount", rawSchemaContextUrls.size()),
+                value("pairsBuilt", pairs.size()),
+                value("transactionId", transactionId));
 
         return List.of(schemaFilter);
     }

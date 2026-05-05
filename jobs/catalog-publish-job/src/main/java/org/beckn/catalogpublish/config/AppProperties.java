@@ -61,8 +61,7 @@ public record AppProperties(
                         @Min(1) int parallelCatalogThreshold,
                         @Min(1) int processingPoolSize,
                         @Valid Elasticsearch elasticsearch,
-                        @Valid TextSearch textSearch,
-                        @Valid Indexing indexing) {
+                        @Valid TextSearch textSearch) {
         }
 
         /**
@@ -86,10 +85,6 @@ public record AppProperties(
                         int timeoutMs,
                         int retries,
                         long retryDelayMs) {}
-
-        public record Indexing(
-                        @Min(1) int maxTextBlobBytes) {
-        }
 
         public record Elasticsearch(
                         boolean enabled,
