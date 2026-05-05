@@ -22,7 +22,7 @@ class ItemPayloadBuilderTest {
         ObjectNode catalog = mapper.createObjectNode();
         catalog.put("id", "c1");
         catalog.putArray("resources").add(mapper.createObjectNode());
-        CatalogContext ctx = new CatalogContext(List.of(), "sub-1", null, null);
+        CatalogContext ctx = new CatalogContext(List.of(), null);
         JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
         assertThat(slice.has("resources")).isFalse();
         assertThat(slice.has("offers")).isFalse();
@@ -39,7 +39,7 @@ class ItemPayloadBuilderTest {
         catalog.put("bppId", "catalog-bpp");
         catalog.put("bppUri", "http://catalog-bpp");
         catalog.putArray("resources").add(mapper.createObjectNode());
-        CatalogContext ctx = new CatalogContext(List.of(), "sub-ctx", null, null);
+        CatalogContext ctx = new CatalogContext(List.of(), null);
         JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
         // bppId/bppUri must NOT appear in the stored payload
         assertThat(slice.has("bppId")).isFalse();

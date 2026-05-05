@@ -51,11 +51,11 @@ class OfferResolutionStepTest {
     }
 
     private CatalogContext testCtx() {
-        return new CatalogContext(List.of("net-1"), "sub-b", null, objectMapper.createObjectNode());
+        return new CatalogContext(List.of("net-1"), objectMapper.createObjectNode());
     }
 
     private Item buildStoredItem(String id, String bppId, String catalogId, String payloadJson) {
-        return Item.from(id, payloadJson, new String[0], null, bppId,
+        return Item.from(id, payloadJson, new String[0],
                 catalogId, "TestType", null, new String[]{"net-1"});
     }
 
@@ -186,7 +186,7 @@ class OfferResolutionStepTest {
                     "offers":[{"id":"offer-old","descriptor":{"name":"Old Offer"}}]}]}
                 """));
         // Item already has offer-old in the DB
-        Item storedItem = Item.from("item-a", existingPayload, new String[]{"offer-old"}, null, "sub-a",
+        Item storedItem = Item.from("item-a", existingPayload, new String[]{"offer-old"},
                 "cat-a", "TestType", null, new String[]{"net-1"});
         when(itemStore.findAllByIdIn(anyList())).thenReturn(List.of(storedItem));
 
