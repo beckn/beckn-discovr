@@ -95,6 +95,11 @@ public class PersistenceStep {
         var updateMode = extractUpdateMode(messageNode, catalogId);
         boolean isFullReplace = "FULL".equalsIgnoreCase(updateMode);
 
+        // Effective network IDs: prefer visibleTo from publishDirectives (multi-network),
+        // falling back to context.networkId (single-network, pre-visibleTo compat).
+        var visibleTo = extractVisibleTo(messageNode, catalogId);
+        var effectiveNetworkIds = visibleTo.isEmpty() ? ctx.networkIds() : visibleTo;
+
         if (isFullReplace) {
             // Delete locations BEFORE items — location subquery references item table
             int deletedLocations = locationStore.deleteByCatalogId(catalogId);
@@ -150,8 +155,7 @@ public class PersistenceStep {
                         : (resourceContextUrl != null ? resourceContextUrl : catalogContextUrl);
                 built.add(new ResourceWithNode(
                         Item.from(resourceId, payload.toString(), offerIds,
-                                ctx.recordId(), ctx.subscriberId(), catalogId,
-                                type, contextUrl, ctx.networkIds().toArray(new String[0])),
+                                catalogId, type, contextUrl, effectiveNetworkIds.toArray(new String[0])),
                         payload));
             } catch (Exception e) {
                 String sanitized = ErrorSanitizer.sanitize(e);
@@ -187,7 +191,6 @@ public class PersistenceStep {
                         String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
                         built.add(new ResourceWithNode(
                                 Item.from(linkedItem.getId(), payload.toString(), offerIds,
-                                        linkedItem.getCreatedBy(), linkedItem.getSubscriberId(),
                                         linkedItem.getCatalogId(),
                                         linkedItem.getType(), linkedItem.getContextUrl(),
                                         linkedItem.getNetworkIds().toArray(new String[0])),
@@ -277,6 +280,37 @@ public class PersistenceStep {
         return "MERGE";
     }
 
+    /**
+     * Reads {@code visibleTo} from the message-level {@code publishDirectives} array by matching
+     * on {@code catalogId}. Returns an empty list when no matching directive or empty {@code visibleTo}.
+     *
+     * <p>When present, {@code visibleTo} contains the full set of network IDs this catalog is
+     * visible to — set by the publisher via Catalg's multi-network publish feature.
+     */
+    private List<String> extractVisibleTo(JsonNode messageNode, String catalogId) {
+        if (messageNode == null || messageNode.isMissingNode() || messageNode.isNull()) {
+            return List.of();
+        }
+        var directives = messageNode.path(BecknFields.PUBLISH_DIRECTIVES);
+        if (directives.isArray()) {
+            for (var d : directives) {
+                if (catalogId.equals(d.path("catalogId").asText(null))) {
+                    var vtNode = d.path(BecknFields.VISIBLE_TO);
+                    if (vtNode.isArray() && !vtNode.isEmpty()) {
+                        var result = new ArrayList<String>();
+                        for (var n : vtNode) {
+                            if (n.isTextual() && !n.asText().isBlank()) {
+                                result.add(n.asText());
+                            }
+                        }
+                        return List.copyOf(result);
+                    }
+                }
+            }
+        }
+        return List.of();
+    }
+
     private String extractResourceId(JsonNode resourceNode) {
         return FieldExtractor.extractString(resourceNode, BecknFields.ID)
                 .filter(s -> !s.isBlank())
@@ -329,8 +363,7 @@ public class PersistenceStep {
             if (offerId == null || offerId.isBlank()) continue;
             try {
                 String payload = objectMapper.writeValueAsString(offerNode);
-                entities.add(ProviderOffer.from(offerId, catalogId, providerId,
-                        payload, ctx.recordId(), ctx.subscriberId()));
+                entities.add(ProviderOffer.from(offerId, catalogId, providerId, payload));
             } catch (Exception e) {
                 log.warn("event={} offerId={} catalogId={} error={}",
                         LogEvent.PERSIST_FAILED, offerId, catalogId, ErrorSanitizer.sanitize(e));

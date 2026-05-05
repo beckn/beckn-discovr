@@ -37,7 +37,6 @@ class ParseStepTest {
                 {"context":{"networkId":"net-1","subscriberId":"sub-1"},"message":{"catalogs":[{"id":"c1","resources":[]}]}}
                 """;
         var parsed = parseStep.parse(msg);
-        assertThat(parsed.context().subscriberId()).isEqualTo("sub-1");
         assertThat(parsed.context().networkIds()).containsExactly("net-1");
         assertThat(parsed.catalogs()).hasSize(1);
         assertThat(parsed.catalogs().get(0).path("id").asText()).isEqualTo("c1");

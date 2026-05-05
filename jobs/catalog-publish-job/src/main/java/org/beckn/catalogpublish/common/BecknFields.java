@@ -63,6 +63,7 @@ public final class BecknFields {
     // ── Publish directives ────────────────────────────────────────────────────
     public static final String PUBLISH_DIRECTIVES = "publishDirectives";
     public static final String UPDATE_MODE        = "updateMode";
+    public static final String VISIBLE_TO         = "visibleTo";
 
     // ── Publish-specific fields ──────────────────────────────────────────────
     public static final String CATALOG         = "catalog";
