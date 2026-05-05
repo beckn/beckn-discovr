@@ -15,6 +15,7 @@ import java.nio.file.Path;
 
 import org.beckn.discover.common.BecknFields;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,11 +44,10 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         }
 
         @Test
-        void postDiscoverSyncReturnsCatalogsFromService() throws Exception {
-                // H9: GET /beckn/discover → POST /beckn/discover/sync
+        void getDiscoverReturnsCatalogsFromService() throws Exception {
                 String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover/sync")
+                ResultActions result = mockMvc.perform(get("/beckn/discover")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -111,11 +111,10 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         }
 
         @Test
-        void postDiscoverSyncWithInvalidSchemaReturnsBadRequest() throws Exception {
-                // H9: GET /beckn/discover → POST /beckn/discover/sync
+        void getDiscoverWithInvalidSchemaReturnsBadRequest() throws Exception {
                 String payload = readFixture("invalid_missing_context.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover/sync")
+                ResultActions result = mockMvc.perform(get("/beckn/discover")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
