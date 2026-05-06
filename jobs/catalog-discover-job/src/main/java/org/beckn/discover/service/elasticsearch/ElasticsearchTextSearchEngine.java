@@ -195,7 +195,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         // Scored by BM25 via beckn_text analyzer (stemming + stop-words); no fuzziness
                         // needed since the blob already captures all catalog text.
                         if (!blobFields.isEmpty()) {
-                            b.must(Query.of(q -> q.match(m -> m
+                            b.must(Query.of(mq -> mq.match(m -> m
                                     .field(blobFields.get(0))
                                     .query(text))));
                         }
