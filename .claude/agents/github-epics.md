@@ -37,7 +37,7 @@ Before doing anything, ask the user ALL of these in one message:
 
 1. **Release?** (e.g., `1.0.0`)
 2. **Sprint?** (e.g., `April 26 - 03`)
-3. **Assignee?** (e.g., `manjudr`)
+3. **Assignee?** (e.g., `github-username`)
 4. **Target branch for PR?** (e.g., `release-1.0.0-RC1`)
 
 Also read the user’s requirement, notes, or bullet list. If **materially ambiguous** (wrong repo/project or how to split Epics), include those questions in the same message. Maximum 6 questions total. Then **stop** until they answer.

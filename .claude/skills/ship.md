@@ -14,7 +14,7 @@ Ask ALL of these in one message before starting:
 
 1. **Which issues are linked?** (fetch titles from git commits/branch name, show with titles)
 2. **Target branch for PR?** (e.g., `release-1.0.0-RC1`, `main`)
-3. **Assignee?** (e.g., `manjudr`)
+3. **Assignee?** (e.g., `github-username`)
 
 Wait for answer. Then run autonomously through phases 2-6.
 
