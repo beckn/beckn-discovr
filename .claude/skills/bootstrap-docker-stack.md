@@ -9,7 +9,7 @@ Bootstrap the Beckn **Discovr** Docker stack from scratch (or reset it cleanly).
 
 ## Assumptions
 
-- You are running from: `/Users/manju/Documents/Projects/Beckn/beckn-discovr`
+- You are running from the repo root: `beckn-discovr/`
 - Compose file: `docker-compose.yml`
 - Docker network used by compose: `beckn-network` (as defined in compose)
 
