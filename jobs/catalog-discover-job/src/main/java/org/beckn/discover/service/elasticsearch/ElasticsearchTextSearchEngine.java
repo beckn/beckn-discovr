@@ -195,10 +195,9 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         // Scored by BM25 via beckn_text analyzer (stemming + stop-words); no fuzziness
                         // needed since the blob already captures all catalog text.
                         if (!blobFields.isEmpty()) {
-                            b.must(Query.of(mq -> mq.multiMatch(mm -> mm
-                                    .query(text)
-                                    .fields(blobFields)
-                                    .type(TextQueryType.BestFields))));
+                            b.must(Query.of(q -> q.match(m -> m
+                                    .field(blobFields.get(0))
+                                    .query(text))));
                         }
                         // Scoring fields: boost documents where the query matches the resource/catalog/
                         // provider name directly. should (not must) so blob-only matches still qualify.
