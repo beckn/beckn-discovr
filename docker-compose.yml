@@ -104,7 +104,7 @@ services:
       - APP_MESSAGING_TOPICS_RESPONSES=discovr.publish.out.responses
       - APP_MESSAGING_TOPICS_FAILED=discovr.publish.dlt.requests
       - APP_CATALOG_VALIDATION_ENABLED=false
-      - BECKN_PROTOCOL_API_SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/schema-update/api/v2.0.0/beckn.yaml
+      - BECKN_PROTOCOL_API_SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/catalog-schema-changes/api/v2.0.0/beckn.yaml
       - JAVA_OPTS=-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - JAVA_TOOL_OPTIONS=
       # Beckn Auth SDK — signature verification for /catalog/push
@@ -197,7 +197,7 @@ services:
       - POSTGRES_PASSWORD=catalog123
       - POSTGRES_MAX_POOL_SIZE=10
       - MAX_ITEMS_PER_CATALOG=100
-      - BECKN_PROTOCOL_API_SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/schema-update/api/v2.0.0/beckn.yaml
+      - BECKN_PROTOCOL_API_SCHEMA_URL=https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/catalog-schema-changes/api/v2.0.0/beckn.yaml
       - SCHEMA_CACHE_TTL_HOURS=24
       - LOGGING_LEVEL_ORG_BECKN_DISCOVER=INFO
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA=ERROR
