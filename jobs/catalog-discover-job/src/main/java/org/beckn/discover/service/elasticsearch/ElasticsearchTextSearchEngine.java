@@ -2,6 +2,7 @@ package org.beckn.discover.service.elasticsearch;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.query_dsl.Operator;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
@@ -197,7 +198,8 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         if (!blobFields.isEmpty()) {
                             b.must(Query.of(mq -> mq.match(m -> m
                                     .field(blobFields.get(0))
-                                    .query(text))));
+                                    .query(text)
+                                    .operator(Operator.And))));
                         }
                         // Scoring fields: boost documents where the query matches the resource/catalog/
                         // provider name directly. should (not must) so blob-only matches still qualify.
@@ -206,7 +208,8 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                             b.should(Query.of(mq -> mq.multiMatch(mm -> mm
                                     .query(text)
                                     .fields(scoringFields)
-                                    .type(TextQueryType.BestFields))));
+                                    .type(TextQueryType.BestFields)
+                                    .tieBreaker(0.3))));
                         }
                         keywordSchemaFilters.forEach(b::filter);
                         return b;
