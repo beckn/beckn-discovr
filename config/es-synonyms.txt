@@ -5,6 +5,7 @@
 
 # EV / Electric Vehicle domain
 ev, electric vehicle
+charging, charger
 charger, charging station
 kw, kilowatt
 

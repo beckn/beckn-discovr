@@ -14,9 +14,9 @@ You are a **test execution agent** for Beckn Discovr. Run tests and report resul
 
 | Job | Directory |
 |-----|-----------|
-| catalog-discover-job | `/Users/manju/Documents/Projects/beckn/beckn-discovr/jobs/catalog-discover-job` |
-| catalog-publish-job | `/Users/manju/Documents/Projects/beckn/beckn-discovr/jobs/catalog-publish-job` |
-| response-dispatcher | `/Users/manju/Documents/Projects/beckn/beckn-discovr/jobs/response-dispatcher` |
+| catalog-discover-job | `jobs/catalog-discover-job` |
+| catalog-publish-job | `jobs/catalog-publish-job` |
+| response-dispatcher | `jobs/response-dispatcher` |
 
 ## Workflow
 

@@ -2,6 +2,7 @@ package org.beckn.discover.service.elasticsearch;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.query_dsl.Operator;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
@@ -179,38 +180,37 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                 value("transactionId", txId),
                 value("schemaFilters", keywordSchemaFilters.size()),
                 value("query", (Supplier<String>) () -> buildTextSearchJson(ErrorSanitizer.sanitize(text))));
+        List<String> blobFields = multiMatchFields.stream()
+                .filter(f -> f.startsWith("full_text_blob"))
+                .toList();
+        List<String> scoringFields = multiMatchFields.stream()
+                .filter(f -> !f.startsWith("full_text_blob"))
+                .toList();
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                     .index(aliasName)
                     // H1: exclude large fields not used by EsSearchAssembler
                     .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
                     .query(q -> q.bool(b -> {
-                        // H8: avoid Levenshtein (fuzziness) on the large full_text_blob field —
-                        // it is expensive and unnecessary since the blob is already a concat of all terms.
-                        // Split multiMatchFields into blob fields (exact match, no fuzz) and
-                        // non-blob fields (fuzzy, boosted). Both are `should` clauses so a match
-                        // in ANY configured field qualifies the document (OR semantics, same as the
-                        // original multi_match). minimumShouldMatch=1 enforces at least one clause hits.
-                        List<String> blobFields = multiMatchFields.stream()
-                                .filter(f -> f.startsWith("full_text_blob"))
-                                .toList();
-                        List<String> nonBlobFields = multiMatchFields.stream()
-                                .filter(f -> !f.startsWith("full_text_blob"))
-                                .toList();
+                        // full_text_blob: gating clause — doc must contain query terms somewhere.
+                        // Scored by BM25 via beckn_text analyzer (stemming + stop-words); no fuzziness
+                        // needed since the blob already captures all catalog text.
                         if (!blobFields.isEmpty()) {
-                            b.should(Query.of(mq -> mq.multiMatch(mm -> mm
+                            b.must(Query.of(mq -> mq.match(m -> m
+                                    .field(blobFields.get(0))
                                     .query(text)
-                                    .fields(blobFields)
-                                    .type(TextQueryType.BestFields))));
+                                    .operator(Operator.And))));
                         }
-                        if (!nonBlobFields.isEmpty()) {
+                        // Scoring fields: boost documents where the query matches the resource/catalog/
+                        // provider name directly. should (not must) so blob-only matches still qualify.
+                        // No fuzziness — beckn_synonyms + english_stemmer handle recall.
+                        if (!scoringFields.isEmpty()) {
                             b.should(Query.of(mq -> mq.multiMatch(mm -> mm
                                     .query(text)
-                                    .fields(nonBlobFields)
+                                    .fields(scoringFields)
                                     .type(TextQueryType.BestFields)
-                                    .fuzziness("AUTO"))));
+                                    .tieBreaker(0.3))));
                         }
-                        b.minimumShouldMatch("1");
                         keywordSchemaFilters.forEach(b::filter);
                         return b;
                     }))
