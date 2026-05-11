@@ -139,7 +139,7 @@ discovery:
     min-score: ${ES_MIN_SCORE:0.72}
     connect-timeout-ms: ${ES_CONNECT_TIMEOUT_MS:5000}
     socket-timeout-ms: ${ES_SOCKET_TIMEOUT_MS:30000}
-    multi-match-fields: ${ES_MULTI_MATCH_FIELDS:full_text_blob,resource_name^2,catalog_name^2,resource_provider_name^1.5,resource_rating_review_text}
+    multi-match-fields: ${ES_MULTI_MATCH_FIELDS:full_text_blob,resource_name^2,catalog_name^2,resource_provider_name^1.5}
     # Drop hits scoring below this fraction of the top hit's score (0.0-1.0).
     # 0.6 = keep only hits with >= 60% of the top score. 0.0 = disable.
     relative-score-threshold: ${ES_RELATIVE_SCORE_THRESHOLD:0.6}
