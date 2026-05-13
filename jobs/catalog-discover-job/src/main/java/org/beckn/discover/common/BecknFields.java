@@ -24,6 +24,10 @@ public final class BecknFields {
     public static final String TIMESTAMP       = "timestamp";
     public static final String COUNTRY         = "country";
     public static final String CITY            = "city";
+    public static final String BAP_ID          = "bapId";
+    public static final String BAP_URI         = "bapUri";
+    public static final String BPP_ID          = "bppId";
+    public static final String BPP_URI         = "bppUri";
 
     // ── AckResponse fields ───────────────────────────────────────────────────
     public static final String STATUS          = "status";
