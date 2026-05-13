@@ -203,6 +203,9 @@ services:
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_KAFKA=ERROR
       - LOGGING_LEVEL_ORG_APACHE_KAFKA=ERROR
       - OTEL_TRACES_EXPORTER=none
+      # ── Onix integration — our BPP identity stamped onto on_discover responses ──
+      - DISCOVERY_BPP_ID=
+      - DISCOVERY_BPP_URI=
       # Beckn Auth SDK — signature verification for /beckn/discover
       - SIGNATURE_AUTH_ENABLED=true
       - SIGNATURE_REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
@@ -306,6 +309,11 @@ services:
       - SIGNING_KEY_ID_SUFFIX=${SIGNING_KEY_ID_SUFFIX:-}
       - SIGNING_PRIVATE_KEY=${SIGNING_PRIVATE_KEY:-}
       - SIGNING_EXPIRY_SECONDS=3600
+      # ── Static callback routing — when enabled, dispatcher posts every callback
+      # to STATIC_CALLBACK_URL (typically Onix-discover/caller) instead of resolving
+      # via DeDi. Onix-discover/caller signs and forwards to the BAP.
+      - STATIC_CALLBACK_ENABLED=false
+      - STATIC_CALLBACK_URL=http://onix-discover:8083/caller
       # SSRF validation — disable for local/Docker development (no public DNS)
       - CALLBACK_URL_VALIDATION_ENABLED=false
       - OTEL_TRACES_EXPORTER=none

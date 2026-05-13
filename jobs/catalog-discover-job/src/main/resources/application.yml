@@ -36,6 +36,10 @@ spring:
 
 # Discovery Service Configuration
 discovery:
+  # Our service's BPP identity stamped onto outbound on_discover responses.
+  # Leave unset/blank to preserve existing behavior (no stamping).
+  bpp-id: ${DISCOVERY_BPP_ID:}
+  bpp-uri: ${DISCOVERY_BPP_URI:}
   auth:
     enabled: ${SIGNATURE_AUTH_ENABLED:false}
     registry-base-url: ${SIGNATURE_REGISTRY_BASE_URL:}

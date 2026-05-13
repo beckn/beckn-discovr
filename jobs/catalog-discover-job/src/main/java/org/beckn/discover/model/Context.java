@@ -55,6 +55,18 @@ public class Context {
     @JsonProperty(BecknFields.SCHEMA_CONTEXT)
     private List<String> schemaContext;
 
+    @JsonProperty(BecknFields.BAP_ID)
+    private String bapId;
+
+    @JsonProperty(BecknFields.BAP_URI)
+    private String bapUri;
+
+    @JsonProperty(BecknFields.BPP_ID)
+    private String bppId;
+
+    @JsonProperty(BecknFields.BPP_URI)
+    private String bppUri;
+
     // Default constructor
     public Context() {}
 
@@ -79,6 +91,10 @@ public class Context {
         this.ttl = other.ttl;
         this.networkId = other.networkId;
         this.schemaContext = other.schemaContext != null ? new java.util.ArrayList<>(other.schemaContext) : null;
+        this.bapId  = other.bapId;
+        this.bapUri = other.bapUri;
+        this.bppId  = other.bppId;
+        this.bppUri = other.bppUri;
     }
 
     // Getters and Setters
@@ -114,6 +130,18 @@ public class Context {
 
     public List<String> getSchemaContext() { return schemaContext; }
     public void setSchemaContext(List<String> schemaContext) { this.schemaContext = schemaContext; }
+
+    public String getBapId() { return bapId; }
+    public void setBapId(String bapId) { this.bapId = bapId; }
+
+    public String getBapUri() { return bapUri; }
+    public void setBapUri(String bapUri) { this.bapUri = bapUri; }
+
+    public String getBppId() { return bppId; }
+    public void setBppId(String bppId) { this.bppId = bppId; }
+
+    public String getBppUri() { return bppUri; }
+    public void setBppUri(String bppUri) { this.bppUri = bppUri; }
 
     @Override
     public String toString() {
