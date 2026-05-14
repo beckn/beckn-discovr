@@ -73,7 +73,7 @@ jobs:
           retention-days: 1
 
   test-publish:
-    name: catalog-indexer-job
+    name: catalog-publish-job
     needs: check-changes
     if: ${{ needs.check-changes.outputs.publish == 'true' || needs.check-changes.outputs.shared == 'true' }}
     runs-on: ubuntu-latest
@@ -97,14 +97,14 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: catalog-indexer-job-test-results
+          name: catalog-publish-job-test-results
           path: jobs/catalog-publish-job/build/test-results/**/*.xml
           retention-days: 1
       - name: Upload coverage report
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: catalog-indexer-job-coverage
+          name: catalog-publish-job-coverage
           path: jobs/catalog-publish-job/build/reports/jacoco/**
           retention-days: 1
 
