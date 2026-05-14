@@ -6,6 +6,7 @@ import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -27,16 +28,36 @@ public class ResponseProcessor {
 
     private final CatalogProcessor catalogProcessor;
 
+    /** Our service's BPP identity stamped onto outbound on_discover. Blank = no stamping. */
+    @Value("${discovery.bpp-id:}")
+    private String bppId;
+
+    /** Our service's public BPP URI stamped onto outbound on_discover. Blank = no stamping. */
+    @Value("${discovery.bpp-uri:}")
+    private String bppUri;
+
     public ResponseProcessor(CatalogProcessor catalogProcessor) {
         this.catalogProcessor = catalogProcessor;
     }
 
     // ── Context creation ─────────────────────────────────────────────────────
 
-    /** Copies the request context and sets {@code action = "on_discover"}. */
+    /**
+     * Copies the request context and sets {@code action = "on_discover"}.
+     * If {@code discovery.bpp-id} / {@code discovery.bpp-uri} are configured, also stamps
+     * our service's BPP identity onto the response context. When unset (or blank), the
+     * bpp fields remain whatever the request had (typically null) — preserves
+     * backward-compatible behavior.
+     */
     public Context createResponseContext(Context requestContext) {
         Context ctx = new Context(requestContext);
         ctx.setAction("on_discover");
+        if (bppId != null && !bppId.isBlank()) {
+            ctx.setBppId(bppId);
+        }
+        if (bppUri != null && !bppUri.isBlank()) {
+            ctx.setBppUri(bppUri);
+        }
         return ctx;
     }
 
