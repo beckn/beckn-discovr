@@ -1,0 +1,59 @@
+{
+  "metadata": {
+    "date": "2026-05-14",
+    "branch": "feat/es-index-settings-analysis",
+    "description": "Baseline ES metrics before any index settings changes (Story #185)",
+    "dataset": {
+      "source": "events-0000001-0010000.jsonl.gz (first 4 events)",
+      "events": 4,
+      "catalogs": 8,
+      "resourcesPerCatalog": 50,
+      "totalResources": 400,
+      "schemaTypes": ["GroceryResource"]
+    }
+  },
+  "indexLevel": {
+    "index": "beckn-catalog-groceryresource",
+    "documentCount": 400,
+    "documentCountSource": "GET /beckn-catalog-groceryresource/_count",
+    "storeSize": "1.1mb",
+    "primaryStoreSize": "1.1mb",
+    "segments": 4,
+    "settings": {
+      "numberOfShards": 1,
+      "numberOfReplicas": 1,
+      "refreshInterval": "5s",
+      "codec": "default (LZ4)"
+    }
+  },
+  "clusterLevel": {
+    "clusterName": "docker-cluster",
+    "status": "yellow",
+    "statusNote": "Yellow because 1 replica shard is unassigned (single-node cluster, expected)",
+    "nodes": 1,
+    "dataNodes": 1,
+    "activePrimaryShards": 1,
+    "activeShards": 1,
+    "unassignedShards": 1
+  },
+  "applicationMetrics": {
+    "indexing": {
+      "resourceIndexed": 400,
+      "resourceFailure": 50,
+      "resourceFailureNote": "50 docs from 1 catalog failed due to index creation race between 2 executor threads (pool size = 2). All recovered.",
+      "batchFailure": 0,
+      "retryAttempts": 0,
+      "recovered": 50,
+      "permanentFailure": 0,
+      "indexCreated": 1,
+      "failuresPending": 0
+    },
+    "bulkDuration": {
+      "count": 8,
+      "totalTimeSeconds": 13.0,
+      "maxSeconds": 5.114,
+      "averageSeconds": 1.625,
+      "note": "8 bulk requests = 1 per catalog (50 docs each, batch size 100). Max includes first index creation. Source: GET /actuator/metrics/discovr.publish.es.bulk.duration"
+    }
+  }
+}

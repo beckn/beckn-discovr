@@ -23,48 +23,9 @@ This document audits the Elasticsearch index configuration across the Beckn Disc
 
 ---
 
-## 1. ES Concepts Primer
+## 1. Current State Audit
 
-### Storage Hierarchy
-
-```
-Cluster
-  └── Node (JVM process)
-        └── Index (logical namespace, e.g. "beckn-catalog-groceryitem")
-              └── Shard (Lucene index, the unit of parallelism)
-                    └── Segment (immutable Lucene file, created on each refresh)
-                          └── Document (one ES JSON document)
-```
-
-### Refresh Cycle
-
-Every `refresh_interval` (default 1 s), Elasticsearch takes in-memory buffered documents and writes them to a new **segment** on disk. The segment is immediately searchable. More frequent refreshes mean more segments, which means more file handles and more work at query time (Lucene must merge results from every segment in a shard).
-
-### Merge Policy
-
-Elasticsearch periodically merges smaller segments into larger ones to keep segment count manageable. The default tiered merge policy targets:
-
-- 10 segments per tier
-- Floor segment size: 2 MB
-- Max merged segment: 5 GB
-
-For small indices (< 100 MB), merges are fast and infrequent. For large indices, an aggressive refresh interval (1 s) during bulk ingest can outpace the merge scheduler and cause high segment counts.
-
-### Compression Codecs
-
-| Property | LZ4 (default) | DEFLATE (best_compression) |
-|----------|--------------|---------------------------|
-| Write speed | Baseline | ~15-30% slower |
-| Read speed | Baseline | ~5-10% slower |
-| Compression ratio | ~2-3x | ~3-4x (15-25% smaller than LZ4) |
-| CPU overhead | Low | Moderate |
-| Best for | Read-heavy, low-latency | Archive indices, storage-constrained |
-
----
-
-## 2. Current State Audit
-
-### 2.1 Index Creation Lifecycle
+### 1.1 Index Creation Lifecycle
 
 Indices are created on-demand by `EsIndexManager` (catalog-publish-job). The lifecycle:
 
@@ -77,24 +38,30 @@ Index naming: `{prefix}-{schema-type}` where schema type is lowercased and non-a
 
 **Source:** `EsIndexManager.java:84-107`
 
-### 2.2 Template Settings — Disk vs Built-in Fallback
+### 1.2 Template Settings — Disk vs Built-in Fallback
 
-The template can be loaded from two sources:
+The ES index template can be loaded from two sources:
 
 | Source | Configuration | Trigger |
 |--------|--------------|---------|
 | Disk template | `config/es-index-template.json`, loaded via `app.catalog.elasticsearch.mapping.template-file` | Default when file exists and is readable |
 | Built-in fallback | `EsIndexManager.defaultTemplateJson()` (Java text block, lines 153-268) | Disk file read fails (`IOException`) |
 
-When the disk template fails to load, the only signal is a WARN log:
+#### How the fallback works
+
+`EsIndexManager.resolveTemplateJson()` (line 133-138) checks if a template file path is configured. If yes, it tries to read the file. If the file read fails (e.g., file missing, bad mount, permission error), it catches the `IOException`, logs a WARN, and falls back to the hardcoded Java text block:
 
 ```
 event=es.template.load.failed path=<path> error=<message> reason=falling-back-to-default
 ```
 
-**Source:** `EsIndexManager.java:140-151`, `LogEvent.java:66`
+**Source:** `EsIndexManager.java:133-151`
 
-#### Divergences Between Disk and Fallback
+#### Why the fallback has drifted
+
+The built-in fallback was written when the ES indexing feature was first implemented. Since then, the disk template (`es-index-template.json`) has evolved — synonyms were added, `dynamic: false` was set on `resource_attributes`, offer mappings were expanded, and `refresh_interval: 5s` was added. However, **nobody updated the Java text block to match**. The two templates are maintained independently, and there is no mechanism (test or build check) to detect when they diverge.
+
+#### Current divergences
 
 | # | Setting | Disk Template | Built-in Fallback | Risk |
 |---|---------|--------------|-------------------|------|
@@ -105,7 +72,16 @@ event=es.template.load.failed path=<path> error=<message> reason=falling-back-to
 | 5 | `index.mapping.total_fields.limit` | 2000 (from JSON) | 2000 (from AppProperties, configurable) | NONE — both default to 2000, but fallback reads from app config |
 | 6 | `index.mapping.depth.limit` | 10 (from JSON) | 10 (from AppProperties, configurable) | NONE — same as above |
 
-### 2.3 Analyzers and Synonyms
+#### Options
+
+| Option | Approach | Pros | Cons |
+|--------|----------|------|------|
+| **A: Sync the fallback** | Update the Java text block to match the disk template | Job still starts if the file is missing | Two copies to maintain — will drift again unless enforced by a test |
+| **B: Fail fast** | Remove the fallback; throw an exception if the disk template can't be read | Single source of truth; impossible to drift | Job won't start without the template file — operators must fix the deployment |
+
+**Recommendation:** Option B (fail fast). The disk template is always expected to be present — it's volume-mounted in Docker and would be deployed alongside the JAR in production. A startup failure is obvious and immediately actionable; a silent fallback that produces different indexing behaviour is not.
+
+### 1.3 Analyzers and Synonyms
 
 Two custom analyzers are defined:
 
@@ -136,7 +112,7 @@ Synonym expansion happens at search time only (via `search_analyzer`), which mea
 
 10 rules across 4 domains. The built-in fallback has 9 inline rules — `"charging, charger"` is missing.
 
-### 2.4 Bulk Indexing Configuration
+### 1.4 Bulk Indexing Configuration
 
 | Setting | Value | Source |
 |---------|-------|--------|
@@ -152,7 +128,7 @@ Synonym expansion happens at search time only (via `search_analyzer`), which mea
 
 **Source:** `docker-compose.yml:129-145`, `BulkIndexService.java:89-92`
 
-### 2.5 Docker Local Dev Configuration
+### 1.5 Docker Local Dev Configuration
 
 | Setting | Value |
 |---------|-------|
@@ -169,9 +145,9 @@ The `min_score` override means local dev returns more results (lower threshold) 
 
 ---
 
-## 3. Findings
+## 2. Findings
 
-### 3.1 Shard Count and Sizing
+### 2.1 Shard Count and Sizing
 
 **Current state:** No explicit `number_of_shards` or `number_of_replicas` in either template. ES defaults apply: 1 primary shard, 1 replica.
 
@@ -191,7 +167,7 @@ Current data volumes are **100-1000x below** the shard size guideline. A single 
 
 **Recommendation:** No change needed. Current defaults are appropriate for the data volumes. If any single schema-type index grows past 10 GB, consider splitting — but this is unlikely in the foreseeable future.
 
-### 3.2 Refresh Interval
+### 2.2 Refresh Interval
 
 **Current state:**
 
@@ -201,13 +177,19 @@ Current data volumes are **100-1000x below** the shard size guideline. A single 
 | Built-in fallback | Not set → ES default `1s` |
 | Docker compose | Not overridden |
 
-**Segment creation analysis** for a typical catalog publish (30 s duration):
+**Segment creation formula:**
 
-| Scenario | Refresh interval | Segments created | Search overhead |
-|----------|-----------------|-----------------|----------------|
-| Disk template | 5 s | ~6 | Low |
-| Built-in fallback | 1 s | ~30 | Moderate |
-| Optimal (FULL replace) | -1 (disabled) + explicit refresh | 1 | Minimal |
+```
+segments created ≈ publish duration ÷ refresh interval
+```
+
+The actual publish duration depends on batch size, embedding generation (if enabled), ES bulk response time, and network latency. This will be measured during baseline capture (Section 5). Example for illustration:
+
+| Scenario | Refresh interval | 10s publish | 30s publish | 60s publish |
+|----------|-----------------|-------------|-------------|-------------|
+| Disk template | 5 s | ~2 segments | ~6 segments | ~12 segments |
+| Built-in fallback | 1 s | ~10 segments | ~30 segments | ~60 segments |
+| Optimal (FULL replace) | -1 (disabled) + explicit refresh | 1 segment | 1 segment | 1 segment |
 
 Each additional segment adds overhead at query time — Lucene must open file handles, query each segment, and merge results. For small indices this is milliseconds, but it compounds with concurrent searches.
 
@@ -217,29 +199,29 @@ Each additional segment adds overhead at query time — Lucene must open file ha
 - For FULL replace operations, consider setting `refresh_interval: -1` before bulk indexing and issuing an explicit `_refresh` after. This is a code change (Task #189).
 - Fix the built-in fallback to include `refresh_interval: 5s` (Task #188).
 
-### 3.3 Segments and Merge Policy
+### 2.3 Segments and Merge Policy (`index.merge.policy.*`)
 
-**Current state:** No explicit merge policy settings. ES defaults apply:
+**Current state:** Neither `es-index-template.json` nor `EsIndexManager.defaultTemplateJson()` sets any `index.merge.policy.*` settings. ES defaults apply:
 
-| Setting | ES Default |
-|---------|-----------|
-| Merge policy | `tiered` |
-| `max_merge_at_once` | 10 |
-| `segments_per_tier` | 10 |
-| `floor_segment` | 2 MB |
-| `max_merged_segment` | 5 GB |
-| `deletes_pct_allowed` | 33% |
+| Setting | ES Default | Description |
+|---------|-----------|-------------|
+| `index.merge.policy.type` | `tiered` | Merge strategy |
+| `index.merge.policy.max_merge_at_once` | 10 | Max segments merged in one pass |
+| `index.merge.policy.segments_per_tier` | 10 | Target segments per tier before merge triggers |
+| `index.merge.policy.floor_segment` | 2 MB | Segments below this are always eligible for merge |
+| `index.merge.policy.max_merged_segment` | 5 GB | Cap on merged segment size |
+| `index.merge.policy.deletes_pct_allowed` | 33% | Deleted doc % before forced merge |
 
-**Analysis:** With index sizes under 100 MB, the tiered merge policy handles segment consolidation efficiently. After a bulk publish creating ~6 segments (at `refresh_interval: 5s`), ES will merge these into 1-2 segments within seconds. The merge scheduler runs in the background and doesn't block indexing.
+**Analysis:** With index sizes under 100 MB, the tiered merge policy handles segment consolidation efficiently. The number of segments created per publish depends on duration and refresh interval (see formula in Section 2.2). For typical small publishes, ES will merge segments into 1-2 within seconds. The merge scheduler runs in the background and doesn't block indexing.
 
 **When to revisit:** If segment count per shard consistently exceeds 30-50 (visible via `GET /_cat/segments/<index>?v`), consider:
 
-- Lowering `segments_per_tier` to trigger merges earlier
+- Setting `index.merge.policy.segments_per_tier` lower (e.g., 5) to trigger merges earlier
 - Force-merging after bulk operations (`POST /<index>/_forcemerge?max_num_segments=1`)
 
-**Recommendation:** No change needed. Monitor segment count as part of baseline metrics. Force-merge is inappropriate for actively-indexed indices — only use on read-only archive indices.
+**Recommendation:** No change needed at current data volumes. The ES defaults are appropriate for indices under 100 MB. These settings are live-updateable via `PUT /<index>/_settings` — no index recreation required. Monitor segment count as part of baseline metrics.
 
-### 3.4 Field Mappings
+### 2.4 Field Mappings
 
 The disk template (`config/es-index-template.json`) defines:
 
@@ -264,9 +246,9 @@ The disk template (`config/es-index-template.json`) defines:
 
 **Nested types** (require special query syntax): `offers`, `constraints`, `policies`, `catalog_descriptor_docs`, `catalog_descriptor_media_file`, `resource_descriptor_docs`, `resource_descriptor_media_file`.
 
-**Recommendation:** Mappings are well-designed. The `dynamic: false` on `resource_attributes` in the disk template is correct and should be replicated in the built-in fallback (currently `dynamic: true` in fallback — see Finding 3.6 / divergence #2).
+**Recommendation:** Mappings are well-designed. The `dynamic: false` on `resource_attributes` in the disk template is correct and should be replicated in the built-in fallback (currently `dynamic: true` in fallback — see Finding 2.6 / divergence #2).
 
-### 3.5 Compression Codec
+### 2.5 Compression Codec
 
 **Current state:** No codec specified in either template. ES default (LZ4) applies.
 
@@ -284,23 +266,50 @@ At current data volumes, the storage savings from `best_compression` are negligi
 
 **Recommendation:** Add `"index.codec": "best_compression"` to both templates. The write-once-read-many access pattern (bulk publish → infrequent discover queries) favours compression. Make configurable via `AppProperties.Mapping.codec` for operators who need raw indexing speed.
 
-### 3.6 Template Divergence (Critical)
+### 2.6 Template Divergence (Critical)
 
-This is the highest-priority finding. The 6 divergences documented in Section 2.2 mean that a single file-read failure silently changes:
+This is the highest-priority finding. The built-in Java fallback (`EsIndexManager.defaultTemplateJson()`) was written once and never updated as the disk template evolved. A single file-read failure silently activates the stale fallback, changing indexing behaviour in 4 material ways:
 
-1. **Segment creation rate** (1s vs 5s refresh) — 5x more segments during bulk ingest
-2. **Mapping safety** (`dynamic: true` on `resource_attributes`) — arbitrary publisher fields create ES mappings
-3. **Offer queryability** (bare nested vs explicit sub-properties) — offer-level filters won't match
-4. **Synonym coverage** (9 vs 10 rules) — "charging" ↔ "charger" synonym missing
+1. **Segment creation rate** — fallback has no `refresh_interval`, so ES uses 1s default instead of 5s. This creates 5x more segments during bulk ingest.
+2. **Mapping safety** — fallback has `resource_attributes.dynamic: true`, allowing arbitrary publisher fields to create ES mappings. The disk template correctly sets `false`.
+3. **Offer queryability** — fallback has bare `"type": "nested"` on offers with no sub-properties. Offer-level queries won't match any fields.
+4. **Synonym coverage** — fallback has 9 inline synonym rules; the disk file has 10. The `"charging, charger"` rule is missing from the Java text block (even though it was added to `es-synonyms.txt` in commit `e958e88`).
 
-**Recommendation:** Synchronize the built-in fallback with the disk template (Task #190). Specifically:
+The root cause is maintaining two independent copies of the same template with no mechanism to detect drift. See Section 1.2 for full divergence table and options.
 
-- Add `"index.refresh_interval": "5s"` to built-in settings
-- Change `resource_attributes.dynamic` from `true` to `false`
-- Add full `offers` sub-property mappings
-- Add the missing `"charging, charger"` synonym
+**Recommendation:** Remove the built-in fallback and fail fast if the disk template can't be read (Option B from Section 1.2). This eliminates the drift problem entirely. The disk template is always expected to be present in deployed environments (Task #190).
 
-### 3.7 Missing ES Health Indicator
+### 2.7 Index Creation Race Condition
+
+**Current state:** `EsIndexManager.ensureIndex()` uses a `ConcurrentHashMap` (`confirmedIndexes`) to skip redundant index-existence checks. However, the check-then-create sequence is not atomic across threads. When two ES executor threads (`es-index-1`, `es-index-2`) simultaneously process catalogs of the same schema type for the first time, both see the index as absent and both attempt to create it. One succeeds; the other gets `resource_already_exists_exception`.
+
+**Impact chain:**
+
+1. `ensureIndex()` throws on the losing thread
+2. `BulkIndexService.index()` catches the exception and marks **all docs in that batch** as failed (not just the index-creation call)
+3. Failed docs are published to the failure topic (`discovr.publish.es.failures`)
+4. `EsFailureConsumer` recovers them one-by-one (not in bulk)
+
+**Observed in baseline capture (400 docs, 8 catalogs × 50 resources):**
+
+| Metric | Value |
+|--------|-------|
+| Docs indexed via bulk | 350 (7 catalogs) |
+| Docs failed due to race | 50 (1 catalog) |
+| Recovery time (one-by-one) | ~3.5 s |
+| Bulk indexing time (total) | ~13 s |
+| Per-doc cost: bulk path | ~32 ms |
+| Per-doc cost: recovery path | ~70 ms |
+
+The recovery path is **~2x slower per doc** because `EsFailureConsumer` indexes individually rather than in bulk. In wall-clock terms, the race condition adds **~27% overhead** for this dataset. At production scale with larger catalogs (500+ resources per catalog), the one-by-one recovery becomes proportionally more expensive.
+
+**Root cause:** The race condition is **deterministic** — it triggers on the very first publish to any new schema type whenever both executor threads pick up catalogs of the same type simultaneously. After the first creation, `confirmedIndexes` caches the index name, and subsequent calls skip the creation path entirely.
+
+**Fix:** Either make `ensureIndex()` atomic (e.g., `putIfAbsent` guard before the HTTP call) or catch `resource_already_exists_exception` and treat it as success rather than propagating the exception. Both approaches are covered under Task #190.
+
+**Source:** `EsIndexManager.java:93-107`, `BulkIndexService.java:99-104`
+
+### 2.8 Missing ES Health Indicator
 
 **Current state:** Neither job has an Elasticsearch-specific health indicator.
 
@@ -315,168 +324,28 @@ This is the highest-priority finding. The 6 divergences documented in Section 2.
 
 ---
 
-## 4. Already Optimised (No Action Needed)
-
-The following items from the April 30 performance review have been verified as **already fixed** in the codebase:
-
-| Finding | Status | Evidence |
-|---------|--------|----------|
-| H1: Full `_source` returned | FIXED | All 4 query paths exclude `full_text_blob`, `resource_vector`, `indexed_at` |
-| H4: Geo-shape in `bool.must` | FIXED | Geo queries now in `bool.filter` (`ElasticsearchQueryEngine.java:190-191`) |
-| H5: `ensureIndex()` 2-4 HTTP calls per batch | FIXED | `ConcurrentHashSet` cache (`EsIndexManager.java:66`) |
-| H6: Serial embedding per item | FIXED | `CompletableFuture.allOf()` parallel embedding (`ElasticIndexStep.java:142-162`) |
-| H7: `buildTextSearchJson()` at INFO level | FIXED | Moved to DEBUG with lazy `Supplier` (`ElasticsearchTextSearchEngine.java:179-182`) |
-| M1: ES connection pool (discover-job) | FIXED | 20/40 in `EsSearchConfig.java` |
-| M2: `trackTotalHits` not disabled | FIXED | `trackTotalHits(false)` on all query paths |
-| M6: No `refresh_interval` in disk template | FIXED | `5s` in `es-index-template.json:7` |
-| L1: `resource_attributes` dynamic:true (disk) | FIXED | `dynamic: false` in disk template |
-| C4: HTTP 429 not retried | FIXED | `EsRateLimitException` wrapping in `BulkIndexService.java:113-119` |
-
----
-
-## 5. Field Mapping Audit
-
-### 5.1 Fields Queried by Discover-Job
-
-| ES Field | Query Path | Query Type | Boost |
-|----------|-----------|------------|-------|
-| `full_text_blob` | BM25 keyword | `match` (Operator.And, must) | 1.0 |
-| `resource_name` | BM25 keyword | `multi_match` (should) | 2.0 |
-| `catalog_name` | BM25 keyword | `multi_match` (should) | 2.0 |
-| `resource_provider_name` | BM25 keyword | `multi_match` (should) | 1.5 |
-| `resource_vector` | KNN semantic | `knn` query | — |
-| `resource_attributes_context` | Schema filter | `term` (filter) | — |
-| `resource_attributes_type` | Schema filter | `term` (filter) | — |
-| `loc_*.geo` | Spatial | `geo_shape` (filter) | — |
-
-### 5.2 Fields Read from `_source` by EsSearchAssembler
-
-**Catalog-level:** `catalog_id`, `catalog_name`, `catalog_short_desc`, `catalog_long_desc`, `catalog_descriptor_thumbnail_image`, `catalog_descriptor_docs`, `catalog_descriptor_media_file`, `catalog_provider_id`, `catalog_provider_name`, `catalog_validity`, `catalog_is_active`
-
-**Resource-level:** `resource_id`, `resource_name`, `resource_short_desc`, `resource_long_desc`, `resource_descriptor_thumbnail_image`, `resource_descriptor_docs`, `resource_descriptor_media_file`, `resource_category_code`, `resource_category_name`, `resource_rating_value`, `resource_rating_count`, `resource_rating_review_text`, `resource_rateable`, `resource_is_active`, `resource_provider_id`, `resource_provider_name`, `resource_attributes`, `resource_attributes_type`, `resource_attributes_context`
-
-**Structured:** `constraints`, `policies`, `offers`, `loc_*` (location fields)
-
-### 5.3 Fields Excluded from `_source`
-
-`full_text_blob`, `resource_vector`, `indexed_at` — excluded via source filtering on all query paths.
-
-### 5.4 Fields Indexed but Never Queried
-
-| Field | Type | Indexed? | Queried? | Recommendation |
-|-------|------|----------|----------|---------------|
-| `catalog_short_desc` | text | Yes | No | Set `"index": false` |
-| `catalog_long_desc` | text | Yes | No | Set `"index": false` |
-| `catalog_context` | keyword | Yes | No | Keep (low overhead) |
-| `catalog_type` | keyword | Yes | No | Keep (low overhead) |
-| `resource_context` | keyword | Yes | No | Keep (low overhead) |
-| `resource_type` | keyword | Yes | No | Keep (low overhead) |
-| `resource_short_desc` | text | Yes | No* | Keep (potential future search field) |
-| `resource_long_desc` | text | Yes | No* | Keep (potential future search field) |
-| `schema_type` | keyword | Yes | No | Keep (used for index routing) |
-| `network_id` | keyword | Yes | No** | Keep (potential future filter) |
-
-\* Resource descriptions contribute to `full_text_blob` which IS queried. Keeping them indexed provides direct field-level search capability.
-
-\** `network_id` is a likely future filter candidate for multi-network deployments.
-
----
-
-## 6. Baseline Metrics Procedure
-
-Before applying any optimisation, record the following baseline metrics from a representative deployment.
-
-### 6.1 Index-Level Metrics
-
-```bash
-# Index size and document count
-curl -s 'localhost:9200/_cat/indices/beckn-catalog-*?v&h=index,docs.count,store.size,pri.store.size'
-
-# Segment count per index
-curl -s 'localhost:9200/_cat/segments/beckn-catalog-*?v&h=index,shard,segment,generation,docs.count,size'
-
-# Index settings (verify applied template)
-curl -s 'localhost:9200/beckn-catalog-*/_settings?pretty'
-
-# Mapping field count
-curl -s 'localhost:9200/beckn-catalog-*/_mapping?pretty' | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-for idx, v in data.items():
-    props = v.get('mappings', {}).get('properties', {})
-    print(f'{idx}: {len(props)} top-level fields')
-"
-```
-
-### 6.2 Cluster-Level Metrics
-
-```bash
-# Cluster health
-curl -s 'localhost:9200/_cluster/health?pretty'
-
-# Node stats (indexing rate, search latency, merge stats)
-curl -s 'localhost:9200/_nodes/stats/indices?pretty' | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-for nid, node in data.get('nodes', {}).items():
-    idx = node.get('indices', {})
-    print(f\"Node: {node.get('name')}\")
-    print(f\"  Indexing: {idx.get('indexing', {}).get('index_total', 0)} docs, {idx.get('indexing', {}).get('index_time_in_millis', 0)}ms total\")
-    print(f\"  Search:   {idx.get('search', {}).get('query_total', 0)} queries, {idx.get('search', {}).get('query_time_in_millis', 0)}ms total\")
-    print(f\"  Merges:   {idx.get('merges', {}).get('total', 0)} merges, {idx.get('merges', {}).get('total_size_in_bytes', 0)} bytes\")
-    print(f\"  Refresh:  {idx.get('refresh', {}).get('total', 0)} refreshes, {idx.get('refresh', {}).get('total_time_in_millis', 0)}ms total\")
-"
-```
-
-### 6.3 Application-Level Metrics
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `discovr.publish.es.resource.indexed` | Counter | Resources successfully indexed |
-| `discovr.publish.es.resource.failure` | Counter | Per-resource bulk failures |
-| `discovr.publish.es.batch.failure` | Counter | Full batch-level failures |
-| `discovr.publish.es.retry` | Counter | Bulk retry attempts |
-| `discovr.publish.es.recovered` | Counter | Resources recovered by failure consumer |
-| `discovr.publish.es.permanent.failure` | Counter | Resources exceeding max retry attempts |
-| `discovr.publish.es.index.created` | Counter | ES indices created |
-| `discovr.publish.es.bulk.duration` | Timer | Bulk request latency (P50/P95/P99) |
-| `discovr.publish.es.failures.pending` | Gauge | Resources queued in failure topic |
-
-### 6.4 Benchmark Procedure
-
-1. Start fresh Docker stack: `docker compose down -v && docker compose up -d`
-2. Wait for ES to be ready: `curl -s localhost:9200/_cluster/health?wait_for_status=green&timeout=30s`
-3. Publish a representative catalog payload (e.g., 500 resources across 3 schema types)
-4. Record: total indexing time, docs/sec, index size, segment count
-5. Run 10 discover queries with text search; record P50/P95 latency
-6. Save results as baseline in `docs/analysis/es-baseline-metrics.json`
-
----
-
-## 7. Recommendations Summary
+## 3. Recommendations Summary
 
 | # | Finding | Severity | Task | Recommendation |
 |---|---------|----------|------|---------------|
-| 1 | Template divergence (6 differences) | **HIGH** | #190 | Sync built-in fallback with disk template |
-| 2 | No `refresh_interval` in built-in fallback | **HIGH** | #189 | Add `5s` to built-in (sync with disk) |
-| 3 | `resource_attributes.dynamic: true` in fallback | **HIGH** | #190 | Change to `false` (sync with disk) |
-| 4 | No bulk-time refresh disable | MEDIUM | #189 | Disable refresh during bulk, restore + flush after |
-| 5 | Missing synonym in built-in fallback | LOW | #190 | Add `"charging, charger"` to inline list |
-| 6 | No explicit shard/replica settings | LOW | #188 | Add `number_of_shards: 1`, `number_of_replicas: 1` (configurable) |
-| 7 | No merge policy settings | LOW | #189 | Monitor segment count; no change needed at current volumes |
-| 8 | No compression codec | LOW | #191 | Add `"index.codec": "best_compression"` |
-| 9 | Unqueried text fields indexed | LOW | #190 | Add `"index": false` to `catalog_short_desc`, `catalog_long_desc` |
-| 10 | No ES health indicator | LOW | Future | Add `ElasticsearchHealthIndicator` (out of scope for Sprint 7) |
+| 1 | Template divergence (6 differences) — stale built-in fallback silently changes indexing behaviour | **HIGH** | #190 | Remove built-in fallback; fail fast if disk template can't be read (see Section 1.2, Option B) |
+| 2 | Index creation race condition — deterministic failure on first publish to any new schema type | **MEDIUM** | #190 | Make `ensureIndex()` atomic or catch `resource_already_exists_exception` as success (see Section 2.7) |
+| 3 | No bulk-time refresh disable | MEDIUM | #189 | Disable refresh during bulk, restore + flush after |
+| 4 | No explicit shard/replica settings | LOW | #188 | Add `number_of_shards: 1`, `number_of_replicas: 1` (configurable) |
+| 5 | No `index.merge.policy.*` settings | LOW | #189 | No change needed at current volumes; monitor segment count |
+| 6 | No compression codec | LOW | #191 | Add `"index.codec": "best_compression"` |
+| 7 | Unqueried text fields indexed | LOW | #190 | Add `"index": false` to `catalog_short_desc`, `catalog_long_desc` |
+| 8 | No ES health indicator | LOW | Future | Add `ElasticsearchHealthIndicator` (out of scope for Sprint 7) |
 
 ---
 
-## 8. Migration Notes
+## 4. Migration Notes
 
 Changes to `number_of_shards`, `codec`, and `dense_vector.dims` require **index recreation** on existing deployments. These settings are fixed at index creation time and cannot be modified on live indices.
 
 **Migration steps for existing deployments:**
 
-1. Record baseline metrics (Section 6)
+1. Record baseline metrics (see `docs/analysis/es-baseline-metrics.json`)
 2. Deploy updated template
 3. Delete existing indices: `DELETE /beckn-catalog-*`
 4. Re-publish all catalogs to trigger fresh index creation with new settings
@@ -484,3 +353,9 @@ Changes to `number_of_shards`, `codec`, and `dense_vector.dims` require **index 
 6. Record post-migration metrics and compare
 
 Changes to `refresh_interval`, `merge_policy`, and `number_of_replicas` **can be applied to live indices** via the `_settings` API without recreation.
+
+---
+
+## 5. Baseline Metrics
+
+Baseline metrics (indexing throughput, document count, bulk duration, failure/recovery counts) were captured before any settings changes and are recorded in [`docs/analysis/es-baseline-metrics.json`](es-baseline-metrics.json).
