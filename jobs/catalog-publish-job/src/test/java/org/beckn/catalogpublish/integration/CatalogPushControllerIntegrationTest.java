@@ -33,7 +33,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     void push_validPayload_returns202() throws Exception {
         String fixture = readFixture("fixtures/ev_charging_station_data.json");
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 .andExpect(status().isAccepted());
@@ -48,7 +48,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     void push_validPayload_ackBodyHasCorrectStructure() throws Exception {
         String fixture = readFixture("fixtures/ev_charging_station_data.json");
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 .andExpect(status().isAccepted())
@@ -66,7 +66,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     void push_validPayload_persistsItemsAsynchronously() throws Exception {
         String fixture = readFixture("fixtures/ev_charging_station_data.json");
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 .andExpect(status().isAccepted());
@@ -80,7 +80,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     void push_multiCatalogPayload_persistsAllItemsAsynchronously() throws Exception {
         String fixture = readFixture("fixtures/ev_charging_catalog_example.json");
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 .andExpect(status().isAccepted());
@@ -98,7 +98,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         String fixture = readFixture("fixtures/ev_charging_station_data.json");
 
         long start = System.currentTimeMillis();
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 .andExpect(status().isAccepted());
@@ -121,7 +121,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         byte[] oversized = new byte[5 * 1024 * 1024 + 1];
         Arrays.fill(oversized, (byte) 'x');
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(oversized))
                 .andExpect(status().isPayloadTooLarge());
@@ -137,7 +137,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         // oversized request never reaches the pipeline (rejected at the HTTP layer)
         long countBefore = itemRepository.count();
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(oversized))
                 .andExpect(status().isPayloadTooLarge());
@@ -153,7 +153,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     void push_invalidJson_returns400NackDoesNotPersist() throws Exception {
         long countBefore = itemRepository.count();
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{this is not valid json}"))
                 .andExpect(status().isBadRequest())
@@ -182,7 +182,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 }
                 """;
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
@@ -225,7 +225,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 }
                 """;
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
@@ -256,7 +256,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 }
                 """;
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
@@ -297,7 +297,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 }
                 """;
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
@@ -327,7 +327,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 }
                 """;
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted());
@@ -362,7 +362,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 }
                 """;
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isBadRequest())
@@ -380,7 +380,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         // SIGNATURE_AUTH_ENABLED defaults to false → BecknAuthFilter skips verification → no Authorization header needed
         String fixture = readFixture("fixtures/ev_charging_station_data.json");
 
-        mockMvc.perform(post("/catalog/push")
+        mockMvc.perform(post("/beckn/catalog/push")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 // Must succeed without any Authorization header
