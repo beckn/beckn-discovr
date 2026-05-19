@@ -1,4 +1,7 @@
 spring:
+  mvc:
+    servlet:
+      path: /beckn
   application:
     name: discovery-service
   datasource:
@@ -53,6 +56,10 @@ discovery:
     # Comma-separated METHOD:PATH pairs that bypass signature verification.
     # Format: POST:/beckn/discover,GET:/beckn/discover
     # Supports {param} and :param wildcards. Leave empty to protect all endpoints.
+    # KNOWN LIMITATION: only GET /beckn/discover honors the whitelist today.
+    # POST /beckn/discover runs auth on an async executor where RequestContextHolder
+    # is not propagated, so the whitelist check is silently skipped on POST (auth
+    # still runs — fail-secure, not a security regression). Tracked separately.
     whitelisted-endpoints: ${SIGNATURE_WHITELISTED_ENDPOINTS:}
   latency-tracking-enabled: ${DISCOVERY_LATENCY_TRACKING_ENABLED:true}
   filter:

@@ -77,10 +77,10 @@ public class AuthorizationService {
      */
     public AuthIdentity authorizeRequest(String rawBody, HttpHeaders headers) {
         var attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attrs != null && isWhitelisted(attrs.getRequest().getMethod(), attrs.getRequest().getServletPath())) {
+        if (attrs != null && isWhitelisted(attrs.getRequest().getMethod(), attrs.getRequest().getRequestURI())) {
             logger.info("{} reason=whitelisted method={} path={}",
                     LogEvent.AUTH_SKIPPED,
-                    attrs.getRequest().getMethod(), attrs.getRequest().getServletPath());
+                    attrs.getRequest().getMethod(), attrs.getRequest().getRequestURI());
             return AuthIdentity.anonymous();
         }
 

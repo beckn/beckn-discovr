@@ -118,8 +118,8 @@ services:
       - SIGNATURE_TIMEOUT_SECONDS=10
       - SIGNATURE_RETRY_ATTEMPTS=3
       # Whitelisted endpoints — comma-separated METHOD:PATH pairs that bypass signature verification
-      # Paths are absolute URI paths (e.g. POST:/catalog/push)
-      # Supports {param} and :param wildcards (e.g. GET:/catalog/{id})
+      # Paths are absolute URI paths (e.g. POST:/beckn/catalog/push)
+      # Supports {param} and :param wildcards (e.g. GET:/beckn/catalog/{id})
       # Leave empty to require auth on all endpoints when SIGNATURE_AUTH_ENABLED=true
       - SIGNATURE_WHITELISTED_ENDPOINTS=
       - OTEL_TRACES_EXPORTER=none
@@ -220,6 +220,8 @@ services:
       # Paths are absolute URI paths (e.g. POST:/beckn/discover, GET:/beckn/discover)
       # Supports {param} and :param wildcards (e.g. GET:/beckn/discover/{id})
       # Leave empty to require auth on all endpoints when SIGNATURE_AUTH_ENABLED=true
+      # KNOWN LIMITATION: POST /beckn/discover runs auth asynchronously; whitelist
+      # check is silently skipped on POST (auth still runs — fail-secure).
       - SIGNATURE_WHITELISTED_ENDPOINTS=
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none

@@ -90,11 +90,14 @@ app:
     timeout-seconds: ${SIGNATURE_TIMEOUT_SECONDS:10}
     retry-attempts: ${SIGNATURE_RETRY_ATTEMPTS:3}
     # Comma-separated METHOD:PATH pairs that bypass signature verification.
-    # Format: POST:/catalog/push,GET:/catalog/health
+    # Format: POST:/beckn/catalog/push,GET:/beckn/catalog/health
     # Supports {param} and :param wildcards. Leave empty to protect all endpoints.
     whitelisted-endpoints: ${SIGNATURE_WHITELISTED_ENDPOINTS:}
 
 spring:
+  mvc:
+    servlet:
+      path: /beckn
   application:
     name: catalog-publish-job
   jpa:

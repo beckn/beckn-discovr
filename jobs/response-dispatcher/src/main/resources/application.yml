@@ -1,4 +1,7 @@
 spring:
+  mvc:
+    servlet:
+      path: /beckn
   application:
     name: response-dispatcher
 

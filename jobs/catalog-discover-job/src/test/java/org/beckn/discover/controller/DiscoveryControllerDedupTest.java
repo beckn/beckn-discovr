@@ -93,14 +93,14 @@ class DiscoveryControllerDedupTest {
         String payload = buildPayload(messageId, transactionId);
 
         // First request — should publish to Kafka
-        mockMvc.perform(post("/beckn/discover")
+        mockMvc.perform(post("/discover")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACK"));
 
         // Second request with same messageId — should be deduplicated
-        mockMvc.perform(post("/beckn/discover")
+        mockMvc.perform(post("/discover")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
@@ -117,13 +117,13 @@ class DiscoveryControllerDedupTest {
         String payload1 = buildPayload(UUID.randomUUID().toString(), transactionId);
         String payload2 = buildPayload(UUID.randomUUID().toString(), transactionId);
 
-        mockMvc.perform(post("/beckn/discover")
+        mockMvc.perform(post("/discover")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload1))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACK"));
 
-        mockMvc.perform(post("/beckn/discover")
+        mockMvc.perform(post("/discover")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload2))
                 .andExpect(status().isOk())
