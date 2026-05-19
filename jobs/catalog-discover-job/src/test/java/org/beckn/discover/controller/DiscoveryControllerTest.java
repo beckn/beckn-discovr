@@ -117,7 +117,7 @@ class DiscoveryControllerTest {
         doReturn(new AuthIdentity("bpp.seller.io", "bpp-key-001"))
                 .when(authorizationService).authorizeRequest(any(), any());
 
-        mockMvc.perform(post("/beckn/discover")
+        mockMvc.perform(post("/discover")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
                 .andExpect(status().isOk())
@@ -147,7 +147,7 @@ class DiscoveryControllerTest {
         doReturn(AuthIdentity.anonymous())
                 .when(authorizationService).authorizeRequest(any(), any());
 
-        mockMvc.perform(post("/beckn/discover")
+        mockMvc.perform(post("/discover")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
                 .andExpect(status().isOk())
@@ -179,7 +179,7 @@ class DiscoveryControllerTest {
                 BecknAuthException.signatureVerificationFailed("bad sig", "SEC_SIGNATURE_INVALID")))
                 .when(authorizationService).authorizeRequest(any(), any());
 
-        mockMvc.perform(post("/beckn/discover")
+        mockMvc.perform(post("/discover")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
                 .andExpect(status().isUnauthorized())
