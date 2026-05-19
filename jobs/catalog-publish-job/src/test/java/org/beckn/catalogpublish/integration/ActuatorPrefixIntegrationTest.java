@@ -21,8 +21,26 @@ class ActuatorPrefixIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void actuatorMetrics_atStandardPath_returns200() throws Exception {
+        mockMvc.perform(get("/actuator/metrics"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void actuatorHealth_underBecknPrefix_returns404() throws Exception {
         mockMvc.perform(get("/beckn/actuator/health"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void actuatorMetrics_underBecknPrefix_returns404() throws Exception {
+        mockMvc.perform(get("/beckn/actuator/metrics"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void actuatorPrometheus_underBecknPrefix_returns404() throws Exception {
+        mockMvc.perform(get("/beckn/actuator/prometheus"))
                 .andExpect(status().isNotFound());
     }
 }
