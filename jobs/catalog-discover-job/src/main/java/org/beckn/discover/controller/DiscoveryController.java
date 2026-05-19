@@ -35,7 +35,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -63,7 +62,6 @@ import static net.logstash.logback.argument.StructuredArguments.value;
  * into a {@link DiscoverRequest}.</p>
  */
 @RestController
-@RequestMapping("/beckn")
 public class DiscoveryController {
 
     /** Request attribute key used to propagate the transaction ID to the exception handler. */
