@@ -343,8 +343,92 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
+        // Flat fields retained for backward compatibility
         assertThat(doc.get("catalog_provider_id")).isEqualTo("prov-catalog");
         assertThat(doc.get("catalog_provider_name")).isEqualTo("Catalog Provider");
+
+        // Full catalog_provider object
+        assertThat(doc.containsKey("catalog_provider")).isTrue();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> catalogProvider = (Map<String, Object>) doc.get("catalog_provider");
+        assertThat(catalogProvider.get("id")).isEqualTo("prov-catalog");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> descriptor = (Map<String, Object>) catalogProvider.get("descriptor");
+        assertThat(descriptor.get("name")).isEqualTo("Catalog Provider");
+    }
+
+    @Test
+    void assemble_catalogWithFullProvider_storesCatalogProviderObject() throws Exception {
+        // Custom payload with rich provider — descriptor, availableAt, providerAttributes
+        JsonNode payload = OM.readTree("""
+                {
+                  "catalogs": [{
+                    "id": "cat-1",
+                    "bppId": "bpp.example.com",
+                    "bppUri": "https://bpp.example.com",
+                    "descriptor": {"name": "Test Catalog"},
+                    "provider": {
+                      "id": "prov-rich",
+                      "descriptor": {
+                        "name": "EcoPower Charging",
+                        "shortDesc": "Clean energy provider",
+                        "longDesc": "Bengaluru-based EV charging network",
+                        "code": "ECO"
+                      },
+                      "availableAt": [
+                        {
+                          "id": "loc-1",
+                          "geo": {"type": "Point", "coordinates": [77.5, 12.9]},
+                          "address": {"addressLocality": "Bengaluru", "addressCountry": "IND"}
+                        }
+                      ],
+                      "providerAttributes": {
+                        "@context": "https://example.org/provider.jsonld",
+                        "@type": "ChargingProvider",
+                        "certification": "ISO-50001"
+                      }
+                    },
+                    "resources": [{
+                      "id": "item-1",
+                      "descriptor": {"name": "Item"},
+                      "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                    }],
+                    "offers": []
+                  }]
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.containsKey("catalog_provider")).isTrue();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> catalogProvider = (Map<String, Object>) doc.get("catalog_provider");
+        assertThat(catalogProvider.get("id")).isEqualTo("prov-rich");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> descriptor = (Map<String, Object>) catalogProvider.get("descriptor");
+        assertThat(descriptor.get("name")).isEqualTo("EcoPower Charging");
+        assertThat(descriptor.get("shortDesc")).isEqualTo("Clean energy provider");
+        assertThat(descriptor.get("longDesc")).isEqualTo("Bengaluru-based EV charging network");
+        assertThat(descriptor.get("code")).isEqualTo("ECO");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> availableAt = (List<Map<String, Object>>) catalogProvider.get("availableAt");
+        assertThat(availableAt).hasSize(1);
+        assertThat(availableAt.get(0).get("id")).isEqualTo("loc-1");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> address = (Map<String, Object>) availableAt.get(0).get("address");
+        assertThat(address.get("addressLocality")).isEqualTo("Bengaluru");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> providerAttributes = (Map<String, Object>) catalogProvider.get("providerAttributes");
+        assertThat(providerAttributes.get("@context")).isEqualTo("https://example.org/provider.jsonld");
+        assertThat(providerAttributes.get("@type")).isEqualTo("ChargingProvider");
+        assertThat(providerAttributes.get("certification")).isEqualTo("ISO-50001");
+
+        // Flat fields remain populated for backward compatibility
+        assertThat(doc.get("catalog_provider_id")).isEqualTo("prov-rich");
+        assertThat(doc.get("catalog_provider_name")).isEqualTo("EcoPower Charging");
     }
 
     // ── item_rating_review_text ───────────────────────────────────────────────

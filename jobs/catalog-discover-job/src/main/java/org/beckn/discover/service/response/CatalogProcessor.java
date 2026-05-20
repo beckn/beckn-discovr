@@ -205,6 +205,8 @@ public class CatalogProcessor {
             target.setDescriptor(source.getDescriptor());
         if (target.getProviderId() == null)
             target.setProviderId(source.getProviderId());
+        if (target.getProvider() == null)
+            target.setProvider(source.getProvider());
     }
 
     private void applyPostMergeDefaults(Catalog catalog) {

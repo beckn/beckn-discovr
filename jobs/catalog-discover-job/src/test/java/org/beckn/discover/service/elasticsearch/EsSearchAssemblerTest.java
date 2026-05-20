@@ -352,7 +352,37 @@ class EsSearchAssemblerTest {
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4");
 
         Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getProvider()).isNotNull();
+        assertThat(catalog.getProvider().getId()).isEqualTo("ecopower-network");
+        // Flat providerId remains in sync for downstream code that still reads it
         assertThat(catalog.getProviderId()).isEqualTo("ecopower-network");
+    }
+
+    @Test
+    void hitWithCatalogProviderDescriptor_populatesFullProviderOnCatalog() {
+        Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4b");
+
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getProvider()).isNotNull();
+        assertThat(catalog.getProvider().getId()).isEqualTo("ecopower-network");
+        assertThat(catalog.getProvider().getDescriptor()).isNotNull();
+        assertThat(catalog.getProvider().getDescriptor().getName()).isEqualTo("EcoPower Network");
+        assertThat(catalog.getProvider().getDescriptor().getShortDesc())
+                .isEqualTo("Network-level EV charging operator");
+        assertThat(catalog.getProvider().getDescriptor().getLongDesc())
+                .isEqualTo("Operates DC fast chargers across India");
+
+        assertThat(catalog.getProvider().getLocations()).isNotNull().hasSize(1);
+        assertThat(catalog.getProvider().getLocations().get(0).getGeo().getType()).isEqualTo("Point");
+        assertThat(catalog.getProvider().getLocations().get(0).getAddress().getAddressLocality())
+                .isEqualTo("Bengaluru");
+
+        assertThat(catalog.getProvider().getProviderAttributes()).isNotNull();
+        assertThat(catalog.getProvider().getProviderAttributes().getContext())
+                .isEqualTo("https://example.org/provider.jsonld");
+        assertThat(catalog.getProvider().getProviderAttributes().getType()).isEqualTo("ChargingProvider");
     }
 
     @Test
@@ -500,6 +530,21 @@ class EsSearchAssemblerTest {
                 Map.entry("catalog_short_desc", "Catalog of EV chargers"),
                 Map.entry("catalog_provider_id", "ecopower-network"),
                 Map.entry("catalog_provider_name", "EcoPower Network"),
+                Map.entry("catalog_provider", Map.of(
+                        "id", "ecopower-network",
+                        "descriptor", Map.of(
+                                "name", "EcoPower Network",
+                                "shortDesc", "Network-level EV charging operator",
+                                "longDesc", "Operates DC fast chargers across India",
+                                "code", "ECO"),
+                        "availableAt", List.of(
+                                Map.of(
+                                        "id", "loc-1",
+                                        "geo", Map.of("type", "Point", "coordinates", List.of(77.5, 12.9)),
+                                        "address", Map.of("addressLocality", "Bengaluru", "addressCountry", "IND"))),
+                        "providerAttributes", Map.of(
+                                "@context", "https://example.org/provider.jsonld",
+                                "@type", "ChargingProvider"))),
                 Map.entry("bpp_id", bppId),
                 Map.entry("bpp_uri", "https://bpp.example.com"),
                 Map.entry("network_id", "ondc-ev"),

@@ -29,6 +29,10 @@ public class Catalog {
     @JsonProperty(BecknFields.PROVIDER_ID)
     private String providerId;
 
+    @Valid
+    @JsonProperty(BecknFields.PROVIDER)
+    private Provider provider;
+
     @JsonProperty(BecknFields.BPP_ID)
     private String bppId;
 
@@ -57,6 +61,9 @@ public class Catalog {
 
     public String getProviderId() { return providerId; }
     public void setProviderId(String providerId) { this.providerId = providerId; }
+
+    public Provider getProvider() { return provider; }
+    public void setProvider(Provider provider) { this.provider = provider; }
 
     public String getBppId() { return bppId; }
     public void setBppId(String bppId) { this.bppId = bppId; }
