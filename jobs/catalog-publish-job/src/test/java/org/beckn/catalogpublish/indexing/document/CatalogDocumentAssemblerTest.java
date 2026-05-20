@@ -1,15 +1,22 @@
 package org.beckn.catalogpublish.indexing.document;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.catalogpublish.config.AppProperties;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.service.geometry.GeoShapeExtractor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -620,5 +627,106 @@ class CatalogDocumentAssemblerTest {
         }
         assertThat(blob.getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
                 .isLessThanOrEqualTo(50);
+    }
+
+    // ── full_text_blob truncation WARN log ────────────────────────────────────
+
+    @Test
+    void assemble_textBlobTruncated_emitsWarnLogWithExpectedFields() throws Exception {
+        // Use a tiny cap (64 bytes) so even a short description triggers truncation.
+        var indexing64 = new AppProperties.Indexing(64);
+        var catalog64 = mock(AppProperties.Catalog.class);
+        when(catalog64.indexing()).thenReturn(indexing64);
+        var props64 = mock(AppProperties.class);
+        when(props64.catalog()).thenReturn(catalog64);
+        when(geoShapeExtractor.extractGeoShapes(any())).thenReturn(Map.of());
+        var assembler64 = new CatalogDocumentAssembler(OM, geoShapeExtractor, props64);
+
+        // Attach a ListAppender to the assembler's logger before running.
+        Logger assemblerLogger = (Logger) LoggerFactory.getLogger(CatalogDocumentAssembler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        assemblerLogger.addAppender(appender);
+
+        try {
+            // Build a resource whose blob will definitely exceed 64 bytes.
+            JsonNode payload = buildPayload("""
+                    {
+                      "id": "res-truncate-log",
+                      "descriptor": {
+                        "name": "A fairly long resource name that alone exceeds sixty four bytes of UTF-8",
+                        "shortDesc": "And additional short description text pushes it further over the limit"
+                      },
+                      "provider": {"id": "prov-1"},
+                      "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                    }
+                    """);
+
+            Map<String, Object> doc = assembler64.assemble(payload, "GenericItem");
+
+            // Verify the blob is within the cap.
+            String blob = (String) doc.get("full_text_blob");
+            assertThat(blob.getBytes(StandardCharsets.UTF_8).length).isLessThanOrEqualTo(64);
+
+            // Verify the WARN log was emitted exactly once with the correct event and fields.
+            // catalogId must appear inline (MDC is never populated for this field — see CorrelationContext).
+            assertThat(appender.list)
+                    .filteredOn(e -> e.getLevel() == Level.WARN)
+                    .anySatisfy(e -> {
+                        String msg = e.getFormattedMessage();
+                        assertThat(msg).contains(LogEvent.FULL_TEXT_BLOB_TRUNCATED);
+                        assertThat(msg).contains("catalogId=cat-1");
+                        assertThat(msg).contains("resourceId=res-truncate-log");
+                        assertThat(msg).containsPattern("originalBytes=\\d+");
+                        assertThat(msg).containsPattern("truncatedBytes=\\d+");
+                    });
+
+            // Verify originalBytes > truncatedBytes in the log message (truncation actually happened).
+            ILoggingEvent warnEvent = appender.list.stream()
+                    .filter(e -> e.getLevel() == Level.WARN
+                            && e.getFormattedMessage().contains(LogEvent.FULL_TEXT_BLOB_TRUNCATED))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Expected WARN log not found"));
+            Object[] args = warnEvent.getArgumentArray();
+            // args: [event-const, catalogId, resourceId, originalBytes, truncatedBytes]
+            int originalBytes = (Integer) args[3];
+            int truncatedBytes = (Integer) args[4];
+            assertThat(originalBytes).isGreaterThan(64);
+            assertThat(truncatedBytes).isLessThanOrEqualTo(64);
+            assertThat(truncatedBytes).isLessThan(originalBytes);
+        } finally {
+            assemblerLogger.detachAppender(appender);
+        }
+    }
+
+    @Test
+    void assemble_textBlobUnderCap_noWarnLogFired() throws Exception {
+        // Attach a ListAppender before running with the default 8192-byte cap.
+        Logger assemblerLogger = (Logger) LoggerFactory.getLogger(CatalogDocumentAssembler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        assemblerLogger.addAppender(appender);
+
+        try {
+            // Very short blob — well under 8192 bytes.
+            JsonNode payload = buildPayload("""
+                    {
+                      "id": "res-short",
+                      "descriptor": {"name": "Short Item", "shortDesc": "Brief."},
+                      "provider": {"id": "prov-1"},
+                      "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                    }
+                    """);
+
+            assembler.assemble(payload, "GenericItem");
+
+            // No WARN log with the truncation event should have been emitted.
+            assertThat(appender.list)
+                    .filteredOn(e -> e.getLevel() == Level.WARN
+                            && e.getFormattedMessage().contains(LogEvent.FULL_TEXT_BLOB_TRUNCATED))
+                    .isEmpty();
+        } finally {
+            assemblerLogger.detachAppender(appender);
+        }
     }
 }
