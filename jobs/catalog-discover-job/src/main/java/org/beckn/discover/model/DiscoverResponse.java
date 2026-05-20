@@ -74,25 +74,16 @@ public class DiscoverResponse {
     }
 
     /**
-     * Response Message DTO containing catalogs and requestDigest.
+     * Response Message DTO containing catalogs.
      */
     public static class ResponseMessage {
         @JsonProperty(BecknFields.CATALOGS)
         private List<Catalog> catalogs;
 
-        @JsonInclude(JsonInclude.Include.NON_NULL)
-        @JsonProperty("requestDigest")
-        private RequestDigest requestDigest;
-
         public ResponseMessage() {}
 
         public ResponseMessage(List<Catalog> catalogs) {
             this.catalogs = catalogs;
-        }
-
-        public ResponseMessage(List<Catalog> catalogs, RequestDigest requestDigest) {
-            this.catalogs = catalogs;
-            this.requestDigest = requestDigest;
         }
 
         public List<Catalog> getCatalogs() {
@@ -103,26 +94,15 @@ public class DiscoverResponse {
             this.catalogs = catalogs;
         }
 
-        public RequestDigest getRequestDigest() {
-            return requestDigest;
-        }
-
-        public void setRequestDigest(RequestDigest requestDigest) {
-            this.requestDigest = requestDigest;
-        }
-
         @Override
         public String toString() {
-            return "ResponseMessage{" +
-                    "catalogs=" + catalogs +
-                    ", requestDigest=" + requestDigest +
-                    '}';
+            return "ResponseMessage{catalogs=" + catalogs + '}';
         }
     }
 
     /**
      * Identifies the discover request this response is replying to.
-     * Placed inside {@code message} per Beckn Protocol v2.1 spec.
+     * Per Beckn Protocol v2.0.0 spec, this belongs in the Context object.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class RequestDigest {
