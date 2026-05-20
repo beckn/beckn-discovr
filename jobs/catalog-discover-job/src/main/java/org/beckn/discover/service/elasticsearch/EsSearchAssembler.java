@@ -109,10 +109,7 @@ public class EsSearchAssembler {
         Provider catalogProvider = buildCatalogProvider(doc);
         if (catalogProvider != null) {
             catalog.setProvider(catalogProvider);
-            // Keep flat providerId in sync for downstream code that still reads it.
             catalog.setProviderId(catalogProvider.getId());
-        } else {
-            catalog.setProviderId(str(doc, "catalog_provider_id"));
         }
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());

@@ -79,11 +79,6 @@ public class CatalogDocumentAssembler {
         doc.put("catalog_descriptor_docs", convertToList(catalogDesc.path("docs")));
         doc.put("catalog_descriptor_media_file", convertToList(catalogDesc.path("mediaFile")));
         JsonNode catalogProviderNode = catalog.path(BecknFields.PROVIDER);
-        // Flat fields retained for backward compatibility with existing queries.
-        doc.put("catalog_provider_id", text(catalogProviderNode, BecknFields.ID));
-        doc.put("catalog_provider_name",
-                text(catalogProviderNode.path(BecknFields.DESCRIPTOR), BecknFields.NAME));
-        // Full Provider object — id, descriptor, availableAt, providerAttributes.
         if (!catalogProviderNode.isMissingNode() && catalogProviderNode.isObject()) {
             doc.put("catalog_provider", objectMapper.convertValue(catalogProviderNode, Map.class));
         }

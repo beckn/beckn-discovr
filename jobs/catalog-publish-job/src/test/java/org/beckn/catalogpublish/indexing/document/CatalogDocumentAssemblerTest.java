@@ -328,11 +328,10 @@ class CatalogDocumentAssemblerTest {
         assertThat(mediaFile).hasSize(1);
     }
 
-    // ── catalog_provider_id / catalog_provider_name ───────────────────────────
+    // ── catalog_provider ─────────────────────────────────────────────────────
 
     @Test
-    void assemble_catalogWithProvider_populatesCatalogProviderFields() throws Exception {
-        // catalog-level provider is in buildPayload() default payload
+    void assemble_catalogWithProvider_populatesCatalogProviderObject() throws Exception {
         JsonNode payload = buildPayload("""
                 {
                   "id": "item-1",
@@ -343,11 +342,6 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        // Flat fields retained for backward compatibility
-        assertThat(doc.get("catalog_provider_id")).isEqualTo("prov-catalog");
-        assertThat(doc.get("catalog_provider_name")).isEqualTo("Catalog Provider");
-
-        // Full catalog_provider object
         assertThat(doc.containsKey("catalog_provider")).isTrue();
         @SuppressWarnings("unchecked")
         Map<String, Object> catalogProvider = (Map<String, Object>) doc.get("catalog_provider");
@@ -355,6 +349,8 @@ class CatalogDocumentAssemblerTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> descriptor = (Map<String, Object>) catalogProvider.get("descriptor");
         assertThat(descriptor.get("name")).isEqualTo("Catalog Provider");
+        assertThat(doc.containsKey("catalog_provider_id")).isFalse();
+        assertThat(doc.containsKey("catalog_provider_name")).isFalse();
     }
 
     @Test
@@ -426,9 +422,8 @@ class CatalogDocumentAssemblerTest {
         assertThat(providerAttributes.get("@type")).isEqualTo("ChargingProvider");
         assertThat(providerAttributes.get("certification")).isEqualTo("ISO-50001");
 
-        // Flat fields remain populated for backward compatibility
-        assertThat(doc.get("catalog_provider_id")).isEqualTo("prov-rich");
-        assertThat(doc.get("catalog_provider_name")).isEqualTo("EcoPower Charging");
+        assertThat(doc.containsKey("catalog_provider_id")).isFalse();
+        assertThat(doc.containsKey("catalog_provider_name")).isFalse();
     }
 
     // ── item_rating_review_text ───────────────────────────────────────────────
