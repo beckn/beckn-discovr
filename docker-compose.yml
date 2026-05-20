@@ -162,6 +162,12 @@ services:
       - CATALOG_TEXT_SEARCH_EMBEDDING_TIMEOUT_MS=10000
       - CATALOG_TEXT_SEARCH_EMBEDDING_RETRIES=3
       - CATALOG_TEXT_SEARCH_EMBEDDING_RETRY_DELAY_MS=1000
+      # ── Text Blob Size Cap ──────────────────────────────────────────────────
+      # full_text_blob is truncated at a UTF-8 word boundary when it exceeds this
+      # byte cap. When truncation fires, a WARN log is emitted:
+      #   event=full.text.blob.truncated resourceId=<id> originalBytes=<n> truncatedBytes=<m>
+      # Production default: 8192 (8 KB).
+      - CATALOG_INDEXING_MAX_TEXT_BLOB_BYTES=8192
     volumes:
       - ./config/es-index-template.json:/config/es-index-template.json
     depends_on:

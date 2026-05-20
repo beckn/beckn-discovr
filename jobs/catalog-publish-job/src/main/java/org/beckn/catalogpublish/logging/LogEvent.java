@@ -76,6 +76,9 @@ public final class LogEvent {
     public static final String PROVIDER_OFFER_DELETED   = "provider.offer.deleted";
     public static final String PROVIDER_OFFER_SKIPPED   = "provider.offer.skipped";
 
+    // Text blob assembly
+    public static final String FULL_TEXT_BLOB_TRUNCATED = "full.text.blob.truncated";
+
     // Geometry extraction
     public static final String GEO_MAX_DEPTH_EXCEEDED   = "geo.max-depth-exceeded";
     public static final String GEO_GPS_OUT_OF_RANGE     = "geo.gps.out-of-range";
