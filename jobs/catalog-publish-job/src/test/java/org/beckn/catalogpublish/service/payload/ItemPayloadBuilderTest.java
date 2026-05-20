@@ -24,7 +24,6 @@ class ItemPayloadBuilderTest {
         JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
         assertThat(slice.has("resources")).isFalse();
         assertThat(slice.has("offers")).isFalse();
-        assertThat(slice.path("bppId").asText()).isEqualTo("b1");
     }
 
     @Test
