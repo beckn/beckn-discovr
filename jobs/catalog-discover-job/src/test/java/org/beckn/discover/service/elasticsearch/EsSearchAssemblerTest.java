@@ -346,7 +346,7 @@ class EsSearchAssemblerTest {
     }
 
     @Test
-    void hitWithCatalogProvider_populatesProviderIdOnCatalog() {
+    void hitWithCatalogProvider_populatesProviderOnCatalog() {
         Map<String, Object> doc = evChargerDoc("cat-1", "bpp-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4");
@@ -354,7 +354,6 @@ class EsSearchAssemblerTest {
         Catalog catalog = catalogs.get(0);
         assertThat(catalog.getProvider()).isNotNull();
         assertThat(catalog.getProvider().getId()).isEqualTo("ecopower-network");
-        assertThat(catalog.getProviderId()).isEqualTo("ecopower-network");
     }
 
     @Test
