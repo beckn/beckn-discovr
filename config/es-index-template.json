@@ -4,26 +4,7 @@
     "settings": {
       "index.mapping.total_fields.limit": 2000,
       "index.mapping.depth.limit": 10,
-      "index.refresh_interval": "5s",
-      "analysis": {
-        "filter": {
-          "english_stop":     { "type": "stop",     "stopwords": "_english_" },
-          "english_stemmer":  { "type": "stemmer",  "language": "english" },
-          "beckn_synonyms":   { "type": "synonym",  "synonyms_path": "config/es-synonyms.txt", "lenient": true }
-        },
-        "analyzer": {
-          "beckn_text": {
-            "type": "custom",
-            "tokenizer": "standard",
-            "filter": ["lowercase", "english_stop", "english_stemmer"]
-          },
-          "beckn_text_search": {
-            "type": "custom",
-            "tokenizer": "standard",
-            "filter": ["lowercase", "english_stop", "beckn_synonyms", "english_stemmer"]
-          }
-        }
-      }
+      "index.refresh_interval": "5s"
     },
     "mappings": {
       "dynamic_templates": [
@@ -187,7 +168,8 @@
             }
           }
         },
-        "full_text_blob":     { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
+        "schema_version":     { "type": "keyword" },
+        "full_text_blob":     { "type": "text", "analyzer": "standard" },
         "indexed_at":         { "type": "date" },
         "resource_vector":        { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }
       }
