@@ -45,11 +45,19 @@
               "type": "nested",
               "dynamic": false,
               "properties": {
-                "id":      { "type": "keyword" },
-                "address": { "type": "text" },
-                "city":    { "type": "keyword" },
-                "country": { "type": "keyword" },
-                "geo":     { "type": "geo_shape" }
+                "geo": { "type": "geo_shape" },
+                "address": {
+                  "type": "object",
+                  "dynamic": false,
+                  "properties": {
+                    "streetAddress":   { "type": "text" },
+                    "extendedAddress": { "type": "text" },
+                    "addressLocality": { "type": "keyword" },
+                    "addressRegion":   { "type": "keyword" },
+                    "postalCode":      { "type": "keyword" },
+                    "addressCountry":  { "type": "keyword" }
+                  }
+                }
               }
             },
             "providerAttributes": {
