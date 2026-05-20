@@ -354,7 +354,6 @@ class EsSearchAssemblerTest {
         Catalog catalog = catalogs.get(0);
         assertThat(catalog.getProvider()).isNotNull();
         assertThat(catalog.getProvider().getId()).isEqualTo("ecopower-network");
-        // Flat providerId remains in sync for downstream code that still reads it
         assertThat(catalog.getProviderId()).isEqualTo("ecopower-network");
     }
 
@@ -528,8 +527,6 @@ class EsSearchAssemblerTest {
                 Map.entry("catalog_type", "Catalog"),
                 Map.entry("catalog_name", "EV Charging Catalog"),
                 Map.entry("catalog_short_desc", "Catalog of EV chargers"),
-                Map.entry("catalog_provider_id", "ecopower-network"),
-                Map.entry("catalog_provider_name", "EcoPower Network"),
                 Map.entry("catalog_provider", Map.of(
                         "id", "ecopower-network",
                         "descriptor", Map.of(

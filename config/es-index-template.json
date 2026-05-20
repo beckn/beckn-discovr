@@ -26,8 +26,6 @@
         "catalog_descriptor_thumbnail_image": { "type": "keyword" },
         "catalog_descriptor_docs":            { "type": "nested" },
         "catalog_descriptor_media_file":      { "type": "nested" },
-        "catalog_provider_id":   { "type": "keyword" },
-        "catalog_provider_name": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
         "catalog_provider": {
           "type": "object",
           "dynamic": false,
@@ -156,11 +154,19 @@
                   "type": "nested",
                   "dynamic": false,
                   "properties": {
-                    "id":      { "type": "keyword" },
-                    "address": { "type": "text" },
-                    "city":    { "type": "keyword" },
-                    "country": { "type": "keyword" },
-                    "geo":     { "type": "geo_shape" }
+                    "geo": { "type": "geo_shape" },
+                    "address": {
+                      "type": "object",
+                      "dynamic": false,
+                      "properties": {
+                        "streetAddress":   { "type": "text" },
+                        "extendedAddress": { "type": "text" },
+                        "addressLocality": { "type": "keyword" },
+                        "addressRegion":   { "type": "keyword" },
+                        "postalCode":      { "type": "keyword" },
+                        "addressCountry":  { "type": "keyword" }
+                      }
+                    }
                   }
                 },
                 "providerAttributes": {
