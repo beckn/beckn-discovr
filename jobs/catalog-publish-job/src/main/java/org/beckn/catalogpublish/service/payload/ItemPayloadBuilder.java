@@ -33,6 +33,13 @@ public class ItemPayloadBuilder {
     public ObjectNode buildCatalogMetadataSlice(JsonNode catalogNode, CatalogContext ctx) {
         // Copy only non-item/offer fields — avoids deep-copying all items/offers just to discard them.
         // buildDenormalizedPayloadFromSlice deep-copies this slice per item, so shallow refs are safe here.
+        //
+        // NOTE: bppId / bppUri are NOT injected from context. They come only from the
+        // catalog object itself (via the field-copy loop above). When the catalog has
+        // neither field, the denormalized payload simply omits them — downstream readers
+        // (discover PostgreSQL assembler, ES doc assembler, pull API) must tolerate absence.
+        // The {@code ctx} parameter is retained for other callers/fields but is no longer
+        // used for bpp injection.
         ObjectNode slice = objectMapper.createObjectNode();
         catalogNode.fields().forEachRemaining(e -> {
             // Exclude items/resources (per-item data) and offers — added back per-item in buildDenormalizedPayloadFromSlice
@@ -40,8 +47,6 @@ public class ItemPayloadBuilder {
                     && !BecknFields.OFFERS.equals(e.getKey()))
                 slice.set(e.getKey(), e.getValue());
         });
-        if (!slice.has(BecknFields.BPP_ID)) slice.put(BecknFields.BPP_ID, ctx.bppId());
-        if (!slice.has(BecknFields.BPP_URI)) slice.put(BecknFields.BPP_URI, ctx.bppUri());
         return slice;
     }
 
