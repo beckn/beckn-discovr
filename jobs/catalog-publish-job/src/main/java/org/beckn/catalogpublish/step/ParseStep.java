@@ -50,8 +50,12 @@ public class ParseStep {
     private CatalogContext extractContext(JsonNode root) {
         JsonNode ctx = FieldExtractor.requireNode(root, BecknFields.CONTEXT);
         ContextNormalizer.normalize(ctx);  // V1.0 snake_case → V2.0 camelCase
-        String bppId = FieldExtractor.requireString(ctx, BecknFields.BPP_ID);
-        String bppUri = FieldExtractor.requireString(ctx, BecknFields.BPP_URI);
+        // bppId / bppUri are optional on context. The authoritative source is the
+        // catalog object itself (read during PersistenceStep). Absent values are
+        // tolerated and flow through as null — the item row's bpp_id / bpp_uri
+        // columns are nullable (see V13__item_pk_id_only.sql).
+        String bppId = FieldExtractor.extractString(ctx, BecknFields.BPP_ID).orElse(null);
+        String bppUri = FieldExtractor.extractString(ctx, BecknFields.BPP_URI).orElse(null);
         String[] netIds = FieldExtractor.extractNetworkIds(ctx);
         return new CatalogContext(bppId, bppUri, netIds, ctx);
     }

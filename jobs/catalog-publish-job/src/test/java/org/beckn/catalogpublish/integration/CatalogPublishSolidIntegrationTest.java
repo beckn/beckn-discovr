@@ -7,7 +7,6 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.model.Item;
-import org.beckn.catalogpublish.model.ItemId;
 import org.beckn.catalogpublish.store.jpa.ItemJpaRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +55,8 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         Set<String> ids = items.stream().map(Item::getId).collect(Collectors.toSet());
         assertThat(ids).containsExactlyInAnyOrder("ev-charger-ccs2-001", "ev-charger-ccs2-002", "ev-charger-type2-001");
 
+        // bpp_id is now sourced from catalog.bppId. This fixture (ev_charging_catalog_example)
+        // sets bppId on the catalog object, so persistence picks it up correctly.
         items.forEach(item -> assertThat(item.getBppId()).isEqualTo("bpp.example.com1"));
 
         Item ccs2_001 = items.stream().filter(i -> "ev-charger-ccs2-001".equals(i.getId())).findFirst().orElseThrow();
@@ -126,7 +127,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(3));
 
-        Item ccs2_001Before = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
+        Item ccs2_001Before = itemRepository.findById("ev-charger-ccs2-001").orElseThrow();
         assertThat(ccs2_001Before.getPayload()).contains("isActive");
         assertThat(ccs2_001Before.getPayload()).contains("77.5946");
         assertThat(ccs2_001Before.getPayload()).contains("value").contains("18.0");
@@ -139,13 +140,13 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
-                    Item item = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
+                    Item item = itemRepository.findById("ev-charger-ccs2-001").orElseThrow();
                     assertThat(item.getPayload()).contains("isActive");
                     assertThat(item.getPayload()).contains("99.5946");
                     assertThat(item.getPayload()).contains("value").contains("22.1");
                 });
 
-        Item ccs2_001After = itemRepository.findById(new ItemId("ev-charger-ccs2-001", "bpp.example.com1")).orElseThrow();
+        Item ccs2_001After = itemRepository.findById("ev-charger-ccs2-001").orElseThrow();
         assertThat(ccs2_001After.getPayload()).contains("isActive").contains("true");
         assertThat(ccs2_001After.getPayload()).contains("99.5946");
         assertThat(ccs2_001After.getPayload()).contains("value").contains("22.1");
@@ -195,7 +196,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         Set<String> ids = items.stream().map(Item::getId).collect(Collectors.toSet());
         assertThat(ids).containsExactlyInAnyOrder("item-1", "item-2", "item-3", "item-4", "item-5");
 
-        items.forEach(item -> assertThat(item.getBppId()).isEqualTo("bpp-1"));
+        items.forEach(item -> assertThat(item.getBppId()).isNull());
 
         Item item1 = items.stream().filter(i -> "item-1".equals(i.getId())).findFirst().orElseThrow();
         Item item2 = items.stream().filter(i -> "item-2".equals(i.getId())).findFirst().orElseThrow();
@@ -275,7 +276,7 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
-                    Item item = itemRepository.findById(new ItemId(before.getId(), before.getBppId())).orElseThrow();
+                    Item item = itemRepository.findById(before.getId()).orElseThrow();
                     assertThat(item.getPayload()).contains("EV Station Updated");
                 });
 

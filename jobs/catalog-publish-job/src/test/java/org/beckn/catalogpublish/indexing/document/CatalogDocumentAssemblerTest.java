@@ -151,7 +151,7 @@ class CatalogDocumentAssemblerTest {
                 new org.beckn.catalogpublish.dto.CatalogContext("bpp.test", "https://bpp.test", null, null);
         org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
                 "item-v21", "{}", new String[0], ctx, "cat-1",
-                "v2.1 Item", "SmartMeter", "prov-1", null, "2.1");
+                "v2.1 Item", "SmartMeter", "prov-1", null, "2.1", "bpp.test", "https://bpp.test");
 
         JsonNode payload = buildPayload("""
                 {
@@ -362,7 +362,7 @@ class CatalogDocumentAssemblerTest {
                         new String[]{"net-a", "net-b"}, null);
         org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
                 "item-multi-net", "{}", new String[0], ctx, "cat-1",
-                "Multi Net Item", "GenericItem", "prov-1", null, "2.0");
+                "Multi Net Item", "GenericItem", "prov-1", null, "2.0", "bpp.net", "https://bpp.net");
 
         JsonNode payload = buildPayload("""
                 {
@@ -388,7 +388,7 @@ class CatalogDocumentAssemblerTest {
                         new String[]{"net-only"}, null);
         org.beckn.catalogpublish.model.Item item = org.beckn.catalogpublish.model.Item.from(
                 "item-single-net", "{}", new String[0], ctx, "cat-1",
-                "Single Net Item", "GenericItem", "prov-1", null, "2.0");
+                "Single Net Item", "GenericItem", "prov-1", null, "2.0", "bpp.single", "https://bpp.single");
 
         JsonNode payload = buildPayload("""
                 {

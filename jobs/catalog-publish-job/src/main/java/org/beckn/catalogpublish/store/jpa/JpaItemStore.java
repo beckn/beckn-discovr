@@ -26,14 +26,12 @@ public class JpaItemStore implements ItemStore {
     }
 
     @Override
-    public List<Item> findAllByIdInAndBppId(List<String> itemIds, String bppId) {
-        return itemIds.isEmpty() ? List.of() : repo.findAllByIdInAndBppId(itemIds, bppId);
+    public List<Item> findAllByIdIn(List<String> itemIds) {
+        return itemIds == null || itemIds.isEmpty() ? List.of() : repo.findAllByIdIn(itemIds);
     }
 
     @Override
-    public List<Item> findAllByBppIdAndAnyOfferId(String bppId, List<String> offerIds) {
-        return offerIds == null || offerIds.isEmpty()
-                ? List.of()
-                : repo.findAllByBppIdAndAnyOfferId(bppId, offerIds);
+    public List<Item> findAllByAnyOfferId(List<String> offerIds) {
+        return offerIds == null || offerIds.isEmpty() ? List.of() : repo.findAllByAnyOfferId(offerIds);
     }
 }
