@@ -422,6 +422,7 @@ public class DiscoveryService {
         copy.setId(src.getId());
         copy.setDescriptor(src.getDescriptor());
         copy.setProviderId(src.getProviderId());
+        copy.setProvider(src.getProvider());
         copy.setBppId(src.getBppId());
         copy.setBppUri(src.getBppUri());
         copy.setValidity(src.getValidity());
