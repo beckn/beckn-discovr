@@ -1,6 +1,5 @@
 package org.beckn.discover.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -26,9 +25,6 @@ public class Catalog {
     @Valid
     @JsonProperty(BecknFields.DESCRIPTOR)
     private Descriptor descriptor;
-
-    @JsonIgnore
-    private String providerId;
 
     @Valid
     @JsonProperty(BecknFields.PROVIDER)
@@ -59,9 +55,6 @@ public class Catalog {
 
     public Descriptor getDescriptor() { return descriptor; }
     public void setDescriptor(Descriptor descriptor) { this.descriptor = descriptor; }
-
-    public String getProviderId() { return providerId; }
-    public void setProviderId(String providerId) { this.providerId = providerId; }
 
     public Provider getProvider() { return provider; }
     public void setProvider(Provider provider) { this.provider = provider; }

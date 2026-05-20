@@ -326,7 +326,7 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void discoverV21Item_providerIdExtractedCorrectly() throws Exception {
+    void discoverV21Item_providerExtractedCorrectly() throws Exception {
         insertCatalog();
         insertProvider();
         insertItem("schema-test-prov-001", "2.1", v21ItemPayload("schema-test-prov-001", "Provider Test Charger"));

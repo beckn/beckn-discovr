@@ -151,14 +151,6 @@ public class PostgreSQLAssembler {
         Catalog catalog = catalogMap.computeIfAbsent(catalogId, id -> buildCatalog(id, catalogPayload));
         catalog.getResources().add(resource);
 
-        // Back-fill providerId from resource when catalog payload lacks providerId
-        if (catalog.getProviderId() == null
-                && resource.getProvider() != null
-                && resource.getProvider().getId() != null
-                && !resource.getProvider().getId().isBlank()) {
-            catalog.setProviderId(resource.getProvider().getId());
-        }
-
         // Offer extraction — uses matching_offers when present, falls back to catalog payload
         mergeOffersFromRow(catalog, row, catalogPayload);
 
@@ -181,9 +173,8 @@ public class PostgreSQLAssembler {
 
     private void extractCatalogAttributes(Catalog catalog, JsonNode cp) {
         try {
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_ID,          catalog::setId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_PROVIDER_ID,  catalog::setProviderId);
-            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_ID,       catalog::setBppId);
+            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_ID,      catalog::setId);
+            setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_ID,  catalog::setBppId);
             setTextIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_BPP_URI,      catalog::setBppUri);
             parseIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_DESCRIPTOR, Descriptor.class, catalog::setDescriptor);
             parseIfPresent(cp, DiscoveryConstants.JsonFields.BECKN_VALIDITY,   TimePeriod.class,  catalog::setValidity);

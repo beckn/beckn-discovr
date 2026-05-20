@@ -51,8 +51,8 @@ public class CatalogProcessor {
     // ── Catalog normalization ────────────────────────────────────────────────
 
     /**
-     * Normalizes a single catalog: validates required fields, processes all
-     * items, and back-fills the {@code providerId} from item data when absent.
+     * Normalizes a single catalog: validates required fields and processes all
+     * resources.
      *
      * @return the catalog (possibly mutated), or {@code null} if invalid
      */
@@ -71,17 +71,6 @@ public class CatalogProcessor {
                             .map(this::processResource)
                             .filter(Objects::nonNull)
                             .toList());
-        }
-
-        // Back-fill providerId from the first resource that carries provider info
-        if (catalog.getProviderId() == null && catalog.getResources() != null) {
-            catalog.getResources().stream()
-                    .map(Resource::getProvider)
-                    .filter(Objects::nonNull)
-                    .map(Provider::getId)
-                    .filter(DiscoveryServiceUtil::isNotBlank)
-                    .findFirst()
-                    .ifPresent(catalog::setProviderId);
         }
 
         return catalog;
@@ -170,8 +159,8 @@ public class CatalogProcessor {
     }
 
     private String providerKey(Catalog catalog) {
-        if (DiscoveryServiceUtil.isNotBlank(catalog.getProviderId()))
-            return catalog.getProviderId();
+        if (catalog.getProvider() != null && DiscoveryServiceUtil.isNotBlank(catalog.getProvider().getId()))
+            return catalog.getProvider().getId();
         if (catalog.getResources() != null) {
             return catalog.getResources().stream()
                     .map(Resource::getProvider).filter(Objects::nonNull)
@@ -203,8 +192,6 @@ public class CatalogProcessor {
 
         if (target.getDescriptor() == null)
             target.setDescriptor(source.getDescriptor());
-        if (target.getProviderId() == null)
-            target.setProviderId(source.getProviderId());
         if (target.getProvider() == null)
             target.setProvider(source.getProvider());
     }
