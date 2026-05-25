@@ -68,6 +68,13 @@ logging:
     org.apache.kafka: ERROR
     root: WARN
 
+
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
 # Server Configuration
 server:
   port: 0  # Random port for tests

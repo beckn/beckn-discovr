@@ -1,3 +1,6 @@
+beckn:
+  api-prefix: ${BECKN_API_PREFIX:/beckn}
+
 spring:
   application:
     name: discovery-service
