@@ -55,6 +55,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class DiscoveryControllerTest {
 
+    private static final String DISCOVER_PATH = "/discover";
+
     @Mock private DiscoveryService discoveryService;
     @Mock private DiscoveryValidationService validationService;
     @Mock private AuthorizationService authorizationService;
@@ -117,7 +119,7 @@ class DiscoveryControllerTest {
         doReturn(new AuthIdentity("bpp.seller.io", "bpp-key-001"))
                 .when(authorizationService).authorizeRequest(any(), any());
 
-        mockMvc.perform(post("/discover")
+        mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
                 .andExpect(status().isOk())
@@ -147,7 +149,7 @@ class DiscoveryControllerTest {
         doReturn(AuthIdentity.anonymous())
                 .when(authorizationService).authorizeRequest(any(), any());
 
-        mockMvc.perform(post("/discover")
+        mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
                 .andExpect(status().isOk())
@@ -179,7 +181,7 @@ class DiscoveryControllerTest {
                 BecknAuthException.signatureVerificationFailed("bad sig", "SEC_SIGNATURE_INVALID")))
                 .when(authorizationService).authorizeRequest(any(), any());
 
-        mockMvc.perform(post("/discover")
+        mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
                 .andExpect(status().isUnauthorized())
