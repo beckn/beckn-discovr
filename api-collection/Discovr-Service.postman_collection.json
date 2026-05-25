@@ -16,7 +16,7 @@
 						"disableBodyPruning": true
 					},
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -48,7 +48,7 @@
 						{
 							"name": "Success - Catalogs Found",
 							"originalRequest": {
-								"method": "GET",
+								"method": "POST",
 								"header": [
 									{
 										"key": "Content-Type",
@@ -89,7 +89,7 @@
 						{
 							"name": "Error - Validation Failed",
 							"originalRequest": {
-								"method": "GET",
+								"method": "POST",
 								"header": [
 									{
 										"key": "Content-Type",
@@ -135,7 +135,7 @@
 						"disableBodyPruning": true
 					},
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -144,7 +144,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"2f94e91d-d967-4c66-9119-9ed972244f3a\",\n        \"transactionId\": \"09bcc3bb-b97b-4d80-b1e2-1d87ffd39e86\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [77.6401, 12.9116]\n                    },\n                    \"distanceMeters\": 1000\n                }\n            ]\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"2f94e91d-d967-4c66-9119-9ed972244f3a\",\n        \"transactionId\": \"09bcc3bb-b97b-4d80-b1e2-1d87ffd39e86\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [\n                            77.6401,\n                            12.9116\n                        ]\n                    },\n                    \"distanceMeters\": 1000\n                }\n            ]\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -171,7 +171,7 @@
 						"disableBodyPruning": true
 					},
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -180,7 +180,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"2375ef1b-e8ba-49c6-859d-7dce0d0d2b73\",\n        \"transactionId\": \"9be553ec-d636-4ff4-b939-75eb5ffe5917\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].offers[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [77.6245, 12.9352]\n                    },\n                    \"distanceMeters\": 1000\n                }\n            ]\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"2375ef1b-e8ba-49c6-859d-7dce0d0d2b73\",\n        \"transactionId\": \"9be553ec-d636-4ff4-b939-75eb5ffe5917\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].offers[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [\n                            77.6245,\n                            12.9352\n                        ]\n                    },\n                    \"distanceMeters\": 1000\n                }\n            ]\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -207,7 +207,7 @@
 						"disableBodyPruning": true
 					},
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -243,7 +243,7 @@
 						"disableBodyPruning": true
 					},
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -252,7 +252,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"a8b7c6d5-e4f3-4a2b-1c0d-9e8f7a6b5c4d\",\n        \"transactionId\": \"b9c8d7e6-f5a4-4b3c-2d1e-0f9a8b7c6d5e\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"coffee\",\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [77.6401, 12.9116]\n                    },\n                    \"distanceMeters\": 5000\n                }\n            ]\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"a8b7c6d5-e4f3-4a2b-1c0d-9e8f7a6b5c4d\",\n        \"transactionId\": \"b9c8d7e6-f5a4-4b3c-2d1e-0f9a8b7c6d5e\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"coffee\",\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [\n                            77.6401,\n                            12.9116\n                        ]\n                    },\n                    \"distanceMeters\": 5000\n                }\n            ]\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -345,7 +345,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a9b\",\n        \"transactionId\": \"f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8a9b0c\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"coffee\",\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [77.6401, 12.9116]\n                    },\n                    \"distanceMeters\": 2000\n                }\n            ]\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a9b\",\n        \"transactionId\": \"f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8a9b0c\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"coffee\",\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [\n                            77.6401,\n                            12.9116\n                        ]\n                    },\n                    \"distanceMeters\": 2000\n                }\n            ]\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -400,7 +400,7 @@
 					"script": {
 						"type": "text/javascript",
 						"exec": [
-							"pm.variables.set('sign-host', 'http://localhost:3032');",
+							"pm.variables.set('sign-host', pm.environment.get('buyer-signer-host'));",
 							"",
 							"console.log('=== Starting signing process ===');",
 							"",
@@ -469,7 +469,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"catalog/push\",\n        \"timestamp\": \"2026-04-28T10:30:05Z\",\n        \"transactionId\": \"fe3b216a-bca7-48d9-a4dd-78e9de9c984d\",\n        \"messageId\": \"6636da5a-4845-4a93-b080-3b4a83662501\",\n        \"networkId\": \"beckn.one/retail\",\n        \"subscriberId\": \"catalg.beckn.org\"\n    },\n    \"message\": {\n        \"publishDirectives\": [\n            {\n                \"catalogId\": \"CAT-GROCERY-FRESHMART-005\",\n                \"catalogType\": \"regular\",\n                \"updateMode\": \"MERGE\"\n            }\n        ],\n        \"catalogs\": [\n            {\n                \"id\": \"CAT-GROCERY-FRESHMART-005\",\n                \"descriptor\": {\n                    \"name\": \"FreshMart Grocery Catalog\",\n                    \"shortDesc\": \"Daily essentials \\u2014 tea, coffee & beverages\"\n                },\n                \"provider\": {\n                    \"id\": \"PROV-FRESHMART-05\",\n                    \"descriptor\": {\n                        \"name\": \"FreshMart Pvt Ltd\"\n                    },\n                    \"availableAt\": [\n                        {\n                            \"geo\": {\n                                \"type\": \"Point\",\n                                \"coordinates\": [77.6401, 12.9116]\n                            },\n                            \"address\": {\n                                \"streetAddress\": \"27th Main Rd, Sector 2, HSR Layout\",\n                                \"addressLocality\": \"Bengaluru\",\n                                \"addressRegion\": \"Karnataka\",\n                                \"postalCode\": \"560102\",\n                                \"addressCountry\": \"IN\"\n                            }\n                        }\n                    ]\n                },\n                \"resources\": [\n                    {\n                        \"id\": \"RES-GROCERY-BRU-GOLD-INSTANT-COFFEE-200GRAMS\",\n                        \"descriptor\": {\n                            \"name\": \"Bru Gold Instant Coffee Powder\",\n                            \"shortDesc\": \"Rich and aromatic instant coffee powder, 200g\"\n                        },\n                        \"resourceAttributes\": {\n                            \"@context\": \"https://schema.beckn.io/GroceryResource/v2.1/context.jsonld\",\n                            \"@type\": \"GroceryResource\",\n                            \"identity\": {\n                                \"brand\": \"Bru\",\n                                \"originCountry\": \"IN\"\n                            },\n                            \"physical\": {\n                                \"weight\": {\n                                    \"unitCode\": \"G\",\n                                    \"unitQuantity\": 200\n                                }\n                            },\n                            \"food\": {\n                                \"classification\": \"VEG\"\n                            }\n                        }\n                    }\n                ]\n            }\n        ]\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"catalog/push\",\n        \"timestamp\": \"2026-04-28T10:30:05Z\",\n        \"transactionId\": \"fe3b216a-bca7-48d9-a4dd-78e9de9c984d\",\n        \"messageId\": \"6636da5a-4845-4a93-b080-3b4a83662501\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"publishDirectives\": [\n            {\n                \"catalogId\": \"CAT-GROCERY-FRESHMART-005\",\n                \"catalogType\": \"REGULAR\",\n                \"updateMode\": \"MERGE\"\n            }\n        ],\n        \"catalogs\": [\n            {\n                \"id\": \"CAT-GROCERY-FRESHMART-005\",\n                \"descriptor\": {\n                    \"name\": \"FreshMart Grocery Catalog\",\n                    \"shortDesc\": \"Daily essentials \\u2014 tea, coffee & beverages\"\n                },\n                \"provider\": {\n                    \"id\": \"PROV-FRESHMART-05\",\n                    \"descriptor\": {\n                        \"name\": \"FreshMart Pvt Ltd\"\n                    },\n                    \"availableAt\": [\n                        {\n                            \"geo\": {\n                                \"type\": \"Point\",\n                                \"coordinates\": [\n                                    77.6401,\n                                    12.9116\n                                ]\n                            },\n                            \"address\": {\n                                \"streetAddress\": \"27th Main Rd, Sector 2, HSR Layout\",\n                                \"addressLocality\": \"Bengaluru\",\n                                \"addressRegion\": \"Karnataka\",\n                                \"postalCode\": \"560102\",\n                                \"addressCountry\": \"IN\"\n                            }\n                        }\n                    ]\n                },\n                \"resources\": [\n                    {\n                        \"id\": \"RES-GROCERY-BRU-GOLD-INSTANT-COFFEE-200GRAMS\",\n                        \"descriptor\": {\n                            \"name\": \"Bru Gold Instant Coffee Powder\",\n                            \"shortDesc\": \"Rich and aromatic instant coffee powder, 200g\"\n                        },\n                        \"resourceAttributes\": {\n                            \"@context\": \"https://schema.beckn.io/GroceryResource/v2.1/context.jsonld\",\n                            \"@type\": \"GroceryResource\",\n                            \"identity\": {\n                                \"brand\": \"Bru\",\n                                \"originCountry\": \"IN\"\n                            },\n                            \"physical\": {\n                                \"weight\": {\n                                    \"unitCode\": \"G\",\n                                    \"unitQuantity\": 200\n                                }\n                            },\n                            \"food\": {\n                                \"classification\": \"VEG\"\n                            }\n                        }\n                    }\n                ]\n            }\n        ]\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -477,11 +477,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{publish-host}}/catalog/push",
+							"raw": "{{publish-host}}/beckn/catalog/push",
 							"host": [
 								"{{publish-host}}"
 							],
 							"path": [
+								"beckn",
 								"catalog",
 								"push"
 							]
@@ -494,11 +495,12 @@
 							"originalRequest": {
 								"method": "POST",
 								"url": {
-									"raw": "{{publish-host}}/catalog/push",
+									"raw": "{{publish-host}}/beckn/catalog/push",
 									"host": [
 										"{{publish-host}}"
 									],
 									"path": [
+										"beckn",
 										"catalog",
 										"push"
 									]
@@ -520,11 +522,12 @@
 							"originalRequest": {
 								"method": "POST",
 								"url": {
-									"raw": "{{publish-host}}/catalog/push",
+									"raw": "{{publish-host}}/beckn/catalog/push",
 									"host": [
 										"{{publish-host}}"
 									],
 									"path": [
+										"beckn",
 										"catalog",
 										"push"
 									]
@@ -546,11 +549,12 @@
 							"originalRequest": {
 								"method": "POST",
 								"url": {
-									"raw": "{{publish-host}}/catalog/push",
+									"raw": "{{publish-host}}/beckn/catalog/push",
 									"host": [
 										"{{publish-host}}"
 									],
 									"path": [
+										"beckn",
 										"catalog",
 										"push"
 									]
@@ -581,7 +585,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"catalog/push\",\n        \"timestamp\": \"2026-04-28T11:00:00Z\",\n        \"transactionId\": \"a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d\",\n        \"messageId\": \"b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e\",\n        \"networkId\": \"beckn.one/retail\",\n        \"subscriberId\": \"catalg.beckn.org\"\n    },\n    \"message\": {\n        \"catalogs\": [\n            {\n                \"id\": \"CAT-OFFERS-FRESHMART-005\",\n                \"descriptor\": {\n                    \"name\": \"FreshMart Summer Offers\",\n                    \"shortDesc\": \"Seasonal offers on beverages\"\n                },\n                \"provider\": {\n                    \"id\": \"PROV-FRESHMART-05\",\n                    \"descriptor\": {\n                        \"name\": \"FreshMart Pvt Ltd\"\n                    },\n                    \"availableAt\": [\n                        {\n                            \"geo\": {\n                                \"type\": \"Point\",\n                                \"coordinates\": [77.6401, 12.9116]\n                            }\n                        }\n                    ]\n                },\n                \"offers\": [\n                    {\n                        \"id\": \"OFFER-SUMMER-COFFEE-BOGO\",\n                        \"descriptor\": {\n                            \"name\": \"Buy 1 Get 1 Free \u2014 Coffee\",\n                            \"shortDesc\": \"Buy any coffee product and get one free\"\n                        },\n                        \"resourceIds\": [\n                            \"RES-GROCERY-BRU-GOLD-INSTANT-COFFEE-200GRAMS\"\n                        ],\n                        \"validity\": {\n                            \"startDate\": \"2026-04-01T00:00:00Z\",\n                            \"endDate\": \"2026-06-30T23:59:59Z\"\n                        },\n                        \"offerAttributes\": {\n                            \"@context\": \"https://schema.beckn.io/RetailOffer/v1.0/context.jsonld\",\n                            \"@type\": \"RetailOffer\",\n                            \"offerType\": \"BOGO\",\n                            \"discountPercentage\": 50\n                        }\n                    }\n                ]\n            }\n        ]\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"catalog/push\",\n        \"timestamp\": \"2026-04-28T11:00:00Z\",\n        \"transactionId\": \"a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d\",\n        \"messageId\": \"b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"catalogs\": [\n            {\n                \"id\": \"CAT-OFFERS-FRESHMART-005\",\n                \"descriptor\": {\n                    \"name\": \"FreshMart Summer Offers\",\n                    \"shortDesc\": \"Seasonal offers on beverages\"\n                },\n                \"provider\": {\n                    \"id\": \"PROV-FRESHMART-05\",\n                    \"descriptor\": {\n                        \"name\": \"FreshMart Pvt Ltd\"\n                    },\n                    \"availableAt\": [\n                        {\n                            \"geo\": {\n                                \"type\": \"Point\",\n                                \"coordinates\": [\n                                    77.6401,\n                                    12.9116\n                                ]\n                            }\n                        }\n                    ]\n                },\n                \"offers\": [\n                    {\n                        \"id\": \"OFFER-SUMMER-COFFEE-BOGO\",\n                        \"descriptor\": {\n                            \"name\": \"Buy 1 Get 1 Free \\u2014 Coffee\",\n                            \"shortDesc\": \"Buy any coffee product and get one free\"\n                        },\n                        \"resourceIds\": [\n                            \"RES-GROCERY-BRU-GOLD-INSTANT-COFFEE-200GRAMS\"\n                        ],\n                        \"validity\": {\n                            \"startDate\": \"2026-04-01T00:00:00Z\",\n                            \"endDate\": \"2026-06-30T23:59:59Z\"\n                        },\n                        \"offerAttributes\": {\n                            \"@context\": \"https://schema.beckn.io/RetailOffer/v1.0/context.jsonld\",\n                            \"@type\": \"RetailOffer\",\n                            \"offerType\": \"BOGO\",\n                            \"discountPercentage\": 50\n                        }\n                    }\n                ]\n            }\n        ]\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -589,11 +593,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{publish-host}}/catalog/push",
+							"raw": "{{publish-host}}/beckn/catalog/push",
 							"host": [
 								"{{publish-host}}"
 							],
 							"path": [
+								"beckn",
 								"catalog",
 								"push"
 							]
@@ -606,11 +611,12 @@
 							"originalRequest": {
 								"method": "POST",
 								"url": {
-									"raw": "{{publish-host}}/catalog/push",
+									"raw": "{{publish-host}}/beckn/catalog/push",
 									"host": [
 										"{{publish-host}}"
 									],
 									"path": [
+										"beckn",
 										"catalog",
 										"push"
 									]
@@ -636,7 +642,7 @@
 					"script": {
 						"type": "text/javascript",
 						"exec": [
-							"pm.variables.set('sign-host', 'http://localhost:3030');",
+							"pm.variables.set('sign-host', pm.environment.get('seller-signer-host'));",
 							"",
 							"console.log('=== Starting signing process ===');",
 							"",
@@ -714,7 +720,7 @@
 						{
 							"name": "Healthy",
 							"originalRequest": {
-								"method": "GET",
+								"method": "POST",
 								"url": {
 									"raw": "{{discover-host}}/actuator/health",
 									"host": [
@@ -745,11 +751,12 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{publish-host}}/actuator/health",
+							"raw": "{{publish-host}}/beckn/actuator/health",
 							"host": [
 								"{{publish-host}}"
 							],
 							"path": [
+								"beckn",
 								"actuator",
 								"health"
 							]
