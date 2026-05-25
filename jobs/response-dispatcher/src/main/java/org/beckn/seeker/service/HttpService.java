@@ -9,6 +9,7 @@ import org.beckn.auth.BecknAuth;
 import org.beckn.seeker.common.BecknFields;
 import org.beckn.seeker.config.HttpClientProperties;
 import org.beckn.seeker.config.SigningProperties;
+import org.beckn.seeker.config.StaticCallbackProperties;
 import org.beckn.seeker.logging.LogEvent;
 import org.beckn.seeker.logging.MdcField;
 import org.beckn.seeker.metrics.DispatcherMetrics;
@@ -50,6 +51,7 @@ public class HttpService {
     private final SigningProperties signingProperties;
     private final DispatcherMetrics dispatcherMetrics;
     private final HttpClientProperties httpClientProperties;
+    private final StaticCallbackProperties staticCallback;
 
     private static final String ON_DISCOVER_ENDPOINT = "/on_discover";
     private static final String ON_PUBLISH_ENDPOINT = "/catalog/on_publish";
@@ -210,14 +212,28 @@ public class HttpService {
     }
 
     /**
-     * Resolves the target callback URL from the DeDi Registry.
+     * Resolves the target callback URL.
      *
-     * <p>Subscriber identity (subscriberId + recordId) must be present as Kafka headers.
-     * No context-based fallback — registry is the single source of truth for callback URLs.</p>
+     * <p>When {@code static-callback.enabled=true}, returns the configured static URL
+     * (typically pointing to an Onix-caller adapter) — DeDi lookup is skipped.</p>
+     *
+     * <p>Otherwise (existing behavior): resolves the URL from the DeDi Registry using
+     * subscriber identity (subscriberId + recordId) propagated through Kafka headers.
+     * Registry is the source of truth — no context-based fallback.</p>
      */
     private String resolveTargetUrl(String action, String subscriberId, String recordId) {
         String endpoint = resolveEndpointPath(action);
 
+        // ─── Static callback path: route to configured URL, skip DeDi ─────
+        if (staticCallback.isEnabled()) {
+            log.info("{}", value("event", LogEvent.CALLBACK_RESOLVED),
+                    value("action", action),
+                    value("targetUrl", staticCallback.getUrl()),
+                    value("mode", "static-callback"));
+            return normalizeBaseUrl(staticCallback.getUrl()) + endpoint;
+        }
+
+        // ─── Existing DeDi-based path — unchanged ─────────────────────────
         if (subscriberId == null || subscriberId.isBlank()
                 || recordId == null || recordId.isBlank()) {
             log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
