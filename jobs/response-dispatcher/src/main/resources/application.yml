@@ -66,6 +66,14 @@ signing:
   expiry-seconds: 4000
   subscriber-id: ""
 
+# Static callback routing — when enabled, dispatcher posts every outbound
+# callback to the configured URL instead of resolving via DeDi.
+# Intended for routing through an Onix adapter; leave disabled to preserve
+# existing DeDi-based behavior.
+static-callback:
+  enabled: ${STATIC_CALLBACK_ENABLED:false}
+  url: ${STATIC_CALLBACK_URL:}
+
 management:
   endpoints:
     web:
