@@ -36,6 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class DiscoveryControllerDedupTest {
 
+    private static final String DISCOVER_PATH = "/discover";
+
     @Mock private DiscoveryService discoveryService;
     @Mock private DiscoveryValidationService validationService;
     @Mock private AuthorizationService authorizationService;
@@ -93,14 +95,14 @@ class DiscoveryControllerDedupTest {
         String payload = buildPayload(messageId, transactionId);
 
         // First request — should publish to Kafka
-        mockMvc.perform(post("/discover")
+        mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACK"));
 
         // Second request with same messageId — should be deduplicated
-        mockMvc.perform(post("/discover")
+        mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
@@ -117,13 +119,13 @@ class DiscoveryControllerDedupTest {
         String payload1 = buildPayload(UUID.randomUUID().toString(), transactionId);
         String payload2 = buildPayload(UUID.randomUUID().toString(), transactionId);
 
-        mockMvc.perform(post("/discover")
+        mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload1))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACK"));
 
-        mockMvc.perform(post("/discover")
+        mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload2))
                 .andExpect(status().isOk())
