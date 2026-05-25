@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.auth.BecknAuth;
 import org.beckn.auth.BecknAuthConfig;
 import org.beckn.catalogpublish.auth.BecknAuthFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -28,12 +29,15 @@ public class BecknAuthConfiguration {
                 .build());
     }
 
+    @Value("${beckn.api-prefix:/beckn}")
+    private String apiPrefix;
+
     @Bean
     public FilterRegistrationBean<BecknAuthFilter> becknAuthFilterRegistration(
             BecknAuth becknAuth, AuthProperties props, ObjectMapper objectMapper) {
         FilterRegistrationBean<BecknAuthFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(new BecknAuthFilter(becknAuth, props, objectMapper));
-        registration.addUrlPatterns("/catalog/*");
+        registration.addUrlPatterns(apiPrefix + "/*");
         registration.setOrder(1);
         return registration;
     }

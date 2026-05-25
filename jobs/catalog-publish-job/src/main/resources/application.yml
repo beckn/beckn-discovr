@@ -94,6 +94,9 @@ app:
     # Supports {param} and :param wildcards. Leave empty to protect all endpoints.
     whitelisted-endpoints: ${SIGNATURE_WHITELISTED_ENDPOINTS:}
 
+beckn:
+  api-prefix: ${BECKN_API_PREFIX:/beckn}
+
 spring:
   application:
     name: catalog-publish-job
