@@ -106,7 +106,10 @@ public class EsSearchAssembler {
         catalog.setBppId(str(doc, "bpp_id"));
         catalog.setBppUri(str(doc, "bpp_uri"));
         catalog.setDescriptor(buildCatalogDescriptor(doc));
-        catalog.setProviderId(str(doc, "catalog_provider_id"));
+        Provider catalogProvider = buildCatalogProvider(doc);
+        if (catalogProvider != null) {
+            catalog.setProvider(catalogProvider);
+        }
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         Object validityRaw = doc.get("catalog_validity");
@@ -114,6 +117,67 @@ public class EsSearchAssembler {
             catalog.setValidity(timePeriodFromMap((Map<String, Object>) validityMap));
         }
         return catalog;
+    }
+
+    /**
+     * Builds a full catalog-level {@link Provider} from the {@code catalog_provider}
+     * map indexed in ES. Falls back to {@code null} when no provider data is present.
+     *
+     * <p>The map mirrors the Beckn Provider schema: {@code id}, {@code descriptor}
+     * ({@code name}, {@code shortDesc}, {@code longDesc}, {@code code}),
+     * {@code availableAt} (array of {@link Location}), and
+     * {@code providerAttributes} (Attributes with {@code @context} + {@code @type}).</p>
+     */
+    @SuppressWarnings("unchecked")
+    private static Provider buildCatalogProvider(Map<String, Object> doc) {
+        Object raw = doc.get("catalog_provider");
+        if (!(raw instanceof Map<?, ?> map)) return null;
+        Map<String, Object> providerMap = (Map<String, Object>) map;
+
+        String id = providerMap.get("id") instanceof String s && !s.isBlank() ? s : null;
+        Descriptor descriptor = null;
+        if (providerMap.get("descriptor") instanceof Map<?, ?> descMap) {
+            Map<String, Object> dm = (Map<String, Object>) descMap;
+            descriptor = new Descriptor();
+            if (dm.get("name") instanceof String v && !v.isBlank()) descriptor.setName(v);
+            if (dm.get("shortDesc") instanceof String v && !v.isBlank()) descriptor.setShortDesc(v);
+            if (dm.get("longDesc") instanceof String v && !v.isBlank()) descriptor.setLongDesc(v);
+        }
+        if (id == null && descriptor == null
+                && !providerMap.containsKey("availableAt")
+                && !providerMap.containsKey("providerAttributes")) {
+            return null;
+        }
+        Provider provider = new Provider();
+        provider.setId(id);
+        provider.setDescriptor(descriptor);
+
+        Object availableAtRaw = providerMap.get("availableAt");
+        if (availableAtRaw instanceof List<?> list && !list.isEmpty()) {
+            List<Location> locations = new ArrayList<>();
+            for (Object element : list) {
+                if (element instanceof Map<?, ?> locMap) {
+                    Location location = reconstructLocation((Map<String, Object>) locMap);
+                    if (location != null) locations.add(location);
+                }
+            }
+            if (!locations.isEmpty()) provider.setLocations(locations);
+        }
+
+        if (providerMap.get("providerAttributes") instanceof Map<?, ?> attrsMap) {
+            Map<String, Object> am = (Map<String, Object>) attrsMap;
+            String atContext = am.get(BecknFields.AT_CONTEXT) instanceof String s ? s : null;
+            String atType = am.get(BecknFields.AT_TYPE) instanceof String s ? s : null;
+            Attributes attrs = new Attributes(atContext, atType);
+            am.forEach((k, v) -> {
+                if (!BecknFields.AT_CONTEXT.equals(k) && !BecknFields.AT_TYPE.equals(k)) {
+                    attrs.setAttribute(k, v);
+                }
+            });
+            provider.setProviderAttributes(attrs);
+        }
+
+        return provider;
     }
 
     @SuppressWarnings("unchecked")

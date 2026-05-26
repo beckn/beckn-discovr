@@ -70,6 +70,22 @@ class CatalogDocumentAssemblerTest {
                 """, itemJson));
     }
 
+    private JsonNode buildPayloadWithOffers(String itemJson, String offersJson) throws Exception {
+        return OM.readTree(String.format("""
+                {
+                  "catalogs": [{
+                    "id": "cat-1",
+                    "bppId": "bpp.example.com",
+                    "bppUri": "https://bpp.example.com",
+                    "descriptor": {"name": "Test Catalog"},
+                    "provider": {"id": "prov-catalog", "descriptor": {"name": "Catalog Provider"}},
+                    "resources": [%s],
+                    "offers": %s
+                  }]
+                }
+                """, itemJson, offersJson));
+    }
+
     // ── item_attributes_type and item_attributes_context ─────────────────────
 
     @Test
@@ -312,11 +328,10 @@ class CatalogDocumentAssemblerTest {
         assertThat(mediaFile).hasSize(1);
     }
 
-    // ── catalog_provider_id / catalog_provider_name ───────────────────────────
+    // ── catalog_provider ─────────────────────────────────────────────────────
 
     @Test
-    void assemble_catalogWithProvider_populatesCatalogProviderFields() throws Exception {
-        // catalog-level provider is in buildPayload() default payload
+    void assemble_catalogWithProvider_populatesCatalogProviderObject() throws Exception {
         JsonNode payload = buildPayload("""
                 {
                   "id": "item-1",
@@ -327,8 +342,88 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.get("catalog_provider_id")).isEqualTo("prov-catalog");
-        assertThat(doc.get("catalog_provider_name")).isEqualTo("Catalog Provider");
+        assertThat(doc.containsKey("catalog_provider")).isTrue();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> catalogProvider = (Map<String, Object>) doc.get("catalog_provider");
+        assertThat(catalogProvider.get("id")).isEqualTo("prov-catalog");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> descriptor = (Map<String, Object>) catalogProvider.get("descriptor");
+        assertThat(descriptor.get("name")).isEqualTo("Catalog Provider");
+        assertThat(doc.containsKey("catalog_provider_id")).isFalse();
+        assertThat(doc.containsKey("catalog_provider_name")).isFalse();
+    }
+
+    @Test
+    void assemble_catalogWithFullProvider_storesCatalogProviderObject() throws Exception {
+        // Custom payload with rich provider — descriptor, availableAt, providerAttributes
+        JsonNode payload = OM.readTree("""
+                {
+                  "catalogs": [{
+                    "id": "cat-1",
+                    "bppId": "bpp.example.com",
+                    "bppUri": "https://bpp.example.com",
+                    "descriptor": {"name": "Test Catalog"},
+                    "provider": {
+                      "id": "prov-rich",
+                      "descriptor": {
+                        "name": "EcoPower Charging",
+                        "shortDesc": "Clean energy provider",
+                        "longDesc": "Bengaluru-based EV charging network",
+                        "code": "ECO"
+                      },
+                      "availableAt": [
+                        {
+                          "id": "loc-1",
+                          "geo": {"type": "Point", "coordinates": [77.5, 12.9]},
+                          "address": {"addressLocality": "Bengaluru", "addressCountry": "IND"}
+                        }
+                      ],
+                      "providerAttributes": {
+                        "@context": "https://example.org/provider.jsonld",
+                        "@type": "ChargingProvider",
+                        "certification": "ISO-50001"
+                      }
+                    },
+                    "resources": [{
+                      "id": "item-1",
+                      "descriptor": {"name": "Item"},
+                      "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                    }],
+                    "offers": []
+                  }]
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.containsKey("catalog_provider")).isTrue();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> catalogProvider = (Map<String, Object>) doc.get("catalog_provider");
+        assertThat(catalogProvider.get("id")).isEqualTo("prov-rich");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> descriptor = (Map<String, Object>) catalogProvider.get("descriptor");
+        assertThat(descriptor.get("name")).isEqualTo("EcoPower Charging");
+        assertThat(descriptor.get("shortDesc")).isEqualTo("Clean energy provider");
+        assertThat(descriptor.get("longDesc")).isEqualTo("Bengaluru-based EV charging network");
+        assertThat(descriptor.get("code")).isEqualTo("ECO");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> availableAt = (List<Map<String, Object>>) catalogProvider.get("availableAt");
+        assertThat(availableAt).hasSize(1);
+        assertThat(availableAt.get(0).get("id")).isEqualTo("loc-1");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> address = (Map<String, Object>) availableAt.get(0).get("address");
+        assertThat(address.get("addressLocality")).isEqualTo("Bengaluru");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> providerAttributes = (Map<String, Object>) catalogProvider.get("providerAttributes");
+        assertThat(providerAttributes.get("@context")).isEqualTo("https://example.org/provider.jsonld");
+        assertThat(providerAttributes.get("@type")).isEqualTo("ChargingProvider");
+        assertThat(providerAttributes.get("certification")).isEqualTo("ISO-50001");
+
+        assertThat(doc.containsKey("catalog_provider_id")).isFalse();
+        assertThat(doc.containsKey("catalog_provider_name")).isFalse();
     }
 
     // ── item_rating_review_text ───────────────────────────────────────────────
@@ -405,6 +500,82 @@ class CatalogDocumentAssemblerTest {
         @SuppressWarnings("unchecked")
         List<String> networkId = (List<String>) doc.get("network_id");
         assertThat(networkId).containsExactly("net-only");
+    }
+
+    // ── offers.provider — descriptor / availableAt / providerAttributes ────────
+
+    @Test
+    void assemble_offerWithProviderDescriptor_storesFullProviderStructure() throws Exception {
+        JsonNode payload = buildPayloadWithOffers("""
+                {
+                  "id": "item-1",
+                  "descriptor": {"name": "EV Charger"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {"@type": "EVCharger", "@context": "https://ctx"}
+                }
+                """, """
+                [{
+                  "id": "offer-1",
+                  "descriptor": {"name": "Summer Discount"},
+                  "provider": {
+                    "id": "prov-1",
+                    "descriptor": {"name": "EcoPower Charging", "shortDesc": "Clean energy provider"},
+                    "availableAt": [{"id": "loc-1", "city": "Bengaluru", "country": "IND"}],
+                    "providerAttributes": {"@context": "https://ctx", "@type": "ChargingProvider"}
+                  },
+                  "resourceIds": ["item-1"]
+                }]
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "EVCharger");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> offers = (List<Map<String, Object>>) doc.get("offers");
+        assertThat(offers).hasSize(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> provider = (Map<String, Object>) offers.get(0).get("provider");
+        assertThat(provider.get("id")).isEqualTo("prov-1");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> descriptor = (Map<String, Object>) provider.get("descriptor");
+        assertThat(descriptor.get("name")).isEqualTo("EcoPower Charging");
+        assertThat(descriptor.get("shortDesc")).isEqualTo("Clean energy provider");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> availableAt = (List<Map<String, Object>>) provider.get("availableAt");
+        assertThat(availableAt).hasSize(1);
+        assertThat(availableAt.get(0).get("city")).isEqualTo("Bengaluru");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> providerAttributes = (Map<String, Object>) provider.get("providerAttributes");
+        assertThat(providerAttributes.get("@type")).isEqualTo("ChargingProvider");
+    }
+
+    @Test
+    void assemble_offerProviderDescriptorName_includedInTextBlob() throws Exception {
+        JsonNode payload = buildPayloadWithOffers("""
+                {
+                  "id": "item-1",
+                  "descriptor": {"name": "EV Charger"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {"@type": "EVCharger", "@context": "https://ctx"}
+                }
+                """, """
+                [{
+                  "id": "offer-1",
+                  "provider": {
+                    "id": "prov-1",
+                    "descriptor": {"name": "EcoPower Charging"}
+                  },
+                  "resourceIds": ["item-1"]
+                }]
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "EVCharger");
+
+        String blob = (String) doc.get("full_text_blob");
+        assertThat(blob).contains("EcoPower Charging");
     }
 
     // ── full_text_blob includes constraints and policies text ─────────────────
