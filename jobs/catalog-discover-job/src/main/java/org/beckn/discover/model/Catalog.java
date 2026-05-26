@@ -61,9 +61,6 @@ public class Catalog {
     public Provider getProvider() { return provider; }
     public void setProvider(Provider provider) { this.provider = provider; }
 
-    /** Convenience accessor — extracts {@code provider.id} for downstream code. */
-    public String getProviderId() { return provider != null ? provider.getId() : null; }
-
     public TimePeriod getValidity() { return validity; }
     public void setValidity(TimePeriod validity) { this.validity = validity; }
 

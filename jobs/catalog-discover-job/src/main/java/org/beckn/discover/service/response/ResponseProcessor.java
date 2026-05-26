@@ -93,10 +93,7 @@ public class ResponseProcessor {
 
         DiscoverResponse response = new DiscoverResponse();
         response.setContext(createResponseContext(ctx));
-        DiscoverResponse.RequestDigest requestDigest = ctx.getMessageId() != null
-                ? new DiscoverResponse.RequestDigest(ctx.getMessageId(), null)
-                : null;
-        response.setMessage(new DiscoverResponse.ResponseMessage(catalogs, requestDigest));
+        response.setMessage(new DiscoverResponse.ResponseMessage(catalogs));
 
         if (!validateResponse(response)) {
             log.warn(LogEvent.RESPONSE_BUILD_VALIDATION_FAILED);
