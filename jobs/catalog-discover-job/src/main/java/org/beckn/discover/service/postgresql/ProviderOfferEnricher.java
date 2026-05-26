@@ -129,7 +129,7 @@ public class ProviderOfferEnricher {
 
         int totalAppended = 0;
         for (Catalog catalog : catalogs) {
-            String providerId = catalog.getProviderId();
+            String providerId = catalog.getProvider() != null ? catalog.getProvider().getId() : null;
             if (providerId == null || providerId.isBlank()) continue;
 
             List<Object> providerOffers = offersByProviderId.get(providerId);
@@ -154,8 +154,9 @@ public class ProviderOfferEnricher {
     private Set<String> collectProviderIds(List<Catalog> catalogs) {
         Set<String> ids = new LinkedHashSet<>();
         for (Catalog catalog : catalogs) {
-            if (catalog.getProviderId() != null && !catalog.getProviderId().isBlank()) {
-                ids.add(catalog.getProviderId());
+            if (catalog.getProvider() != null && catalog.getProvider().getId() != null
+                    && !catalog.getProvider().getId().isBlank()) {
+                ids.add(catalog.getProvider().getId());
             }
         }
         return ids;

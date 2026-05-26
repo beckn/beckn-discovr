@@ -86,9 +86,10 @@ public class CatalogDocumentAssembler {
         doc.put("catalog_descriptor_thumbnail_image", text(catalogDesc, "thumbnailImage"));
         doc.put("catalog_descriptor_docs", convertToList(catalogDesc.path("docs")));
         doc.put("catalog_descriptor_media_file", convertToList(catalogDesc.path("mediaFile")));
-        doc.put("catalog_provider_id", text(catalog.path(BecknFields.PROVIDER), BecknFields.ID));
-        doc.put("catalog_provider_name",
-                text(catalog.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+        JsonNode providerNode = catalog.path(BecknFields.PROVIDER);
+        if (!providerNode.isMissingNode() && providerNode.isObject()) {
+            doc.put("catalog_provider", objectMapper.convertValue(providerNode, Map.class));
+        }
         putIfPresent(doc, "catalog_is_active", boolOrNull(catalog, "isActive"));
         doc.put("network_id", networkIds);
         JsonNode validityNode = catalog.path(BecknFields.VALIDITY);
