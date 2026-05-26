@@ -345,13 +345,30 @@ class EsSearchAssemblerTest {
     }
 
     @Test
-    void hitWithCatalogProvider_populatesProviderIdOnCatalog() {
+    void hitWithCatalogProvider_populatesFullProviderOnCatalog() {
         Map<String, Object> doc = evChargerDoc("cat-1", "item-1", "Charger");
 
         List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4");
 
         Catalog catalog = catalogs.get(0);
-        assertThat(catalog.getProviderId()).isEqualTo("ecopower-network");
+        assertThat(catalog.getProvider()).isNotNull();
+        assertThat(catalog.getProvider().getId()).isEqualTo("ecopower-network");
+        assertThat(catalog.getProvider().getDescriptor()).isNotNull();
+        assertThat(catalog.getProvider().getDescriptor().getName()).isEqualTo("EcoPower Network");
+        assertThat(catalog.getProvider().getDescriptor().getShortDesc()).isEqualTo("EcoPower charging network");
+    }
+
+    @Test
+    void hitWithCatalogProviderMissingDescriptor_populatesIdOnly() {
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
+        doc.put("catalog_provider", Map.of("id", "minimal-provider"));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-new-4b");
+
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getProvider()).isNotNull();
+        assertThat(catalog.getProvider().getId()).isEqualTo("minimal-provider");
+        assertThat(catalog.getProvider().getDescriptor()).isNull();
     }
 
     @Test
@@ -456,8 +473,9 @@ class EsSearchAssemblerTest {
                 Map.entry("catalog_type", "Catalog"),
                 Map.entry("catalog_name", "EV Charging Catalog"),
                 Map.entry("catalog_short_desc", "Catalog of EV chargers"),
-                Map.entry("catalog_provider_id", "ecopower-network"),
-                Map.entry("catalog_provider_name", "EcoPower Network"),
+                Map.entry("catalog_provider", Map.of(
+                        "id", "ecopower-network",
+                        "descriptor", Map.of("name", "EcoPower Network", "shortDesc", "EcoPower charging network"))),
                 Map.entry("network_id", "ondc-ev"),
                 Map.entry("resource_id", itemId),
                 Map.entry("resource_name", itemName),

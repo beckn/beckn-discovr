@@ -155,8 +155,8 @@ public class CatalogProcessor {
     }
 
     private String providerKey(Catalog catalog) {
-        if (DiscoveryServiceUtil.isNotBlank(catalog.getProviderId()))
-            return catalog.getProviderId();
+        if (catalog.getProvider() != null && DiscoveryServiceUtil.isNotBlank(catalog.getProvider().getId()))
+            return catalog.getProvider().getId();
         if (catalog.getResources() != null) {
             return catalog.getResources().stream()
                     .map(Resource::getProvider).filter(Objects::nonNull)

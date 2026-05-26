@@ -45,13 +45,53 @@
         "catalog_descriptor_thumbnail_image": { "type": "keyword" },
         "catalog_descriptor_docs":            { "type": "nested" },
         "catalog_descriptor_media_file":      { "type": "nested" },
-        "catalog_provider_id":   { "type": "keyword" },
-        "catalog_provider_name": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+        "catalog_provider": {
+          "type": "object",
+          "dynamic": false,
+          "properties": {
+            "id": { "type": "keyword" },
+            "descriptor": {
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                "shortDesc": { "type": "text" },
+                "longDesc":  { "type": "text" },
+                "code":      { "type": "keyword" }
+              }
+            },
+            "availableAt": {
+              "type": "nested",
+              "dynamic": false,
+              "properties": {
+                "address": {
+                  "type": "object",
+                  "dynamic": false,
+                  "properties": {
+                    "streetAddress":   { "type": "text" },
+                    "extendedAddress": { "type": "text" },
+                    "addressLocality": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                    "addressRegion":   { "type": "keyword" },
+                    "postalCode":      { "type": "keyword" },
+                    "addressCountry":  { "type": "keyword" }
+                  }
+                }
+              }
+            },
+            "providerAttributes": {
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "@context": { "type": "keyword" },
+                "@type":    { "type": "keyword" }
+              }
+            }
+          }
+        },
         "catalog_is_active":     { "type": "boolean" },
         "catalog_validity": {
           "type": "object",
           "properties": {
-            "@type":     { "type": "keyword" },
             "startDate": { "type": "date" },
             "endDate":   { "type": "date" },
             "startTime": { "type": "keyword" },
@@ -122,8 +162,43 @@
               "type": "object",
               "dynamic": false,
               "properties": {
-                "id":   { "type": "keyword" },
-                "name": { "type": "text", "fields": { "raw": { "type": "keyword" } } }
+                "id": { "type": "keyword" },
+                "descriptor": {
+                  "type": "object",
+                  "dynamic": false,
+                  "properties": {
+                    "name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                    "shortDesc": { "type": "text" },
+                    "longDesc":  { "type": "text" },
+                    "code":      { "type": "keyword" }
+                  }
+                },
+                "availableAt": {
+                  "type": "nested",
+                  "dynamic": false,
+                  "properties": {
+                    "address": {
+                      "type": "object",
+                      "dynamic": false,
+                      "properties": {
+                        "streetAddress":   { "type": "text" },
+                        "extendedAddress": { "type": "text" },
+                        "addressLocality": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "addressRegion":   { "type": "keyword" },
+                        "postalCode":      { "type": "keyword" },
+                        "addressCountry":  { "type": "keyword" }
+                      }
+                    }
+                  }
+                },
+                "providerAttributes": {
+                  "type": "object",
+                  "dynamic": false,
+                  "properties": {
+                    "@context": { "type": "keyword" },
+                    "@type":    { "type": "keyword" }
+                  }
+                }
               }
             },
             "resourceIds": { "type": "keyword" },
@@ -152,8 +227,12 @@
               }
             },
             "offerAttributes": {
-              "type": "nested",
-              "dynamic": false
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "@context": { "type": "keyword" },
+                "@type":    { "type": "keyword" }
+              }
             }
           }
         },
