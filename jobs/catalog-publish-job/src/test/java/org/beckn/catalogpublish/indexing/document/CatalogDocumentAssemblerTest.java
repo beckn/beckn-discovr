@@ -328,11 +328,13 @@ class CatalogDocumentAssemblerTest {
         assertThat(mediaFile).hasSize(1);
     }
 
-    // ── catalog_provider_id / catalog_provider_name ───────────────────────────
+    // ── catalog_provider structured object ───────────────────────────────────
 
     @Test
-    void assemble_catalogWithProvider_populatesCatalogProviderFields() throws Exception {
-        // catalog-level provider is in buildPayload() default payload
+    @SuppressWarnings("unchecked")
+    void assemble_catalogWithProvider_populatesStructuredCatalogProvider() throws Exception {
+        // catalog-level provider is in buildPayload() default payload:
+        // {"id": "prov-catalog", "descriptor": {"name": "Catalog Provider"}}
         JsonNode payload = buildPayload("""
                 {
                   "id": "item-1",
@@ -343,8 +345,13 @@ class CatalogDocumentAssemblerTest {
 
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
-        assertThat(doc.get("catalog_provider_id")).isEqualTo("prov-catalog");
-        assertThat(doc.get("catalog_provider_name")).isEqualTo("Catalog Provider");
+        assertThat(doc).doesNotContainKey("catalog_provider_id");
+        assertThat(doc).doesNotContainKey("catalog_provider_name");
+        assertThat(doc.get("catalog_provider")).isInstanceOf(Map.class);
+        Map<String, Object> providerMap = (Map<String, Object>) doc.get("catalog_provider");
+        assertThat(providerMap.get("id")).isEqualTo("prov-catalog");
+        Map<String, Object> descMap = (Map<String, Object>) providerMap.get("descriptor");
+        assertThat(descMap.get("name")).isEqualTo("Catalog Provider");
     }
 
     // ── item_rating_review_text ───────────────────────────────────────────────

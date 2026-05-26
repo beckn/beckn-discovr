@@ -104,12 +104,9 @@ public class EsSearchAssembler {
         Catalog catalog = new Catalog();
         catalog.setId(catalogId);
         catalog.setDescriptor(buildCatalogDescriptor(doc));
-        // Build catalog-level provider from ES doc fields
-        String catalogProviderId = extractString(doc, "catalog_provider_id");
-        if (catalogProviderId != null) {
-            Descriptor providerDesc = new Descriptor();
-            providerDesc.setName(extractString(doc, "catalog_provider_name"));
-            catalog.setProvider(new Provider(catalogProviderId, providerDesc));
+        Object catalogProviderRaw = doc.get("catalog_provider");
+        if (catalogProviderRaw instanceof Map<?, ?> providerMap) {
+            catalog.setProvider(buildCatalogProvider((Map<String, Object>) providerMap));
         }
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
@@ -118,6 +115,23 @@ public class EsSearchAssembler {
             catalog.setValidity(timePeriodFromMap((Map<String, Object>) validityMap));
         }
         return catalog;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Provider buildCatalogProvider(Map<String, Object> providerMap) {
+        String id = extractString(providerMap, "id");
+        if (id == null) return null;
+        Provider provider = new Provider();
+        provider.setId(id);
+        Object descRaw = providerMap.get("descriptor");
+        if (descRaw instanceof Map<?, ?> descMap) {
+            Descriptor desc = new Descriptor();
+            desc.setName((String) ((Map<String, Object>) descMap).get("name"));
+            desc.setShortDesc((String) ((Map<String, Object>) descMap).get("shortDesc"));
+            desc.setLongDesc((String) ((Map<String, Object>) descMap).get("longDesc"));
+            provider.setDescriptor(desc);
+        }
+        return provider;
     }
 
     @SuppressWarnings("unchecked")
