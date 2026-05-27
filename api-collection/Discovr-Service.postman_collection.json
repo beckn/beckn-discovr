@@ -1,8 +1,8 @@
 {
 	"info": {
-		"_postman_id": "1c97eeeb-344e-4ea1-9168-8596955ca50d",
+		"_postman_id": "79d61000-432e-47b0-97b5-83c8d972ee34",
 		"name": "Discovr Service",
-		"description": "Beckn Protocol v2.0 \u2014 Discovr Service API Collection.\n\nCovers catalog discovery (text search, spatial, JSONPath), catalog push (from Catalg CDS), and health endpoints.\n\nGET /beckn/discover is synchronous (returns catalogs directly).\nPOST /beckn/discover is asynchronous (returns ACK, delivers on_discover via callback).\nPOST /catalog/push is fire-and-forget (returns ACK, no callback).\n\nAll POST endpoints are auto-signed via pre-request scripts (requires signing service on sign-host).\nIdentity (subscriberId, recordId) is extracted from the Authorization header.",
+		"description": "Beckn Protocol v2.0 — Discovr Service API Collection.\n\nCovers catalog discovery (text search, spatial, JSONPath), catalog push (from Catalg CDS), and health endpoints.\n\nGET /beckn/discover is synchronous (returns catalogs directly).\nPOST /beckn/discover is asynchronous (returns ACK, delivers on_discover via callback).\nPOST /catalog/push is fire-and-forget (returns ACK, no callback).\n\nAll POST endpoints are auto-signed via pre-request scripts (requires signing service on sign-host).\nIdentity (subscriberId, recordId) is extracted from the Authorization header.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "42114807"
 	},
@@ -25,7 +25,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"f421fed9-94bf-4000-b265-82b8ac71964d\",\n        \"transactionId\": \"45c2f8ee-7b51-4e9e-bf77-f290bca06719\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"instant coffee powder\"\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"f421fed9-94bf-4000-b265-82b8ac71964d\",\n        \"transactionId\": \"45c2f8ee-7b51-4e9e-bf77-f290bca06719\",\n        \"networkId\": \"beckn.one/retail\",\n        \"bapUri\":{{bapUri}} // Here you will receive On_discover response\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"instant coffee powder\"\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -48,7 +48,7 @@
 						{
 							"name": "Success - Catalogs Found",
 							"originalRequest": {
-								"method": "GET",
+								"method": "POST",
 								"header": [
 									{
 										"key": "Content-Type",
@@ -84,12 +84,13 @@
 									"value": "application/json"
 								}
 							],
-							"body": "{\n    \"context\": {\n        \"action\": \"on_discover\",\n        \"messageId\": \"f421fed9-94bf-4000-b265-82b8ac71964d\",\n        \"transactionId\": \"45c2f8ee-7b51-4e9e-bf77-f290bca06719\",\n        \"timestamp\": \"2026-04-28T10:30:01Z\",\n        \"version\": \"2.0.0\"\n    },\n    \"message\": {\n        \"catalogs\": [\n            {\n                \"id\": \"CAT-GROCERY-FRESHMART-005\",\n                \"descriptor\": {\n                    \"name\": \"FreshMart Grocery Catalog\",\n                    \"shortDesc\": \"Daily essentials \u2014 tea, coffee & beverages\"\n                },\n                \"provider\": {\n                    \"id\": \"PROV-FRESHMART-05\",\n                    \"descriptor\": { \"name\": \"FreshMart Pvt Ltd\" }\n                },\n                \"resources\": [\n                    {\n                        \"id\": \"RES-GROCERY-BRU-GOLD-INSTANT-COFFEE-200GRAMS\",\n                        \"descriptor\": {\n                            \"name\": \"Bru Gold Instant Coffee Powder\",\n                            \"shortDesc\": \"Rich and aromatic instant coffee powder, 200g\"\n                        },\n                        \"resourceAttributes\": {\n                            \"@context\": \"https://schema.beckn.io/GroceryResource/v2.1/context.jsonld\",\n                            \"@type\": \"GroceryResource\"\n                        }\n                    }\n                ]\n            }\n        ]\n    }\n}"
+							"cookie": [],
+							"body": "{\n    \"context\": {\n        \"action\": \"on_discover\",\n        \"messageId\": \"f421fed9-94bf-4000-b265-82b8ac71964d\",\n        \"transactionId\": \"45c2f8ee-7b51-4e9e-bf77-f290bca06719\",\n        \"timestamp\": \"2026-04-28T10:30:01Z\",\n        \"version\": \"2.0.0\"\n    },\n    \"message\": {\n        \"catalogs\": [\n            {\n                \"id\": \"CAT-GROCERY-FRESHMART-005\",\n                \"descriptor\": {\n                    \"name\": \"FreshMart Grocery Catalog\",\n                    \"shortDesc\": \"Daily essentials — tea, coffee & beverages\"\n                },\n                \"provider\": {\n                    \"id\": \"PROV-FRESHMART-05\",\n                    \"descriptor\": { \"name\": \"FreshMart Pvt Ltd\" }\n                },\n                \"resources\": [\n                    {\n                        \"id\": \"RES-GROCERY-BRU-GOLD-INSTANT-COFFEE-200GRAMS\",\n                        \"descriptor\": {\n                            \"name\": \"Bru Gold Instant Coffee Powder\",\n                            \"shortDesc\": \"Rich and aromatic instant coffee powder, 200g\"\n                        },\n                        \"resourceAttributes\": {\n                            \"@context\": \"https://schema.beckn.io/GroceryResource/v2.1/context.jsonld\",\n                            \"@type\": \"GroceryResource\"\n                        }\n                    }\n                ]\n            }\n        ]\n    }\n}"
 						},
 						{
 							"name": "Error - Validation Failed",
 							"originalRequest": {
-								"method": "GET",
+								"method": "POST",
 								"header": [
 									{
 										"key": "Content-Type",
@@ -125,17 +126,15 @@
 									"value": "application/json"
 								}
 							],
+							"cookie": [],
 							"body": "{\n    \"status\": \"NACK\",\n    \"error\": {\n        \"errorCode\": \"INVALID_REQUEST\",\n        \"errorMessage\": \"context.messageId is required\"\n    }\n}"
 						}
 					]
 				},
 				{
 					"name": "Discover - Spatial Query (Catalog Provider)",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -144,7 +143,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"2f94e91d-d967-4c66-9119-9ed972244f3a\",\n        \"transactionId\": \"09bcc3bb-b97b-4d80-b1e2-1d87ffd39e86\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [77.6401, 12.9116]\n                    },\n                    \"distanceMeters\": 1000\n                }\n            ]\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"2f94e91d-d967-4c66-9119-9ed972244f3a\",\n        \"transactionId\": \"09bcc3bb-b97b-4d80-b1e2-1d87ffd39e86\",\n        \"networkId\": \"beckn.one/retail\",\n        \"bapUri\":{{bapUri}} // Here you will receive On_discover response\n    },\n    \"message\": {\n        \"intent\": {\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [\n                            77.6401,\n                            12.9116\n                        ]\n                    },\n                    \"distanceMeters\": 1000\n                }\n            ]\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -161,7 +160,7 @@
 								"discover"
 							]
 						},
-						"description": "Spatial discovery \u2014 find catalogs whose provider is within 1km of a point (HSR Layout, Bengaluru).\n\nUses S_DWITHIN operator (OGC CQL2) targeting provider.availableAt geo coordinates."
+						"description": "Spatial discovery — find catalogs whose provider is within 1km of a point (HSR Layout, Bengaluru).\n\nUses S_DWITHIN operator (OGC CQL2) targeting provider.availableAt geo coordinates."
 					},
 					"response": []
 				},
@@ -180,7 +179,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"2375ef1b-e8ba-49c6-859d-7dce0d0d2b73\",\n        \"transactionId\": \"9be553ec-d636-4ff4-b939-75eb5ffe5917\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].offers[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [77.6245, 12.9352]\n                    },\n                    \"distanceMeters\": 1000\n                }\n            ]\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"2375ef1b-e8ba-49c6-859d-7dce0d0d2b73\",\n        \"transactionId\": \"9be553ec-d636-4ff4-b939-75eb5ffe5917\",\n        \"networkId\": \"beckn.one/retail\",\n        \"bapUri\":{{bapUri}} // Here you will receive On_discover response\n    },\n    \"message\": {\n        \"intent\": {\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].offers[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [\n                            77.6245,\n                            12.9352\n                        ]\n                    },\n                    \"distanceMeters\": 1000\n                }\n            ]\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -197,17 +196,14 @@
 								"discover"
 							]
 						},
-						"description": "Spatial discovery \u2014 find offers whose provider is within 1km of a point (Koramangala, Bengaluru).\n\nTargets offer-level provider locations instead of catalog-level."
+						"description": "Spatial discovery — find offers whose provider is within 1km of a point (Koramangala, Bengaluru).\n\nTargets offer-level provider locations instead of catalog-level."
 					},
 					"response": []
 				},
 				{
 					"name": "Discover - JSONPath Filter",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -216,7 +212,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"469bfce5-ada9-4c9a-bb64-99bf3c100702\",\n        \"transactionId\": \"f61459a2-c1f0-4c65-bd56-c1107bad27e8\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"filters\": {\n                \"type\": \"jsonpath\",\n                \"expression\": \"$.catalogs[*].resources[*] ? (@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == \\\"Hindustan Unilever Limited\\\")\"\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"469bfce5-ada9-4c9a-bb64-99bf3c100702\",\n        \"transactionId\": \"f61459a2-c1f0-4c65-bd56-c1107bad27e8\",\n        \"networkId\": \"beckn.one/retail\",\n        \"bapUri\":{{bapUri}} // Here you will receive On_discover response\n    },\n    \"message\": {\n        \"intent\": {\n            \"filters\": {\n                \"type\": \"jsonpath\",\n                \"expression\": \"$.catalogs[*].resources[*] ? (@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == \\\"Hindustan Unilever Limited\\\")\"\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -233,17 +229,14 @@
 								"discover"
 							]
 						},
-						"description": "JSONPath filter discovery \u2014 find resources by a specific manufacturer.\n\nUses RFC 9535 JSONPath with filter expressions on resourceAttributes fields."
+						"description": "JSONPath filter discovery — find resources by a specific manufacturer.\n\nUses RFC 9535 JSONPath with filter expressions on resourceAttributes fields."
 					},
 					"response": []
 				},
 				{
 					"name": "Discover - Combined (Text + Spatial)",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -252,7 +245,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"a8b7c6d5-e4f3-4a2b-1c0d-9e8f7a6b5c4d\",\n        \"transactionId\": \"b9c8d7e6-f5a4-4b3c-2d1e-0f9a8b7c6d5e\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"coffee\",\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [77.6401, 12.9116]\n                    },\n                    \"distanceMeters\": 5000\n                }\n            ]\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"a8b7c6d5-e4f3-4a2b-1c0d-9e8f7a6b5c4d\",\n        \"transactionId\": \"b9c8d7e6-f5a4-4b3c-2d1e-0f9a8b7c6d5e\",\n        \"networkId\": \"beckn.one/retail\",\n        \"bapUri\":{{bapUri}} // Here you will receive On_discover response\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"coffee\",\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [\n                            77.6401,\n                            12.9116\n                        ]\n                    },\n                    \"distanceMeters\": 5000\n                }\n            ]\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -269,7 +262,7 @@
 								"discover"
 							]
 						},
-						"description": "Combined search \u2014 text search for \"coffee\" AND spatial filter for providers within 5km.\n\nMultiple intent fields are ANDed together."
+						"description": "Combined search — text search for \"coffee\" AND spatial filter for providers within 5km.\n\nMultiple intent fields are ANDed together."
 					},
 					"response": []
 				},
@@ -285,7 +278,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f\",\n        \"transactionId\": \"d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"tea premium leaf\"\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f\",\n        \"transactionId\": \"d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a\",\n        \"networkId\": \"beckn.one/retail\",\n       \"bapUri\":{{bapUri}} // Here you will receive On_discover response\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"tea premium leaf\"\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -302,13 +295,14 @@
 								"discover"
 							]
 						},
-						"description": "Asynchronous discovery \u2014 returns immediate ACK, processes via Kafka.\n\nResults are delivered asynchronously via on_discover callback to the caller's registered URL (resolved from DeDi Registry using subscriberId/recordId from the Authorization header).\n\nUse POST for production workloads; GET is for synchronous testing."
+						"description": "Asynchronous discovery — returns immediate ACK, processes via Kafka.\n\nResults are delivered asynchronously via on_discover callback to the caller's registered URL (resolved from DeDi Registry using subscriberId/recordId from the Authorization header).\n\nUse POST for production workloads; GET is for synchronous testing."
 					},
 					"response": [
 						{
 							"name": "Success - ACK",
 							"originalRequest": {
 								"method": "POST",
+								"header": [],
 								"url": {
 									"raw": "{{discover-host}}/beckn/discover",
 									"host": [
@@ -329,6 +323,7 @@
 									"value": "application/json"
 								}
 							],
+							"cookie": [],
 							"body": "{\n    \"status\": \"ACK\"\n}"
 						}
 					]
@@ -345,7 +340,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a9b\",\n        \"transactionId\": \"f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8a9b0c\",\n        \"networkId\": \"beckn.one/retail\"\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"coffee\",\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [77.6401, 12.9116]\n                    },\n                    \"distanceMeters\": 2000\n                }\n            ]\n        }\n    }\n}",
+							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"discover\",\n        \"timestamp\": \"2026-04-28T10:30:00Z\",\n        \"messageId\": \"e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a9b\",\n        \"transactionId\": \"f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8a9b0c\",\n        \"networkId\": \"beckn.one/retail\",\n        \"bapUri\":{{bapUri}} // Here you will receive On_discover response\n    },\n    \"message\": {\n        \"intent\": {\n            \"textSearch\": \"coffee\",\n            \"spatial\": [\n                {\n                    \"op\": \"S_DWITHIN\",\n                    \"targets\": \"$.catalogs[*].provider.availableAt[*].geo\",\n                    \"geometry\": {\n                        \"type\": \"Point\",\n                        \"coordinates\": [\n                            77.6401,\n                            12.9116\n                        ]\n                    },\n                    \"distanceMeters\": 2000\n                }\n            ]\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -362,13 +357,14 @@
 								"discover"
 							]
 						},
-						"description": "Asynchronous combined discovery \u2014 text search + spatial filter, delivered via callback."
+						"description": "Asynchronous combined discovery — text search + spatial filter, delivered via callback."
 					},
 					"response": [
 						{
 							"name": "Success - ACK",
 							"originalRequest": {
 								"method": "POST",
+								"header": [],
 								"url": {
 									"raw": "{{discover-host}}/beckn/discover",
 									"host": [
@@ -389,6 +385,7 @@
 									"value": "application/json"
 								}
 							],
+							"cookie": [],
 							"body": "{\n    \"status\": \"ACK\"\n}"
 						}
 					]
@@ -400,7 +397,7 @@
 					"script": {
 						"type": "text/javascript",
 						"exec": [
-							"pm.variables.set('sign-host', 'http://localhost:3032');",
+							"pm.variables.set('sign-host', pm.environment.get('buyer-signer-host'));",
 							"",
 							"console.log('=== Starting signing process ===');",
 							"",
@@ -417,10 +414,10 @@
 							"    requestBody = resolveVariables(requestBody);",
 							"}",
 							"",
-							"// Sign even when no body (GET/DELETE) \u2014 use empty string for digest",
+							"// Sign even when no body (GET/DELETE) — use empty string for digest",
 							"if (!requestBody) {",
 							"    requestBody = '';",
-							"    console.log('No request body \u2014 signing empty string for GET/DELETE');",
+							"    console.log('No request body — signing empty string for GET/DELETE');",
 							"}",
 							"",
 							"console.log('Body to sign:', requestBody);",
@@ -451,360 +448,6 @@
 							"})();"
 						]
 					}
-				}
-			]
-		},
-		{
-			"name": "Catalog Push",
-			"item": [
-				{
-					"name": "Push Catalog (from Catalg CDS)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"catalog/push\",\n        \"timestamp\": \"2026-04-28T10:30:05Z\",\n        \"transactionId\": \"fe3b216a-bca7-48d9-a4dd-78e9de9c984d\",\n        \"messageId\": \"6636da5a-4845-4a93-b080-3b4a83662501\",\n        \"networkId\": \"beckn.one/retail\",\n        \"subscriberId\": \"catalg.beckn.org\"\n    },\n    \"message\": {\n        \"publishDirectives\": [\n            {\n                \"catalogId\": \"CAT-GROCERY-FRESHMART-005\",\n                \"catalogType\": \"regular\",\n                \"updateMode\": \"MERGE\"\n            }\n        ],\n        \"catalogs\": [\n            {\n                \"id\": \"CAT-GROCERY-FRESHMART-005\",\n                \"descriptor\": {\n                    \"name\": \"FreshMart Grocery Catalog\",\n                    \"shortDesc\": \"Daily essentials \\u2014 tea, coffee & beverages\"\n                },\n                \"provider\": {\n                    \"id\": \"PROV-FRESHMART-05\",\n                    \"descriptor\": {\n                        \"name\": \"FreshMart Pvt Ltd\"\n                    },\n                    \"availableAt\": [\n                        {\n                            \"geo\": {\n                                \"type\": \"Point\",\n                                \"coordinates\": [77.6401, 12.9116]\n                            },\n                            \"address\": {\n                                \"streetAddress\": \"27th Main Rd, Sector 2, HSR Layout\",\n                                \"addressLocality\": \"Bengaluru\",\n                                \"addressRegion\": \"Karnataka\",\n                                \"postalCode\": \"560102\",\n                                \"addressCountry\": \"IN\"\n                            }\n                        }\n                    ]\n                },\n                \"resources\": [\n                    {\n                        \"id\": \"RES-GROCERY-BRU-GOLD-INSTANT-COFFEE-200GRAMS\",\n                        \"descriptor\": {\n                            \"name\": \"Bru Gold Instant Coffee Powder\",\n                            \"shortDesc\": \"Rich and aromatic instant coffee powder, 200g\"\n                        },\n                        \"resourceAttributes\": {\n                            \"@context\": \"https://schema.beckn.io/GroceryResource/v2.1/context.jsonld\",\n                            \"@type\": \"GroceryResource\",\n                            \"identity\": {\n                                \"brand\": \"Bru\",\n                                \"originCountry\": \"IN\"\n                            },\n                            \"physical\": {\n                                \"weight\": {\n                                    \"unitCode\": \"G\",\n                                    \"unitQuantity\": 200\n                                }\n                            },\n                            \"food\": {\n                                \"classification\": \"VEG\"\n                            }\n                        }\n                    }\n                ]\n            }\n        ]\n    }\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{publish-host}}/catalog/push",
-							"host": [
-								"{{publish-host}}"
-							],
-							"path": [
-								"catalog",
-								"push"
-							]
-						},
-						"description": "Receive a fully-assembled catalog from the Catalg CDS (Catalog Distribution Service).\n\nFire-and-forget: returns 202 ACK, processes asynchronously via Kafka.\nCatalog is persisted to PostgreSQL, indexed in Elasticsearch, and made searchable.\n\npublishDirectives carries updateMode: MERGE (upsert) or FULL (replace all resources for this catalogId).\n\nPayload size limit: 5MB (configurable)."
-					},
-					"response": [
-						{
-							"name": "Success - ACK (202 Accepted)",
-							"originalRequest": {
-								"method": "POST",
-								"url": {
-									"raw": "{{publish-host}}/catalog/push",
-									"host": [
-										"{{publish-host}}"
-									],
-									"path": [
-										"catalog",
-										"push"
-									]
-								}
-							},
-							"status": "Accepted",
-							"code": 202,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"body": "{\n    \"status\": \"ACK\"\n}"
-						},
-						{
-							"name": "Error - Missing Context",
-							"originalRequest": {
-								"method": "POST",
-								"url": {
-									"raw": "{{publish-host}}/catalog/push",
-									"host": [
-										"{{publish-host}}"
-									],
-									"path": [
-										"catalog",
-										"push"
-									]
-								}
-							},
-							"status": "Bad Request",
-							"code": 400,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"body": "{\n    \"status\": \"NACK\",\n    \"error\": {\n        \"errorCode\": \"INVALID_REQUEST\",\n        \"errorMessage\": \"Missing or invalid context object\"\n    }\n}"
-						},
-						{
-							"name": "Error - Payload Too Large",
-							"originalRequest": {
-								"method": "POST",
-								"url": {
-									"raw": "{{publish-host}}/catalog/push",
-									"host": [
-										"{{publish-host}}"
-									],
-									"path": [
-										"catalog",
-										"push"
-									]
-								}
-							},
-							"status": "Payload Too Large",
-							"code": 413,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"body": "{\n    \"status\": \"NACK\",\n    \"error\": {\n        \"errorCode\": \"INVALID_REQUEST\",\n        \"errorMessage\": \"Payload exceeds maximum allowed size\"\n    }\n}"
-						}
-					]
-				},
-				{
-					"name": "Push Offer-Only Catalog",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"context\": {\n        \"version\": \"2.0.0\",\n        \"action\": \"catalog/push\",\n        \"timestamp\": \"2026-04-28T11:00:00Z\",\n        \"transactionId\": \"a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d\",\n        \"messageId\": \"b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e\",\n        \"networkId\": \"beckn.one/retail\",\n        \"subscriberId\": \"catalg.beckn.org\"\n    },\n    \"message\": {\n        \"catalogs\": [\n            {\n                \"id\": \"CAT-OFFERS-FRESHMART-005\",\n                \"descriptor\": {\n                    \"name\": \"FreshMart Summer Offers\",\n                    \"shortDesc\": \"Seasonal offers on beverages\"\n                },\n                \"provider\": {\n                    \"id\": \"PROV-FRESHMART-05\",\n                    \"descriptor\": {\n                        \"name\": \"FreshMart Pvt Ltd\"\n                    },\n                    \"availableAt\": [\n                        {\n                            \"geo\": {\n                                \"type\": \"Point\",\n                                \"coordinates\": [77.6401, 12.9116]\n                            }\n                        }\n                    ]\n                },\n                \"offers\": [\n                    {\n                        \"id\": \"OFFER-SUMMER-COFFEE-BOGO\",\n                        \"descriptor\": {\n                            \"name\": \"Buy 1 Get 1 Free \u2014 Coffee\",\n                            \"shortDesc\": \"Buy any coffee product and get one free\"\n                        },\n                        \"resourceIds\": [\n                            \"RES-GROCERY-BRU-GOLD-INSTANT-COFFEE-200GRAMS\"\n                        ],\n                        \"validity\": {\n                            \"startDate\": \"2026-04-01T00:00:00Z\",\n                            \"endDate\": \"2026-06-30T23:59:59Z\"\n                        },\n                        \"offerAttributes\": {\n                            \"@context\": \"https://schema.beckn.io/RetailOffer/v1.0/context.jsonld\",\n                            \"@type\": \"RetailOffer\",\n                            \"offerType\": \"BOGO\",\n                            \"discountPercentage\": 50\n                        }\n                    }\n                ]\n            }\n        ]\n    }\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{publish-host}}/catalog/push",
-							"host": [
-								"{{publish-host}}"
-							],
-							"path": [
-								"catalog",
-								"push"
-							]
-						},
-						"description": "Push an offer-only catalog. Contains offers with resourceIds referencing resources from previously published catalogs.\n\nDiscovr resolves resourceIds via OfferResolutionStep (Phase 3), finds items by ID, merges offers, and re-indexes in Elasticsearch."
-					},
-					"response": [
-						{
-							"name": "Success - ACK (202 Accepted)",
-							"originalRequest": {
-								"method": "POST",
-								"url": {
-									"raw": "{{publish-host}}/catalog/push",
-									"host": [
-										"{{publish-host}}"
-									],
-									"path": [
-										"catalog",
-										"push"
-									]
-								}
-							},
-							"status": "Accepted",
-							"code": 202,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"body": "{\n    \"status\": \"ACK\"\n}"
-						}
-					]
-				}
-			],
-			"event": [
-				{
-					"listen": "prerequest",
-					"script": {
-						"type": "text/javascript",
-						"exec": [
-							"pm.variables.set('sign-host', 'http://localhost:3030');",
-							"",
-							"console.log('=== Starting signing process ===');",
-							"",
-							"const resolveVariables = (str) => {",
-							"    return str.replace(/\\{\\{([^}]+)\\}\\}/g, (match, varName) => {",
-							"        const value = pm.variables.get(varName);",
-							"        return value !== undefined ? value : match;",
-							"    });",
-							"};",
-							"",
-							"let requestBody = '';",
-							"if (pm.request.body && pm.request.body.raw) {",
-							"    requestBody = pm.request.body.raw;",
-							"    requestBody = resolveVariables(requestBody);",
-							"}",
-							"",
-							"// Sign even when no body (GET/DELETE) \u2014 use empty string for digest",
-							"if (!requestBody) {",
-							"    requestBody = '';",
-							"    console.log('No request body \u2014 signing empty string for GET/DELETE');",
-							"}",
-							"",
-							"console.log('Body to sign:', requestBody);",
-							"",
-							"const signPayload = () => {",
-							"    return new Promise((resolve, reject) => {",
-							"        pm.sendRequest({",
-							"            url: pm.variables.get('sign-host') + '/sign-payload',",
-							"            method: 'POST',",
-							"            header: { 'Content-Type': 'application/json' },",
-							"            body: { mode: 'raw', raw: requestBody }",
-							"        }, function (err, response) {",
-							"            if (err) { console.error('Error calling signing endpoint:', err); reject(err); return; }",
-							"            console.log('Signing response status:', response.code);",
-							"            resolve(response.text());",
-							"        });",
-							"    });",
-							"};",
-							"",
-							"(async () => {",
-							"    try {",
-							"        const signature = await signPayload();",
-							"        pm.request.headers.upsert({ key: 'Authorization', value: signature });",
-							"        console.log('=== Authorization header set successfully ===');",
-							"    } catch (error) {",
-							"        console.error('Failed to sign payload:', error);",
-							"    }",
-							"})();"
-						]
-					}
-				}
-			]
-		},
-		{
-			"name": "Health",
-			"item": [
-				{
-					"name": "Health Check (Discover)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{discover-host}}/actuator/health",
-							"host": [
-								"{{discover-host}}"
-							],
-							"path": [
-								"actuator",
-								"health"
-							]
-						},
-						"description": "Spring Boot Actuator health check for the Discovery service.\n\nIncludes DiscoveryHealthIndicator status."
-					},
-					"response": [
-						{
-							"name": "Healthy",
-							"originalRequest": {
-								"method": "GET",
-								"url": {
-									"raw": "{{discover-host}}/actuator/health",
-									"host": [
-										"{{discover-host}}"
-									],
-									"path": [
-										"actuator",
-										"health"
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"body": "{\n    \"status\": \"UP\"\n}"
-						}
-					]
-				},
-				{
-					"name": "Health Check (Publish)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{publish-host}}/actuator/health",
-							"host": [
-								"{{publish-host}}"
-							],
-							"path": [
-								"actuator",
-								"health"
-							]
-						},
-						"description": "Spring Boot Actuator health check for the Catalog Publish service."
-					},
-					"response": []
-				},
-				{
-					"name": "Reset Stats",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{discover-host}}/discovery-service/health/reset-stats",
-							"host": [
-								"{{discover-host}}"
-							],
-							"path": [
-								"discovery-service",
-								"health",
-								"reset-stats"
-							]
-						},
-						"description": "Reset operational processing statistics (admin endpoint)."
-					},
-					"response": [
-						{
-							"name": "Stats Reset",
-							"originalRequest": {
-								"method": "POST",
-								"url": {
-									"raw": "{{discover-host}}/discovery-service/health/reset-stats",
-									"host": [
-										"{{discover-host}}"
-									],
-									"path": [
-										"discovery-service",
-										"health",
-										"reset-stats"
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"body": "{\n    \"message\": \"Statistics reset successfully\",\n    \"timestamp\": \"2026-04-28T10:00:00Z\"\n}"
-						}
-					]
 				}
 			]
 		}
