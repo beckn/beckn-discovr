@@ -78,9 +78,9 @@ public final class AuthHeaderParser {
      * @param authorizationHeader the full {@code Authorization} or
      *                            {@code X-Gateway-Authorization} header value
      * @return a fully validated {@link ParsedAuthHeader} record
-     * @throws BecknAuthException with {@code SEC_SIGNATURE_MISSING} (400) if header is null/blank
+     * @throws BecknAuthException with {@code SEC_SIGNATURE_MISSING} (401) if header is null/blank
      * @throws BecknAuthException with {@code SEC_SIGNATURE_INVALID} (400) if format or fields are invalid
-     * @throws BecknAuthException with {@code SEC_SUBSCRIBER_NOT_FOUND} (400) if subscriberId is blank
+     * @throws BecknAuthException with {@code SEC_SUBSCRIBER_NOT_FOUND} (401) if subscriberId is blank
      */
     public ParsedAuthHeader parseAuthorizationHeader(String authorizationHeader) {
         logger.debug("Parsing authorization header");
@@ -166,13 +166,13 @@ public final class AuthHeaderParser {
     /**
      * Checks that the Authorization header value is not null or blank.
      *
-     * @throws BecknAuthException with {@code SEC_SIGNATURE_MISSING} (400) if absent
+     * @throws BecknAuthException with {@code SEC_SIGNATURE_MISSING} (401) if absent
      */
     private void validateHeaderPresent(String authorizationHeader) {
         if (authorizationHeader == null || authorizationHeader.isBlank()) {
             logger.error("Authorization header is missing or empty");
-            throw BecknAuthException.invalidHeader(
-                    ErrorMessages.AUTH_HEADER_MISSING, ErrorCodes.SEC_SIGNATURE_MISSING);
+            throw BecknAuthException.authenticationRequired(
+                    ErrorMessages.AUTH_HEADER_MISSING, ErrorCodes.SEC_SIGNATURE_MISSING, "authorization");
         }
     }
 
@@ -303,14 +303,14 @@ public final class AuthHeaderParser {
      * @param subscriberId   the subscriber ID (must not be blank)
      * @param uniqueKeyId    the unique key ID (must not be blank)
      * @param keyIdAlgorithm the algorithm suffix from keyId (must equal {@code ed25519})
-     * @throws BecknAuthException with {@code SEC_SUBSCRIBER_NOT_FOUND} (400) if subscriberId is blank
+     * @throws BecknAuthException with {@code SEC_SUBSCRIBER_NOT_FOUND} (401) if subscriberId is blank
      * @throws BecknAuthException with {@code SEC_SIGNATURE_INVALID} (400) if uniqueKeyId is blank
      * @throws BecknAuthException with {@code SEC_SIGNATURE_INVALID} (400) if algorithm is wrong
      */
     private void validateKeyIdComponents(String subscriberId, String uniqueKeyId, String keyIdAlgorithm) {
         if (subscriberId.isBlank()) {
             logger.error("Empty subscriberId in keyId | subscriberId='" + subscriberId + "'");
-            throw BecknAuthException.invalidHeader(
+            throw BecknAuthException.authenticationRequired(
                     ErrorMessages.AUTH_SUBSCRIBER_NOT_FOUND,
                     ErrorCodes.SEC_SUBSCRIBER_NOT_FOUND,
                     "authorization/keyId");

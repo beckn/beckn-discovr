@@ -1,0 +1,85 @@
+name: Build & Push Gradle Dependencies Base Image
+
+# =============================================================================
+# Triggers:
+#
+# 1. Tag push  deps/v*  (e.g. deps/v1.0, deps/v1.1)
+#    Builds and pushes gradle-deps-base:<version> to GCP AR.
+#    Use this to cut a pinned, versioned release of the base image.
+#    After pushing the tag, update DEPS_BASE in docker.yml to the new version
+#    before the next service tag build.
+#
+# 2. Push to main when deps files change
+#    Auto-rebuilds gradle-deps-base:1.0 (floating tag for the current stable
+#    version) whenever build.gradle, settings.gradle, gradle-wrapper.properties,
+#    the SDK, or deps/Dockerfile.gradle-deps changes.
+#    Note: paths filter applies to branch pushes only, not tag pushes.
+#
+# 3. workflow_dispatch
+#    Manual trigger — useful for bootstrapping or after rotating credentials.
+#
+# All Java job image builds (docker.yml) reference this base image via the
+# DEPS_BASE build argument, reducing cold-build times from ~7 min to ~10 s
+# for the dependency resolution step.
+# =============================================================================
+
+on:
+  push:
+    # branches: [main, 'release-*']
+    # paths:
+    #   - 'jobs/**/build.gradle'
+    #   - 'jobs/**/settings.gradle'
+    #   - 'jobs/**/gradle-wrapper.properties'
+    #   - 'sdks/beckn-auth-java-sdk/**'
+    #   - 'deps/Dockerfile.gradle-deps'
+    tags:
+      - 'deps/v*'
+  workflow_dispatch:
+
+jobs:
+  build-gradle-deps-base:
+    name: Build & Push — gradle-deps-base
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tags
+        id: resolve
+        run: |
+          REGISTRY="asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/gradle-deps-base"
+          if [[ "${GITHUB_REF}" == refs/tags/deps/* ]]; then
+            # Tag push: push both the versioned tag and update the floating :1.0.
+            # docker.yml always references :1.0 so it must stay current.
+            VERSION="${GITHUB_REF_NAME#deps/}"
+            echo "tags=${REGISTRY}:${VERSION},${REGISTRY}:1.0" >> "$GITHUB_OUTPUT"
+          else
+            # Branch push or manual: update the floating :1.0 tag only.
+            echo "tags=${REGISTRY}:1.0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+
+      - name: Build and push gradle-deps-base
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deps/Dockerfile.gradle-deps
+          push: true
+          tags: ${{ steps.resolve.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

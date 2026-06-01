@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.beckn.catalogpublish.common.BecknFields;
+import org.beckn.catalogpublish.common.ErrorCodes;
+import org.beckn.catalogpublish.common.ErrorMessages;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.util.CorrelationContext;
@@ -15,8 +17,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
-
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -36,7 +36,8 @@ public class CatalogPushController {
             Map.of("status", "ACK");
     private static final Map<String, Object> NACK_MISSING_CONTEXT = Map.of(
             "status", "NACK",
-            "error", Map.of("errorCode", "INVALID_REQUEST", "errorMessage", "Missing or invalid context object"));
+            "error", Map.of("errorCode", ErrorCodes.CTX_INVALID_FIELD,
+                    "errorMessage", ErrorMessages.CTX_INVALID_FIELD));
 
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
@@ -58,7 +59,10 @@ public class CatalogPushController {
 
         if (rawBytes.length > maxPayloadSize) {
             log.warn("event={} sizeBytes={} limit={}", LogEvent.PUSH_REJECTED, rawBytes.length, maxPayloadSize);
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Payload too large");
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(
+                    Map.of("status", "NACK",
+                            "error", Map.of("errorCode", ErrorCodes.REQUEST_TOO_LARGE,
+                                    "errorMessage", ErrorMessages.REQUEST_TOO_LARGE)));
         }
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);

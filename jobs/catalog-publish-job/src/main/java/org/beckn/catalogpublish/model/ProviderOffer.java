@@ -5,7 +5,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
@@ -35,37 +37,22 @@ public class ProviderOffer {
     @Column(name = "payload", columnDefinition = "jsonb", nullable = false)
     private String payload;
 
-    @Column(name = "created_by", updatable = false)
-    private String createdBy;
-
-    @Column(name = "updated_by")
-    private String updatedBy;
-
-    @Column(name = "subscriber_id")
-    private String subscriberId;
-
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     protected ProviderOffer() {}
 
-    public static ProviderOffer from(String offerId, String catalogId, String providerId,
-            String payload, String recordId, String subscriberId) {
+    public static ProviderOffer from(String offerId, String catalogId, String providerId, String payload) {
         var po = new ProviderOffer();
         po.offerId = offerId;
         po.catalogId = catalogId;
         po.providerId = providerId;
         po.payload = payload;
-        var effectiveOwner = (recordId != null && !recordId.isBlank()) ? recordId : subscriberId;
-        po.createdBy = effectiveOwner;
-        po.updatedBy = effectiveOwner;
-        po.subscriberId = subscriberId;
-        var now = LocalDateTime.now();
-        po.createdAt = now;
-        po.updatedAt = now;
         return po;
     }
 
@@ -85,9 +72,6 @@ public class ProviderOffer {
     public String getCatalogId() { return catalogId; }
     public String getProviderId() { return providerId; }
     public String getPayload() { return payload; }
-    public String getCreatedBy() { return createdBy; }
-    public String getUpdatedBy() { return updatedBy; }
-    public String getSubscriberId() { return subscriberId; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

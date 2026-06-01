@@ -1,6 +1,7 @@
 package org.beckn.catalogpublish.indexing.bulk;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
@@ -12,9 +13,11 @@ import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.retry.RetryContext;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
+import org.springframework.retry.support.RetrySynchronizationManager;
 import org.springframework.stereotype.Service;
 
 import java.net.ConnectException;
@@ -84,11 +87,11 @@ public class BulkIndexService {
     }
 
     @Retryable(
-        retryFor = { ConnectException.class, SocketTimeoutException.class },
+        retryFor = { ConnectException.class, SocketTimeoutException.class, EsRateLimitException.class },
         maxAttempts = 3,
         backoff = @Backoff(delay = 1000, multiplier = 2, maxDelay = 30000)
     )
-    public BulkIndexResult index(String indexKey, List<Map<String, Object>> docs) throws ConnectException, SocketTimeoutException {
+    public BulkIndexResult index(String indexKey, List<Map<String, Object>> docs) throws ConnectException, SocketTimeoutException, EsRateLimitException {
         if (docs.isEmpty()) return new BulkIndexResult(List.of(), List.of());
 
         String indexName = indexManager.resolveIndexName(indexKey);
@@ -106,6 +109,17 @@ public class BulkIndexService {
             metrics.incrementRetried();
             log.warn("event={} index={} error={}", LogEvent.ES_FAILED, indexName, e.getMessage());
             throw e; // let @Retryable handle retry
+        } catch (ElasticsearchException e) {
+            if (e.status() == 429) {
+                metrics.incrementRetried();
+                int attempt = currentRetryAttempt();
+                log.warn("event={} reason=rate-limited index={} attempt={} error={}",
+                        LogEvent.ES_FAILED, indexName, attempt, e.getMessage());
+                throw new EsRateLimitException("ES returned HTTP 429 on index=" + indexName, e);
+            }
+            // Non-transient ES error (mapping conflict, auth, etc.) — don't retry
+            log.error("event={} reason=non-retryable index={} error={}", LogEvent.ES_FAILED, indexName, ErrorSanitizer.sanitize(e));
+            return BulkIndexResult.allFailed(toFailedDocs(docs, e.getMessage()));
         } catch (Exception e) {
             // Non-transient (mapping conflict, auth) — don't retry
             log.error("event={} reason=non-retryable index={} error={}", LogEvent.ES_FAILED, indexName, ErrorSanitizer.sanitize(e));
@@ -125,6 +139,19 @@ public class BulkIndexService {
         log.error("event={} reason=retries-exhausted index={}", LogEvent.ES_FAILED, indexKey);
         metrics.incrementBatchFailure();
         return BulkIndexResult.allFailed(toFailedDocs(docs, e.getMessage()));
+    }
+
+    @Recover
+    public BulkIndexResult recoverIndex(EsRateLimitException e, String indexKey, List<Map<String, Object>> docs) {
+        log.error("event={} reason=retries-exhausted-rate-limited index={}", LogEvent.ES_FAILED, indexKey);
+        metrics.incrementBatchFailure();
+        return BulkIndexResult.allFailed(toFailedDocs(docs, e.getMessage()));
+    }
+
+    /** Returns the current Spring Retry attempt count (1-based), or 0 if not inside a retry context. */
+    private static int currentRetryAttempt() {
+        RetryContext ctx = RetrySynchronizationManager.getContext();
+        return ctx != null ? ctx.getRetryCount() + 1 : 0;
     }
 
     // ── Private ──────────────────────────────────────────────────────────────

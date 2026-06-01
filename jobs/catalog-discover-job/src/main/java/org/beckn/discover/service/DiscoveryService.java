@@ -4,6 +4,7 @@ import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.exception.SemanticSearchException;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.logging.LogMessages;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverRequest;
@@ -180,18 +181,18 @@ public class DiscoveryService {
             throws Exception {
 
         if (qr.hasFilters() && qr.hasSpatial()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "jsonpath-spatial"));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH_SPATIAL));
             return executeJsonPathWithSpatialQuery(qr, context, tracker);
         }
         if (qr.hasFilters()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "jsonpath"));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH));
             return executeJsonPathFilterQuery(qr, context, tracker);
         }
         if (qr.hasSpatial()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "spatial"));
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_SPATIAL));
             return executeSpatialOnlyQuery(qr, context, tracker);
         }
-        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", "text-search"));
+        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_TEXT_SEARCH));
         return executeTextSearchQuery(qr, context, tracker);
     }
 
@@ -216,7 +217,7 @@ public class DiscoveryService {
 
         if (combined.isEmpty()) {
             // Engine could not build spatial conditions → fall back to parallel
-            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", "no-spatial-conditions"));
+            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS));
             return executeJsonPathAndSpatialParallel(qr, context, tracker);
         }
 
@@ -294,10 +295,31 @@ public class DiscoveryService {
 
     private DiscoverResponse executeJsonPathFilterQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
+        int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
         Instant engineStart = Instant.now();
-        List<Catalog> catalogs = queryEngine.executeFilterQuery(qr);
-        metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
-        metrics.recordResultCount("postgres", catalogs.size());
+        CompletableFuture<List<Catalog>> queryFuture = runAsyncWithMdc(() -> {
+            List<Catalog> r = queryEngine.executeFilterQuery(qr);
+            metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
+            metrics.recordResultCount("postgres", r.size());
+            return r;
+        });
+
+        List<Catalog> catalogs;
+        try {
+            catalogs = queryFuture.get(timeoutSec, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            queryFuture.cancel(true);
+            log.error(LogEvent.QUERY_TIMEOUT,
+                    value("path", "B"),
+                    value("timeoutSec", timeoutSec),
+                    e);
+            throw new Exception("Filter query timed out after " + timeoutSec + "s", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+            throw new Exception("Filter query failed: " + cause.getMessage(), cause);
+        }
+
         recordStep(tracker, "path-b.query");
 
         // Path B: PostgreSQL — schema already filtered in SQL WHERE clause
@@ -311,10 +333,31 @@ public class DiscoveryService {
 
     private DiscoverResponse executeSpatialOnlyQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
+        int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
         Instant engineStart = Instant.now();
-        List<Catalog> catalogs = queryEngine.executeSpatialQuery(qr);
-        metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
-        metrics.recordResultCount("postgres", catalogs.size());
+        CompletableFuture<List<Catalog>> queryFuture = runAsyncWithMdc(() -> {
+            List<Catalog> r = queryEngine.executeSpatialQuery(qr);
+            metrics.recordSearchDuration("postgres", Duration.between(engineStart, Instant.now()));
+            metrics.recordResultCount("postgres", r.size());
+            return r;
+        });
+
+        List<Catalog> catalogs;
+        try {
+            catalogs = queryFuture.get(timeoutSec, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            queryFuture.cancel(true);
+            log.error(LogEvent.QUERY_TIMEOUT,
+                    value("path", "C"),
+                    value("timeoutSec", timeoutSec),
+                    e);
+            throw new Exception("Spatial query timed out after " + timeoutSec + "s", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+            throw new Exception("Spatial query failed: " + cause.getMessage(), cause);
+        }
+
         recordStep(tracker, "path-c.query");
 
         // Path C: ES spatial or PostgreSQL spatial — schema filtered in ES knn.filter or SQL

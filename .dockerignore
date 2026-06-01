@@ -1,0 +1,30 @@
+# Version control — never needed in build context
+.git
+.gitignore
+
+# Compiled output from local builds — the Docker build compiles from source
+**/build/
+**/.gradle/
+**/target/
+**/out/
+
+# Node.js artefacts (reference-apps/) — irrelevant to Java service builds
+reference-apps/beckn-demo-ui/node_modules/
+reference-apps/beckn-demo-ui/.next/
+
+# IDE and editor files
+**/.idea/
+**/*.iml
+**/.vscode/
+**/.DS_Store
+
+# Test reports and coverage output
+**/reports/
+**/jacoco.exec
+
+# Log files
+**/*.log
+
+# Documentation — not needed inside the image
+docs/
+*.md

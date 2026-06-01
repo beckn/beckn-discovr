@@ -31,6 +31,13 @@ app:
     schema-url: https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml
     parallel-catalog-threshold: 1
 
+
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
 spring:
   jpa:
     hibernate:

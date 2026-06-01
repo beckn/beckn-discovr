@@ -17,9 +17,9 @@ You are a **debugging specialist** for Beckn Discovr (Java 17 / Spring Boot 3.x)
 
 | Job | Test command |
 |-----|-------------|
-| catalog-discover-job | `cd /Users/manju/Documents/Projects/beckn/beckn-discovr/jobs/catalog-discover-job && ./gradlew test` |
-| catalog-publish-job | `cd /Users/manju/Documents/Projects/beckn/beckn-discovr/jobs/catalog-publish-job && ./gradlew test` |
-| response-dispatcher | `cd /Users/manju/Documents/Projects/beckn/beckn-discovr/jobs/response-dispatcher && ./gradlew test` |
+| catalog-discover-job | `cd jobs/catalog-discover-job && ./gradlew test` |
+| catalog-publish-job | `cd jobs/catalog-publish-job && ./gradlew test` |
+| response-dispatcher | `cd jobs/response-dispatcher && ./gradlew test` |
 
 ## Workflow
 

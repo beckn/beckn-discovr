@@ -110,13 +110,13 @@ class BecknAuthTest {
         void endToEnd_SignAndVerify_Success() {
             stubRegistryLookup();
 
-            String authHeader = becknAuthSigner.generateAuthHeader(rawRequestBody);
+            String authHeader = becknAuthSigner.signPayload(rawRequestBody);
             assertThat(authHeader).startsWith("Signature ");
 
-            ParsedAuthHeader parsed = becknAuthVerifier.verifySignature(authHeader, rawRequestBody);
+            var result = becknAuthVerifier.verifySignature(authHeader, rawRequestBody);
 
-            assertThat(parsed.subscriberId()).isEqualTo("example-bap.com");
-            assertThat(parsed.uniqueKeyId()).isEqualTo("key-1");
+            assertThat(result.parsedHeader().subscriberId()).isEqualTo("example-bap.com");
+            assertThat(result.parsedHeader().uniqueKeyId()).isEqualTo("key-1");
             wireMockServer.verify(1, getRequestedFor(urlEqualTo("/subscribers/example-bap.com/keys/key-1")));
         }
 
@@ -125,7 +125,7 @@ class BecknAuthTest {
         void endToEnd_SecondVerify_UsesCacheNoExtraRegistryCall() {
             stubRegistryLookup();
 
-            String authHeader = becknAuthSigner.generateAuthHeader(rawRequestBody);
+            String authHeader = becknAuthSigner.signPayload(rawRequestBody);
 
             becknAuthVerifier.verifySignature(authHeader, rawRequestBody);
             becknAuthVerifier.verifySignature(authHeader, rawRequestBody); // should hit cache
@@ -139,12 +139,12 @@ class BecknAuthTest {
         void endToEnd_TamperedBody_Fails() {
             stubRegistryLookup();
 
-            String authHeader = becknAuthSigner.generateAuthHeader(rawRequestBody);
+            String authHeader = becknAuthSigner.signPayload(rawRequestBody);
             String tamperedBody = rawRequestBody.replace("msg-456", "msg-999");
 
             assertThatThrownBy(() -> becknAuthVerifier.verifySignature(authHeader, tamperedBody))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Signature verification failed");
+                    .hasMessageContaining("Authorization verification failed");
         }
 
         @Test
@@ -153,7 +153,7 @@ class BecknAuthTest {
             stubRegistryLookup();
 
             // The body has a well-formed context — main check is that no exception is thrown
-            String authHeader = becknAuthSigner.generateAuthHeader(rawRequestBody);
+            String authHeader = becknAuthSigner.signPayload(rawRequestBody);
             assertThatCode(() -> becknAuthVerifier.verifySignature(authHeader, rawRequestBody))
                     .doesNotThrowAnyException();
         }
@@ -177,7 +177,7 @@ class BecknAuthTest {
                             .withHeader("Content-Type", "application/json")
                             .withBody(jsonResponse)));
 
-            String authHeader = becknAuthSigner.generateAuthHeader(noContextBody);
+            String authHeader = becknAuthSigner.signPayload(noContextBody);
             assertThatCode(() -> becknAuthVerifier.verifySignature(authHeader, noContextBody))
                     .doesNotThrowAnyException();
         }
@@ -193,11 +193,11 @@ class BecknAuthTest {
             wireMockServer.stubFor(get(urlPathMatching("/subscribers/.*"))
                     .willReturn(aResponse().withStatus(404)));
 
-            String authHeader = becknAuthSigner.generateAuthHeader(rawRequestBody);
+            String authHeader = becknAuthSigner.signPayload(rawRequestBody);
 
             assertThatThrownBy(() -> becknAuthVerifier.verifySignature(authHeader, rawRequestBody))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Public key not found in registry");
+                    .hasMessageContaining("Credentials not found");
         }
     }
 
@@ -214,9 +214,9 @@ class BecknAuthTest {
                     .registryName("keys")
                     .build());
 
-            assertThatThrownBy(() -> verifyOnly.generateAuthHeader(rawRequestBody))
+            assertThatThrownBy(() -> verifyOnly.signPayload(rawRequestBody))
                     .isInstanceOf(BecknAuthException.class)
-                    .hasMessageContaining("Private key not configured");
+                    .hasMessageContaining("Service configuration error");
         }
 
         @Test
@@ -243,10 +243,10 @@ class BecknAuthTest {
                     .build();
             BecknAuth bothAuth = new BecknAuth(bothConfig);
 
-            String authHeader = bothAuth.generateAuthHeader(rawRequestBody);
-            ParsedAuthHeader parsed = bothAuth.verifySignature(authHeader, rawRequestBody);
+            String authHeader = bothAuth.signPayload(rawRequestBody);
+            var result = bothAuth.verifySignature(authHeader, rawRequestBody);
 
-            assertThat(parsed.subscriberId()).isEqualTo("example-bap.com");
+            assertThat(result.parsedHeader().subscriberId()).isEqualTo("example-bap.com");
         }
     }
 

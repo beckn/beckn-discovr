@@ -3,11 +3,16 @@ package org.beckn.catalogpublish.indexing.document;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.catalogpublish.common.BecknFields;
+import org.beckn.catalogpublish.config.AppProperties;
+import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.model.Item;
 import org.beckn.catalogpublish.service.geometry.GeoShapeExtractor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -21,12 +26,20 @@ import java.util.Set;
 @ConditionalOnProperty(name = "app.catalog.elasticsearch.enabled", havingValue = "true")
 public class CatalogDocumentAssembler {
 
+    private static final Logger log = LoggerFactory.getLogger(CatalogDocumentAssembler.class);
+    private static final int DEFAULT_MAX_TEXT_BLOB_BYTES = 8192;
+
     private final ObjectMapper objectMapper;
     private final GeoShapeExtractor geoShapeExtractor;
+    private final int maxTextBlobBytes;
 
-    public CatalogDocumentAssembler(ObjectMapper objectMapper, GeoShapeExtractor geoShapeExtractor) {
+    public CatalogDocumentAssembler(ObjectMapper objectMapper,
+                                    GeoShapeExtractor geoShapeExtractor,
+                                    AppProperties appProperties) {
         this.objectMapper = objectMapper;
         this.geoShapeExtractor = geoShapeExtractor;
+        var indexing = appProperties.catalog().indexing();
+        this.maxTextBlobBytes = (indexing != null) ? indexing.maxTextBlobBytes() : DEFAULT_MAX_TEXT_BLOB_BYTES;
     }
 
     /** Called from ElasticIndexStep — builds the ES document from the Item and its payload. */
@@ -73,9 +86,10 @@ public class CatalogDocumentAssembler {
         doc.put("catalog_descriptor_thumbnail_image", text(catalogDesc, "thumbnailImage"));
         doc.put("catalog_descriptor_docs", convertToList(catalogDesc.path("docs")));
         doc.put("catalog_descriptor_media_file", convertToList(catalogDesc.path("mediaFile")));
-        doc.put("catalog_provider_id", text(catalog.path(BecknFields.PROVIDER), BecknFields.ID));
-        doc.put("catalog_provider_name",
-                text(catalog.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+        JsonNode providerNode = catalog.path(BecknFields.PROVIDER);
+        if (!providerNode.isMissingNode() && providerNode.isObject()) {
+            doc.put("catalog_provider", objectMapper.convertValue(providerNode, Map.class));
+        }
         putIfPresent(doc, "catalog_is_active", boolOrNull(catalog, "isActive"));
         doc.put("network_id", networkIds);
         JsonNode validityNode = catalog.path(BecknFields.VALIDITY);
@@ -164,7 +178,45 @@ public class CatalogDocumentAssembler {
         collectStrings(resourceNode.path(BecknFields.DESCRIPTOR).path("docs"), parts);
         collectStrings(resourceNode.path(BecknFields.DESCRIPTOR).path("mediaFile"), parts);
         collectStrings(offersNode, parts);
-        return String.join(" ", parts);
+        String blob = String.join(" ", parts);
+        TruncationResult result = truncateAtWordBoundary(blob, maxTextBlobBytes);
+        if (result.wasTruncated()) {
+            log.warn("event={} catalogId={} resourceId={} originalBytes={} truncatedBytes={}",
+                    LogEvent.FULL_TEXT_BLOB_TRUNCATED,
+                    doc.get("catalog_id"),
+                    doc.get("resource_id"),
+                    result.originalBytes(), result.truncatedBytes());
+        }
+        return result.text();
+    }
+
+    private record TruncationResult(String text, int originalBytes, int truncatedBytes) {
+        boolean wasTruncated() { return truncatedBytes < originalBytes; }
+    }
+
+    /**
+     * Truncates {@code text} to at most {@code maxBytes} bytes (UTF-8), breaking
+     * only at a word boundary (space) so no token is split mid-word.
+     */
+    private static TruncationResult truncateAtWordBoundary(String text, int maxBytes) {
+        if (text == null) return new TruncationResult(null, 0, 0);
+        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+        int originalBytes = bytes.length;
+        if (originalBytes <= maxBytes) {
+            return new TruncationResult(text, originalBytes, originalBytes);
+        }
+        // Walk back from maxBytes until we hit a space or start of string
+        int cut = maxBytes;
+        while (cut > 0 && bytes[cut] != ' ') {
+            cut--;
+        }
+        if (cut == 0) {
+            // No space found — hard cut at maxBytes (avoids empty string for long tokens)
+            cut = maxBytes;
+        }
+        String result = new String(bytes, 0, cut, StandardCharsets.UTF_8).stripTrailing();
+        int truncatedBytes = result.getBytes(StandardCharsets.UTF_8).length;
+        return new TruncationResult(result, originalBytes, truncatedBytes);
     }
 
     private static void collectLocationText(JsonNode node, Collection<String> parts) {

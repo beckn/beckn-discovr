@@ -45,15 +45,6 @@ public class Item {
     @Column(name = "offer_ids", columnDefinition = "text[]")
     private String[] offerIds;
 
-    @Column(name = "created_by", updatable = false)
-    private String createdBy;
-
-    @Column(name = "updated_by")
-    private String updatedBy;
-
-    @Column(name = "subscriber_id")
-    private String subscriberId;
-
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -65,17 +56,8 @@ public class Item {
     protected Item() {
     }
 
-    /**
-     * Creates an Item with full ownership tracking.
-     *
-     * @param recordId     the specific key holder (Beckn keyId second segment) — stored as
-     *                     {@code created_by}/{@code updated_by} for ownership enforcement;
-     *                     falls back to subscriberId when null
-     * @param subscriberId the org-level identity (Beckn keyId first segment) — stored as
-     *                     {@code subscriber_id} for grouping/listing
-     */
     public static Item from(String id, String payload, String[] offerIds,
-            String recordId, String subscriberId, String catalogId, String type, String contextUrl,
+            String catalogId, String type, String contextUrl,
             String[] networkIds) {
         var item = new Item();
         item.id = id;
@@ -85,11 +67,6 @@ public class Item {
         item.networkIds = networkIds != null ? networkIds : new String[0];
         item.payload = payload;
         item.offerIds = offerIds != null ? offerIds : new String[0];
-        // ownership principal: recordId when available, otherwise fall back to subscriberId
-        var effectiveOwner = (recordId != null && !recordId.isBlank()) ? recordId : subscriberId;
-        item.createdBy = effectiveOwner;
-        item.updatedBy = effectiveOwner;
-        item.subscriberId = subscriberId;
         return item;
     }
 
@@ -127,12 +104,6 @@ public class Item {
 
     /** Raw array accessor for JPA / JdbcTypeCode — do not expose to callers. */
     String[] getOfferIdsArray() { return offerIds; }
-
-    public String getCreatedBy() { return createdBy; }
-
-    public String getUpdatedBy() { return updatedBy; }
-
-    public String getSubscriberId() { return subscriberId; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
 
