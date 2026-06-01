@@ -1,5 +1,6 @@
 package org.beckn.catalogpublish.consumer;
 
+import org.beckn.catalogpublish.common.ErrorMessages;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.dto.CatalogOperation;
 import org.beckn.catalogpublish.dto.ProcessingResult;
@@ -74,7 +75,7 @@ public class CatalogPublishConsumer {
             if (rawByteLen > maxPayloadSize) {
                 log.warn("event={} op={} topic={} offset={} sizeBytes={} limit={}",
                         LogEvent.CONSUMER_REJECTED, operation, topic, offset, rawByteLen, maxPayloadSize);
-                rejectAndAck(raw, "Payload too large", operation, ack);
+                rejectAndAck(raw, ErrorMessages.REQUEST_TOO_LARGE, operation, ack);
                 return;
             }
 

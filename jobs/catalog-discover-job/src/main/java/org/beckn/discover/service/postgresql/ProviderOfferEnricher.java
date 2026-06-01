@@ -1,6 +1,8 @@
 package org.beckn.discover.service.postgresql;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.util.ErrorSanitizer;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Post-pipeline enrichment: appends provider-level offers to search results.
@@ -32,12 +35,32 @@ public class ProviderOfferEnricher {
 
     private static final Logger log = LoggerFactory.getLogger(ProviderOfferEnricher.class);
 
+    /**
+     * H2: Per-provider-ID offer cache — TTL 60 s.
+     *
+     * <p>Provider-level offers change only on catalog publish events (infrequent).
+     * Caching eliminates the SELECT ... FROM provider_offer round-trip on every
+     * non-empty discovery response. Each entry is keyed by provider_id; a sentinel
+     * empty list is cached on cache miss so that providers with no offers also skip
+     * the DB call for 60 s.</p>
+     */
+    private static final Cache<String, List<Map<String, Object>>> OFFER_CACHE =
+            Caffeine.newBuilder()
+                    .expireAfterWrite(60, TimeUnit.SECONDS)
+                    .maximumSize(1024)
+                    .build();
+
     private final ProviderOfferRepository repository;
     private final ObjectMapper objectMapper;
 
     public ProviderOfferEnricher(ProviderOfferRepository repository, ObjectMapper objectMapper) {
         this.repository = repository;
         this.objectMapper = objectMapper;
+    }
+
+    /** Clears the provider offer cache. Exposed for testing only. */
+    static void clearCacheForTesting() {
+        OFFER_CACHE.invalidateAll();
     }
 
     /**
@@ -58,15 +81,55 @@ public class ProviderOfferEnricher {
         Set<String> providerIds = collectProviderIds(catalogs);
         if (providerIds.isEmpty()) return;
 
-        List<Map<String, Object>> rows = repository.findByProviderIds(providerIds);
-        if (rows.isEmpty()) return;
+        // H2: resolve per-provider-ID from cache; only query DB for IDs not yet cached.
+        Set<String> uncachedIds = new LinkedHashSet<>();
+        for (String pid : providerIds) {
+            if (OFFER_CACHE.getIfPresent(pid) == null) {
+                uncachedIds.add(pid);
+            }
+        }
 
-        Map<String, List<Object>> offersByProviderId = groupByProviderId(rows);
+        if (!uncachedIds.isEmpty()) {
+            List<Map<String, Object>> rows = repository.findByProviderIds(uncachedIds);
+            // Group rows by provider_id and populate cache (one entry per provider)
+            Map<String, List<Map<String, Object>>> byPid = new HashMap<>();
+            for (Map<String, Object> row : rows) {
+                String pid = Objects.toString(row.get("provider_id"), null);
+                if (pid != null) byPid.computeIfAbsent(pid, k -> new ArrayList<>()).add(row);
+            }
+            // Cache fetched providers (may be empty list = no offers)
+            for (String pid : uncachedIds) {
+                OFFER_CACHE.put(pid, byPid.getOrDefault(pid, List.of()));
+            }
+        }
+
+        // Now build offer map from cache for all provider IDs
+        Map<String, List<Object>> offersByProviderId = new HashMap<>();
+        for (String pid : providerIds) {
+            List<Map<String, Object>> cachedRows = OFFER_CACHE.getIfPresent(pid);
+            if (cachedRows != null && !cachedRows.isEmpty()) {
+                List<Object> offers = new ArrayList<>();
+                for (Map<String, Object> row : cachedRows) {
+                    Object payloadRaw = row.get("payload");
+                    if (payloadRaw == null) continue;
+                    try {
+                        Object offer = objectMapper.readValue(payloadRaw.toString(), Object.class);
+                        offers.add(offer);
+                    } catch (Exception e) {
+                        log.warn("event={} providerId={} error={}",
+                                LogEvent.PROVIDER_OFFER_ENRICHED, ErrorSanitizer.sanitize(pid),
+                                ErrorSanitizer.sanitize(e));
+                    }
+                }
+                if (!offers.isEmpty()) offersByProviderId.put(pid, offers);
+            }
+        }
+
         if (offersByProviderId.isEmpty()) return;
 
         int totalAppended = 0;
         for (Catalog catalog : catalogs) {
-            String providerId = catalog.getProviderId();
+            String providerId = catalog.getProvider() != null ? catalog.getProvider().getId() : null;
             if (providerId == null || providerId.isBlank()) continue;
 
             List<Object> providerOffers = offersByProviderId.get(providerId);
@@ -91,31 +154,12 @@ public class ProviderOfferEnricher {
     private Set<String> collectProviderIds(List<Catalog> catalogs) {
         Set<String> ids = new LinkedHashSet<>();
         for (Catalog catalog : catalogs) {
-            if (catalog.getProviderId() != null && !catalog.getProviderId().isBlank()) {
-                ids.add(catalog.getProviderId());
+            if (catalog.getProvider() != null && catalog.getProvider().getId() != null
+                    && !catalog.getProvider().getId().isBlank()) {
+                ids.add(catalog.getProvider().getId());
             }
         }
         return ids;
     }
 
-    private Map<String, List<Object>> groupByProviderId(List<Map<String, Object>> rows) {
-        Map<String, List<Object>> grouped = new HashMap<>();
-        for (Map<String, Object> row : rows) {
-            String providerId = Objects.toString(row.get("provider_id"), null);
-            if (providerId == null) continue;
-
-            Object payloadRaw = row.get("payload");
-            if (payloadRaw == null) continue;
-
-            try {
-                Object offer = objectMapper.readValue(payloadRaw.toString(), Object.class);
-                grouped.computeIfAbsent(providerId, k -> new ArrayList<>()).add(offer);
-            } catch (Exception e) {
-                log.warn("event={} providerId={} error={}",
-                        LogEvent.PROVIDER_OFFER_ENRICHED, ErrorSanitizer.sanitize(providerId),
-                        ErrorSanitizer.sanitize(e));
-            }
-        }
-        return grouped;
-    }
 }

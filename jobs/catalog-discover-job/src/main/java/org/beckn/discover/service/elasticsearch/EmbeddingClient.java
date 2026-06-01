@@ -107,7 +107,9 @@ public class EmbeddingClient {
                     .POST(HttpRequest.BodyPublishers.ofString(body));
             if (apiKey != null && !apiKey.isBlank())
                 builder.header("Authorization", "Bearer " + apiKey);
-            response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            // sendAsync releases the calling thread during I/O; join() surfaces exceptions
+            response = httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
+                    .join();
         } catch (Exception e) {
             throw new RuntimeException("Embedding provider unavailable or timed out: " + e.getMessage(), e);
         }

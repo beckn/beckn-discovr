@@ -2,6 +2,7 @@ package org.beckn.discover.service.elasticsearch;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.query_dsl.Operator;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * {@link TextSearchEngine} backed by Elasticsearch.
@@ -139,6 +141,9 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         .index(aliasName)
                         .minScore(minScore)
                         .size(resultLimit)
+                        // H1: exclude large fields not used by EsSearchAssembler
+                        .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
+                        .trackTotalHits(t -> t.enabled(false))
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
@@ -170,24 +175,48 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
 
         // ── Keyword search path (engine=native-els only) ──────────────────────
         List<Query> keywordSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(queryRequest);
-        log.info(LogEvent.ES_SEARCH_STARTED + ".keyword",
+        // H7: Move serialization to DEBUG with a lazy Supplier — avoids Jackson cost on every request
+        log.debug(LogEvent.ES_SEARCH_STARTED + ".keyword",
                 value("transactionId", txId),
                 value("schemaFilters", keywordSchemaFilters.size()),
-                value("query", buildTextSearchJson(ErrorSanitizer.sanitize(text))));
+                value("query", (Supplier<String>) () -> buildTextSearchJson(ErrorSanitizer.sanitize(text))));
+        List<String> blobFields = multiMatchFields.stream()
+                .filter(f -> f.startsWith("full_text_blob"))
+                .toList();
+        List<String> scoringFields = multiMatchFields.stream()
+                .filter(f -> !f.startsWith("full_text_blob"))
+                .toList();
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                     .index(aliasName)
+                    // H1: exclude large fields not used by EsSearchAssembler
+                    .source(sf -> sf.filter(f -> f.excludes("full_text_blob", "resource_vector", "indexed_at")))
                     .query(q -> q.bool(b -> {
-                        b.must(Query.of(mq -> mq.multiMatch(mm -> mm
-                                .query(text)
-                                .fields(multiMatchFields)
-                                .type(TextQueryType.BestFields)
-                                .fuzziness("AUTO"))));
+                        // full_text_blob: gating clause — doc must contain query terms somewhere.
+                        // Scored by BM25 via beckn_text analyzer (stemming + stop-words); no fuzziness
+                        // needed since the blob already captures all catalog text.
+                        if (!blobFields.isEmpty()) {
+                            b.must(Query.of(mq -> mq.match(m -> m
+                                    .field(blobFields.get(0))
+                                    .query(text)
+                                    .operator(Operator.And))));
+                        }
+                        // Scoring fields: boost documents where the query matches the resource/catalog/
+                        // provider name directly. should (not must) so blob-only matches still qualify.
+                        // No fuzziness — beckn_synonyms + english_stemmer handle recall.
+                        if (!scoringFields.isEmpty()) {
+                            b.should(Query.of(mq -> mq.multiMatch(mm -> mm
+                                    .query(text)
+                                    .fields(scoringFields)
+                                    .type(TextQueryType.BestFields)
+                                    .tieBreaker(0.3))));
+                        }
                         keywordSchemaFilters.forEach(b::filter);
                         return b;
                     }))
                     .minScore(minScore)
-                    .size(resultLimit),
+                    .size(resultLimit)
+                    .trackTotalHits(t -> t.enabled(false)),
                     Map.class);
             var filteredHits = filterByRelativeScore(response.hits().hits(), txId);
             return assembleAndLog(filteredHits, txId, start, "keyword");

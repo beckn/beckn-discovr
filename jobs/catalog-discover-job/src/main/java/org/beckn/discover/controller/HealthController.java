@@ -52,7 +52,7 @@ public class HealthController {
                     "timestamp", Instant.now().toString()));
         } catch (Exception e) {
             logger.error("Failed to reset statistics", e);
-            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to reset statistics. Check server logs for details"));
         }
     }
 }

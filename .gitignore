@@ -23,11 +23,15 @@ Thumbs.db
 *.log
 logs/
 
+# Node
+node_modules/
+
 # Local config (if any)
 .env
 .env.local
 *.local
 key.json
+!.env.example
 
 # Graphify (generated knowledge graph output)
 graphify-out/

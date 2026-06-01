@@ -30,6 +30,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * Post-commit ES indexing step.
@@ -106,7 +108,10 @@ public class ElasticIndexStep {
             }
         }
 
+        // Phase 1: build docs grouped by schema type (no embedding yet)
         Map<String, List<Map<String, Object>>> bySchemaType = new LinkedHashMap<>();
+        Map<String, Item> docToItem = new LinkedHashMap<>(); // doc identity map for embedding
+
         for (Item item : batch.savedResources()) {
             JsonNode payloadNode = batch.payloadNodes().get(item.getId());
             if (payloadNode == null) {
@@ -120,20 +125,44 @@ public class ElasticIndexStep {
             }
             List<String> networkIds = item.getNetworkIds();
             Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkIds);
-            // TODO (M8): Embedding currently serializes the full denormalized payload (catalog
-            // envelope + item). For better search quality, extract only the resource node:
-            //   payloadNode.path("catalogs").path(0).path("resources").path(0)
-            // This avoids diluting the embedding with shared catalog metadata.
-            embeddingClient.ifPresent(client -> {
-                try {
-                    String itemJson = mapper.writeValueAsString(payloadNode);
-                    client.embed(itemJson).ifPresent(vec -> doc.put("resource_vector", vec));
-                } catch (Exception e) {
-                    log.warn("event={} itemId={} error={}", LogEvent.EMBEDDING_SERIALIZE_FAILED, item.getId(), e.getMessage());
-                }
-            });
             bySchemaType.computeIfAbsent(schemaType, k -> new ArrayList<>()).add(doc);
+            docToItem.put(item.getId(), item); // track item for embedding payload lookup
         }
+
+        // Phase 2: H6 — batch embed in parallel across all docs in each schema-type group.
+        // CompletableFuture.allOf starts all embedding HTTP calls concurrently (one per item)
+        // before waiting for any to finish. Per-item failures are isolated — the item is
+        // indexed without a vector rather than blocking others.
+        if (embeddingClient.isPresent()) {
+            var client = embeddingClient.get();
+            for (Map.Entry<String, List<Map<String, Object>>> entry : bySchemaType.entrySet()) {
+                List<Map<String, Object>> docs = entry.getValue();
+                // Build one CompletableFuture per doc; all are submitted before joining
+                @SuppressWarnings("unchecked")
+                CompletableFuture<Void>[] futures = docs.stream()
+                        .map(doc -> {
+                            String itemId = (String) doc.get("resource_id");
+                            Item item = itemId != null ? docToItem.get(itemId) : null;
+                            if (item == null) return CompletableFuture.<Void>completedFuture(null);
+                            JsonNode payloadNode = batch.payloadNodes().get(item.getId());
+                            if (payloadNode == null) return CompletableFuture.<Void>completedFuture(null);
+                            return CompletableFuture.runAsync(() -> {
+                                try {
+                                    // TODO (M8): extract only the resource node for better quality
+                                    String itemJson = mapper.writeValueAsString(payloadNode);
+                                    client.embed(itemJson).ifPresent(vec -> doc.put("resource_vector", vec));
+                                } catch (Exception e) {
+                                    log.warn("event={} itemId={} error={}",
+                                            LogEvent.EMBEDDING_SERIALIZE_FAILED, item.getId(), e.getMessage());
+                                }
+                            }, ForkJoinPool.commonPool());
+                        })
+                        .toArray(CompletableFuture[]::new);
+                // Wait for all embeddings to complete before proceeding to index
+                CompletableFuture.allOf(futures).join();
+            }
+        }
+
         bySchemaType.forEach((schemaType, docs) -> indexInBatches(schemaType, docs, batch));
     }
 

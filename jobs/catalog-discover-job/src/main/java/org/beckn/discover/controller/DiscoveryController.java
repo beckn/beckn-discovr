@@ -1,6 +1,13 @@
 package org.beckn.discover.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -16,9 +23,11 @@ import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
 import org.beckn.discover.service.authorization.AuthorizationService;
+import org.beckn.discover.common.ErrorMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -26,11 +35,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
@@ -53,7 +62,6 @@ import static net.logstash.logback.argument.StructuredArguments.value;
  * into a {@link DiscoverRequest}.</p>
  */
 @RestController
-@RequestMapping("/beckn")
 public class DiscoveryController {
 
     /** Request attribute key used to propagate the transaction ID to the exception handler. */
@@ -67,6 +75,9 @@ public class DiscoveryController {
     private final AuthorizationService authorizationService;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final DiscoveryProperties discoveryProperties;
+    private final ExecutorService queryExecutor;
+    /** Short-lived cache keyed on messageId — suppresses duplicate Kafka publishes on BAP retries (M10). */
+    private final Cache<String, Boolean> messageIdDedupCache;
 
     public DiscoveryController(
             DiscoveryService discoveryService,
@@ -74,16 +85,25 @@ public class DiscoveryController {
             DiscoveryValidationService validationService,
             AuthorizationService authorizationService,
             KafkaTemplate<String, String> kafkaTemplate,
-            DiscoveryProperties discoveryProperties) {
+            DiscoveryProperties discoveryProperties,
+            @Qualifier("discoveryQueryExecutor") ExecutorService queryExecutor) {
         this.discoveryService = discoveryService;
         this.objectMapper = objectMapper;
         this.validationService = validationService;
         this.authorizationService = authorizationService;
         this.kafkaTemplate = kafkaTemplate;
         this.discoveryProperties = discoveryProperties;
+        this.queryExecutor = queryExecutor;
+        long dedupTtl = discoveryProperties.getKafka().getDedupCacheTtlSeconds();
+        this.messageIdDedupCache = Caffeine.newBuilder()
+                .expireAfterWrite(dedupTtl, TimeUnit.SECONDS)
+                .maximumSize(10_000)
+                .build();
     }
 
-    /** GET endpoint for Beckn discovery. */
+    /**
+     * Synchronous discovery endpoint — returns the full on_discover response inline.
+     */
     @GetMapping("/discover")
     public ResponseEntity<DiscoverResponse> discover(
             @RequestBody byte[] rawBytes,
@@ -130,6 +150,9 @@ public class DiscoveryController {
                     value("method", httpRequest.getMethod()),
                     value("transactionId", txnNode.asText("")));
 
+            // Direct call on the GET path — the return value is not needed here (no Kafka
+            // headers to set), and wrapping a blocking join in supplyAsync provides no
+            // benefit when we have to wait for the result anyway.
             authorizationService.authorizeRequest(rawBody, headers);
             log.info(LogEvent.AUTH_PASSED);
 
@@ -166,27 +189,60 @@ public class DiscoveryController {
                     value("method", "POST"),
                     value("transactionId", transactionId));
 
-            authorizationService.authorizeRequest(rawBody, headers);
+            // Move Ed25519 signature verification off the Tomcat thread so the server
+            // thread is free during the crypto/registry-lookup operation (M9).
+            // Capture the returned identity on the Tomcat thread — MDC is thread-local and
+            // cannot be read across the executor-thread boundary (would always be null).
+            var identity = joinUnwrapped(CompletableFuture.supplyAsync(
+                    () -> authorizationService.authorizeRequest(rawBody, headers), queryExecutor));
+            // Also apply to MDC on this thread so downstream log statements include auth fields.
+            BecknMdcContext.setAuthFields(identity.subscriberId(), identity.recordId());
             log.info(LogEvent.AUTH_PASSED);
 
             validateSchema(requestNode, rawBody);
 
             String messageId = contextNode.path(BecknFields.MESSAGE_ID).asText();
+
+            // M10: Idempotency check — if same messageId was seen within dedupCacheTtlSeconds,
+            // return ACK immediately without re-publishing to Kafka.
+            if (messageId != null && !messageId.isBlank()
+                    && messageIdDedupCache.getIfPresent(messageId) != null) {
+                log.info(LogEvent.REQUEST_RECEIVED + ".duplicate-suppressed",
+                        value("messageId", messageId),
+                        value("transactionId", transactionId));
+                return ResponseEntity.ok(AckResponse.ack());
+            }
+
             String kafkaKey = transactionId != null ? transactionId : messageId;
             String requestTopic = discoveryProperties.getKafka().getRequestTopic();
             if (requestTopic == null || requestTopic.isBlank()) {
-                throw new IllegalStateException("discovery.kafka.request-topic is not configured");
+                throw new IllegalStateException(ErrorMessages.NET_INTERNAL_ERROR);
             }
 
             final String logTxnId = transactionId;
             final String logMsgId = messageId;
             try {
                 var kafkaHeaders = new RecordHeaders();
-                addHeaderIfPresent(kafkaHeaders, "subscriber_id", MDC.get(MdcField.AUTH_SUBSCRIBER_ID));
-                addHeaderIfPresent(kafkaHeaders, "record_id", MDC.get(MdcField.AUTH_RECORD_ID));
-                addHeaderIfPresent(kafkaHeaders, "tags", MDC.get(MdcField.TAGS));
+                // Tags travel as Kafka header (standard cross-job propagation); identity travels
+                // in JSON meta body — consistent with Catalg catalogService.publishCatalog pattern.
+                addHeaderIfPresent(kafkaHeaders, MdcField.TAGS, MDC.get(MdcField.TAGS));
 
-                var record = new ProducerRecord<>(requestTopic, null, kafkaKey, rawBody, kafkaHeaders);
+                // Wrap the discover request in an envelope carrying caller identity in meta.
+                // Format: { "meta": { "subscriber_id": "...", "record_id": "..." }, "payload": { <discover request> } }
+                // meta is internal routing only — stripped by DiscoveryEventConsumer before processing.
+                ObjectNode envelope = objectMapper.createObjectNode();
+                ObjectNode metaNode = envelope.putObject(BecknFields.META);
+                metaNode.put(BecknFields.SUBSCRIBER_ID, identity.subscriberId());
+                metaNode.put(BecknFields.RECORD_ID, identity.recordId());
+                envelope.set(BecknFields.PAYLOAD, requestNode);
+                String kafkaBody = objectMapper.writeValueAsString(envelope);
+
+                var record = new ProducerRecord<>(requestTopic, null, kafkaKey, kafkaBody, kafkaHeaders);
+                // Record the messageId before sending — ensures the cache entry is set before
+                // any concurrent retry arrives, even if the send completes asynchronously.
+                if (logMsgId != null && !logMsgId.isBlank()) {
+                    messageIdDedupCache.put(logMsgId, Boolean.TRUE);
+                }
                 kafkaTemplate.send(record)
                         .whenComplete((result, ex) -> {
                             if (ex != null) {
@@ -219,11 +275,10 @@ public class DiscoveryController {
     }
 
     private void validateSchema(JsonNode requestNode, String rawBody) {
-        log.info(LogEvent.VALIDATE_PASSED + ".starting");
+        log.info(LogEvent.VALIDATE_STARTING);
         DiscoveryValidationService.ValidationResult result = validationService.validateDiscoverRequest(requestNode);
         if (!result.isValid()) {
-            String paths = result.getPaths().isEmpty() ? "root" : String.join(", ", result.getPaths());
-            String msg = "Schema validation failed: " + String.join("; ", result.getErrors()) + " (paths: " + paths + ")";
+            String msg = "Schema validation failed: " + String.join("; ", result.getErrors());
             log.warn(LogEvent.VALIDATE_FAILED,
                     value("errors", result.getErrors()),
                     value("paths", result.getPaths()),
@@ -241,6 +296,25 @@ public class DiscoveryController {
     private static void addHeaderIfPresent(RecordHeaders headers, String key, String value) {
         if (value != null && !value.isBlank()) {
             headers.add(key, value.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    /**
+     * Joins a {@link CompletableFuture} and rethrows any exception unwrapped from
+     * {@link CompletionException}, so that the original exception type (e.g. {@link
+     * org.springframework.web.ErrorResponseException}) reaches the
+     * {@link org.beckn.discover.exception.GlobalExceptionHandler} with the correct
+     * HTTP status code instead of being swallowed into a 500.
+     */
+    private static <T> T joinUnwrapped(CompletableFuture<T> future) throws Exception {
+        try {
+            return future.join();
+        } catch (CompletionException ce) {
+            Throwable cause = ce.getCause();
+            if (cause instanceof Exception e) {
+                throw e;
+            }
+            throw ce;
         }
     }
 }

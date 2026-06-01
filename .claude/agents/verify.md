@@ -47,7 +47,7 @@ Containers: `catalog-api-service`, `catalog-indexer-job`, `catalog-delivery-job`
 **Always rebuild from source before testing** — never test against stale images. This ensures the verify run tests the actual code, not an old build.
 
 ```bash
-cd /Users/manju/Documents/Projects/Beckn/beckn-discovr
+cd beckn-discovr
 docker compose build --no-cache
 docker compose up -d
 ```
@@ -59,7 +59,7 @@ If Catalg containers are NOT running, ask the user:
 
 If user says yes:
 ```bash
-cd /Users/manju/Documents/Projects/Beckn/beckn-catalg
+cd ../beckn-catalg
 docker compose build --no-cache
 docker compose up -d
 ```

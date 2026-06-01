@@ -2,30 +2,32 @@ package org.beckn.discover.consumer;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.beckn.discover.common.BecknFields;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.logging.LogMessages;
+import org.beckn.discover.logging.MdcField;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
 
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
@@ -49,7 +51,6 @@ import static net.logstash.logback.argument.StructuredArguments.value;
  * </ul>
  */
 @Component
-@ConditionalOnProperty(name = "discovery.kafka.request-topic")
 public class DiscoveryEventConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(DiscoveryEventConsumer.class);
@@ -84,9 +85,7 @@ public class DiscoveryEventConsumer {
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             @Header(KafkaHeaders.RECEIVED_TIMESTAMP) long timestamp,
-            @Header(value = "tags", required = false) byte[] tagsHeader,
-            @Header(value = "subscriber_id", required = false) byte[] subscriberIdHeader,
-            @Header(value = "record_id", required = false) byte[] recordIdHeader) {
+            @Header(value = MdcField.TAGS, required = false) byte[] tagsHeader) {
 
         BecknMdcContext.setTags(tagsHeader);
 
@@ -96,9 +95,9 @@ public class DiscoveryEventConsumer {
                 value("timestamp", timestamp));
 
         // 1. Parse — do NOT ack on failure; let Kafka retry / route to DLT
-        JsonNode requestNode;
+        JsonNode root;
         try {
-            requestNode = objectMapper.readTree(message);
+            root = objectMapper.readTree(message);
         } catch (Exception e) {
             log.error(LogEvent.CONSUMER_PARSE_FAILED,
                     value("partition", partition),
@@ -107,6 +106,14 @@ public class DiscoveryEventConsumer {
                     e);
             throw new RuntimeException("Failed to parse discovery event", e); // triggers DefaultErrorHandler retry / DLT
         }
+
+        // Extract caller identity from meta envelope.
+        // Format: { "meta": { "subscriber_id": "...", "record_id": "..." }, "payload": { <discover request> } }
+        // Consistent with Catalg catalogService.publishCatalog pattern — identity in JSON meta body.
+        JsonNode metaNode = root.path(BecknFields.META);
+        String subscriberId = metaNode.path(BecknFields.SUBSCRIBER_ID).asText(null);
+        String recordId = metaNode.path(BecknFields.RECORD_ID).asText(null);
+        JsonNode requestNode = root.path(BecknFields.PAYLOAD);
 
         // Populate MDC as early as possible
         BecknMdcContext.populate(requestNode.path(BecknFields.CONTEXT));
@@ -132,15 +139,12 @@ public class DiscoveryEventConsumer {
 
             DiscoverResponse response = discoveryService.processDiscoveryRequest(discoverRequest);
 
-            // Publish the response BEFORE acknowledging so that a publish failure keeps
-            // the message un-acked and allows the container error handler to retry/DLT it.
-            // If we ack first and publish fails, the BAP never receives its callback.
-            publishResponse(response, discoverRequest, subscriberIdHeader, recordIdHeader);
-
-            acknowledgment.acknowledge();
-            log.info(LogEvent.QUERY_COMPLETED,
-                    value("partition", partition),
-                    value("offset", offset));
+            // Ack is moved into publishResponse's whenComplete success branch so that a
+            // broker rejection keeps the message un-acked and the container error handler
+            // can retry/DLT it.  If we ack first and the send fails, the BAP never
+            // receives its on_discover callback.
+            publishResponse(response, discoverRequest, subscriberId, recordId,
+                    acknowledgment, partition, offset);
 
         } catch (Exception e) {
             log.error(LogEvent.QUERY_FAILED,
@@ -154,65 +158,83 @@ public class DiscoveryEventConsumer {
     }
 
     /**
-     * Publishes the discovery response to the Kafka response topic.
+     * Publishes the discovery response to the Kafka response topic asynchronously.
      *
-     * <p>This method blocks until the send completes so that the caller can decide
-     * whether to acknowledge the inbound message.  If the send fails, a
-     * {@link RuntimeException} is thrown — the caller's catch block will
-     * rethrow it, keeping the inbound message un-acked so the container
-     * error handler can retry or route it to the DLT.</p>
+     * <p>Uses {@code whenComplete} — never {@code .get()} — so the Kafka I/O thread
+     * is never blocked. {@code acknowledgment.acknowledge()} is called only on
+     * successful broker confirmation inside the {@code whenComplete} success branch.
+     * When the broker rejects (or the send throws), the offset is NOT committed and
+     * the container error handler can retry or route to DLT.</p>
      *
-     * <p>If the response topic is not configured, the failure is logged as a
-     * warning and the method returns normally (misconfiguration is an ops issue,
-     * not a message-level retry candidate).</p>
+     * <p>If the response topic is not configured the failure is logged as a warning
+     * and the method returns normally — misconfiguration is an ops issue, not a
+     * message-level retry candidate.</p>
      */
     private void publishResponse(DiscoverResponse response, DiscoverRequest request,
-                                  byte[] subscriberIdHeader, byte[] recordIdHeader) {
+                                  String subscriberId, String recordId,
+                                  Acknowledgment acknowledgment, int partition, long offset) {
         String responseTopic = discoveryProperties.getKafka().getResponseTopic();
         if (responseTopic == null || responseTopic.isBlank()) {
             log.warn(LogEvent.RESPONSE_PUBLISH_FAILED,
-                    value("reason", "response-topic-not-configured"));
+                    value("reason", LogMessages.REASON_RESPONSE_TOPIC_NOT_CONFIGURED));
             return;
         }
         String transactionId = request.getContext() != null ? request.getContext().getTransactionId() : null;
         try {
-            String responseJson = objectMapper.writeValueAsString(response);
+            // Wrap response in envelope carrying routing metadata (consistent with Catalg PullResponsePublisher).
+            // meta = internal routing only — read by response-dispatcher, stripped before HTTP POST to BAP.
+            ObjectNode envelope = objectMapper.createObjectNode();
+            ObjectNode meta = envelope.putObject(BecknFields.META);
+            if (subscriberId != null) {
+                meta.put(BecknFields.SUBSCRIBER_ID, subscriberId);
+            }
+            if (recordId != null) {
+                meta.put(BecknFields.RECORD_ID, recordId);
+            }
+            envelope.set(BecknFields.PAYLOAD, objectMapper.valueToTree(response));
+            String responseJson = objectMapper.writeValueAsString(envelope);
 
-            var headers = new RecordHeaders();
-            if (subscriberIdHeader != null) {
-                headers.add("subscriber_id", subscriberIdHeader);
-            }
-            if (recordIdHeader != null) {
-                headers.add("record_id", recordIdHeader);
-            }
-            String tags = org.slf4j.MDC.get("tags");
+            // Identity travels in meta (JSON body) — Kafka headers carry only tags.
+            var kafkaHeaders = new RecordHeaders();
+            String tags = MDC.get(MdcField.TAGS);
             if (tags != null && !tags.isBlank()) {
-                headers.add("tags", tags.getBytes(StandardCharsets.UTF_8));
+                kafkaHeaders.add(MdcField.TAGS, tags.getBytes(StandardCharsets.UTF_8));
             }
 
-            var record = new ProducerRecord<>(responseTopic, null, transactionId, responseJson, headers);
-            // Block until Kafka broker confirms receipt so that any send failure propagates
-            // before the inbound offset is acknowledged. Timeout prevents indefinite hang.
-            kafkaTemplate.send(record).get(30, TimeUnit.SECONDS);
-            log.info(LogEvent.RESPONSE_PUBLISHED,
-                    value("topic", responseTopic));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
-                    value("topic", responseTopic),
-                    e);
-            throw new RuntimeException("Interrupted while publishing response", e);
-        } catch (TimeoutException e) {
-            log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
-                    value("topic", responseTopic),
-                    value("reason", "publish timed out after 30s"),
-                    e);
-            throw new RuntimeException("Kafka publish timed out", e);
+            // Capture MDC snapshot for use inside the async callback (MDC is thread-local)
+            Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
+            final String topicForCallback = responseTopic;
+
+            var record = new ProducerRecord<>(responseTopic, null, transactionId, responseJson, kafkaHeaders);
+            kafkaTemplate.send(record).whenComplete((result, ex) -> {
+                // Restore MDC so callback log lines carry the same correlation IDs
+                if (mdcSnapshot != null) MDC.setContextMap(mdcSnapshot);
+                try {
+                    if (ex != null) {
+                        log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
+                                value("topic", topicForCallback),
+                                ex);
+                        // Do NOT ack — offset stays uncommitted so the container error
+                        // handler can retry or route to DLT.
+                    } else {
+                        log.info(LogEvent.QUERY_COMPLETED,
+                                value("partition", partition),
+                                value("offset", offset));
+                        log.info(LogEvent.RESPONSE_PUBLISHED,
+                                value("topic", topicForCallback),
+                                value("partition", result.getRecordMetadata().partition()),
+                                value("offset", result.getRecordMetadata().offset()));
+                        acknowledgment.acknowledge();
+                    }
+                } finally {
+                    MDC.clear();
+                }
+            });
         } catch (Exception e) {
             log.error(LogEvent.RESPONSE_PUBLISH_FAILED,
                     value("topic", responseTopic),
                     e);
-            throw new RuntimeException("Failed to publish on_discover response", e);
+            throw new RuntimeException("Failed to serialize/enqueue on_discover response", e);
         }
     }
 

@@ -88,6 +88,20 @@ public class BecknAuthException extends RuntimeException {
         return new BecknAuthException(message, code, paths, 400);
     }
 
+    /**
+     * Factory for authentication failures where the request header is missing or
+     * syntactically invalid. Returns HTTP 400 (Bad Request) because the issue is
+     * a malformed or absent header, not a failed authentication lookup.
+     *
+     * @param message human-readable error description
+     * @param code    error code constant (e.g. SEC_SIGNATURE_MISSING, SEC_SUBSCRIBER_NOT_FOUND)
+     * @param paths   dot-notation path indicating the failing field
+     * @return a BecknAuthException with HTTP 400
+     */
+    public static BecknAuthException authenticationRequired(String message, String code, String paths) {
+        return new BecknAuthException(message, code, paths, 400);
+    }
+
     public static BecknAuthException signatureGenerationFailed(String message, String code) {
         return new BecknAuthException(message, code, "", 500);
     }
@@ -105,7 +119,7 @@ public class BecknAuthException extends RuntimeException {
     }
 
     public static BecknAuthException registryError(String message, Throwable cause) {
-        return new BecknAuthException(message, org.beckn.auth.util.ErrorCodes.INTERNAL_ERROR, "", 500, cause);
+        return new BecknAuthException(message, org.beckn.auth.util.ErrorCodes.NET_INTERNAL_ERROR, "", 502, cause);
     }
 
     public static BecknAuthException keyNotFound(String message) {

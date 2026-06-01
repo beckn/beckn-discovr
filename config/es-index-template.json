@@ -4,6 +4,7 @@
     "settings": {
       "index.mapping.total_fields.limit": 2000,
       "index.mapping.depth.limit": 10,
+      "index.refresh_interval": "5s",
       "analysis": {
         "filter": {
           "english_stop":     { "type": "stop",     "stopwords": "_english_" },
@@ -44,13 +45,53 @@
         "catalog_descriptor_thumbnail_image": { "type": "keyword" },
         "catalog_descriptor_docs":            { "type": "nested" },
         "catalog_descriptor_media_file":      { "type": "nested" },
-        "catalog_provider_id":   { "type": "keyword" },
-        "catalog_provider_name": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+        "catalog_provider": {
+          "type": "object",
+          "dynamic": false,
+          "properties": {
+            "id": { "type": "keyword" },
+            "descriptor": {
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                "shortDesc": { "type": "text" },
+                "longDesc":  { "type": "text" },
+                "code":      { "type": "keyword" }
+              }
+            },
+            "availableAt": {
+              "type": "nested",
+              "dynamic": false,
+              "properties": {
+                "address": {
+                  "type": "object",
+                  "dynamic": false,
+                  "properties": {
+                    "streetAddress":   { "type": "text" },
+                    "extendedAddress": { "type": "text" },
+                    "addressLocality": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                    "addressRegion":   { "type": "keyword" },
+                    "postalCode":      { "type": "keyword" },
+                    "addressCountry":  { "type": "keyword" }
+                  }
+                }
+              }
+            },
+            "providerAttributes": {
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "@context": { "type": "keyword" },
+                "@type":    { "type": "keyword" }
+              }
+            }
+          }
+        },
         "catalog_is_active":     { "type": "boolean" },
         "catalog_validity": {
           "type": "object",
           "properties": {
-            "@type":     { "type": "keyword" },
             "startDate": { "type": "date" },
             "endDate":   { "type": "date" },
             "startTime": { "type": "keyword" },
@@ -79,7 +120,7 @@
         "resource_rateable":      { "type": "boolean" },
         "resource_attributes": {
           "type": "object",
-          "dynamic": true,
+          "dynamic": false,
           "properties": {
             "@context": { "type": "keyword" },
             "@type":    { "type": "keyword" }
@@ -102,7 +143,99 @@
             "name":  { "type": "keyword" }
           }
         },
-        "offers":             { "type": "nested" },
+        "offers": {
+          "type": "nested",
+          "dynamic": false,
+          "properties": {
+            "id":          { "type": "keyword" },
+            "descriptor": {
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                "shortDesc": { "type": "text" },
+                "longDesc":  { "type": "text" },
+                "code":      { "type": "keyword" }
+              }
+            },
+            "provider": {
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "id": { "type": "keyword" },
+                "descriptor": {
+                  "type": "object",
+                  "dynamic": false,
+                  "properties": {
+                    "name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                    "shortDesc": { "type": "text" },
+                    "longDesc":  { "type": "text" },
+                    "code":      { "type": "keyword" }
+                  }
+                },
+                "availableAt": {
+                  "type": "nested",
+                  "dynamic": false,
+                  "properties": {
+                    "address": {
+                      "type": "object",
+                      "dynamic": false,
+                      "properties": {
+                        "streetAddress":   { "type": "text" },
+                        "extendedAddress": { "type": "text" },
+                        "addressLocality": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "addressRegion":   { "type": "keyword" },
+                        "postalCode":      { "type": "keyword" },
+                        "addressCountry":  { "type": "keyword" }
+                      }
+                    }
+                  }
+                },
+                "providerAttributes": {
+                  "type": "object",
+                  "dynamic": false,
+                  "properties": {
+                    "@context": { "type": "keyword" },
+                    "@type":    { "type": "keyword" }
+                  }
+                }
+              }
+            },
+            "resourceIds": { "type": "keyword" },
+            "addOns": {
+              "type": "nested",
+              "dynamic": false
+            },
+            "considerations": {
+              "type": "nested",
+              "dynamic": false
+            },
+            "validity": {
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "startDate": { "type": "date" },
+                "endDate":   { "type": "date" }
+              }
+            },
+            "availableTo": {
+              "type": "nested",
+              "dynamic": false,
+              "properties": {
+                "type": { "type": "keyword" },
+                "id":   { "type": "keyword" }
+              }
+            },
+            "offerAttributes": {
+              "type": "object",
+              "dynamic": false,
+              "properties": {
+                "@context": { "type": "keyword" },
+                "@type":    { "type": "keyword" }
+              }
+            }
+          }
+        },
         "full_text_blob":     { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
         "indexed_at":         { "type": "date" },
         "resource_vector":        { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }

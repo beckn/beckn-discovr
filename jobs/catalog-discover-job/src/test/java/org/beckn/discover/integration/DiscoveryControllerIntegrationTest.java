@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.beckn.discover.common.BecknFields;
+import org.beckn.discover.common.ErrorCodes;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -24,6 +25,7 @@ import static org.hamcrest.Matchers.*;
 @AutoConfigureMockMvc
 class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
+        private static final String DISCOVER_PATH = "/beckn/discover";
         private static final Path REQUEST_FIXTURES = Path.of("src", "test", "resources", "fixtures", "requests");
 
         @Autowired
@@ -35,7 +37,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // The actual catalog response is delivered asynchronously via response-dispatcher.
                 String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -47,7 +49,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         void getDiscoverReturnsCatalogsFromService() throws Exception {
                 String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
-                ResultActions result = mockMvc.perform(get("/beckn/discover")
+                ResultActions result = mockMvc.perform(get(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -100,13 +102,13 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         void postDiscoverWithInvalidSchemaReturnsBadRequest() throws Exception {
                 String payload = readFixture("invalid_missing_message_spatial.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
         }
 
@@ -114,13 +116,13 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         void getDiscoverWithInvalidSchemaReturnsBadRequest() throws Exception {
                 String payload = readFixture("invalid_missing_context.json");
 
-                ResultActions result = mockMvc.perform(get("/beckn/discover")
+                ResultActions result = mockMvc.perform(get(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
         }
 
@@ -129,26 +131,26 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // Context V2.0 requires transactionId — a request missing it fails schema validation.
                 String payload = readFixture("invalid_missing_transaction_id.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"));
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
         }
 
         @Test
         void postDiscoverWithInvalidUuidReturnsBadRequest() throws Exception {
                 String payload = readFixture("invalid_invalid_uuid.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, anyOf(
                                                 containsString(BecknFields.TRANSACTION_ID),
                                                 containsString(BecknFields.MESSAGE_ID),
@@ -159,13 +161,13 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         void postDiscoverWithEmptyBodyReturnsBadRequest() throws Exception {
                 String payload = readFixture("invalid_empty_body.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"));
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
         }
 
         @Test
@@ -173,7 +175,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_spatial_query.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -186,7 +188,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_combined_jsonpath_spatial.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -200,13 +202,13 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // textSearch, filters, or spatial
                 String payload = readFixture("empty_filters.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
         }
 
@@ -215,7 +217,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_jsonpath_offer_by_id.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -227,13 +229,13 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         void postDiscoverWithRelativeFilterExpression_returnsBadRequest() throws Exception {
                 String payload = readFixture("invalid_relative_filter_expression.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
                                 .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("INVALID_REQUEST"))
+                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
                                 .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                 containsString("absolute JSONPath")));
         }
@@ -243,7 +245,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_jsonpath_catalog_only.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -256,7 +258,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_jsonpath_connector_ccs2_only.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -269,7 +271,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // POST is async — request is valid, returns ACK.
                 String payload = readFixture("ev_charging_jsonpath_offer_by_price.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -296,7 +298,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 // POST is async — should succeed without Authorization header and return ACK.
                 String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
-                ResultActions result = mockMvc.perform(post("/beckn/discover")
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(payload));
 
@@ -331,7 +333,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         // When registry auth is enabled and Authorization header is missing
                         // Expected: 400 Bad Request with NACK response
-                        ResultActions result = mockMvc.perform(post("/beckn/discover")
+                        ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(payload));
 
@@ -339,7 +341,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_MISSING"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
-                                                        containsString("Missing Authorization")));
+                                                        containsString("Authorization header is missing")));
                 }
 
                 @Test
@@ -347,7 +349,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
                         String invalidHeader = "Signature keyId=\"invalid|format\",algorithm=\"ed25519\",headers=\"(created)\",created=\"123\",expires=\"456\",signature=\"sig\"";
 
-                        ResultActions result = mockMvc.perform(post("/beckn/discover")
+                        ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .header("Authorization", invalidHeader)
                                         .content(payload));
@@ -366,7 +368,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         // When registry auth is enabled and Authorization header has invalid format
                         // Expected: 400 Bad Request with NACK response
-                        ResultActions result = mockMvc.perform(post("/beckn/discover")
+                        ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .header("Authorization", "InvalidFormat")
                                         .content(payload));
@@ -375,7 +377,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
-                                                        containsString("Invalid Beckn HTTP Signature format")));
+                                                        containsString("Authorization header format is invalid")));
                 }
 
                 @Test
@@ -395,7 +397,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         paramKeyId, now, now + 100);
 
                         // Expected: 401 Unauthorized with NACK response and SEC_KEY_NOT_FOUND code
-                        ResultActions result = mockMvc.perform(post("/beckn/discover")
+                        ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .header("Authorization", header)
                                         .content(payload));

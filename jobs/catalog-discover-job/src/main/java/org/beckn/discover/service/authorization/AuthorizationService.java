@@ -5,6 +5,7 @@ import org.beckn.auth.exception.BecknAuthException;
 import org.beckn.discover.config.AuthProperties;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
+import org.beckn.discover.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -20,6 +21,16 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  */
 @Service
 public class AuthorizationService {
+
+    /**
+     * Caller identity returned from a successful authorization check.
+     * Carries the values on the calling thread — never rely on MDC propagation across threads.
+     */
+    public record AuthIdentity(String subscriberId, String recordId) {
+        public static AuthIdentity anonymous() {
+            return new AuthIdentity("anonymous", "anonymous");
+        }
+    }
 
     private static final Logger logger = LoggerFactory.getLogger(AuthorizationService.class);
 
@@ -55,22 +66,27 @@ public class AuthorizationService {
     /**
      * Verifies the Beckn HTTP Signature on the incoming request.
      *
+     * <p>Returns the caller's {@link AuthIdentity} (subscriberId + recordId) so that the
+     * controller can propagate identity across thread boundaries without relying on the
+     * thread-local MDC (which is only set on the executor thread, not the calling thread).</p>
+     *
      * @param rawBody the exact unmodified request body string
      * @param headers HTTP headers containing the Authorization header
+     * @return caller identity; {@link AuthIdentity#anonymous()} when auth is disabled or endpoint whitelisted
      * @throws ErrorResponseException with 401 if signature is missing or invalid
      */
-    public void authorizeRequest(String rawBody, HttpHeaders headers) {
+    public AuthIdentity authorizeRequest(String rawBody, HttpHeaders headers) {
         var attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attrs != null && isWhitelisted(attrs.getRequest().getMethod(), attrs.getRequest().getServletPath())) {
             logger.info("{} reason=whitelisted method={} path={}",
                     LogEvent.AUTH_SKIPPED,
                     attrs.getRequest().getMethod(), attrs.getRequest().getServletPath());
-            return;
+            return AuthIdentity.anonymous();
         }
 
         if (!authProperties.enabled()) {
             logger.debug("{}", LogEvent.AUTH_DISABLED);
-            return;
+            return AuthIdentity.anonymous();
         }
 
         String authHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
@@ -80,9 +96,12 @@ public class AuthorizationService {
             var parsed = result.parsedHeader();
             logger.info("{} subscriberId={}", LogEvent.AUTH_VERIFY_DONE, parsed.subscriberId());
             BecknMdcContext.setAuthFields(parsed.subscriberId(), parsed.uniqueKeyId());
+            return new AuthIdentity(parsed.subscriberId(), parsed.uniqueKeyId());
         } catch (BecknAuthException e) {
-            logger.error("{} code={} message={} authHeader={}",
-                    LogEvent.AUTH_FAILED, e.getCode(), e.getMessage(), authHeader);
+            logger.error("{} code={} message={}",
+                    LogEvent.AUTH_FAILED,
+                    ErrorSanitizer.sanitize(e.getCode()),
+                    ErrorSanitizer.sanitize(e.getMessage()));
             ProblemDetail pd = ProblemDetail.forStatus(e.getHttpStatus());
             pd.setDetail(e.getMessage());
             pd.setProperty("code", e.getCode());

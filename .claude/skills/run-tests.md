@@ -8,9 +8,9 @@ Run tests for the Beckn Discovr project. If a specific job name was passed, run 
 
 | Job | Command |
 |-----|---------|
-| catalog-discover-job | `cd /Users/manju/Documents/Projects/beckn/beckn-discovr/jobs/catalog-discover-job && ./gradlew test 2>&1 \| tail -15` |
-| catalog-publish-job | `cd /Users/manju/Documents/Projects/beckn/beckn-discovr/jobs/catalog-publish-job && ./gradlew test 2>&1 \| tail -10` |
-| response-dispatcher | `cd /Users/manju/Documents/Projects/beckn/beckn-discovr/jobs/response-dispatcher && ./gradlew test 2>&1 \| tail -10` |
+| catalog-discover-job | `cd jobs/catalog-discover-job && ./gradlew test 2>&1 \| tail -15` |
+| catalog-publish-job | `cd jobs/catalog-publish-job && ./gradlew test 2>&1 \| tail -10` |
+| response-dispatcher | `cd jobs/response-dispatcher && ./gradlew test 2>&1 \| tail -10` |
 
 Run each relevant job's test command. Then print a summary table:
 

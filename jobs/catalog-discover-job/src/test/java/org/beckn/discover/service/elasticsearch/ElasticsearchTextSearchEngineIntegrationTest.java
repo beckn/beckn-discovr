@@ -47,10 +47,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 
  * <pre>
  * cat-ev-001 / bpp-ecopower:
- *   ev-charger-001  "DC Fast Charger CCS2 60kW"    full_text_blob has "CCS2" and "EcoPower"
- *   ev-charger-002  "AC Charger Type2 22kW"         full_text_blob has "Type2" and "EcoPower"
+ *   ev-charger-001  "DC Fast Charger CCS2 60kW"    full_text_blob has "CCS2", "EcoPower", and "charging"
+ *   ev-charger-002  "AC Charger Type2 22kW"         full_text_blob has "Type2", "EcoPower", and "charging"
  * cat-ev-002 / bpp-greenvolt:
- *   ev-charger-003  "DC Charger CHAdeMO 50kW"       full_text_blob has "CHAdeMO" and "GreenVolt"
+ *   ev-charger-003  "DC Charger CHAdeMO 50kW"       full_text_blob has "CHAdeMO", "GreenVolt", and "charging"
  * </pre>
  * 
  * Each test uses a term that is unique to specific docs so results are
@@ -264,14 +264,14 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     }
 
     /**
-     * "CCS2" matches ev-charger-001 (cat-ev-001); "CHAdeMO" matches ev-charger-003
-     * (cat-ev-002).
-     * ev-charger-002 has neither term → excluded. Verifies 2 separate catalog
-     * objects are returned.
+     * "DC Charger charging" matches ev-charger-001 (DC, cat-ev-001) and
+     * ev-charger-003 (DC, cat-ev-002). ev-charger-002 is excluded because its
+     * blob starts with "AC" not "DC" — the AND operator requires all three terms.
+     * Verifies 2 separate catalog objects are returned.
      */
     @Test
     void search_itemsFromDifferentCatalogs_returnsSeparateCatalogObjects() throws Exception {
-        List<Catalog> catalogs = searchEngine.search("CCS2 CHAdeMO", queryRequest("tx-3"));
+        List<Catalog> catalogs = searchEngine.search("DC Charger charging", queryRequest("tx-3"));
 
         assertThat(catalogs).hasSize(2);
         assertThat(catalogs).extracting(Catalog::getId)
@@ -374,12 +374,13 @@ class ElasticsearchTextSearchEngineIntegrationTest {
     }
 
     /**
-     * Searching by catalog_name (boosted ^2) should return results.
-     * "EcoPower Catalog" is the catalog_name for cat-ev-001 docs.
+     * "EcoPower" is present in both full_text_blob (gating passes) and
+     * catalog_name "EcoPower Catalog" (scoring field ^2 boosts the score).
+     * Verifies that catalog_name boost returns expected results.
      */
     @Test
     void search_catalogNameBoost_matchScoresHigher() throws Exception {
-        List<Catalog> catalogs = searchEngine.search("EcoPower Catalog", queryRequest("tx-boost-1"));
+        List<Catalog> catalogs = searchEngine.search("EcoPower", queryRequest("tx-boost-1"));
 
         assertThat(catalogs).isNotEmpty();
         boolean found = catalogs.stream().anyMatch(c -> c.getId().equals("cat-ev-001"));
@@ -489,7 +490,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                       "filter": {
                         "english_stop":    { "type": "stop",    "stopwords": "_english_" },
                         "english_stemmer": { "type": "stemmer", "language": "english" },
-                        "beckn_synonyms":  { "type": "synonym", "synonyms": ["ev, electric vehicle", "charger, charging station"] }
+                        "beckn_synonyms":  { "type": "synonym", "synonyms": ["ev, electric vehicle", "charging, charger", "charger, charging station"] }
                       },
                       "analyzer": {
                         "beckn_text": {
@@ -551,6 +552,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
      * - "CHAdeMO" → only ev-charger-003 (cat-ev-002)
      * - "GreenVolt"→ only ev-charger-003 (cat-ev-002)
      * - "150" → only ev-charger-001 (numeric blob value)
+     * - "charging" → all 3 docs (via synonym expansion "charging ↔ charger" + explicit term)
      *
      * Schema context values:
      * - ev-charger-001: context=https://schema.org/EV, type=Charger
@@ -565,7 +567,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         "EV_CHARGING", "EV Charging", 4.5, 120,
                         "ecopower-charging", "EcoPower Charging Pvt Ltd",
                         Map.of("connectorType", "CCS2", "maxPowerKW", 60),
-                        "DC Fast Charger CCS2 60kW EV EcoPower 150",
+                        "DC Fast Charger CCS2 60kW EV EcoPower 150 charging",
                         "https://schema.org/EV", "Charger"),
 
                 doc("cat-ev-001", "EcoPower Catalog",
@@ -574,7 +576,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         "EV_CHARGING", "EV Charging", 4.2, 85,
                         "ecopower-charging", "EcoPower Charging Pvt Ltd",
                         Map.of("connectorType", "Type2", "maxPowerKW", 22),
-                        "AC Charger Type2 22kW EV EcoPower",
+                        "AC Charger Type2 22kW EV EcoPower charging",
                         "https://schema.org/EV", "Charger"),
 
                 doc("cat-ev-002", "GreenVolt Catalog",
@@ -583,7 +585,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
                         "EV_CHARGING", "EV Charging", 3.9, 60,
                         "greenvolt-stations", "GreenVolt Charging Stations",
                         Map.of("connectorType", "CHAdeMO", "maxPowerKW", 50),
-                        "DC Charger CHAdeMO 50kW electric vehicle GreenVolt",
+                        "DC Charger CHAdeMO 50kW electric vehicle GreenVolt charging",
                         "https://schema.org/EV", "Battery"));
     }
 

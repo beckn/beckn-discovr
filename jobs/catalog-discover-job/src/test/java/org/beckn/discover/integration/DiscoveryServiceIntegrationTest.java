@@ -392,7 +392,8 @@ class DiscoveryServiceIntegrationTest extends BaseIntegrationTest {
         Assertions.assertThat(catalog.getDescriptor().getMediaFile()).hasSize(2);
         Assertions.assertThat(catalog.getResources()).isNotEmpty();
         Assertions.assertThat(catalog.getOffers()).isNotEmpty();
-        Assertions.assertThat(catalog.getProviderId()).isNotNull();
+        Assertions.assertThat(catalog.getProvider()).isNotNull();
+        Assertions.assertThat(catalog.getProvider().getId()).isNotNull();
     }
 
     @Test
