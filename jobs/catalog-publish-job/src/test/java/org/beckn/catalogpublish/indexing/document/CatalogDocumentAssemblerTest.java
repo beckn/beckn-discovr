@@ -155,9 +155,29 @@ class CatalogDocumentAssemblerTest {
 
         // schema_version has been removed from the ES document model (v2.1 schema redesign)
         assertThat(doc).doesNotContainKey("schema_version");
-        // bpp_id and bpp_uri must not appear in ES documents
+        // Unprefixed bpp_id/bpp_uri are not used — catalog-level BPP fields live
+        // under catalog_bpp_id / catalog_bpp_uri (see assemble_indexesCatalogLevelBppFields).
         assertThat(doc).doesNotContainKey("bpp_id");
         assertThat(doc).doesNotContainKey("bpp_uri");
+    }
+
+    @Test
+    void assemble_indexesCatalogLevelBppFields() throws Exception {
+        // Catalog-level bppId/bppUri must be indexed as catalog_bpp_id / catalog_bpp_uri
+        // so they can be echoed back at the catalog level on discover responses.
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-bpp",
+                  "descriptor": {"name": "BPP Item"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {"@type": "ServiceItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "ServiceItem");
+
+        assertThat(doc.get("catalog_bpp_id")).isEqualTo("bpp.example.com");
+        assertThat(doc.get("catalog_bpp_uri")).isEqualTo("https://bpp.example.com");
     }
 
     @Test

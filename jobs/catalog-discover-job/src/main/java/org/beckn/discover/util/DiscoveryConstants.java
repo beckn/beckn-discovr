@@ -39,6 +39,8 @@ public class DiscoveryConstants {
         public static final String BECKN_PROVIDER = "provider";
         public static final String BECKN_PROVIDER_ID = "providerId";
         public static final String BECKN_VALIDITY = "validity";
+        public static final String BECKN_BPP_ID = "bppId";
+        public static final String BECKN_BPP_URI = "bppUri";
         /** v2.1 catalog-level addOns field. */
         public static final String ADD_ONS = "addOns";
     }

@@ -187,6 +187,8 @@ public class PostgreSQLAssembler {
             parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_PROVIDER,   Provider.class,    catalog::setProvider);
             parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_DESCRIPTOR, Descriptor.class,  catalog::setDescriptor);
             parseIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_VALIDITY,   TimePeriod.class,  catalog::setValidity);
+            setTextIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_BPP_ID,      catalog::setBppId);
+            setTextIfPresent(catalogPayload, DiscoveryConstants.JsonFields.BECKN_BPP_URI,     catalog::setBppUri);
             setBooleanIfPresent(catalogPayload, "isActive", catalog::setIsActive);
             // Note: offers are NOT merged here — they are merged exactly once per catalog
             // in mergeOffersFromRow (first row guard) to avoid N-row duplication.
