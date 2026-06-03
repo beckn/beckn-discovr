@@ -18,22 +18,22 @@ class ItemPayloadBuilderTest {
     private final ItemPayloadBuilder builder = new ItemPayloadBuilder(mapper);
 
     @Test
-    void buildCatalogMetadataSlice_removesItemsOffersAndBppFields() {
+    void buildCatalogMetadataSlice_removesItemsAndOffers() {
         ObjectNode catalog = mapper.createObjectNode();
         catalog.put("id", "c1");
         catalog.putArray("resources").add(mapper.createObjectNode());
+        catalog.putArray("offers");
         CatalogContext ctx = new CatalogContext(List.of(), null);
         JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
         assertThat(slice.has("resources")).isFalse();
         assertThat(slice.has("offers")).isFalse();
-        assertThat(slice.has("bppId")).isFalse();
-        assertThat(slice.has("bppUri")).isFalse();
         assertThat(slice.path("id").asText()).isEqualTo("c1");
     }
 
     @Test
-    void buildCatalogMetadataSlice_stripsBppIdAndBppUriFromCatalog() {
-        // bppId/bppUri in the catalog body must be stripped — never stored per the schema redesign
+    void buildCatalogMetadataSlice_preservesBppIdAndBppUri() {
+        // bppId/bppUri at the catalog level are preserved so they can be echoed
+        // back on discover responses (ownership remains subscriberId-based).
         ObjectNode catalog = mapper.createObjectNode();
         catalog.put("id", "c1");
         catalog.put("bppId", "catalog-bpp");
@@ -41,9 +41,8 @@ class ItemPayloadBuilderTest {
         catalog.putArray("resources").add(mapper.createObjectNode());
         CatalogContext ctx = new CatalogContext(List.of(), null);
         JsonNode slice = builder.buildCatalogMetadataSlice(catalog, ctx);
-        // bppId/bppUri must NOT appear in the stored payload
-        assertThat(slice.has("bppId")).isFalse();
-        assertThat(slice.has("bppUri")).isFalse();
+        assertThat(slice.path("bppId").asText()).isEqualTo("catalog-bpp");
+        assertThat(slice.path("bppUri").asText()).isEqualTo("http://catalog-bpp");
         assertThat(slice.path("id").asText()).isEqualTo("c1");
     }
 
