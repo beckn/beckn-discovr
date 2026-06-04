@@ -35,6 +35,12 @@ public class Catalog {
     @JsonProperty(BecknFields.PROVIDER)
     private Provider provider;
 
+    @JsonProperty(BecknFields.BPP_ID)
+    private String bppId;
+
+    @JsonProperty(BecknFields.BPP_URI)
+    private String bppUri;
+
     @JsonProperty("validity")
     private TimePeriod validity;
 
@@ -60,6 +66,12 @@ public class Catalog {
 
     public Provider getProvider() { return provider; }
     public void setProvider(Provider provider) { this.provider = provider; }
+
+    public String getBppId() { return bppId; }
+    public void setBppId(String bppId) { this.bppId = bppId; }
+
+    public String getBppUri() { return bppUri; }
+    public void setBppUri(String bppUri) { this.bppUri = bppUri; }
 
     public TimePeriod getValidity() { return validity; }
     public void setValidity(TimePeriod validity) { this.validity = validity; }
