@@ -32,14 +32,13 @@ public class ItemPayloadBuilder {
 
     public ObjectNode buildCatalogMetadataSlice(JsonNode catalogNode, CatalogContext ctx) {
         // Copy only non-item/offer fields — avoids deep-copying all items/offers just to discard them.
+        // bppId/bppUri are preserved verbatim so they can be echoed back at the catalog level
+        // on discover responses; auth/ownership is still tracked via subscriberId, not these fields.
         ObjectNode slice = objectMapper.createObjectNode();
         catalogNode.fields().forEachRemaining(e -> {
-            // Exclude items/resources (per-item data), offers (added back per-item in buildDenormalizedPayloadFromSlice),
-            // and bppId/bppUri (never stored — auth ownership is tracked via subscriberId, not BPP identity)
             String key = e.getKey();
             if (!"items".equals(key) && !BecknFields.RESOURCES.equals(key)
-                    && !BecknFields.OFFERS.equals(key)
-                    && !BecknFields.BPP_ID.equals(key) && !BecknFields.BPP_URI.equals(key))
+                    && !BecknFields.OFFERS.equals(key))
                 slice.set(key, e.getValue());
         });
         return slice;

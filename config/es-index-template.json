@@ -39,6 +39,8 @@
         "catalog_id":         { "type": "keyword" },
         "catalog_context":    { "type": "keyword" },
         "catalog_type":       { "type": "keyword" },
+        "catalog_bpp_id":     { "type": "keyword" },
+        "catalog_bpp_uri":    { "type": "keyword" },
         "catalog_name":       { "type": "text", "fields": { "raw": { "type": "keyword" } } },
         "catalog_short_desc": { "type": "text" },
         "catalog_long_desc":  { "type": "text" },

@@ -108,6 +108,8 @@ public class EsSearchAssembler {
         if (catalogProviderRaw instanceof Map<?, ?> providerMap) {
             catalog.setProvider(buildCatalogProvider((Map<String, Object>) providerMap));
         }
+        catalog.setBppId(extractString(doc, "catalog_bpp_id"));
+        catalog.setBppUri(extractString(doc, "catalog_bpp_uri"));
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         Object validityRaw = doc.get("catalog_validity");
