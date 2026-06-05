@@ -359,6 +359,49 @@ class EsSearchAssemblerTest {
     }
 
     @Test
+    void hitWithCatalogProviderAvailableAt_populatesProviderLocationsOnCatalog() {
+        // Regression: EsSearchAssembler used to drop catalog_provider.availableAt during
+        // response assembly even though the data was indexed under catalog_provider.
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
+        doc.put("catalog_provider", Map.of(
+                "id", "freshmart-pvt",
+                "descriptor", Map.of("name", "FreshMart Pvt Ltd"),
+                "availableAt", List.of(Map.of(
+                        "geo", Map.of("type", "Point", "coordinates", List.of(77.6401, 12.9116)),
+                        "address", Map.of(
+                                "streetAddress", "27th Main Rd, Sector 2, HSR Layout",
+                                "addressLocality", "Bengaluru",
+                                "addressRegion", "Karnataka",
+                                "postalCode", "560102",
+                                "addressCountry", "IN")))));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-avail-1");
+
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getProvider()).isNotNull();
+        assertThat(catalog.getProvider().getAvailableAt()).isNotNull().hasSize(1);
+        var loc = catalog.getProvider().getAvailableAt().get(0);
+        assertThat(loc.getGeo()).isNotNull();
+        assertThat(loc.getGeo().getType()).isEqualTo("Point");
+        assertThat(loc.getGeo().getCoordinates()).containsExactly(77.6401, 12.9116);
+        assertThat(loc.getAddress()).isNotNull();
+        assertThat(loc.getAddress().getAddressLocality()).isEqualTo("Bengaluru");
+        assertThat(loc.getAddress().getPostalCode()).isEqualTo("560102");
+    }
+
+    @Test
+    void hitWithCatalogIsActive_populatesIsActiveOnCatalog() {
+        // Regression: catalog_is_active was indexed by CatalogDocumentAssembler but
+        // never read back into Catalog.isActive on the ES path.
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
+        doc.put("catalog_is_active", Boolean.TRUE);
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-isactive-1");
+
+        assertThat(catalogs.get(0).getIsActive()).isTrue();
+    }
+
+    @Test
     void hitWithCatalogProviderMissingDescriptor_populatesIdOnly() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("catalog_provider", Map.of("id", "minimal-provider"));
