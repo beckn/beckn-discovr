@@ -110,6 +110,7 @@ public class EsSearchAssembler {
         }
         catalog.setBppId(extractString(doc, "catalog_bpp_id"));
         catalog.setBppUri(extractString(doc, "catalog_bpp_uri"));
+        catalog.setIsActive(extractBoolean(doc, "catalog_is_active"));
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         Object validityRaw = doc.get("catalog_validity");
@@ -132,6 +133,33 @@ public class EsSearchAssembler {
             desc.setShortDesc((String) ((Map<String, Object>) descMap).get("shortDesc"));
             desc.setLongDesc((String) ((Map<String, Object>) descMap).get("longDesc"));
             provider.setDescriptor(desc);
+        }
+        // Reconstruct provider.availableAt from the stored ES sub-object so spatial /
+        // text search responses echo the full Beckn Provider shape (id, descriptor,
+        // availableAt). Without this the locations are indexed but invisible to callers.
+        Object availableAtRaw = providerMap.get("availableAt");
+        if (availableAtRaw instanceof List<?> list && !list.isEmpty()) {
+            List<Location> locations = new ArrayList<>();
+            for (Object entry : list) {
+                if (entry instanceof Map<?, ?> locMap) {
+                    Location loc = reconstructLocation((Map<String, Object>) locMap);
+                    if (loc != null) locations.add(loc);
+                }
+            }
+            if (!locations.isEmpty()) provider.setAvailableAt(locations);
+        }
+        // providerAttributes is an open Attributes bag — copy every field verbatim so any
+        // L2-extension or custom field (including nested Location objects) round-trips.
+        Object providerAttrsRaw = providerMap.get("providerAttributes");
+        if (providerAttrsRaw instanceof Map<?, ?> attrsMap) {
+            String atContext = (String) attrsMap.get(BecknFields.AT_CONTEXT);
+            String atType    = (String) attrsMap.get(BecknFields.AT_TYPE);
+            Attributes attrs = new Attributes(atContext, atType);
+            ((Map<String, Object>) attrsMap).forEach((k, v) -> {
+                if (!k.equals(BecknFields.AT_CONTEXT) && !k.equals(BecknFields.AT_TYPE))
+                    attrs.setAttribute(k, v);
+            });
+            provider.setProviderAttributes(attrs);
         }
         return provider;
     }
