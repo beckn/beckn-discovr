@@ -1,0 +1,42 @@
+# Caller routing — outbound traffic from Discovr services through Onix to the network.
+#
+# Three outbound flows:
+#   - on_discover           → BAP    (per-request URL from body.context.bapUri)
+#                             response-dispatcher posts here via STATIC_CALLBACK_URL.
+#   - catalog/subscription  → Catalg (operator-triggered: subscribes Discovr to
+#                             receive catalog/push notifications from Catalg)
+#   - catalog/pull          → Catalg (operator-triggered: pulls catalogs from Catalg)
+#
+# Subscription + pull are triggered externally by an operator (Postman) hitting
+# /beckn/catalog/subscription or /beckn/catalog/pull on the public Nginx ingress.
+# Nginx rewrites /beckn/* → /caller/* for those actions (see nginx/default.conf).
+#
+# For version 2.x.x, Onix ignores the `domain` field entirely (and never reads
+# `networkId`). Match is purely by version + endpoint.
+
+routingRules:
+  # ──────────────────────────────────────────────────────────────
+  # on_discover → BAP via context.bapUri (targetType: bap)
+  # ──────────────────────────────────────────────────────────────
+  - version: "2.0.0"
+    targetType: "bap"
+    endpoints:
+      - on_discover
+
+  # ──────────────────────────────────────────────────────────────
+  # subscription + pull → Catalg (fixed URL — operator-triggered outbound)
+  # Onix joins path.Base(inboundURL) onto target.url, e.g.:
+  #   POST /caller/catalog/subscription
+  #     → path.Base = "subscription"
+  #     → forwards to http://catalg-nginx/beckn/catalog/subscription
+  #     → catalg-nginx rewrites /beckn/* → /receiver/*
+  #     → onix-catalg/receiver/catalog/subscription → catalog-api
+  # ──────────────────────────────────────────────────────────────
+  - version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://catalg-nginx/beckn/catalog"
+      # final URL: http://catalg-nginx/beckn/catalog/<endpoint>
+    endpoints:
+      - subscription
+      - pull

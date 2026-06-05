@@ -1,0 +1,32 @@
+# Receiver routing — inbound traffic from the Beckn network into our Discover stack.
+#
+# Onix's router takes the LAST path segment of the inbound URL as the endpoint name
+# (e.g. /receiver/discover → endpoint "discover") and appends it to target.url
+# to build the final forwarding URL. So target.url is the base path WITHOUT
+# the trailing action segment.
+#
+# For version 2.x.x, Onix ignores the `domain` field entirely (and never reads
+# `networkId`). Match is purely by version + endpoint.
+
+routingRules:
+  # ──────────────────────────────────────────────────────────────
+  # BAP `discover` → catalog-discover-job /beckn/discover
+  # ──────────────────────────────────────────────────────────────
+  - version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://catalog-discover-job:8080/beckn"
+      # final URL: http://catalog-discover-job:8080/beckn/discover
+    endpoints:
+      - discover
+
+  # ──────────────────────────────────────────────────────────────
+  # Catalg `catalog/push` → discovr-ingestion /beckn/catalog/push
+  # ──────────────────────────────────────────────────────────────
+  - version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://discovr-ingestion:8080/beckn/catalog"
+      # final URL: http://discovr-ingestion:8080/beckn/catalog/push
+    endpoints:
+      - push

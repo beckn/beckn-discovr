@@ -1,0 +1,181 @@
+# Onix-discover adapter config for the LOCAL DEV Discovr stack (docker-compose.yml).
+#
+# Sits in front of the Beckn Discovr stack. Two modules in one process:
+#
+#   - discoverReceiver  (public)   — accepts inbound from the Beckn network
+#                                    (BAP `discover`, Catalg `catalog/push`)
+#                                    Validates signature → routes to internal services.
+#
+#   - discoverCaller    (internal) — accepts outbound from response-dispatcher
+#                                    (STATIC_CALLBACK_URL) for on_discover.
+#                                    Signs → routes via context.bapUri.
+#
+# Volume-mounted at /app/config by docker-compose.yml.
+#
+# ── Local-dev defaults ────────────────────────────────────────────────────────
+#   - validateSign / sign steps are commented out — signing is disabled both
+#     ways in dev. Re-enable with real DeDi-registered keys for production.
+#   - simplekeymanager has dummy 32-byte zero-seed keys so the plugin loads
+#     cleanly. Replace before enabling validateSign/sign.
+
+appName: "onix-discover"
+
+log:
+  level: info
+  destinations:
+    - type: stdout
+  contextKeys:
+    - transactionId
+    - messageId
+
+http:
+  port: 8080
+  timeout:
+    read: 30
+    write: 30
+    idle: 30
+
+pluginManager:
+  root: ./plugins
+
+modules:
+  # ───────────────────────────────────────────────────────────────
+  # discoverReceiver — public endpoint
+  # URL: http://onix-discover:8080/receiver/
+  # Routes (defined in routing-discover-receiver.yaml):
+  #   - discover  → catalog-discover-job (/beckn/discover)
+  #   - push      → discovr-ingestion    (/beckn/catalog/push)
+  # ───────────────────────────────────────────────────────────────
+  - name: discoverReceiver
+    path: /receiver/
+    handler:
+      type: std
+      role: bpp                            # Discover plays the BPP role from BAPs' perspective
+      # Handler-level identity used by onix_plugin_info metric labels and as the
+      # fallback for ctx.SubID when reqpreprocessor doesn't populate from body.
+      # MUST equal the simplekeymanager networkParticipant below + DISCOVERY_BPP_ID
+      # env on catalog-discover-job.
+      subscriberId: beckn.bap.dev
+      httpClientConfig:
+        maxIdleConns: 1000
+        maxIdleConnsPerHost: 200
+        idleConnTimeout: 300s
+        responseHeaderTimeout: 5s
+      plugins:
+        registry:
+          id: dediregistry
+          config:
+            url: https://fabric.nfh.global/registry/dedi
+            registryName: subscribers.beckn.one
+            timeout: 10
+        keyManager:
+          id: simplekeymanager
+          config:
+            # v1.6.0 uses `networkParticipant`; main branch renamed to `subscriberId`.
+            # LOCAL DEV — dummy 32-byte zero-seed base64 so simplekeymanager parses
+            # cleanly on startup. validateSign / sign steps are commented out, so
+            # these are never actually used. Replace with real keys for production.
+            networkParticipant: beckn.bap.dev
+            keyId: 76EU8fPZFEAUjVC1rK3SbxcEDa2eRq66Cej4BhWGdj59rGZ2pQ57u8
+            signingPrivateKey: 9NBh67Pk/6v3irrkYZHlQ5E1qw+GivHdDFtKeCylzIM=
+            signingPublicKey: Z3Hnc8FZDo/7dwWApeRVs6OV560gr7uxPsFUDGUMsBg=
+            encrPrivateKey: 9NBh67Pk/6v3irrkYZHlQ5E1qw+GivHdDFtKeCylzIM=
+            encrPublicKey: Z3Hnc8FZDo/7dwWApeRVs6OV560gr7uxPsFUDGUMsBg=
+        cache:
+          id: cache
+          config:
+            addr: discovr-onix-redis:6379
+        schemaValidator:
+          id: schemav2validator
+          config:
+            type: url
+            location: https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/tags/core-v2.0.0-lts/api/v2.0.0/beckn.yaml
+            cacheTTL: "3600"
+            extendedSchema_enabled: "false"
+            extendedSchema_cacheTTL: "86400"
+            extendedSchema_maxCacheSize: "100"
+            extendedSchema_downloadTimeout: "30"
+            extendedSchema_allowedDomains: "beckn.org,example.com,raw.githubusercontent.com"
+        signValidator:
+          id: signvalidator
+        router:
+          id: router
+          config:
+            routingConfig: ./config/routing-discover-receiver.yaml
+        middleware:
+          - id: reqpreprocessor
+            config:
+              contextKeys: transactionId,messageId
+              role: bpp
+      steps:
+        - validateSign     # verifies inbound Beckn HTTP Signature against DeDi-registered public key
+        - addRoute         # match endpoint to a routing rule
+        - validateSchema   # validate against Beckn v2.0 OpenAPI
+
+  # ───────────────────────────────────────────────────────────────
+  # discoverCaller — internal endpoint
+  # URL: http://onix-discover:8080/caller/
+  # response-dispatcher posts on_discover bodies here (STATIC_CALLBACK_URL).
+  # Routes (defined in routing-discover-caller.yaml):
+  #   - on_discover → BAP (targetType: bap → context.bapUri)
+  # ───────────────────────────────────────────────────────────────
+  - name: discoverCaller
+    path: /caller/
+    handler:
+      type: std
+      role: bpp
+      subscriberId: beckn.bap.dev
+      httpClientConfig:
+        maxIdleConns: 1000
+        maxIdleConnsPerHost: 200
+        idleConnTimeout: 300s
+        responseHeaderTimeout: 5s
+      plugins:
+        registry:
+          id: dediregistry
+          config:
+            url: https://fabric.nfh.global/registry/dedi
+            registryName: subscribers.beckn.one
+            timeout: 10
+        keyManager:
+          id: simplekeymanager
+          config:
+            # Caller uses these keys to SIGN outbound on_discover.
+            # body.context.bppId MUST equal this networkParticipant value —
+            # catalog-discover-job stamps it via DISCOVERY_BPP_ID. Keep them in sync.
+            networkParticipant: beckn.bap.dev
+            keyId: 76EU8fPZFEAUjVC1rK3SbxcEDa2eRq66Cej4BhWGdj59rGZ2pQ57u8
+            signingPrivateKey: 9NBh67Pk/6v3irrkYZHlQ5E1qw+GivHdDFtKeCylzIM=
+            signingPublicKey: Z3Hnc8FZDo/7dwWApeRVs6OV560gr7uxPsFUDGUMsBg=
+            encrPrivateKey: 9NBh67Pk/6v3irrkYZHlQ5E1qw+GivHdDFtKeCylzIM=
+            encrPublicKey: Z3Hnc8FZDo/7dwWApeRVs6OV560gr7uxPsFUDGUMsBg=
+        cache:
+          id: cache
+          config:
+            addr: discovr-onix-redis:6379
+        schemaValidator:
+          id: schemav2validator
+          config:
+            type: url
+            location: https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/tags/core-v2.0.0-lts/api/v2.0.0/beckn.yaml
+            cacheTTL: "3600"
+            extendedSchema_enabled: "false"
+            extendedSchema_cacheTTL: "86400"
+            extendedSchema_maxCacheSize: "100"
+            extendedSchema_downloadTimeout: "30"
+            extendedSchema_allowedDomains: "beckn.org,example.com,raw.githubusercontent.com"
+        signer:
+          id: signer
+        router:
+          id: router
+          config:
+            routingConfig: ./config/routing-discover-caller.yaml
+        middleware:
+          - id: reqpreprocessor
+            config:
+              contextKeys: transactionId,messageId
+              role: bpp
+      steps:
+        - addRoute         # router uses context.bapUri (targetType: bap)
+        - validateSchema   # validate outbound on_discover against Beckn v2.0 OpenAPI
+        - sign             # sign outbound with simplekeymanager keys (discovr's identity)
