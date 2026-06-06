@@ -150,6 +150,11 @@ discovery:
     # Drop hits scoring below this fraction of the top hit's score (0.0-1.0).
     # 0.6 = keep only hits with >= 60% of the top score. 0.0 = disable.
     relative-score-threshold: ${ES_RELATIVE_SCORE_THRESHOLD:0.6}
+    # best_fields scoring: weight given to non-best matching fields (0.0-1.0).
+    # 0.0 = pure best-field-only; 1.0 = sum across all fields.
+    tie-breaker: ${ES_TIE_BREAKER:0.3}
+    # Typo tolerance for text matching (AUTO|0|1|2). AUTO scales with term length.
+    fuzziness: ${ES_FUZZINESS:AUTO}
 
   # PostgreSQL Configuration for filter-based queries
   postgresql:

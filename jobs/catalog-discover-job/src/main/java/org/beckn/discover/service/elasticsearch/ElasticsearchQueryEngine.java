@@ -2,6 +2,7 @@ package org.beckn.discover.service.elasticsearch;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.query_dsl.Operator;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
@@ -149,23 +150,52 @@ public class ElasticsearchQueryEngine implements QueryEngine {
 
         // ── BM25 text + spatial OR spatial only ───────────────────────────────
         // H4: geo-shape queries always go to bool.filter — no scoring contribution.
-        // Only the text multi-match belongs in bool.must so BM25 scores are not
-        // diluted by binary geo inclusion/exclusion.
+        // Text scoring mirrors ElasticsearchTextSearchEngine (Path D) so the same
+        // minScore floor calibrates correctly for both paths:
+        //   must:   match(full_text_blob, AND)      — gating + BM25 score
+        //   should: multiMatch(scoringFields, ...)  — name/provider boost
         List<Query> spatialSchemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(request);
         double applyMinScore = 0.0;
         final Query textMustQuery;
+        final Query textShouldQuery;
 
         if (hasText) {
             String text = request.textSearch();
-            textMustQuery = Query.of(q -> q.multiMatch(mm -> mm
-                    .query(text)
-                    .fields("full_text_blob", "resource_name^2")
-                    .type(TextQueryType.BestFields)
-                    .fuzziness("AUTO")));
-            applyMinScore = discoveryProperties.getElasticsearch().getMinScore();
+            DiscoveryProperties.Elasticsearch esConfig = discoveryProperties.getElasticsearch();
+            List<String> mmFields = esConfig.getMultiMatchFields();
+            List<String> blobFields = mmFields.stream()
+                    .filter(f -> f.startsWith("full_text_blob"))
+                    .toList();
+            List<String> scoringFields = mmFields.stream()
+                    .filter(f -> !f.startsWith("full_text_blob"))
+                    .toList();
+            final double tieBreaker = esConfig.getTieBreaker();
+            final String fuzziness  = esConfig.getFuzziness();
+
+            // Mirror Path D's text-query structure (see ElasticsearchTextSearchEngine):
+            //   must:   match(full_text_blob)              — required match + BM25 score
+            //   should: multiMatch(scoringFields, BestFields) — name/provider boost
+            // fuzziness is read from config so operators can tighten/loosen typo tolerance.
+            textMustQuery = !blobFields.isEmpty()
+                    ? Query.of(q -> q.match(m -> m
+                            .field(blobFields.get(0))
+                            .query(text)
+                            .operator(Operator.And)
+                            .fuzziness(fuzziness)))
+                    : null;
+            textShouldQuery = !scoringFields.isEmpty()
+                    ? Query.of(q -> q.multiMatch(mm -> mm
+                            .query(text)
+                            .fields(scoringFields)
+                            .type(TextQueryType.BestFields)
+                            .tieBreaker(tieBreaker)
+                            .fuzziness(fuzziness)))
+                    : null;
+            applyMinScore = esConfig.getMinScore();
             log.debug("event={} schemaFilters={}", LogEvent.ES_ENGINE_SPATIAL_REQUEST, spatialSchemaFilters.size());
         } else {
             textMustQuery = null;
+            textShouldQuery = null;
             log.debug("event={} schemaFilters={}", LogEvent.ES_ENGINE_SPATIAL_REQUEST, spatialSchemaFilters.size());
         }
 
@@ -190,8 +220,9 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                             // geo-shape queries in filter — no scoring, cache-friendly
                             finalGeoFilters.forEach(bq::filter);
                             finalSchemaFilters.forEach(bq::filter);
-                            // only text match goes in must (scoring contribution)
-                            if (textMustQuery != null) bq.must(textMustQuery);
+                            // text clauses contribute to score (mirrors Path D)
+                            if (textMustQuery != null)   bq.must(textMustQuery);
+                            if (textShouldQuery != null) bq.should(textShouldQuery);
                             return bq;
                         }));
                 return finalMinScore > 0 ? b.minScore(finalMinScore) : b;

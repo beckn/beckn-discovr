@@ -133,6 +133,11 @@ public class DiscoveryProperties {
         @DecimalMin(value = "0.0", message = "discovery.elasticsearch.relative-score-threshold must be >= 0.0")
         @DecimalMax(value = "1.0", message = "discovery.elasticsearch.relative-score-threshold must be <= 1.0")
         private double relativeScoreThreshold = 0.6;
+        @DecimalMin(value = "0.0", message = "discovery.elasticsearch.tie-breaker must be >= 0.0")
+        @DecimalMax(value = "1.0", message = "discovery.elasticsearch.tie-breaker must be <= 1.0")
+        private double tieBreaker = 0.3;
+        @NotBlank(message = "discovery.elasticsearch.fuzziness must not be blank")
+        private String fuzziness = "AUTO";
 
         public String getHosts() { return hosts; }
         public void setHosts(String hosts) { this.hosts = hosts; }
@@ -150,6 +155,10 @@ public class DiscoveryProperties {
         public void setMultiMatchFields(java.util.List<String> multiMatchFields) { this.multiMatchFields = multiMatchFields; }
         public double getRelativeScoreThreshold() { return relativeScoreThreshold; }
         public void setRelativeScoreThreshold(double relativeScoreThreshold) { this.relativeScoreThreshold = relativeScoreThreshold; }
+        public double getTieBreaker() { return tieBreaker; }
+        public void setTieBreaker(double tieBreaker) { this.tieBreaker = tieBreaker; }
+        public String getFuzziness() { return fuzziness; }
+        public void setFuzziness(String fuzziness) { this.fuzziness = fuzziness; }
     }
 
     /**
