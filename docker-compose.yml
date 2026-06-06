@@ -236,6 +236,8 @@ services:
       - ES_ALIAS=beckn-catalog
       - ES_RESULT_LIMIT=50
       - ES_MIN_SCORE=0.68
+      - ES_TIE_BREAKER=0.3
+      - ES_FUZZINESS=AUTO
       - ES_CONNECT_TIMEOUT_MS=5000
       - ES_SOCKET_TIMEOUT_MS=30000
       # ── Text Search ─────────────────────────────────────────────────────────
