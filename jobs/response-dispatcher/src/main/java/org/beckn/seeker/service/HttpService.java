@@ -2,6 +2,7 @@ package org.beckn.seeker.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -102,7 +103,7 @@ public class HttpService {
             }
 
             String action = context.path(BecknFields.ACTION).asText();
-            String targetUrl = resolveTargetUrl(action, subscriberId, recordId);
+            String targetUrl = resolveTargetUrl(action, subscriberId, recordId, (ObjectNode) context);
 
             // SSRF guard — defense-in-depth even for registry-resolved URLs
             if (httpClientProperties.urlValidationEnabled()) {
@@ -214,53 +215,72 @@ public class HttpService {
     /**
      * Resolves the target callback URL.
      *
-     * <p>When {@code static-callback.enabled=true}, returns the configured static URL
-     * (typically pointing to an Onix-caller adapter) — DeDi lookup is skipped.</p>
+     * <p>Single resolution path for both static-callback modes:
+     * <ol>
+     *   <li>Try DeDi registry lookup via {@code subscriberId}/{@code recordId}.</li>
+     *   <li>On success: stamp the resolved URL into {@code context.bapUri}
+     *       (overrides whatever {@code ResponseProcessor} preserved).</li>
+     *   <li>On failure (blank URL, throw, or missing identity): leave
+     *       {@code context.bapUri} as-is so the BAP's preserved URI flows through
+     *       as fallback.</li>
+     * </ol>
      *
-     * <p>Otherwise (existing behavior): resolves the URL from the DeDi Registry using
-     * subscriber identity (subscriberId + recordId) propagated through Kafka headers.
-     * Registry is the source of truth — no context-based fallback.</p>
+     * <p>Then:
+     * <ul>
+     *   <li>{@code static-callback.enabled=true}: POST destination is the configured
+     *       static URL (onix-caller adapter). Onix reads {@code body.context.bapUri}
+     *       to route via {@code targetType:bap}.</li>
+     *   <li>{@code static-callback.enabled=false}: POST destination is
+     *       {@code body.context.bapUri} directly.</li>
+     * </ul>
+     * Throws if neither DeDi nor the body context yields a usable bapUri.</p>
      */
-    private String resolveTargetUrl(String action, String subscriberId, String recordId) {
+    private String resolveTargetUrl(String action, String subscriberId, String recordId, ObjectNode context) {
         String endpoint = resolveEndpointPath(action);
 
-        // ─── Static callback path: route to configured URL, skip DeDi ─────
+        // 1. Try DeDi. Stamp on success (overrides any prior context.bapUri); leave context
+        //    untouched on any failure (BAP's preserved bapUri remains as fallback).
+        String dediUrl = lookupDediUrl(subscriberId, recordId);
+        if (dediUrl != null) {
+            context.put(BecknFields.BAP_URI, dediUrl);
+            log.info("event={} action={} subscriberId={} recordId={} url={} note=overrode-context-bapUri-with-dedi", LogEvent.REGISTRY_RESOLVED, action, sanitize(subscriberId), sanitize(recordId), sanitize(dediUrl));
+        } else {
+            log.info("event={} action={} note=dedi-unresolved-keeping-original-context-bapUri", LogEvent.REGISTRY_FALLBACK, action);
+        }
+
+        // 2. Static-callback ON: POST to onix; onix reads context.bapUri.
         if (staticCallback.isEnabled()) {
-            log.info("{}", value("event", LogEvent.CALLBACK_RESOLVED),
-                    value("action", action),
-                    value("targetUrl", staticCallback.getUrl()),
-                    value("mode", "static-callback"));
+            log.info("event={} action={} mode=static-callback targetUrl={}", LogEvent.CALLBACK_RESOLVED, action, staticCallback.getUrl());
             return normalizeBaseUrl(staticCallback.getUrl()) + endpoint;
         }
 
-        // ─── Existing DeDi-based path — unchanged ─────────────────────────
-        if (subscriberId == null || subscriberId.isBlank()
-                || recordId == null || recordId.isBlank()) {
-            log.error("{}", value("event", LogEvent.CALLBACK_ERROR),
-                    value("reason", "missing subscriber identity — cannot resolve callback URL"),
-                    value("action", action),
-                    value("subscriberId", sanitize(subscriberId)),
-                    value("recordId", sanitize(recordId)));
-            throw new IllegalArgumentException(
-                    "Subscriber identity required for callback URL resolution: subscriberId="
-                    + sanitize(subscriberId) + " recordId=" + sanitize(recordId));
+        // 3. Static-callback OFF: POST directly using context.bapUri (DeDi-stamped or BAP-preserved).
+        String bapUri = context.path(BecknFields.BAP_URI).asText(null);
+        if (bapUri == null || bapUri.isBlank()) {
+            log.error("event={} action={} subscriberId={} recordId={} reason=no-usable-bapUri", LogEvent.REGISTRY_FAILED, action, sanitize(subscriberId), sanitize(recordId));
+            throw new IllegalArgumentException("No usable bapUri for action=" + action);
         }
+        log.info("event={} action={} mode=direct source={} targetUrl={}", LogEvent.CALLBACK_RESOLVED, action, dediUrl != null ? "dedi-stamped" : "context.bapUri", sanitize(bapUri));
+        return normalizeBaseUrl(bapUri) + endpoint;
+    }
 
-        var entry = becknAuth.getRegistryEntry(subscriberId, recordId);
-        String baseUrl = entry.subscriberUrl();
-        if (baseUrl == null || baseUrl.isBlank()) {
-            log.error("{}", value("event", LogEvent.REGISTRY_FAILED),
-                    value("subscriberId", sanitize(subscriberId)),
-                    value("recordId", sanitize(recordId)),
-                    value("reason", "registry returned blank URL"));
-            throw new IllegalArgumentException(
-                    "Registry returned blank URL for subscriberId=" + sanitize(subscriberId)
-                    + " recordId=" + sanitize(recordId));
+    /** DeDi lookup with identity guard + exception trap. Returns null on any failure. */
+    private String lookupDediUrl(String subscriberId, String recordId) {
+        if (subscriberId == null || subscriberId.isBlank() || recordId == null || recordId.isBlank()) {
+            log.warn("event={} reason=missing-identity", LogEvent.REGISTRY_FAILED);
+            return null;
         }
-        log.info("{}", value("event", LogEvent.REGISTRY_RESOLVED),
-                value("subscriberId", sanitize(subscriberId)),
-                value("recordId", sanitize(recordId)));
-        return normalizeBaseUrl(baseUrl) + endpoint;
+        try {
+            String url = becknAuth.getRegistryEntry(subscriberId, recordId).subscriberUrl();
+            if (url == null || url.isBlank()) {
+                log.warn("event={} subscriberId={} recordId={} reason=blank-registry-url", LogEvent.REGISTRY_FAILED, sanitize(subscriberId), sanitize(recordId));
+                return null;
+            }
+            return url;
+        } catch (RuntimeException e) {
+            log.warn("event={} subscriberId={} recordId={} error={}", LogEvent.REGISTRY_FAILED, sanitize(subscriberId), sanitize(recordId), e.getMessage());
+            return null;
+        }
     }
 
     private String resolveEndpointPath(String action) {

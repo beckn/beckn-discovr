@@ -26,6 +26,7 @@ public final class LogEvent {
     // Registry resolution
     public static final String REGISTRY_RESOLVED = "registry.resolved";
     public static final String REGISTRY_FAILED   = "registry.failed";
+    public static final String REGISTRY_FALLBACK = "registry.fallback";
     public static final String SSRF_BLOCKED      = "ssrf.blocked";
 
     // Dead-letter topic
