@@ -16,6 +16,10 @@ import org.springframework.web.ErrorResponseException;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Authorization Service — delegates Beckn HTTP Signature validation to the SDK.
  */
@@ -33,6 +37,9 @@ public class AuthorizationService {
     }
 
     private static final Logger logger = LoggerFactory.getLogger(AuthorizationService.class);
+
+    /** Beckn HTTP Signature header keyId pattern: keyId="subscriberId|recordId|algorithm". */
+    private static final Pattern KEY_ID_PATTERN = Pattern.compile("keyId=\"([^\"]+)\"");
 
     private final BecknAuth becknAuth;
     private final AuthProperties authProperties;
@@ -84,12 +91,25 @@ public class AuthorizationService {
             return AuthIdentity.anonymous();
         }
 
+        String authHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
+
         if (!authProperties.enabled()) {
-            logger.debug("{}", LogEvent.AUTH_DISABLED);
-            return AuthIdentity.anonymous();
+            // Onix in front already verified the signature cryptographically; we only need
+            // to extract the caller's identity from the keyId. Falls back to anonymous when
+            // the header is missing/malformed (matches prior behaviour).
+            return parseIdentityFromKeyId(authHeader)
+                    .map(identity -> {
+                        logger.info("{} mode=parse-only subscriberId={}",
+                                LogEvent.AUTH_VERIFY_DONE, identity.subscriberId());
+                        BecknMdcContext.setAuthFields(identity.subscriberId(), identity.recordId());
+                        return identity;
+                    })
+                    .orElseGet(() -> {
+                        logger.debug("{}", LogEvent.AUTH_DISABLED);
+                        return AuthIdentity.anonymous();
+                    });
         }
 
-        String authHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
         logger.info("{}", LogEvent.AUTH_VERIFY_START);
         try {
             var result = becknAuth.verifySignature(authHeader, rawBody);
@@ -107,5 +127,24 @@ public class AuthorizationService {
             pd.setProperty("code", e.getCode());
             throw new ErrorResponseException(HttpStatusCode.valueOf(e.getHttpStatus()), pd, e);
         }
+    }
+
+    /**
+     * Extracts the {@link AuthIdentity} (subscriberId + recordId) from the Beckn HTTP Signature
+     * {@code keyId} parameter without performing cryptographic verification. Used when an upstream
+     * component (e.g. onix) has already verified the signature and this service only needs the
+     * caller's identity.
+     *
+     * <p>keyId format: {@code keyId="<subscriberId>|<recordId>|<algorithm>"}.
+     * Returns {@link Optional#empty()} when the header is missing, has no {@code keyId} parameter,
+     * or the keyId doesn't contain at least two pipe-separated non-blank segments.</p>
+     */
+    private static Optional<AuthIdentity> parseIdentityFromKeyId(String authHeader) {
+        if (authHeader == null || authHeader.isBlank()) return Optional.empty();
+        Matcher m = KEY_ID_PATTERN.matcher(authHeader);
+        if (!m.find()) return Optional.empty();
+        String[] parts = m.group(1).split("\\|", 3);
+        if (parts.length < 2 || parts[0].isBlank() || parts[1].isBlank()) return Optional.empty();
+        return Optional.of(new AuthIdentity(parts[0].trim(), parts[1].trim()));
     }
 }
