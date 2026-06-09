@@ -33,6 +33,11 @@ public final class LogEvent {
     public static final String PUSH_RECEIVED = "push.received";
     public static final String PUSH_REJECTED = "push.rejected";
 
+    // HTTP pull callback endpoint
+    public static final String ON_PULL_RECEIVED = "on_pull.received";
+    public static final String ON_PULL_REJECTED = "on_pull.rejected";
+    public static final String ON_PULL_FAILED   = "on_pull.failed";
+
     // Auth filter
     public static final String AUTH_SKIPPED       = "auth.skipped";
     public static final String AUTH_VERIFY_START  = "auth.verify.start";
