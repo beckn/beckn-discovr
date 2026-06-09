@@ -38,14 +38,17 @@ public class CatalogPushController {
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
     private final CorrelationContext correlationContext;
+    private final CatalogPullCallbackService pullCallbackService;
     private final long maxPayloadSize;
 
     public CatalogPushController(CatalogPushService pushService, AppProperties props,
-            ObjectMapper objectMapper, CorrelationContext correlationContext) {
+            ObjectMapper objectMapper, CorrelationContext correlationContext,
+            CatalogPullCallbackService pullCallbackService) {
         this.pushService = pushService;
         this.maxPayloadSize = props.catalog().maxPayloadSize();
         this.objectMapper = objectMapper;
         this.correlationContext = correlationContext;
+        this.pullCallbackService = pullCallbackService;
     }
 
     @PostMapping("/catalog/push")
@@ -88,6 +91,51 @@ public class CatalogPushController {
         // 200 Ack: the request is accepted for async processing and a catalog/on_publish
         // callback follows. Beckn maps 202 to AckNoCallback (which requires an error and
         // signals that NO callback will follow), so 200 Ack is the correct code here.
+        return ResponseEntity.ok(ackBody(messageId));
+    }
+
+    /**
+     * POST /catalog/on_pull — Beckn v2.0.0 pull callback ingestion.
+     *
+     * <p>Receives a {@code catalog/on_pull} callback (the asynchronous result of a prior
+     * {@code /catalog/pull}), returns {@code 200 Ack} immediately, and processes the
+     * payload asynchronously via {@link CatalogPullCallbackService}.</p>
+     */
+    @PostMapping("/catalog/on_pull")
+    public ResponseEntity<Map<String, Object>> onPull(
+            @RequestBody byte[] rawBytes,
+            HttpServletRequest request) {
+
+        if (rawBytes.length > maxPayloadSize) {
+            log.warn("event={} sizeBytes={} limit={}", LogEvent.ON_PULL_REJECTED, rawBytes.length, maxPayloadSize);
+            // Oversized body is a client error → 400 NackBadRequest. 413 is not part of the
+            // Beckn response set (200/400/401/429/500). Payload not parsed — messageId omitted.
+            return ResponseEntity.badRequest().body(
+                    nackBody(null, ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED, ErrorMessages.REQUEST_TOO_LARGE));
+        }
+
+        String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
+
+        correlationContext.setTagsFromHttp(request.getHeader("X-Tags"));
+
+        JsonNode root = tryParse(rawBody);
+        if (root == null) {
+            return ResponseEntity.badRequest().body(
+                    nackBody(null, ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON));
+        }
+
+        String messageId = contextText(root, BecknFields.MESSAGE_ID);
+
+        if (!hasRequiredContext(root)) {
+            return ResponseEntity.badRequest().body(
+                    nackBody(messageId, ErrorCodes.CTX_MISSING_FIELD, ErrorMessages.SCH_MISSING_CONTEXT));
+        }
+
+        log.info("event={} sizeBytes={}", LogEvent.ON_PULL_RECEIVED, rawBytes.length);
+        pullCallbackService.processPullCallbackAsynchronously(rawBody);
+
+        // 200 Ack per beckn.yaml /catalog/on_pull — the callback receiver acknowledges
+        // synchronously; there is no further callback, so 200 Ack (not 202) is correct.
         return ResponseEntity.ok(ackBody(messageId));
     }
 
