@@ -1,32 +1,57 @@
 #!/usr/bin/env bash
-# Run a read-only ClickStack query and print the JSON response.
+# Run a read-only ClickStack query (ClickHouse SQL) and print the result.
+#
+# Self-hosted HyperDX (ClickStack) does not expose the SaaS /api/v1/query endpoint,
+# so this script bypasses HyperDX entirely and execs `clickhouse-client` inside the
+# ClickHouse pod. Inside the pod, local connections need no credentials — which
+# also means no API key, no port-forward, no env-var dance.
+#
+# Usage:
+#   clickstack-query.sh "SELECT 1"
+#   clickstack-query.sh @path/to/query.sql
+#   clickstack-query.sh --format JSON "SELECT count() FROM default.otel_metrics_gauge"
+#
+# Requires:
+#   - KUBECONFIG pointing at the reliability cluster
+#   - kubectl access to the monitoring namespace
+#   - clickhouse-client present in the ClickHouse pod (it is, by default)
 
 set -euo pipefail
 
 CONFIG="reliability/config/cluster.yaml"
-QUERY="${1:?query (or @file) required}"
+CH_NAMESPACE="monitoring"
+CH_LABEL="app=clickhouse"
+FORMAT="${FORMAT:-PrettyCompact}"   # override via env or first arg
 
-BASE_URL=$(grep -E '^\s*base_url:' "$CONFIG" | head -1 | sed -E 's/.*base_url:[[:space:]]*"([^"]+)".*/\1/')
-API_KEY_ENV=$(grep -E '^\s*api_key_env:' "$CONFIG" | head -1 | sed -E 's/.*api_key_env:[[:space:]]*"([^"]+)".*/\1/')
-
-if [[ -z "$BASE_URL" || "$BASE_URL" == "<FILL_CLICKSTACK_BASE_URL>" ]]; then
-  echo "ERROR: clickstack.base_url is not set in $CONFIG" >&2
-  exit 3
+# Optional --format flag
+if [[ "${1:-}" == "--format" ]]; then
+    FORMAT="$2"
+    shift 2
 fi
 
-API_KEY="${!API_KEY_ENV:-}"
-if [[ -z "$API_KEY" ]]; then
-  echo "ERROR: env var $API_KEY_ENV is not set" >&2
-  exit 4
+QUERY="${1:?query (or @file) required}"
+
+if [[ ! -f "$CONFIG" ]]; then
+    echo "ERROR: $CONFIG not found (run from beckn-discovr repo root)" >&2
+    exit 3
 fi
 
 if [[ "$QUERY" == @* ]]; then
-  QUERY_BODY=$(cat "${QUERY#@}")
+    if [[ ! -f "${QUERY#@}" ]]; then
+        echo "ERROR: query file ${QUERY#@} not found" >&2
+        exit 3
+    fi
+    QUERY_BODY=$(cat "${QUERY#@}")
 else
-  QUERY_BODY="$QUERY"
+    QUERY_BODY="$QUERY"
 fi
 
-curl -sS -X POST "$BASE_URL/api/v1/query" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  --data-raw "$(jq -n --arg q "$QUERY_BODY" '{query:$q}')"
+CH_POD=$(kubectl -n "$CH_NAMESPACE" get pod -l "$CH_LABEL" \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [[ -z "$CH_POD" ]]; then
+    echo "ERROR: no clickhouse pod found in $CH_NAMESPACE (label $CH_LABEL)" >&2
+    exit 4
+fi
+
+kubectl -n "$CH_NAMESPACE" exec "$CH_POD" -- \
+    clickhouse-client --format "$FORMAT" --query "$QUERY_BODY"
