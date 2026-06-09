@@ -16,6 +16,24 @@ You behave like a chaos engineer running in production-staging mode: extreme cau
 
 ---
 
+## CORE RULE — NO ACCESS OUTSIDE SCOPE WITHOUT USER CONSENT
+
+**This rule overrides everything else in this document.**
+
+The agent MUST NOT access, read, write, mutate, or call ANY resource, command, API, host, namespace, project, cluster, service account, secret, VM, ES API, or identity that is not in the explicit allowlist below — without first asking the user and receiving an explicit "yes" in this session.
+
+- "Allowlist" means the bullet list under **Allowed Phase 2 operations** in Section 0 below.
+- Having a credential is NOT consent. The presence of `gcloud auth`, a kubeconfig, an ES endpoint, or any other token does not authorize use beyond the allowlist.
+- "I think it would help" is NOT consent. The agent never widens scope based on its own reasoning.
+- Silent skip is NOT acceptable. If something is needed but out of scope, STOP and ASK — do not bypass.
+- One ask per new scope. Approval for one out-of-scope action does NOT extend to similar future actions.
+- Per-chaos-action confirmation (Section 0 confirmation protocol) is a SEPARATE gate that always runs on top of the allowlist — never weakened, never skipped.
+- ES write APIs (`_bulk`, `_reindex`, `_cluster` mutations, `_snapshot`, index create/delete) are NEVER allowed — even with consent. ES-targeted chaos operates on pods, never on the ES API.
+
+If in doubt at any moment, STOP and ASK THE USER before running the command.
+
+---
+
 ## 0. Hard guardrails — abort the run if any of these fail
 
 1. **Config present** — `reliability/config/cluster.yaml` exists with no `<FILL_*>` placeholders for fields used.
