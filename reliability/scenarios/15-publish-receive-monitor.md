@@ -62,6 +62,44 @@ If either of the above shows non-trivial CPU / network during the soak, log a WA
 - `k8s.pod.network.io` on `catalog-publish-job` (bytes/sec inbound — should track JMeter pace)
 - Pod restarts in any of the in-scope namespaces (must remain 0)
 
+### Service log peeking (every 60 s — agent runs `kubectl logs` per poll)
+
+Agent calls `kubectl -n discovery logs deploy/discovery-discovery-publish-job --since=60s --tail=500` and tallies:
+
+- Count of `level=ERROR` lines (must remain 0 — fail if non-zero)
+- Count of `event=consumer.received` events (proxy for publish rate per minute)
+- Count of `event=pipeline.completed` events (proxy for success rate per minute)
+- Count of `event=es.indexed` events (ES insertion rate)
+- Sample (last 3 lines) of any ERROR or WARN — embedded verbatim in the hourly report
+- Look for known-bad substrings: `OutOfMemoryError`, `Connection refused`, `consumer.rebalance`, `dlt.published`, `SignatureVerifierException`
+
+If any ERROR/known-bad substring is found, copy the full log line + `messageId` + `transactionId` into the report's `comments` field for cross-reference with the Catalg-side run.
+
+### PG peeking (every 60 s — agent runs `kubectl exec`)
+
+Agent calls `kubectl -n discovr-psql exec discovery-infra-postgresql-primary-0 -- psql -U <user> -d <db> -c '<query>'` for:
+
+- `SELECT count(*) FROM item;` — running tally of distinct resources in the cluster (sanity check: should track publish rate; if flat while publishes are succeeding, indexer is broken)
+- `SELECT count(*) FROM pg_stat_activity WHERE state = 'active' AND datname = current_database();` — active sessions, compared against `max_connections`
+- `SELECT pg_size_pretty(pg_database_size(current_database()));` — DB size (every 10 min to avoid load)
+- `SELECT now() - pg_last_xact_replay_timestamp() AS lag;` on the read replica — replication lag in seconds
+- `SELECT count(*) FROM pg_stat_statements WHERE mean_exec_time > 500;` — slow query count (where pg_stat_statements is enabled)
+
+If a query fails because of auth, the agent records "PG peek unavailable: <error>" and continues without aborting.
+
+### ES peeking (every 60 s — agent runs `kubectl exec` for unauthenticated HTTP)
+
+Agent calls `kubectl -n discovr-es exec discovery-elasticsearch-master-0 -- curl -sf localhost:9200/<path>` for:
+
+- `GET /beckn-catalog-groceryresource/_count` — running tally of indexed docs
+- `GET /_cluster/health` — status (`green` expected throughout the run; alert on `yellow` or `red`)
+- `GET /_nodes/stats/jvm` — heap used %, GC count + collection time
+- `GET /_cluster/pending_tasks` — must remain empty
+- `GET /_cat/segments/beckn-catalog-groceryresource?h=index,shard,segment,size,docs.count` — every 10 min, to track segment growth (proxy for merge pressure)
+- `GET /_nodes/stats/indices/refresh` — refresh count + total_time_in_millis (compute refresh rate + avg refresh ms)
+
+Embed each poll's `_count` value in the report so the doc-count growth curve is captured. If `_count` is flat while publish-job consumer.received is climbing, indexer is the bottleneck.
+
 ## SLOs
 - Zero pod restarts across all in-scope namespaces
 - Zero events on `discovr.publish.es.dlt`
@@ -87,6 +125,8 @@ If either of the above shows non-trivial CPU / network during the soak, log a WA
 - Attach **start + end snapshots** of `kubectl get pods -A` for the four in-scope namespaces (catches restarts the metrics might miss).
 - Embed a hyperlink to the HyperDX dashboard's time window for this run (`Reliability Overview` with `from=<ts>&to=<ts>`).
 - Note the Catalg-side run ID (so the two reports can be cross-referenced).
+- **Embed the doc-count growth curve** — PG `item` count + ES `_count` sampled every minute, plotted as a small CSV table in the report so flat-vs-climbing patterns are visually obvious.
+- **Embed log error excerpts** — any ERROR / known-bad lines captured during the run, verbatim, with timestamp + messageId.
 
 ## Notes
 - This scenario shares load with the Catalg-side scenario 03 (4-hour publish soak) and scenario 08 (git PVC growth). Run them on the same calendar window so a single soak yields both reports.
