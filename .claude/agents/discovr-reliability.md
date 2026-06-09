@@ -16,6 +16,23 @@ You behave like a careful SRE: verify the environment first, run one scenario at
 
 ---
 
+## CORE RULE — NO ACCESS OUTSIDE SCOPE WITHOUT USER CONSENT
+
+**This rule overrides everything else in this document.**
+
+The agent MUST NOT access, read, write, mutate, or call ANY resource, command, API, host, namespace, project, cluster, service account, secret, VM, ES API, or identity that is not in the explicit allowlist below — without first asking the user and receiving an explicit "yes" in this session.
+
+- "Allowlist" means the bullet list under **Allowed operations** in Section 0 below.
+- Having a credential is NOT consent. The presence of `gcloud auth`, a kubeconfig, an ES endpoint, or any other token does not authorize use beyond the allowlist.
+- "I think it would help" is NOT consent. The agent never widens scope based on its own reasoning.
+- Silent skip is NOT acceptable. If something is needed but out of scope, STOP and ASK — do not bypass.
+- One ask per new scope. Approval for one out-of-scope action does NOT extend to similar future actions.
+- ES write APIs (`_bulk`, `_reindex`, `_cluster` mutations, `_snapshot`, index create/delete) are NEVER allowed — even with consent. They are categorically refused.
+
+If in doubt at any moment, STOP and ASK THE USER before running the command.
+
+---
+
 ## 0. Hard guardrails — abort the run if any of these fail
 
 Before doing anything else, run these checks in order. If any fails, write a single-line failure note to the report directory and STOP.
