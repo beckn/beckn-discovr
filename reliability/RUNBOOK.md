@@ -11,7 +11,7 @@ For *how* the report is rendered, see `REPORT_TEMPLATE.md`.
 
 | You want to… | Invoke | Notes |
 |---|---|---|
-| Sanity-check a single load case | `@discovr-reliability run scenario 01` | ~5–10 min |
+| Sanity-check a single scenario | `@discovr-reliability run scenario 04` | ~10 min |
 | Run all indexing-path scenarios | `@discovr-reliability run group indexing` | ~30 min |
 | Run all query-path scenarios | `@discovr-reliability run group query` | ~45 min |
 | Overnight soak (4h scenarios) | `@discovr-reliability run group soak` | ~4–5 h |
@@ -68,12 +68,12 @@ Note on Elasticsearch: Phase 2 will never run `_bulk` writes, `_reindex`, `_clus
 
 ```text
 # Single scenario by number
-@discovr-reliability run scenario 01
-@discovr-reliability run scenario 14
+@discovr-reliability run scenario 04
+@discovr-reliability run scenario 09
 
 # By group (matches `group:` in scenario frontmatter)
-@discovr-reliability run group indexing    # 01, 02, 04, 05, 06
-@discovr-reliability run group query       # 07, 08, 09, 10, 11, 12, 14
+@discovr-reliability run group indexing    # 04, 06
+@discovr-reliability run group query       # 09, 11, 12
 @discovr-reliability run group soak        # 03, 13 — 4h each
 
 # Everything
@@ -87,20 +87,17 @@ Note on Elasticsearch: Phase 2 will never run `_bulk` writes, `_reindex`, `_clus
 
 | # | Name | Group | Approx duration |
 |---|---|---|---|
-| 01 | Baseline push receive + index | indexing | 5 min |
-| 02 | Push throughput ramp | indexing | 15 min |
+Pure benchmarks (baseline latency / throughput ramps / payload-size sweeps / scale curve / e2e p99) have been removed — JSONPath-discover and push-API benchmarks are already captured. What remains here is **reliability**: leak detection, contention correctness, lag behaviour, callback flow, bad-external-API behaviour.
+
+| # | Name | Group | Approx duration |
+|---|---|---|---|
 | 03 | Push sustained soak — 4 h | soak | 4 h |
 | 04 | Concurrent same-catalogId push | indexing | 10 min |
-| 05 | Large catalog push payload sweep | indexing | 20 min |
 | 06 | ES + PG write lag under push burst | indexing | 20 min |
-| 07 | Baseline discover query | query | 5 min |
-| 08 | Discover throughput ramp | query | 15 min |
 | 09 | Discover under concurrent push (mixed load) | query | 25 min |
-| 10 | Discover query at scale (10k → 1M indexed) | query | 1 h |
 | 11 | on_discover async callback success throughput | query | 20 min |
 | 12 | on_discover with slow / failing external API | query | 20 min |
 | 13 | on_discover async callback soak — 4 h | soak | 4 h |
-| 14 | E2E push → searchable + discover → on_discover p99 | query | 30 min |
 
 ### 2.3 What Phase 1 does per scenario
 
@@ -262,7 +259,7 @@ The agent writes `verdict.md` with the abort reason even if it never starts a sc
 | `gcloud project mismatch` | `gcloud config get-value project` ≠ `cluster.project` | `gcloud config set project <correct>` — **the agent will not run this for you** |
 | `ClickStack unreachable` | Network / auth issue to ClickStack base URL | Check VPN / token; the agent never retries silently |
 | `Namespace not in allowlist` | Scenario references a namespace not in `namespaces.allowed` | Either add the namespace to the config or skip the scenario — **the agent will ask first** |
-| `External enrichment unreachable` | The mock/real enrichment endpoint is down | Bring it up or skip scenarios 11/12/13/14 |
+| `External enrichment unreachable` | The mock/real enrichment endpoint is down | Bring it up or skip scenarios 11/12/13 |
 | `Catalg→Discovr subscription not active` | No catalogs flowing into the index | Re-establish the subscription before running indexing scenarios |
 | `chaos-mesh CRDs missing` (Phase 2) | NetworkChaos / IOChaos CRDs not installed | Install chaos-mesh, or skip D08 / D12 |
 | `Scope-widening request detected` | A scenario or your prompt asked the agent to do something forbidden | The agent refuses and asks. **Never override.** |
