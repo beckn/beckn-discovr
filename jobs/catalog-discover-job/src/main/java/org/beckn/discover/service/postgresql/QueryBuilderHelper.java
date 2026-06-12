@@ -161,6 +161,52 @@ public final class QueryBuilderHelper {
             return this;
         }
 
+        /**
+         * Adds a paired (context, type) schema filter from the raw schemaContext
+         * URLs, preserving exact pairing (F-14 / spec SC-45).
+         *
+         * <p>Each raw URL is split into a base context URL and an optional
+         * {@code #fragment} type. Every pair becomes one parenthesised
+         * {@code (context = ? AND type = ?)} clause (or {@code context = ?} when
+         * the URL has no fragment); all pairs are OR'd together inside a single
+         * parenthesised group and AND'd into the WHERE clause. This prevents the
+         * cross-pair leak that two independent {@code IN} clauses
+         * ({@link #schemaFilters}) allow — e.g. a resource carrying
+         * {@code (Grocery-context, Retail-type)} can no longer satisfy a request
+         * for the pairs {@code Grocery#Grocery} and {@code Retail#Retail}.</p>
+         *
+         * <p>No-op when {@code rawSchemaContextUrls} is null/empty or contains no
+         * usable base URL.</p>
+         */
+        public QueryTemplate schemaFiltersPaired(List<String> rawSchemaContextUrls) {
+            if (rawSchemaContextUrls == null || rawSchemaContextUrls.isEmpty()) {
+                return this;
+            }
+            List<String> pairClauses = new ArrayList<>(rawSchemaContextUrls.size());
+            List<Object> pairParams  = new ArrayList<>(rawSchemaContextUrls.size());
+            for (String rawUrl : rawSchemaContextUrls) {
+                if (DiscoveryServiceUtil.isBlank(rawUrl)) continue;
+                String base     = DiscoveryServiceUtil.extractBaseUrl(rawUrl);
+                String fragment = DiscoveryServiceUtil.extractFragment(rawUrl);
+                if (DiscoveryServiceUtil.isBlank(base)) continue;
+                if (DiscoveryServiceUtil.isBlank(fragment)) {
+                    // Context-only pair: no type restriction for this URL
+                    pairClauses.add("i.context_url = ?");
+                    pairParams.add(base);
+                } else {
+                    // Paired context + type: both must match the same row
+                    pairClauses.add("(i.context_url = ? AND i.type = ?)");
+                    pairParams.add(base);
+                    pairParams.add(fragment);
+                }
+            }
+            if (!pairClauses.isEmpty()) {
+                conditions.add("(" + String.join(" OR ", pairClauses) + ")");
+                parameters.addAll(pairParams);
+            }
+            return this;
+        }
+
         /** Builds the final {@link QuerySpec} with WHERE, ORDER BY, and LIMIT. */
         public QuerySpec build(int limit) {
             StringBuilder sql = new StringBuilder(selectFrom);

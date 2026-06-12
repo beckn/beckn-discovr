@@ -90,17 +90,16 @@ public class SpatialQueryBuilder {
      * <p>Each spatial constraint becomes one correlated EXISTS subquery in the
      * WHERE clause.  Multiple constraints are ANDed — all must match.</p>
      *
-     * @param constraints       the spatial constraints to apply; must not be null
-     * @param schemaTypes       optional {@code item.type} IN-filter
-     * @param schemaContextUrls optional {@code item.context_url} IN-filter
-     * @param limit             maximum number of rows to return
+     * @param constraints          the spatial constraints to apply; must not be null
+     * @param rawSchemaContextUrls optional raw schemaContext URLs ({@code context#type})
+     *                             applied as paired (context, type) filters (F-14 / SC-45)
+     * @param limit                maximum number of rows to return
      * @return a ready-to-execute spec, or {@link Optional#empty()} when no
      *         valid conditions could be built
      */
     public Optional<QuerySpec> build(
             List<DiscoverRequest.SpatialConstraint> constraints,
-            List<String> schemaTypes,
-            List<String> schemaContextUrls,
+            List<String> rawSchemaContextUrls,
             int limit) {
 
         if (constraints == null || constraints.isEmpty()) {
@@ -116,7 +115,7 @@ public class SpatialQueryBuilder {
             return Optional.empty();
         }
 
-        template.schemaFilters(schemaTypes, schemaContextUrls);
+        template.schemaFiltersPaired(rawSchemaContextUrls);
         QuerySpec spec = template.build(limit);
         log.debug("event={} added={} params={}", LogEvent.SPATIAL_BUILD_DONE, added, spec.parameters().size());
         return Optional.of(spec);
@@ -132,19 +131,18 @@ public class SpatialQueryBuilder {
      * round-trips and the Java-side intersection overhead of the parallel
      * approach.</p>
      *
-     * @param constraints       the spatial constraints from the request
-     * @param filterExpression  already-validated JSONPath filter expression
-     * @param schemaTypes       optional {@code item.type} IN-filter
-     * @param schemaContextUrls optional {@code item.context_url} IN-filter
-     * @param limit             maximum number of rows to return
+     * @param constraints          the spatial constraints from the request
+     * @param filterExpression     already-validated JSONPath filter expression
+     * @param rawSchemaContextUrls optional raw schemaContext URLs ({@code context#type})
+     *                             applied as paired (context, type) filters (F-14 / SC-45)
+     * @param limit                maximum number of rows to return
      * @return a ready-to-execute spec, or {@link Optional#empty()} when no
      *         valid spatial conditions could be built (caller must fall back)
      */
     public Optional<QuerySpec> buildCombined(
             List<DiscoverRequest.SpatialConstraint> constraints,
             String filterExpression,
-            List<String> schemaTypes,
-            List<String> schemaContextUrls,
+            List<String> rawSchemaContextUrls,
             int limit) {
 
         if (constraints == null || constraints.isEmpty()) {
@@ -167,7 +165,7 @@ public class SpatialQueryBuilder {
             return Optional.empty();
         }
 
-        template.schemaFilters(schemaTypes, schemaContextUrls);
+        template.schemaFiltersPaired(rawSchemaContextUrls);
         QuerySpec spec = template.build(limit);
         log.debug("event={} added={} params={}", LogEvent.SPATIAL_COMBINED_BUILT, added, spec.parameters().size());
         return Optional.of(spec);

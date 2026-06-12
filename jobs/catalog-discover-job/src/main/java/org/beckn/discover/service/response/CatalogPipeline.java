@@ -128,12 +128,18 @@ public class CatalogPipeline {
     /**
      * Filter resources by schema context URL.
      * No-op when the request has no schema context filter.
+     *
+     * <p>Uses the raw schemaContext URLs ({@code context#type}) — not the
+     * pre-split base-URL list — so {@code matchesSchema} pairs each context with
+     * its own type and a resource carrying a cross-pair combination is excluded
+     * (F-14 / SC-45). Passing the pre-split {@code schemaContextUrls()} here
+     * dropped the {@code #fragment}, which made type matching a no-op.</p>
      */
     private void filterResourcesBySchemaContext(List<Catalog> catalogs, QueryRequest request) {
-        if (request.schemaContextUrls().isEmpty()) return;
+        if (request.rawSchemaContextUrls().isEmpty()) return;
 
         int beforeCount = totalResourceCount(catalogs);
-        processor.filterCatalogsBySchemaContext(catalogs, request.schemaContextUrls());
+        processor.filterCatalogsBySchemaContext(catalogs, request.rawSchemaContextUrls());
         int afterCount = totalResourceCount(catalogs);
 
         if (beforeCount != afterCount) {

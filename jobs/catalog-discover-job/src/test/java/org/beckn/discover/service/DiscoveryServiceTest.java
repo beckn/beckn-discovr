@@ -214,6 +214,113 @@ class DiscoveryServiceTest {
         assertThat(response.getCatalogs()).hasSize(1);
     }
 
+    // ── F-6: text predicate applied (AND-intersected) on the JSONPath branch ──
+
+    @Test
+    void textPlusFilters_intersectsTextWithFilterResult_textNotDropped() throws Exception {
+        properties.getFilter().setDiscardCatalogsWithoutOffers(false);
+
+        // Filter (PG/JSONPath) branch returns R1 + R2; text (ES) branch matches only R1.
+        Catalog filterCatalog = buildCatalogWithResources("cat-1", "R1", "R2");
+        Catalog textCatalog   = buildCatalogWithResources("cat-1", "R1");
+
+        when(queryEngine.executeFilterQuery(any())).thenReturn(List.of(filterCatalog));
+        when(textSearchEngine.search(any(), any())).thenReturn(List.of(textCatalog));
+        when(catalogPipeline.process(anyList(), any(), anyBoolean())).thenAnswer(inv -> inv.getArgument(0));
+        when(responseProcessor.buildResponse(anyList(), any())).thenAnswer(inv ->
+                new DiscoverResponse(inv.getArgument(1), new DiscoverResponse.ResponseMessage(inv.getArgument(0))));
+
+        DiscoverResponse response = discoveryService.processDiscoveryRequest(
+                buildFilterAndTextRequest("{\"name\":\"coffee\"}", "coffee"));
+
+        // F-6: text WAS applied (not dropped) — only R1, present in BOTH branches, survives.
+        verify(textSearchEngine).search(any(), any());
+        assertThat(response.getCatalogs()).hasSize(1);
+        assertThat(response.getCatalogs().get(0).getResources())
+                .extracting(org.beckn.discover.model.Resource::getId)
+                .as("AND of jsonpath {R1,R2} and text {R1} must be {R1}")
+                .containsExactly("R1");
+    }
+
+    @Test
+    void textPlusFilters_noTextMatch_yieldsEmptyAnd() throws Exception {
+        Catalog filterCatalog = buildCatalogWithResources("cat-1", "R1", "R2");
+        Catalog textCatalog   = buildCatalogWithResources("cat-9", "R9"); // disjoint ids
+
+        var emptyResponse = new DiscoverResponse(null, new DiscoverResponse.ResponseMessage(List.of()));
+        when(queryEngine.executeFilterQuery(any())).thenReturn(List.of(filterCatalog));
+        when(textSearchEngine.search(any(), any())).thenReturn(List.of(textCatalog));
+        when(catalogPipeline.process(anyList(), any(), anyBoolean())).thenAnswer(inv -> inv.getArgument(0));
+        when(responseProcessor.buildEmptyResponse(any())).thenReturn(emptyResponse);
+
+        DiscoverResponse response = discoveryService.processDiscoveryRequest(
+                buildFilterAndTextRequest("{\"name\":\"coffee\"}", "tea"));
+
+        verify(textSearchEngine).search(any(), any());
+        assertThat(response.getCatalogs()).isEmpty();
+    }
+
+    @Test
+    void textPlusFilters_filterEmpty_skipsTextQuery() throws Exception {
+        var emptyResponse = new DiscoverResponse(null, new DiscoverResponse.ResponseMessage(List.of()));
+        when(queryEngine.executeFilterQuery(any())).thenReturn(List.of());
+        when(catalogPipeline.process(anyList(), any(), anyBoolean())).thenAnswer(inv -> inv.getArgument(0));
+        when(responseProcessor.buildEmptyResponse(any())).thenReturn(emptyResponse);
+
+        DiscoverResponse response = discoveryService.processDiscoveryRequest(
+                buildFilterAndTextRequest("{\"name\":\"none\"}", "none"));
+
+        // Structured branch empty → intersection is empty → no point querying text.
+        verify(textSearchEngine, org.mockito.Mockito.never()).search(any(), any());
+        assertThat(response.getCatalogs()).isEmpty();
+    }
+
+    // ── F-6: text rides the spatial leg (existing path reused, no separate text query) ──
+
+    @Test
+    void textPlusSpatial_foldsTextIntoSpatialQuery_noSeparateTextQuery() throws Exception {
+        properties.getFilter().setDiscardCatalogsWithoutOffers(false);
+        Catalog spatialCatalog = buildCatalogWithResources("cat-1", "R1");
+
+        when(queryEngine.executeSpatialQuery(any())).thenReturn(List.of(spatialCatalog));
+        when(catalogPipeline.process(anyList(), any(), anyBoolean())).thenAnswer(inv -> inv.getArgument(0));
+        when(responseProcessor.buildResponse(anyList(), any())).thenAnswer(inv ->
+                new DiscoverResponse(inv.getArgument(1), new DiscoverResponse.ResponseMessage(inv.getArgument(0))));
+
+        DiscoverResponse response = discoveryService.processDiscoveryRequest(buildSpatialAndTextRequest("coffee"));
+
+        // text+spatial reuses the ES spatial query (which folds text in) — no separate text query.
+        verify(queryEngine).executeSpatialQuery(any());
+        verify(textSearchEngine, org.mockito.Mockito.never()).search(any(), any());
+        assertThat(response.getCatalogs()).hasSize(1);
+    }
+
+    @Test
+    void allThree_textRidesSpatialLeg_noSeparateTextQuery() throws Exception {
+        properties.getFilter().setDiscardCatalogsWithoutOffers(false);
+        Catalog filterCatalog  = buildCatalogWithResources("cat-1", "R1", "R2"); // jsonpath
+        Catalog spatialCatalog = buildCatalogWithResources("cat-1", "R1");        // spatial ∧ text
+
+        when(queryEngine.executeCombinedQuery(any())).thenReturn(Optional.empty()); // → parallel fallback
+        when(queryEngine.executeFilterQuery(any())).thenReturn(List.of(filterCatalog));
+        when(queryEngine.executeSpatialQuery(any())).thenReturn(List.of(spatialCatalog));
+        when(catalogPipeline.process(anyList(), any(), anyBoolean())).thenAnswer(inv -> inv.getArgument(0));
+        when(responseProcessor.buildResponse(anyList(), any())).thenAnswer(inv ->
+                new DiscoverResponse(inv.getArgument(1), new DiscoverResponse.ResponseMessage(inv.getArgument(0))));
+
+        DiscoverResponse response = discoveryService.processDiscoveryRequest(
+                buildAllThreeRequest("{\"name\":\"x\"}", "coffee"));
+
+        // Triple reuses the combined/parallel path; text rides the ES spatial leg, no separate text query.
+        verify(queryEngine).executeSpatialQuery(any());
+        verify(queryEngine).executeFilterQuery(any());
+        verify(textSearchEngine, org.mockito.Mockito.never()).search(any(), any());
+        // jsonpath {R1,R2} ∩ (spatial ∧ text) {R1} = {R1}
+        assertThat(response.getCatalogs().get(0).getResources())
+                .extracting(org.beckn.discover.model.Resource::getId)
+                .containsExactly("R1");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static DiscoverRequest buildFilterOnlyRequest(String filters) {
@@ -270,5 +377,51 @@ class DiscoveryServiceTest {
         request.setContext(context);
         request.setMessage(message);
         return request;
+    }
+
+    /** Request carrying spatial + text (routes to the ES spatial query which folds text in). */
+    private static DiscoverRequest buildSpatialAndTextRequest(String text) {
+        var request = buildSpatialOnlyRequest();
+        request.setTextSearch(text);
+        return request;
+    }
+
+    /** Request carrying jsonpath + spatial + text (combined/parallel path; text on spatial leg). */
+    private static DiscoverRequest buildAllThreeRequest(String filters, String text) {
+        var request = buildSpatialOnlyRequest();
+        request.setFilters(filters);
+        request.setTextSearch(text);
+        return request;
+    }
+
+    /** Request carrying BOTH a JSONPath filter and a text-search term (F-6 path). */
+    private static DiscoverRequest buildFilterAndTextRequest(String filters, String text) {
+        var context = new Context();
+        context.setAction("discover");
+        context.setMessageId(UUID.randomUUID().toString());
+        context.setTransactionId(UUID.randomUUID().toString());
+
+        var request = new DiscoverRequest();
+        request.setContext(context);
+        request.setFilters(filters);   // populates message.intent.filters
+        request.setTextSearch(text);   // populates message.intent.textSearch
+        return request;
+    }
+
+    private static Catalog buildCatalogWithResources(String id, String... resourceIds) {
+        var catalog = new Catalog();
+        catalog.setId(id);
+        var descriptor = new Descriptor();
+        descriptor.setName("Test Catalog " + id);
+        catalog.setDescriptor(descriptor);
+        var resources = new ArrayList<org.beckn.discover.model.Resource>();
+        for (String rid : resourceIds) {
+            var r = new org.beckn.discover.model.Resource();
+            r.setId(rid);
+            resources.add(r);
+        }
+        catalog.setResources(resources);
+        catalog.setOffers(new ArrayList<>());
+        return catalog;
     }
 }

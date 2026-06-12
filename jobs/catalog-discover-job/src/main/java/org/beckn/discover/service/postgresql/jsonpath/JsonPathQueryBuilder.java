@@ -30,8 +30,12 @@ public class JsonPathQueryBuilder {
      * Builds a complete JSONPath query (SQL + params) with optional schema filters and limit.
      * When filter is a selection path (starts with $), always adds filter-result column so
      * response can show only matched offers/items regardless of expression format.
+     *
+     * <p>Schema filtering uses paired (context, type) matching from the raw
+     * schemaContext URLs ({@code rawSchemaContextUrls}) so each {@code context#type}
+     * pair must match as a unit — preventing the cross-pair leak (F-14 / SC-45).</p>
      */
-    public QuerySpec build(String filters, List<String> schemaTypes, List<String> schemaContextUrls, int limit) {
+    public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit) {
         String processedFilter = jsonPathConverter.processFilter(filters);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
         String postgresFilter = toPostgresFilter(processedFilter);
@@ -41,7 +45,7 @@ public class JsonPathQueryBuilder {
                 : QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
         QuerySpec query = template
                 .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
-                .schemaFilters(schemaTypes, schemaContextUrls)
+                .schemaFiltersPaired(rawSchemaContextUrls)
                 .build(limit);
         log.debug("Built JSONPath query with {} parameters, limit {}", query.parameters().size(), limit);
         return query;

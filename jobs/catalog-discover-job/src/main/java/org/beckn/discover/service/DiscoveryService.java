@@ -177,33 +177,76 @@ public class DiscoveryService {
 
     // ── Query routing ────────────────────────────────────────────────────────
 
+    /**
+     * Routes a request to the correct query path.
+     *
+     * <p><b>F-6 fix — minimal, reusing existing paths.</b> The only branch that
+     * silently dropped text was <em>JSONPath-only</em> ({@code text + jsonpath},
+     * no spatial): the PostgreSQL filter query cannot evaluate text, and with no
+     * spatial leg there was nowhere for text to be applied. That case now ANDs the
+     * PG filter result with the dedicated ES text-search result by resource id.</p>
+     *
+     * <p>All other paths are unchanged and keep their existing (correct) behavior:
+     * <ul>
+     *   <li><b>text + spatial</b> and <b>spatial-only</b> → {@code executeSpatialQuery}
+     *       (ES) which folds text into the single geo query (filter-then-rank).</li>
+     *   <li><b>jsonpath + spatial</b> and <b>text + jsonpath + spatial</b> →
+     *       the combined/parallel path; when text is present it rides the ES
+     *       spatial leg, giving {@code jsonpath ∧ (spatial ∧ text)} = a correct
+     *       3-way AND.</li>
+     *   <li><b>text-only</b> → the text engine (Path D).</li>
+     * </ul></p>
+     */
     private DiscoverResponse route(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
 
-        if (qr.hasFilters() && qr.hasSpatial()) {
+        boolean hasFilters = qr.hasFilters();
+        boolean hasSpatial = qr.hasSpatial();
+        boolean hasText    = qr.hasTextSearch();
+
+        // No structured predicate → text-only (Path D) or empty intent.
+        if (!hasFilters && !hasSpatial) {
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_TEXT_SEARCH));
+            return executeTextSearchQuery(qr, context, tracker);
+        }
+
+        List<Catalog> structured;
+        if (hasFilters && hasSpatial) {
+            // Path A — combined/parallel. Text (if any) rides the ES spatial leg.
             log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH_SPATIAL));
-            return executeJsonPathWithSpatialQuery(qr, context, tracker);
-        }
-        if (qr.hasFilters()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH));
-            return executeJsonPathFilterQuery(qr, context, tracker);
-        }
-        if (qr.hasSpatial()) {
+            structured = queryJsonPathWithSpatial(qr, tracker);
+        } else if (hasSpatial) {
+            // Path C — ES spatial. Text (if any) is folded into the single geo query.
             log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_SPATIAL));
-            return executeSpatialOnlyQuery(qr, context, tracker);
+            structured = querySpatialOnly(qr, tracker);
+        } else {
+            // Path B — PG JSONPath. Text cannot be evaluated here and there is no
+            // spatial leg to carry it, so AND it in via the ES text engine (F-6).
+            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH));
+            structured = queryJsonPathFilter(qr, tracker);
+            if (hasText && !structured.isEmpty()) {
+                List<Catalog> textResult = queryText(qr, tracker);
+                structured = intersectByResourceId(structured, textResult);
+                recordStep(tracker, "jsonpath.text.intersect");
+            }
         }
-        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_TEXT_SEARCH));
-        return executeTextSearchQuery(qr, context, tracker);
+
+        // Every path above schema-filters inside the query (ES filter / SQL WHERE),
+        // so pipeline step 1 (schema context filter) is skipped.
+        List<Catalog> processed = catalogPipeline.process(structured, qr, true);
+        recordStep(tracker, "structured.pipeline");
+        return buildResponse(processed, context);
     }
 
     // ── JSONPath + Spatial combined query ──────────────────────────────────────
 
     /**
-     * Attempts a single-round-trip combined JSONPath + spatial query.
-     * Falls back to parallel execution when the engine signals that no
-     * spatial conditions could be built ({@code Optional.empty()}).
+     * Attempts a single-round-trip combined JSONPath + spatial query, falling
+     * back to parallel execution when the engine signals that no spatial
+     * conditions could be built ({@code Optional.empty()}). Returns the raw
+     * matched catalogs (text-intersection and pipeline are applied by the caller).
      */
-    private DiscoverResponse executeJsonPathWithSpatialQuery(QueryRequest qr, Context context, LatencyTracker tracker)
+    private List<Catalog> queryJsonPathWithSpatial(QueryRequest qr, LatencyTracker tracker)
             throws Exception {
 
         Instant engineStart = Instant.now();
@@ -215,25 +258,20 @@ public class DiscoveryService {
         });
         recordStep(tracker, "path-a.combined.query");
 
-        if (combined.isEmpty()) {
-            // Engine could not build spatial conditions → fall back to parallel
-            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS));
-            return executeJsonPathAndSpatialParallel(qr, context, tracker);
+        if (combined.isPresent()) {
+            // combined.get() may be an empty list — a valid "no results" outcome
+            return combined.get();
         }
-
-        // combined.get() may be an empty list — that is a valid "no results" response
-        // Path A uses PostgreSQL (schema already filtered in SQL WHERE)
-        List<Catalog> processed = catalogPipeline.process(combined.get(), qr, true);
-        recordStep(tracker, "path-a.pipeline");
-
-        return buildResponse(processed, context);
+        // Engine could not build spatial conditions → fall back to parallel
+        log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS));
+        return queryJsonPathAndSpatialParallel(qr, tracker);
     }
 
     /**
-     * Fallback: runs JSONPath filter and spatial queries concurrently,
-     * then intersects results by resource ID.
+     * Fallback: runs JSONPath filter and spatial queries concurrently, then
+     * intersects results by resource ID. Returns the raw intersected catalogs.
      */
-    private DiscoverResponse executeJsonPathAndSpatialParallel(QueryRequest qr, Context context, LatencyTracker tracker)
+    private List<Catalog> queryJsonPathAndSpatialParallel(QueryRequest qr, LatencyTracker tracker)
             throws Exception {
 
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
@@ -279,21 +317,12 @@ public class DiscoveryService {
 
         List<Catalog> intersected = intersectByResourceId(filterQueryResult, spatialQueryResult);
         recordStep(tracker, "path-a.parallel.intersect");
-
-        if (intersected.isEmpty()) {
-            return responseProcessor.buildEmptyResponse(context);
-        }
-
-        // Path A-parallel: PostgreSQL filter + ES spatial — schema filtered in SQL
-        List<Catalog> processed = catalogPipeline.process(intersected, qr, true);
-        recordStep(tracker, "path-a.parallel.pipeline");
-
-        return buildResponse(processed, context);
+        return intersected;
     }
 
     // ── JSONPath filter only ───────────────────────────────────────────────────
 
-    private DiscoverResponse executeJsonPathFilterQuery(QueryRequest qr, Context context, LatencyTracker tracker)
+    private List<Catalog> queryJsonPathFilter(QueryRequest qr, LatencyTracker tracker)
             throws Exception {
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
         Instant engineStart = Instant.now();
@@ -321,17 +350,12 @@ public class DiscoveryService {
         }
 
         recordStep(tracker, "path-b.query");
-
-        // Path B: PostgreSQL — schema already filtered in SQL WHERE clause
-        List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
-        recordStep(tracker, "path-b.pipeline");
-
-        return buildResponse(processed, context);
+        return catalogs;
     }
 
     // ── Spatial only ──────────────────────────────────────────────────────────
 
-    private DiscoverResponse executeSpatialOnlyQuery(QueryRequest qr, Context context, LatencyTracker tracker)
+    private List<Catalog> querySpatialOnly(QueryRequest qr, LatencyTracker tracker)
             throws Exception {
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
         Instant engineStart = Instant.now();
@@ -359,21 +383,17 @@ public class DiscoveryService {
         }
 
         recordStep(tracker, "path-c.query");
-
-        // Path C: ES spatial or PostgreSQL spatial — schema filtered in ES knn.filter or SQL
-        List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
-        recordStep(tracker, "path-c.pipeline");
-
-        return buildResponse(processed, context);
+        return catalogs;
     }
 
     // ── Text search ────────────────────────────────────────────────────────────
 
     /**
      * Runs the text-search engine on the dedicated I/O executor so the blocking
-     * HTTP call does not tie up servlet threads under concurrent load.
+     * HTTP call does not tie up servlet threads under concurrent load. Returns
+     * the raw text-matched catalogs.
      */
-    private DiscoverResponse executeTextSearchQuery(QueryRequest qr, Context context, LatencyTracker tracker)
+    private List<Catalog> queryText(QueryRequest qr, LatencyTracker tracker)
             throws Exception {
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
         String engine = properties.getTextSearch().getEngine();
@@ -403,6 +423,13 @@ public class DiscoveryService {
         metrics.recordSearchDuration(engine, Duration.between(engineStart, Instant.now()));
         metrics.recordResultCount(engine, catalogs.size());
         recordStep(tracker, "path-d.search");
+        return catalogs;
+    }
+
+    /** Text-only path (Path D): text search → pipeline → response. */
+    private DiscoverResponse executeTextSearchQuery(QueryRequest qr, Context context, LatencyTracker tracker)
+            throws Exception {
+        List<Catalog> catalogs = queryText(qr, tracker);
 
         // Path D: use appliesSchemaFilter() to decide if pipeline step 1 can be skipped.
         // ElasticsearchTextSearchEngine returns true; NLWebTextSearchEngine returns false.

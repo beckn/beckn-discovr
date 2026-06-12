@@ -133,9 +133,13 @@ discovery:
       temperature: ${DISCOVERY_TEXT_SEARCH_LLM_TEMPERATURE:0.0}
       system-prompt: ${DISCOVERY_TEXT_SEARCH_LLM_SYSTEM_PROMPT:You are a search query enricher for a product and service catalog. Append up to 5 highly relevant synonyms or specifications to the original query. Keep the original query words first, then add only closely related terms. Return only the expanded query as a single short line. Do not add loosely related terms, brands, or categories. No explanation. No formatting.}
 
-  # Spatial search engine — "postgresql" (default) or "elasticsearch"
+  # Spatial search engine — "elasticsearch" (default) or "postgresql"
+  # Elasticsearch is the supported/standard spatial engine: its spatial query folds in the
+  # text predicate (filter-then-rank), so text+spatial / text+jsonpath+spatial keep correct
+  # AND semantics. The PostgreSQL spatial path does not apply text and is not a supported
+  # configuration for text-bearing spatial queries.
   spatial:
-    engine: ${DISCOVERY_SPATIAL_ENGINE:postgresql}
+    engine: ${DISCOVERY_SPATIAL_ENGINE:elasticsearch}
 
   # Elasticsearch configuration (active when text-search.engine or spatial.engine=elasticsearch)
   elasticsearch:
