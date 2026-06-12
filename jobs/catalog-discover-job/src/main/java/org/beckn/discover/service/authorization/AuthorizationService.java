@@ -102,10 +102,26 @@ public class AuthorizationService {
                     LogEvent.AUTH_FAILED,
                     ErrorSanitizer.sanitize(e.getCode()),
                     ErrorSanitizer.sanitize(e.getMessage()));
-            ProblemDetail pd = ProblemDetail.forStatus(e.getHttpStatus());
+            int httpStatus = authHttpStatus(e.getCode(), e.getHttpStatus());
+            ProblemDetail pd = ProblemDetail.forStatus(httpStatus);
             pd.setDetail(e.getMessage());
             pd.setProperty("code", e.getCode());
-            throw new ErrorResponseException(HttpStatusCode.valueOf(e.getHttpStatus()), pd, e);
+            throw new ErrorResponseException(HttpStatusCode.valueOf(httpStatus), pd, e);
         }
+    }
+
+    /**
+     * Maps a Beckn auth error code to the correct HTTP status (F-12).
+     *
+     * <p>The SDK returns {@code 400 Bad Request} for a missing or syntactically
+     * malformed {@code Authorization} header ({@code SEC_SIGNATURE_MISSING} /
+     * {@code SEC_SIGNATURE_INVALID}); per HTTP semantics that is an authentication
+     * failure and must be {@code 401 Unauthorized}. All other codes keep the
+     * SDK-provided status (the crypto/registry path already returns 401).</p>
+     */
+    static int authHttpStatus(String code, int sdkStatus) {
+        return (org.beckn.discover.common.ErrorCodes.SEC_SIGNATURE_MISSING.equals(code)
+                || org.beckn.discover.common.ErrorCodes.SEC_SIGNATURE_INVALID.equals(code))
+                ? 401 : sdkStatus;
     }
 }

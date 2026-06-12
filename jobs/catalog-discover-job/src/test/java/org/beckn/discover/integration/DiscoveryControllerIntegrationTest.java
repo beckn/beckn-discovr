@@ -328,16 +328,16 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 private MockMvc mockMvc;
 
                 @Test
-                void postDiscover_WithRegistryAuthEnabled_MissingAuthHeader_Returns400() throws Exception {
+                void postDiscover_WithRegistryAuthEnabled_MissingAuthHeader_Returns401() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
-                        // When registry auth is enabled and Authorization header is missing
-                        // Expected: 400 Bad Request with NACK response
+                        // F-12: a missing Authorization header is an authentication failure →
+                        // 401 Unauthorized with a WWW-Authenticate challenge (not 400).
                         ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(payload));
 
-                        result.andExpect(status().isBadRequest())
+                        result.andExpect(status().isUnauthorized())
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_MISSING"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
@@ -345,7 +345,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 }
 
                 @Test
-                void postDiscover_WithRegistryAuthEnabled_InvalidKeyIdFormat_Returns400() throws Exception {
+                void postDiscover_WithRegistryAuthEnabled_InvalidKeyIdFormat_Returns401() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
                         String invalidHeader = "Signature keyId=\"invalid|format\",algorithm=\"ed25519\",headers=\"(created)\",created=\"123\",expires=\"456\",signature=\"sig\"";
 
@@ -354,8 +354,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .header("Authorization", invalidHeader)
                                         .content(payload));
 
-                        result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
-                                        .andExpect(status().isBadRequest())
+                        // F-12: a malformed credential is an authentication failure → 401 (not 400).
+                        result.andExpect(status().isUnauthorized())
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
@@ -363,17 +363,17 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 }
 
                 @Test
-                void postDiscover_WithRegistryAuthEnabled_InvalidSignatureFormat_Returns400() throws Exception {
+                void postDiscover_WithRegistryAuthEnabled_InvalidSignatureFormat_Returns401() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
-                        // When registry auth is enabled and Authorization header has invalid format
-                        // Expected: 400 Bad Request with NACK response
+                        // F-12: a header that isn't a valid Signature credential is an authentication
+                        // failure → 401 Unauthorized with a WWW-Authenticate challenge (not 400).
                         ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .header("Authorization", "InvalidFormat")
                                         .content(payload));
 
-                        result.andExpect(status().isBadRequest())
+                        result.andExpect(status().isUnauthorized())
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
