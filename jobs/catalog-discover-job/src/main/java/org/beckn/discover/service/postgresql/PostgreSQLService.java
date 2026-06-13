@@ -101,8 +101,7 @@ public class PostgreSQLService {
         log.debug("event={}", LogEvent.JSONPATH_QUERY_START);
         QueryBuilderHelper.QuerySpec query = jsonPathQueryBuilder.build(
                 request.filters(),
-                request.schemaTypes(),
-                request.schemaContextUrls(),
+                request.rawSchemaContextUrls(),
                 resultLimit());
         return executeQuery(query, "jsonpath", request.transactionId(), "PostgreSQL JSONPath query failed");
     }
@@ -123,8 +122,7 @@ public class PostgreSQLService {
         log.debug("event={}", LogEvent.SPATIAL_QUERY_START);
         Optional<QueryBuilderHelper.QuerySpec> queryOpt = spatialQueryBuilder.build(
                 request.spatial(),
-                request.schemaTypes(),
-                request.schemaContextUrls(),
+                request.rawSchemaContextUrls(),
                 resultLimit());
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-conditions", LogEvent.SPATIAL_QUERY_SKIP);
@@ -153,8 +151,7 @@ public class PostgreSQLService {
         log.debug("event={} allowlistSize={}", LogEvent.JSONPATH_QUERY_START + ".chain", idAllowlist.size());
         QueryBuilderHelper.QuerySpec query = jsonPathQueryBuilder.buildWithAllowlist(
                 request.filters(),
-                request.schemaTypes(),
-                request.schemaContextUrls(),
+                request.rawSchemaContextUrls(),
                 resultLimit(),
                 idAllowlist);
         return executeQuery(query, "jsonpath-chain", request.transactionId(), "PostgreSQL chain JSONPath query failed");
@@ -185,8 +182,7 @@ public class PostgreSQLService {
         Optional<QueryBuilderHelper.QuerySpec> queryOpt = spatialQueryBuilder.buildCombinedWithAllowlist(
                 request.spatial(),
                 request.filters(),
-                request.schemaTypes(),
-                request.schemaContextUrls(),
+                request.rawSchemaContextUrls(),
                 resultLimit(),
                 idAllowlist);
 
@@ -218,8 +214,7 @@ public class PostgreSQLService {
         Optional<QueryBuilderHelper.QuerySpec> queryOpt = spatialQueryBuilder.buildCombined(
                 request.spatial(),
                 request.filters(),
-                request.schemaTypes(),
-                request.schemaContextUrls(),
+                request.rawSchemaContextUrls(),
                 resultLimit());
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP);

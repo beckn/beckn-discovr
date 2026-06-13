@@ -32,7 +32,7 @@ public class JsonPathQueryBuilder {
      * When filter is a selection path (starts with $), always adds filter-result column so
      * response can show only matched offers/items regardless of expression format.
      */
-    public QuerySpec build(String filters, List<String> schemaTypes, List<String> schemaContextUrls, int limit) {
+    public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit) {
         String processedFilter = jsonPathConverter.processFilter(filters);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
         String postgresFilter = toPostgresFilter(processedFilter);
@@ -42,7 +42,7 @@ public class JsonPathQueryBuilder {
                 : QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
         QuerySpec query = template
                 .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
-                .schemaFilters(schemaTypes, schemaContextUrls)
+                .schemaFiltersPaired(rawSchemaContextUrls)
                 .build(limit);
         log.debug("Built JSONPath query with {} parameters, limit {}", query.parameters().size(), limit);
         return query;
@@ -56,7 +56,7 @@ public class JsonPathQueryBuilder {
      *
      * @param idAllowlist non-null, non-empty collection of resource IDs from ES step 1
      */
-    public QuerySpec buildWithAllowlist(String filters, List<String> schemaTypes, List<String> schemaContextUrls,
+    public QuerySpec buildWithAllowlist(String filters, List<String> rawSchemaContextUrls,
                                         int limit, Collection<String> idAllowlist) {
         String processedFilter = jsonPathConverter.processFilter(filters);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
@@ -67,7 +67,7 @@ public class JsonPathQueryBuilder {
                 : QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
         QuerySpec query = template
                 .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
-                .schemaFilters(schemaTypes, schemaContextUrls)
+                .schemaFiltersPaired(rawSchemaContextUrls)
                 .idAllowlist(idAllowlist)
                 .build(limit);
         log.debug("Built chain JSONPath query with allowlist size={} params={} limit={}",
