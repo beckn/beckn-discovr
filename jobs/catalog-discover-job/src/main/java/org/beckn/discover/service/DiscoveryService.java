@@ -467,15 +467,17 @@ public class DiscoveryService {
             return responseProcessor.buildEmptyResponse(context);
         }
 
-        // Count underreturn: PSQL returned fewer resources than the request limit
-        // even though it had a pre-filtered resource-id list to work from.
-        if (catalogs.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum() < limit) {
-            metrics.incrementChainUnderreturn();
-        }
-
         // PSQL applied schema filter in SQL WHERE; ES already applied text+geo.
         List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
         recordStep(tracker, "jsonpath-text.pipeline");
+
+        // Count underreturn: fewer resources actually returned than the request limit
+        // even though the chain had a pre-filtered resource-id list to work from.
+        // Counted AFTER the pipeline so it reflects rows actually returned, not the
+        // raw pre-prune PSQL row count.
+        if (processed.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum() < limit) {
+            metrics.incrementChainUnderreturn();
+        }
 
         return buildResponse(processed, context);
     }
