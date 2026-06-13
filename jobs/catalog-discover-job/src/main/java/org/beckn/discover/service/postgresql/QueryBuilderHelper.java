@@ -126,10 +126,19 @@ public final class QueryBuilderHelper {
     }
 
     /**
-     * {@code AND i.id = ANY(?)} clause for the chain allowlist filter.
-     * The single {@code ?} binds a {@code String[]} array parameter.
+     * {@code AND i.id = ANY(string_to_array(?, '|'))} clause for the chain
+     * allowlist filter. The single {@code ?} binds a {@code String} parameter
+     * containing the IDs joined by {@code |}. Using {@code string_to_array}
+     * avoids the JDBC-driver overhead of wrapping a {@code String[]} as a
+     * {@code java.sql.Array}, which Spring's {@code JdbcClient.params()} does
+     * not perform automatically (it would otherwise bind the array via
+     * {@code setObject} and PostgreSQL rejects it with
+     * {@code op ANY/ALL (array) requires array on right side}).
      */
-    public static final String ID_IN_ALLOWLIST = "i.id = ANY(?)";
+    public static final String ID_IN_ALLOWLIST = "i.id = ANY(string_to_array(?, '|'))";
+
+    /** Separator used to join allowlist IDs into the single {@code String} bind value. */
+    public static final String ID_ALLOWLIST_SEPARATOR = "|";
 
     /**
      * Fluent builder that assembles a query from a base SELECT, WHERE conditions,
@@ -146,7 +155,7 @@ public final class QueryBuilderHelper {
         private final String selectFrom;
         private final List<String> conditions = new ArrayList<>();
         private final List<Object> parameters = new ArrayList<>();
-        private String[] idAllowlist = null;   // null = no allowlist filter
+        private String idAllowlist = null;   // null = no allowlist filter; otherwise IDs joined by ID_ALLOWLIST_SEPARATOR
 
         QueryTemplate(String selectFrom, Object... selectParams) {
             this.selectFrom = selectFrom;
@@ -181,7 +190,17 @@ public final class QueryBuilderHelper {
          * Callers must pass a non-null, non-empty collection.
          */
         public QueryTemplate idAllowlist(Collection<String> ids) {
-            this.idAllowlist = ids.toArray(String[]::new);
+            // Sanity-check the IDs do not contain the separator; if any do we
+            // would silently split them apart inside Postgres, returning wrong
+            // rows. Catalog/resource IDs in the indexed data are alphanumeric
+            // with hyphens and underscores only, so '|' is safe.
+            for (String id : ids) {
+                if (id != null && id.indexOf('|') >= 0) {
+                    throw new IllegalArgumentException(
+                            "idAllowlist contains an ID with the reserved '|' separator: " + id);
+                }
+            }
+            this.idAllowlist = String.join(ID_ALLOWLIST_SEPARATOR, ids);
             return this;
         }
 
@@ -189,16 +208,17 @@ public final class QueryBuilderHelper {
         public QuerySpec build(int limit) {
             StringBuilder sql = new StringBuilder(selectFrom);
 
-            // Append allowlist condition before other conditions so the planner can
-            // use the primary-key index for the ANY(?) lookup early.
-            List<String> allConditions = new ArrayList<>();
+            // Existing conditions come first so their parameter positions match the
+            // order they were added via .condition(). The allowlist condition is
+            // appended last and its bind value is appended last — keeping SQL
+            // placeholder order in lockstep with the params list.
+            List<String> allConditions = new ArrayList<>(conditions);
             List<Object> allParams    = new ArrayList<>(parameters);
 
             if (idAllowlist != null) {
                 allConditions.add(ID_IN_ALLOWLIST);
                 allParams.add(idAllowlist);
             }
-            allConditions.addAll(conditions);
 
             if (!allConditions.isEmpty()) {
                 sql.append(" WHERE ").append(String.join(" AND ", allConditions));
@@ -207,7 +227,7 @@ public final class QueryBuilderHelper {
             if (idAllowlist != null) {
                 // Preserve ES relevance order: array_position returns NULL for IDs not in
                 // the array, which sorts last — safe because all rows pass the ANY(?) filter.
-                sql.append(" ORDER BY array_position(?, i.id)");
+                sql.append(" ORDER BY array_position(string_to_array(?, '").append(ID_ALLOWLIST_SEPARATOR).append("'), i.id)");
                 allParams.add(idAllowlist);
             } else {
                 sql.append(" ORDER BY i.updated_at DESC");
