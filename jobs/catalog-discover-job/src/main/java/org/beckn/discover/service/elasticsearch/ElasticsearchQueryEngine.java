@@ -34,9 +34,16 @@ import java.util.Optional;
  *
  * <p>Active when {@code discovery.spatial.engine=elasticsearch}. Decorated over
  * {@link PostgreSQLQueryEngine} — filter queries (Path B) always go to PostgreSQL;
- * spatial queries (Path C) use ES geo_shape on loc_* fields; combined (Path A)
- * always returns {@code Optional.empty()} to trigger the parallel PG ∥ ES fallback
- * in {@code DiscoveryService}.</p>
+ * spatial queries (Path C) use ES geo_shape on loc_* fields. Combined (Path A,
+ * J+G) is always handled in {@link org.beckn.discover.service.DiscoveryService}
+ * via {@link PostgreSQLQueryEngine#executeCombinedQuery} directly, not through
+ * this engine.</p>
+ *
+ * <p>Additionally exposes {@link #fetchMatchingResourceIds} for step 1 of the
+ * JSONPath+text query (cases 6 J+T and 7 J+G+T), returning a ranked list of
+ * resource IDs only. This is a dedicated lexical-BM25 path that does not invoke
+ * the configured {@link org.beckn.discover.service.engine.TextSearchEngine}
+ * (semantic / NLWeb).</p>
  */
 @Service
 @Primary
@@ -244,12 +251,139 @@ public class ElasticsearchQueryEngine implements QueryEngine {
     }
 
     /**
-     * Path A: always returns {@code Optional.empty()} to force the parallel
-     * PG-filter ∥ ES-spatial fallback in {@code DiscoveryService}.
+     * Path A is always handled by {@link PostgreSQLQueryEngine#executeCombinedQuery}
+     * directly in {@code DiscoveryService}, not by this engine. This method exists
+     * to satisfy the {@link QueryEngine} interface and always returns
+     * {@code Optional.empty()} — the orchestrator never invokes it.
      */
     @Override
     public Optional<List<Catalog>> executeCombinedQuery(QueryRequest request) throws Exception {
         return Optional.empty();
+    }
+
+    /**
+     * Step 1 of the JSONPath+text search query (cases 6 J+T and 7 J+G+T):
+     * runs a lexical (BM25) ES query for the given text [+ geo] and returns
+     * only the {@code resource_id} field from the top-{@code size} hits, in
+     * ES relevance order.
+     *
+     * <p>Uses the same bool query structure as {@link #executeSpatialQuery} for the
+     * text and geo clauses. Sets {@code _source} to include only {@code resource_id}
+     * to minimise network overhead.</p>
+     *
+     * <p><b>This is a dedicated lexical-BM25 path</b> — independent of
+     * {@code TextSearchEngine.search()}. Semantic search (els-semantic-search) and
+     * NLWeb dispatch happen only on Path D (case 3 T-only) via
+     * {@link TextSearchEngine}; cases 6 and 7 always use lexical BM25 here for
+     * fast ID lookup. {@code TextSearchEngine} implementations are not touched
+     * by this method.</p>
+     *
+     * <p>Returns an empty list only for benign conditions (no hits, missing index,
+     * unindexed targets path). Any other failure — connection error, malformed
+     * query, serialization error — is propagated to the caller so infrastructure
+     * failures are not silently degraded to "no results."</p>
+     *
+     * @param request the active query request (must have hasTextSearch() == true)
+     * @param size    maximum number of resource IDs to return
+     * @return list of resource IDs in ES relevance order; empty when no hits
+     * @throws Exception when ES is unreachable, the query is malformed, or any
+     *                   non-benign failure occurs
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> fetchMatchingResourceIds(QueryRequest request, int size) throws Exception {
+        Instant start = Instant.now();
+        String alias = discoveryProperties.getElasticsearch().getAliasName();
+        DiscoveryProperties.Elasticsearch esConfig = discoveryProperties.getElasticsearch();
+
+        // Build text query clauses — mirrors executeSpatialQuery BM25 path.
+        String text = request.textSearch();
+        List<String> mmFields     = esConfig.getMultiMatchFields();
+        List<String> blobFields   = mmFields.stream().filter(f -> f.startsWith("full_text_blob")).toList();
+        List<String> scoringFields = mmFields.stream().filter(f -> !f.startsWith("full_text_blob")).toList();
+        final double tieBreaker   = esConfig.getTieBreaker();
+        final String fuzziness    = esConfig.getFuzziness();
+
+        final Query textMustQuery = !blobFields.isEmpty()
+                ? Query.of(q -> q.match(m -> m
+                        .field(blobFields.get(0))
+                        .query(text)
+                        .operator(Operator.And)
+                        .fuzziness(fuzziness)))
+                : null;
+        final Query textShouldQuery = !scoringFields.isEmpty()
+                ? Query.of(q -> q.multiMatch(mm -> mm
+                        .query(text)
+                        .fields(scoringFields)
+                        .type(TextQueryType.BestFields)
+                        .tieBreaker(tieBreaker)
+                        .fuzziness(fuzziness)))
+                : null;
+        final double applyMinScore = esConfig.getMinScore();
+
+        // Build optional geo shape filter (case 7 — present when request has spatial).
+        List<Query> geoFilters = List.of();
+        if (request.hasSpatial()) {
+            Optional<List<Query>> queriesOpt = spatialBuilder.buildGeoShapeQueries(request.spatial());
+            geoFilters = queriesOpt.orElse(List.of());
+        }
+
+        final List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(request);
+        final List<Query> finalGeoFilters = geoFilters;
+        final int effectiveSize = size;
+
+        log.debug("event={} chain alias={} size={} geo={} schema={}",
+                LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, effectiveSize,
+                finalGeoFilters.size(), schemaFilters.size());
+
+        try {
+            SearchResponse<Map> response = esClient.search(s -> {
+                var b = s.index(alias)
+                        .size(effectiveSize)
+                        // Only fetch resource_id — minimise network overhead for chain step 1.
+                        .source(sf -> sf.filter(f -> f.includes("resource_id")))
+                        .trackTotalHits(t -> t.enabled(false))
+                        .query(q -> q.bool(bq -> {
+                            finalGeoFilters.forEach(bq::filter);
+                            schemaFilters.forEach(bq::filter);
+                            if (textMustQuery != null)   bq.must(textMustQuery);
+                            if (textShouldQuery != null) bq.should(textShouldQuery);
+                            return bq;
+                        }));
+                return applyMinScore > 0 ? b.minScore(applyMinScore) : b;
+            }, Map.class);
+
+            List<String> ids = response.hits().hits().stream()
+                    .map(h -> (Map<String, Object>) h.source())
+                    .filter(Objects::nonNull)
+                    .map(doc -> {
+                        Object v = doc.get("resource_id");
+                        return v instanceof String s && !s.isBlank() ? s : null;
+                    })
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            log.info("event={} ids={} durationMs={}",
+                    LogEvent.CHAIN_ES_CANDIDATES_FETCHED, ids.size(), elapsed(start));
+            return ids;
+
+        } catch (ElasticsearchException e) {
+            // Benign: missing index / unindexed targets path → empty result.
+            // Any other ES-level error is re-thrown to the caller.
+            if ("index_not_found_exception".equals(e.error().type())) {
+                log.warn("event={} alias={}", LogEvent.ES_ENGINE_SPATIAL_INDEX_NOT_FOUND, alias);
+                return List.of();
+            }
+            if ("search_phase_execution_exception".equals(e.error().type())
+                    && e.error().rootCause().stream().anyMatch(rc ->
+                            rc.reason() != null && rc.reason().contains("failed to find type for field"))) {
+                String fieldHint = e.error().rootCause().get(0).reason();
+                log.warn("event={} reason=targets-path-not-indexed hint='{}'",
+                        LogEvent.ES_ENGINE_SPATIAL_UNKNOWN_FIELD, fieldHint);
+                return List.of();
+            }
+            log.error("event={} error={}", LogEvent.ES_SEARCH_FAILED, e.getMessage(), e);
+            throw e;
+        }
     }
 
     private List<Catalog> handleEsException(ElasticsearchException e, String alias, String transactionId) {

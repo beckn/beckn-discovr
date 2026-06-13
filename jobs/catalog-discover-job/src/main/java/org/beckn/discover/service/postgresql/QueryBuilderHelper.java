@@ -3,6 +3,7 @@ package org.beckn.discover.service.postgresql;
 import org.beckn.discover.util.DiscoveryServiceUtil;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -125,6 +126,12 @@ public final class QueryBuilderHelper {
     }
 
     /**
+     * {@code AND i.id = ANY(?)} clause for the chain allowlist filter.
+     * The single {@code ?} binds a {@code String[]} array parameter.
+     */
+    public static final String ID_IN_ALLOWLIST = "i.id = ANY(?)";
+
+    /**
      * Fluent builder that assembles a query from a base SELECT, WHERE conditions,
      * and LIMIT.
      *
@@ -139,6 +146,7 @@ public final class QueryBuilderHelper {
         private final String selectFrom;
         private final List<String> conditions = new ArrayList<>();
         private final List<Object> parameters = new ArrayList<>();
+        private String[] idAllowlist = null;   // null = no allowlist filter
 
         QueryTemplate(String selectFrom, Object... selectParams) {
             this.selectFrom = selectFrom;
@@ -161,14 +169,51 @@ public final class QueryBuilderHelper {
             return this;
         }
 
+        /**
+         * Restricts the query to resources whose {@code id} is in {@code ids}.
+         *
+         * <p>When present:
+         * <ul>
+         *   <li>Adds {@code AND i.id = ANY(?)} to the WHERE clause.</li>
+         *   <li>Switches ORDER BY to {@code array_position(?, i.id)} so PSQL
+         *       returns rows in the same rank order as the ES candidate list.</li>
+         * </ul>
+         * Callers must pass a non-null, non-empty collection.
+         */
+        public QueryTemplate idAllowlist(Collection<String> ids) {
+            this.idAllowlist = ids.toArray(String[]::new);
+            return this;
+        }
+
         /** Builds the final {@link QuerySpec} with WHERE, ORDER BY, and LIMIT. */
         public QuerySpec build(int limit) {
             StringBuilder sql = new StringBuilder(selectFrom);
-            if (!conditions.isEmpty()) {
-                sql.append(" WHERE ").append(String.join(" AND ", conditions));
+
+            // Append allowlist condition before other conditions so the planner can
+            // use the primary-key index for the ANY(?) lookup early.
+            List<String> allConditions = new ArrayList<>();
+            List<Object> allParams    = new ArrayList<>(parameters);
+
+            if (idAllowlist != null) {
+                allConditions.add(ID_IN_ALLOWLIST);
+                allParams.add(idAllowlist);
             }
-            sql.append(" ORDER BY i.updated_at DESC LIMIT ").append(sanitizeLimit(limit));
-            return new QuerySpec(sql.toString(), parameters);
+            allConditions.addAll(conditions);
+
+            if (!allConditions.isEmpty()) {
+                sql.append(" WHERE ").append(String.join(" AND ", allConditions));
+            }
+
+            if (idAllowlist != null) {
+                // Preserve ES relevance order: array_position returns NULL for IDs not in
+                // the array, which sorts last — safe because all rows pass the ANY(?) filter.
+                sql.append(" ORDER BY array_position(?, i.id)");
+                allParams.add(idAllowlist);
+            } else {
+                sql.append(" ORDER BY i.updated_at DESC");
+            }
+            sql.append(" LIMIT ").append(sanitizeLimit(limit));
+            return new QuerySpec(sql.toString(), allParams);
         }
     }
 
