@@ -402,6 +402,24 @@ class EsSearchAssemblerTest {
     }
 
     @Test
+    void hitWithCatalogBppFields_populatesBppIdAndUriOnCatalog() {
+        // Field-completeness guard (fabric-support #63): bppId/bppUri must survive the
+        // ES path identically to the PostgreSQL path, so the same indexed catalog
+        // returns these fields in every J/G/T combination (T and G+T go through ES).
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
+        doc.put("catalog_bpp_id", "bpp.example.com");
+        doc.put("catalog_bpp_uri", "https://bpp.example.com/bpp/receiver");
+        doc.put("catalog_is_active", Boolean.TRUE);
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-bpp-1");
+
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getBppId()).isEqualTo("bpp.example.com");
+        assertThat(catalog.getBppUri()).isEqualTo("https://bpp.example.com/bpp/receiver");
+        assertThat(catalog.getIsActive()).isTrue();
+    }
+
+    @Test
     void hitWithCatalogProviderMissingDescriptor_populatesIdOnly() {
         Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
         doc.put("catalog_provider", Map.of("id", "minimal-provider"));
