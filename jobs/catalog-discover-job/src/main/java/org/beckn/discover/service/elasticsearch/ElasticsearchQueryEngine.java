@@ -363,24 +363,27 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         value("schemaFilters", schemaFilters.size()));
             }
             try {
-                SearchResponse<Map> response = esClient.search(s -> s
-                        .index(alias)
-                        // KNN returns at most knnK hits; bounding size to knnK also keeps
-                        // the request under index.max_result_window for large max-ids.
-                        .size(knnK)
-                        .minScore(minScore)
-                        // chain step 1 only needs resource_id
-                        .source(sf -> sf.filter(f -> f.includes("resource_id")))
-                        .trackTotalHits(t -> t.enabled(false))
-                        .knn(k -> {
-                            var kb = k.field("resource_vector")
-                                    .queryVector(vec)
-                                    .k(knnK)
-                                    .numCandidates(effectiveCandidates);
-                            finalGeoFilters.forEach(kb::filter);
-                            schemaFilters.forEach(kb::filter);
-                            return kb;
-                        }), Map.class);
+                SearchResponse<Map> response = esClient.search(s -> {
+                    var b = s.index(alias)
+                            // KNN returns at most knnK hits; bounding size to knnK also keeps
+                            // the request under index.max_result_window for large max-ids.
+                            .size(knnK)
+                            // chain step 1 only needs resource_id
+                            .source(sf -> sf.filter(f -> f.includes("resource_id")))
+                            .trackTotalHits(t -> t.enabled(false))
+                            .knn(k -> {
+                                var kb = k.field("resource_vector")
+                                        .queryVector(vec)
+                                        .k(knnK)
+                                        .numCandidates(effectiveCandidates);
+                                finalGeoFilters.forEach(kb::filter);
+                                schemaFilters.forEach(kb::filter);
+                                return kb;
+                            });
+                    // Apply the score floor only when set (>0), mirroring the BM25 branch.
+                    // No-op at the 0.0 default (KNN cosine scores are normalized to [0,1]).
+                    return minScore > 0 ? b.minScore(minScore) : b;
+                }, Map.class);
 
                 List<String> ids = extractResourceIds(response);
                 log.info("event={} mode=semantic ids={} durationMs={}",
