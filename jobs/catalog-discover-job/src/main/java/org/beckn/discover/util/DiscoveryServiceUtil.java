@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Utility helpers specific to discovery service custom logic.
@@ -112,30 +111,6 @@ public final class DiscoveryServiceUtil {
         if (h < 0 || h == url.length() - 1) return null;
         String f = url.substring(h + 1).trim();
         return f.isEmpty() ? null : f;
-    }
-
-    // --- SQL utilities ---
-
-    /**
-     * Builds an SQL IN clause string for the provided column and values, while
-     * appending the values to the supplied
-     * parameters list.
-     *
-     * @param column     SQL column name on which IN filter needs to be applied
-     * @param values     Values to include in the IN clause
-     * @param parameters Parameter collection that will be used for the prepared
-     *                   statement
-     * @return Optional containing the generated clause (without leading AND) when
-     *         values are present, otherwise empty
-     */
-    public static Optional<String> buildInClause(String column, List<String> values, List<Object> parameters) {
-        if (values == null || values.isEmpty()) {
-            return Optional.empty();
-        }
-
-        String placeholders = String.join(", ", Collections.nCopies(values.size(), "?"));
-        parameters.addAll(values);
-        return Optional.of(column + " IN (" + placeholders + ")");
     }
 
 }
