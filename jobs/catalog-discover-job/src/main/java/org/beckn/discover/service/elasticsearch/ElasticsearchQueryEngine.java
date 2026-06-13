@@ -11,6 +11,7 @@ import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.model.Catalog;
 import org.beckn.discover.service.engine.QueryEngine;
 import org.beckn.discover.service.engine.QueryRequest;
+import org.beckn.discover.service.engine.TextSearchEngine;
 import org.beckn.discover.service.postgresql.PostgreSQLQueryEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +23,6 @@ import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -41,9 +41,11 @@ import java.util.Optional;
  *
  * <p>Additionally exposes {@link #fetchMatchingResourceIds} for step 1 of the
  * JSONPath+text query (cases 6 J+T and 7 J+G+T), returning a ranked list of
- * resource IDs only. This is a dedicated lexical-BM25 path that does not invoke
- * the configured {@link org.beckn.discover.service.engine.TextSearchEngine}
- * (semantic / NLWeb).</p>
+ * resource IDs only. The chain step honours the configured
+ * {@code discovery.text-search.engine}: it runs KNN semantic search when
+ * {@code els-semantic-search} is active, and lexical BM25 otherwise.
+ * {@link ElasticsearchTextSearchEngine} (Path D, case 3) is not invoked from
+ * this engine — its internal semantic behaviour is mirrored, not modified.</p>
  */
 @Service
 @Primary
@@ -263,25 +265,35 @@ public class ElasticsearchQueryEngine implements QueryEngine {
 
     /**
      * Step 1 of the JSONPath+text search query (cases 6 J+T and 7 J+G+T):
-     * runs a lexical (BM25) ES query for the given text [+ geo] and returns
-     * only the {@code resource_id} field from the top-{@code size} hits, in
-     * ES relevance order.
+     * runs an ES query for the given text [+ geo] and returns only the
+     * {@code resource_id} field from the top-{@code size} hits, in ES
+     * relevance order.
      *
-     * <p>Uses the same bool query structure as {@link #executeSpatialQuery} for the
-     * text and geo clauses. Sets {@code _source} to include only {@code resource_id}
-     * to minimise network overhead.</p>
+     * <h4>Dual-mode behaviour</h4>
+     * <ul>
+     *   <li><b>Semantic mode</b> — when {@code discovery.text-search.engine=els-semantic-search}
+     *       (i.e. the {@link EmbeddingClient} bean is present): enriches the query
+     *       via {@link QueryEnricher} (if available), embeds it via
+     *       {@link EmbeddingClient}, and runs a KNN search on {@code resource_vector}
+     *       with geo + schema conditions as {@code knn.filter}. Mirrors the KNN
+     *       path used by {@link #executeSpatialQuery} and
+     *       {@link ElasticsearchTextSearchEngine#search} so internal semantic
+     *       behaviour is unchanged.</li>
+     *   <li><b>BM25 mode</b> — when {@code EmbeddingClient} is absent (native-els):
+     *       runs the same bool query structure as {@link #executeSpatialQuery}
+     *       (match on {@code full_text_blob} + multi_match on scoring fields, with
+     *       geo and schema in {@code bool.filter}).</li>
+     * </ul>
      *
-     * <p><b>This is a dedicated lexical-BM25 path</b> — independent of
-     * {@code TextSearchEngine.search()}. Semantic search (els-semantic-search) and
-     * NLWeb dispatch happen only on Path D (case 3 T-only) via
-     * {@link TextSearchEngine}; cases 6 and 7 always use lexical BM25 here for
-     * fast ID lookup. {@code TextSearchEngine} implementations are not touched
-     * by this method.</p>
+     * <p>In both modes {@code _source} is restricted to {@code [resource_id]} to
+     * minimise network overhead — the PSQL step 2 only needs the IDs. Neither
+     * {@link TextSearchEngine} implementation is invoked here.</p>
      *
      * <p>Returns an empty list only for benign conditions (no hits, missing index,
-     * unindexed targets path). Any other failure — connection error, malformed
-     * query, serialization error — is propagated to the caller so infrastructure
-     * failures are not silently degraded to "no results."</p>
+     * unindexed targets path, semantic provider returned an empty vector). Any
+     * other failure — connection error, malformed query, serialization error —
+     * is propagated to the caller so infrastructure failures are not silently
+     * degraded to "no results."</p>
      *
      * @param request the active query request (must have hasTextSearch() == true)
      * @param size    maximum number of resource IDs to return
@@ -293,9 +305,71 @@ public class ElasticsearchQueryEngine implements QueryEngine {
     public List<String> fetchMatchingResourceIds(QueryRequest request, int size) throws Exception {
         Instant start = Instant.now();
         String alias = discoveryProperties.getElasticsearch().getAliasName();
-        DiscoveryProperties.Elasticsearch esConfig = discoveryProperties.getElasticsearch();
+        final double minScore = discoveryProperties.getElasticsearch().getMinScore();
 
-        // Build text query clauses — mirrors executeSpatialQuery BM25 path.
+        // Build optional geo shape filter (case 7 — present when request has spatial).
+        List<Query> geoFilters = List.of();
+        if (request.hasSpatial()) {
+            Optional<List<Query>> queriesOpt = spatialBuilder.buildGeoShapeQueries(request.spatial());
+            geoFilters = queriesOpt.orElse(List.of());
+        }
+        final List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(request);
+        final List<Query> finalGeoFilters = geoFilters;
+        final int effectiveSize = size;
+
+        // ── Semantic mode (discovery.text-search.engine=els-semantic-search) ─
+        // Mirrors the KNN structure used by executeSpatialQuery — semantic
+        // internals (enrich + embed) are delegated to QueryEnricher /
+        // EmbeddingClient unchanged. Only the _source projection differs
+        // (resource_id only) so the chain's PSQL step 2 receives just IDs.
+        if (embeddingClient.isPresent()) {
+            String text = request.textSearch();
+            String enriched = queryEnricher.isPresent() ? queryEnricher.get().enrich(text) : text;
+            Optional<List<Float>> vecOpt = embeddingClient.get().embed(enriched);
+            if (vecOpt.isEmpty()) {
+                log.warn("event={} mode=semantic reason=empty-vector",
+                        LogEvent.CHAIN_ES_CANDIDATES_FETCHED);
+                return List.of();
+            }
+            final List<Float> vec = vecOpt.get();
+            log.debug("event={} mode=semantic alias={} k={} numCandidates={} geo={} schema={}",
+                    LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, effectiveSize, knnCandidates,
+                    finalGeoFilters.size(), schemaFilters.size());
+            if (!schemaFilters.isEmpty()) {
+                log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
+                        value("path", "chain+semantic"),
+                        value("schemaFilters", schemaFilters.size()));
+            }
+            try {
+                SearchResponse<Map> response = esClient.search(s -> s
+                        .index(alias)
+                        .size(effectiveSize)
+                        .minScore(minScore)
+                        // chain step 1 only needs resource_id
+                        .source(sf -> sf.filter(f -> f.includes("resource_id")))
+                        .trackTotalHits(t -> t.enabled(false))
+                        .knn(k -> {
+                            var kb = k.field("resource_vector")
+                                    .queryVector(vec)
+                                    .k(effectiveSize)
+                                    .numCandidates(knnCandidates);
+                            finalGeoFilters.forEach(kb::filter);
+                            schemaFilters.forEach(kb::filter);
+                            return kb;
+                        }), Map.class);
+
+                List<String> ids = extractResourceIds(response);
+                log.info("event={} mode=semantic ids={} durationMs={}",
+                        LogEvent.CHAIN_ES_CANDIDATES_FETCHED, ids.size(), elapsed(start));
+                return ids;
+            } catch (ElasticsearchException e) {
+                return handleResourceIdEsException(e, alias);
+            }
+        }
+
+        // ── BM25 mode (discovery.text-search.engine=native-els) ──────────────
+        // Mirrors the BM25 path of executeSpatialQuery.
+        DiscoveryProperties.Elasticsearch esConfig = discoveryProperties.getElasticsearch();
         String text = request.textSearch();
         List<String> mmFields     = esConfig.getMultiMatchFields();
         List<String> blobFields   = mmFields.stream().filter(f -> f.startsWith("full_text_blob")).toList();
@@ -318,20 +392,8 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .tieBreaker(tieBreaker)
                         .fuzziness(fuzziness)))
                 : null;
-        final double applyMinScore = esConfig.getMinScore();
 
-        // Build optional geo shape filter (case 7 — present when request has spatial).
-        List<Query> geoFilters = List.of();
-        if (request.hasSpatial()) {
-            Optional<List<Query>> queriesOpt = spatialBuilder.buildGeoShapeQueries(request.spatial());
-            geoFilters = queriesOpt.orElse(List.of());
-        }
-
-        final List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(request);
-        final List<Query> finalGeoFilters = geoFilters;
-        final int effectiveSize = size;
-
-        log.debug("event={} chain alias={} size={} geo={} schema={}",
+        log.debug("event={} mode=bm25 alias={} size={} geo={} schema={}",
                 LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, effectiveSize,
                 finalGeoFilters.size(), schemaFilters.size());
 
@@ -339,7 +401,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             SearchResponse<Map> response = esClient.search(s -> {
                 var b = s.index(alias)
                         .size(effectiveSize)
-                        // Only fetch resource_id — minimise network overhead for chain step 1.
+                        // chain step 1 only needs resource_id
                         .source(sf -> sf.filter(f -> f.includes("resource_id")))
                         .trackTotalHits(t -> t.enabled(false))
                         .query(q -> q.bool(bq -> {
@@ -349,41 +411,53 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                             if (textShouldQuery != null) bq.should(textShouldQuery);
                             return bq;
                         }));
-                return applyMinScore > 0 ? b.minScore(applyMinScore) : b;
+                return minScore > 0 ? b.minScore(minScore) : b;
             }, Map.class);
 
-            List<String> ids = response.hits().hits().stream()
-                    .map(h -> (Map<String, Object>) h.source())
-                    .filter(Objects::nonNull)
-                    .map(doc -> {
-                        Object v = doc.get("resource_id");
-                        return v instanceof String s && !s.isBlank() ? s : null;
-                    })
-                    .filter(Objects::nonNull)
-                    .toList();
-
-            log.info("event={} ids={} durationMs={}",
+            List<String> ids = extractResourceIds(response);
+            log.info("event={} mode=bm25 ids={} durationMs={}",
                     LogEvent.CHAIN_ES_CANDIDATES_FETCHED, ids.size(), elapsed(start));
             return ids;
 
         } catch (ElasticsearchException e) {
-            // Benign: missing index / unindexed targets path → empty result.
-            // Any other ES-level error is re-thrown to the caller.
-            if ("index_not_found_exception".equals(e.error().type())) {
-                log.warn("event={} alias={}", LogEvent.ES_ENGINE_SPATIAL_INDEX_NOT_FOUND, alias);
-                return List.of();
-            }
-            if ("search_phase_execution_exception".equals(e.error().type())
-                    && e.error().rootCause().stream().anyMatch(rc ->
-                            rc.reason() != null && rc.reason().contains("failed to find type for field"))) {
-                String fieldHint = e.error().rootCause().get(0).reason();
-                log.warn("event={} reason=targets-path-not-indexed hint='{}'",
-                        LogEvent.ES_ENGINE_SPATIAL_UNKNOWN_FIELD, fieldHint);
-                return List.of();
-            }
-            log.error("event={} error={}", LogEvent.ES_SEARCH_FAILED, e.getMessage(), e);
-            throw e;
+            return handleResourceIdEsException(e, alias);
         }
+    }
+
+    /** Extracts {@code resource_id} values from a chain-step-1 search response. */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static List<String> extractResourceIds(SearchResponse<Map> response) {
+        return response.hits().hits().stream()
+                .map(h -> (Map<String, Object>) h.source())
+                .filter(Objects::nonNull)
+                .map(doc -> {
+                    Object v = doc.get("resource_id");
+                    return v instanceof String s && !s.isBlank() ? s : null;
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /**
+     * Maps ES exceptions raised by chain step 1 to either a benign empty result
+     * (missing index / unindexed targets path) or re-throws for the caller to
+     * propagate. Mirrors {@link #handleEsException} but returns {@code List<String>}.
+     */
+    private static List<String> handleResourceIdEsException(ElasticsearchException e, String alias) {
+        if ("index_not_found_exception".equals(e.error().type())) {
+            log.warn("event={} alias={}", LogEvent.ES_ENGINE_SPATIAL_INDEX_NOT_FOUND, alias);
+            return List.of();
+        }
+        if ("search_phase_execution_exception".equals(e.error().type())
+                && e.error().rootCause().stream().anyMatch(rc ->
+                        rc.reason() != null && rc.reason().contains("failed to find type for field"))) {
+            String fieldHint = e.error().rootCause().get(0).reason();
+            log.warn("event={} reason=targets-path-not-indexed hint='{}'",
+                    LogEvent.ES_ENGINE_SPATIAL_UNKNOWN_FIELD, fieldHint);
+            return List.of();
+        }
+        log.error("event={} error={}", LogEvent.ES_SEARCH_FAILED, e.getMessage(), e);
+        throw e;
     }
 
     private List<Catalog> handleEsException(ElasticsearchException e, String alias, String transactionId) {

@@ -65,11 +65,22 @@ import java.util.concurrent.Callable;
  * offers → remove empty catalogs) before the response is assembled.
  *
  * <h3>Semantic search</h3>
- * Semantic search is exercised only by Path D (case 3 T-only) via the configured
- * {@link TextSearchEngine} bean ({@code ElasticsearchTextSearchEngine} for ES
- * KNN/BM25, {@code NLWebTextSearchEngine} for NLWeb). Cases 6 and 7 always use
- * lexical BM25 in ES step 1 because the goal there is fast resource-id lookup
- * to feed the PSQL JSONPath step.
+ * When {@code discovery.text-search.engine=els-semantic-search} (i.e. an
+ * {@link org.beckn.discover.service.elasticsearch.EmbeddingClient} bean is present),
+ * the semantic (KNN) path is used everywhere a text condition is involved:
+ * <ul>
+ *   <li>Case 3 (T-only) — via the {@link TextSearchEngine} bean
+ *       ({@code ElasticsearchTextSearchEngine#search}).</li>
+ *   <li>Case 5 (G+T) — via {@code ElasticsearchQueryEngine.executeSpatialQuery},
+ *       which runs KNN with geo_shape as {@code knn.filter}.</li>
+ *   <li>Cases 6 (J+T) and 7 (J+G+T) — via
+ *       {@code ElasticsearchQueryEngine.fetchMatchingResourceIds}, which runs KNN
+ *       restricted to {@code _source: [resource_id]} for the chain's step 1.</li>
+ * </ul>
+ * When the embedding client is absent (e.g. {@code native-els}), all of the above
+ * use lexical BM25 instead. Semantic internals (enrich + embed) live in
+ * {@code QueryEnricher} / {@code EmbeddingClient} and are reused unchanged across
+ * every path — not re-implemented per route.
  *
  * <h3>Design decisions</h3>
  * <ul>
@@ -308,18 +319,23 @@ public class DiscoveryService {
      * filters and a text query are present (cases 6 J+T and 7 J+G+T).
      *
      * <ol>
-     *   <li>ES step: lexical (BM25) ES query for text [+ geo] with
-     *       {@code _source: [resource_id]} only, size =
-     *       {@code min(limit * overfetchFactor, maxIds)}. Returns a ranked list of
-     *       matching resource IDs.</li>
+     *   <li>ES step: text [+ geo] query with {@code _source: [resource_id]} only,
+     *       size = {@code min(limit * overfetchFactor, maxIds)}. Runs KNN semantic
+     *       when {@code discovery.text-search.engine=els-semantic-search} (i.e.
+     *       {@code EmbeddingClient} bean present) and lexical BM25 otherwise —
+     *       see {@code ElasticsearchQueryEngine.fetchMatchingResourceIds} for the
+     *       dual-mode logic. Returns a ranked list of matching resource IDs.</li>
      *   <li>PSQL step: JSONPath query (+ geo redundantly for case 7) restricted
      *       to those resource IDs; {@code ORDER BY array_position} preserves the ES rank.</li>
      * </ol>
      *
-     * <p><b>Semantic search note:</b> this path uses lexical BM25 in ES step 1.
-     * Semantic / NLWeb text search is exercised only by case 3 (text-only) via
-     * {@link #executeTextSearchQuery}, which dispatches through the configured
-     * {@link TextSearchEngine} bean. This method does not invoke or affect that path.</p>
+     * <p><b>Semantic search:</b> the KNN path mirrors the structure used by
+     * {@code ElasticsearchTextSearchEngine} (case 3) and {@code executeSpatialQuery}
+     * (case 5) — enrich → embed → KNN with geo/schema as {@code knn.filter}. The
+     * semantic internals are delegated unchanged to {@code QueryEnricher} and
+     * {@code EmbeddingClient}; this method does not modify the semantic engine,
+     * it only uses the same primitives so chain step 1 honours the configured
+     * text-search engine for cases 6 and 7.</p>
      *
      * <p>Short-circuits with an empty response when ES returns 0 resource IDs
      * ({@link LogEvent#CHAIN_EMPTY_FROM_ES}).</p>
@@ -377,7 +393,10 @@ public class DiscoveryService {
     private DiscoverResponse runJsonPathAndTextSearchPipeline(QueryRequest qr, Context context,
             LatencyTracker tracker, int esSize, int limit, Instant pipelineStart) throws Exception {
 
-        // ── Step 1: ES text [+ geo] → matching resource IDs (BM25, lexical) ────
+        // ── Step 1: ES text [+ geo] → matching resource IDs ────────────────────
+        // fetchMatchingResourceIds picks semantic (KNN) when EmbeddingClient is
+        // present, lexical (BM25) otherwise. Internal semantic behaviour is the
+        // same as case 3 / case 5 — see ElasticsearchQueryEngine for the branch.
         List<String> resourceIds = esQueryEngine
                 .orElseThrow(() -> new IllegalStateException(
                         "JSONPath+text route reached without ES engine — routing tree should have fallen back."))
