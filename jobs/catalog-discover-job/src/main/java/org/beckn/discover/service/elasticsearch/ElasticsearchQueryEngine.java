@@ -315,7 +315,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
         }
         final List<Query> schemaFilters = EsSchemaFilterBuilder.buildSchemaFilters(request);
         final List<Query> finalGeoFilters = geoFilters;
-        final int effectiveSize = size;
 
         // ── Semantic mode (discovery.text-search.engine=els-semantic-search) ─
         // Mirrors the KNN structure used by executeSpatialQuery — semantic
@@ -333,7 +332,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             }
             final List<Float> vec = vecOpt.get();
             log.debug("event={} mode=semantic alias={} k={} numCandidates={} geo={} schema={}",
-                    LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, effectiveSize, knnCandidates,
+                    LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, size, knnCandidates,
                     finalGeoFilters.size(), schemaFilters.size());
             if (!schemaFilters.isEmpty()) {
                 log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
@@ -343,7 +342,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             try {
                 SearchResponse<Map> response = esClient.search(s -> s
                         .index(alias)
-                        .size(effectiveSize)
+                        .size(size)
                         .minScore(minScore)
                         // chain step 1 only needs resource_id
                         .source(sf -> sf.filter(f -> f.includes("resource_id")))
@@ -351,7 +350,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
-                                    .k(effectiveSize)
+                                    .k(size)
                                     .numCandidates(knnCandidates);
                             finalGeoFilters.forEach(kb::filter);
                             schemaFilters.forEach(kb::filter);
@@ -394,13 +393,13 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                 : null;
 
         log.debug("event={} mode=bm25 alias={} size={} geo={} schema={}",
-                LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, effectiveSize,
+                LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, size,
                 finalGeoFilters.size(), schemaFilters.size());
 
         try {
             SearchResponse<Map> response = esClient.search(s -> {
                 var b = s.index(alias)
-                        .size(effectiveSize)
+                        .size(size)
                         // chain step 1 only needs resource_id
                         .source(sf -> sf.filter(f -> f.includes("resource_id")))
                         .trackTotalHits(t -> t.enabled(false))
@@ -473,6 +472,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                     LogEvent.ES_ENGINE_SPATIAL_UNKNOWN_FIELD, fieldHint);
             return List.of();
         }
+        log.error("event={} error={}", LogEvent.ES_SEARCH_FAILED, e.getMessage(), e);
         throw e;
     }
 

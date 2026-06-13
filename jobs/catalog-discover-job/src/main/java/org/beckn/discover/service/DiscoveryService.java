@@ -568,9 +568,10 @@ public class DiscoveryService {
      * <p>Dispatches through {@link TextSearchEngine#search} — implementation is
      * one of {@code ElasticsearchTextSearchEngine} (semantic KNN or BM25),
      * {@code NLWebTextSearchEngine} (NLWeb HTTP), depending on
-     * {@code discovery.text-search.engine}. <b>This path is the only entry point
-     * for semantic search</b>; the JSONPath+text path ({@link #executeJsonPathAndTextSearchQuery})
-     * always uses lexical BM25 in ES step 1.</p>
+     * {@code discovery.text-search.engine}. Cases 6 and 7 also honour the
+     * configured text-search engine via
+     * {@link org.beckn.discover.service.elasticsearch.ElasticsearchQueryEngine#fetchMatchingResourceIds}
+     * — see the class-level Javadoc for the full dual-mode picture.</p>
      */
     private DiscoverResponse executeTextSearchQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
