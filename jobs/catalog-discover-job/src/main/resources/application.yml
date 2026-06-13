@@ -137,6 +137,13 @@ discovery:
   spatial:
     engine: ${DISCOVERY_SPATIAL_ENGINE:postgresql}
 
+  # ES-text → PSQL-JSONPath chain configuration (cases 6 & 7: JSONPath + text).
+  # ES candidate pool = min(limit * overfetch-factor, max-ids).
+  # Increase overfetch-factor for better recall; cap max-ids to bound IN-clause size.
+  chain:
+    overfetch-factor: ${DISCOVERY_CHAIN_OVERFETCH_FACTOR:10}
+    max-ids: ${DISCOVERY_CHAIN_MAX_IDS:5000}
+
   # Elasticsearch configuration (active when text-search.engine or spatial.engine=elasticsearch)
   elasticsearch:
     hosts: ${ES_HOSTS:http://localhost:9200}

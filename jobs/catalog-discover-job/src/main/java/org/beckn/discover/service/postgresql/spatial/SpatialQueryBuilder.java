@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -128,9 +129,8 @@ public class SpatialQueryBuilder {
      *
      * <p>Both the GIN index (on {@code item.payload} for JSONPath) and the
      * GiST index (on {@code item_location_collection.geom} for spatial) are
-     * available to the PostgreSQL planner in one query plan — eliminating two
-     * round-trips and the Java-side intersection overhead of the parallel
-     * approach.</p>
+     * available to the PostgreSQL planner in one query plan, eliminating
+     * Java-side intersection of two separately-bounded result sets.</p>
      *
      * @param constraints       the spatial constraints from the request
      * @param filterExpression  already-validated JSONPath filter expression
@@ -170,6 +170,50 @@ public class SpatialQueryBuilder {
         template.schemaFilters(schemaTypes, schemaContextUrls);
         QuerySpec spec = template.build(limit);
         log.debug("event={} added={} params={}", LogEvent.SPATIAL_COMBINED_BUILT, added, spec.parameters().size());
+        return Optional.of(spec);
+    }
+
+    /**
+     * Builds a combined JSONPath + spatial + ID-allowlist query (chain step 2, case 7).
+     *
+     * <p>Identical to {@link #buildCombined} but adds {@code AND i.id = ANY(?)} and
+     * switches {@code ORDER BY} to {@code array_position(?, i.id)} so ES relevance
+     * order is preserved while geo conditions are redundantly enforced belt-and-
+     * suspenders style.</p>
+     *
+     * @param idAllowlist non-null, non-empty collection of resource IDs from ES step 1
+     * @return {@link Optional#empty()} when no valid spatial conditions could be built
+     */
+    public Optional<QuerySpec> buildCombinedWithAllowlist(
+            List<DiscoverRequest.SpatialConstraint> constraints,
+            String filterExpression,
+            List<String> schemaTypes,
+            List<String> schemaContextUrls,
+            int limit,
+            Collection<String> idAllowlist) {
+
+        if (constraints == null || constraints.isEmpty()) {
+            log.debug("event={} reason=no-constraints", LogEvent.SPATIAL_COMBINED_SKIP);
+            return Optional.empty();
+        }
+
+        QueryTemplate template = QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
+        if (filterExpression != null && !filterExpression.isBlank()) {
+            String pgFilter = toPostgresFilter(filterExpression);
+            template.condition(QueryBuilderHelper.JSONPATH_MATCH, pgFilter);
+        }
+
+        int added = appendSpatialConditions(template, constraints);
+        if (added == 0) {
+            log.warn("event={} reason=no-valid-spatial-conditions", LogEvent.SPATIAL_COMBINED_SKIP);
+            return Optional.empty();
+        }
+
+        template.schemaFilters(schemaTypes, schemaContextUrls)
+                .idAllowlist(idAllowlist);
+        QuerySpec spec = template.build(limit);
+        log.debug("event={} added={} allowlistSize={} params={}",
+                LogEvent.SPATIAL_COMBINED_BUILT + ".chain", added, idAllowlist.size(), spec.parameters().size());
         return Optional.of(spec);
     }
 

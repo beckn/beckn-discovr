@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -44,6 +45,33 @@ public class JsonPathQueryBuilder {
                 .schemaFilters(schemaTypes, schemaContextUrls)
                 .build(limit);
         log.debug("Built JSONPath query with {} parameters, limit {}", query.parameters().size(), limit);
+        return query;
+    }
+
+    /**
+     * Builds a JSONPath query restricted to a specific set of resource IDs (chain step 2).
+     *
+     * <p>Identical to {@link #build} but adds {@code AND i.id = ANY(?)} and switches
+     * {@code ORDER BY} to {@code array_position(?, i.id)} so ES relevance order is preserved.</p>
+     *
+     * @param idAllowlist non-null, non-empty collection of resource IDs from ES step 1
+     */
+    public QuerySpec buildWithAllowlist(String filters, List<String> schemaTypes, List<String> schemaContextUrls,
+                                        int limit, Collection<String> idAllowlist) {
+        String processedFilter = jsonPathConverter.processFilter(filters);
+        boolean hasSelectionPath = isSelectionPath(processedFilter);
+        String postgresFilter = toPostgresFilter(processedFilter);
+
+        var template = hasSelectionPath
+                ? QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT_WITH_FILTER_RESULT, processedFilter)
+                : QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
+        QuerySpec query = template
+                .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
+                .schemaFilters(schemaTypes, schemaContextUrls)
+                .idAllowlist(idAllowlist)
+                .build(limit);
+        log.debug("Built chain JSONPath query with allowlist size={} params={} limit={}",
+                idAllowlist.size(), query.parameters().size(), limit);
         return query;
     }
 

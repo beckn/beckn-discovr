@@ -133,17 +133,84 @@ public class PostgreSQLService {
         return executeQuery(queryOpt.get(), "spatial", request.transactionId(), "Spatial query failed");
     }
 
+    // ── Chain step 2: JSONPath with ID allowlist (case 6) ────────────────────
+
+    /**
+     * Executes a JSONPath filter query restricted to resources whose ID is in
+     * {@code idAllowlist}.
+     *
+     * <p>Called as chain step 2 for case 6 (JSONPath + text). The allowlist comes
+     * from ES step 1 (top-K resource IDs by text relevance).  ORDER BY preserves
+     * ES relevance order via {@code array_position(?, i.id)}.</p>
+     *
+     * @param idAllowlist non-null, non-empty collection of resource IDs
+     */
+    public List<Map<String, Object>> executeJsonPathChainQuery(QueryRequest request,
+            java.util.Collection<String> idAllowlist) throws Exception {
+        if (!request.hasFilters()) {
+            throw new IllegalArgumentException("Filter expression cannot be null or empty");
+        }
+        log.debug("event={} allowlistSize={}", LogEvent.JSONPATH_QUERY_START + ".chain", idAllowlist.size());
+        QueryBuilderHelper.QuerySpec query = jsonPathQueryBuilder.buildWithAllowlist(
+                request.filters(),
+                request.schemaTypes(),
+                request.schemaContextUrls(),
+                resultLimit(),
+                idAllowlist);
+        return executeQuery(query, "jsonpath-chain", request.transactionId(), "PostgreSQL chain JSONPath query failed");
+    }
+
+    // ── Chain step 2: JSONPath + spatial with ID allowlist (case 7) ──────────
+
+    /**
+     * Executes a combined JSONPath + spatial filter restricted to resources whose
+     * ID is in {@code idAllowlist}.
+     *
+     * <p>Called as chain step 2 for case 7 (JSONPath + spatial + text). The belt-
+     * and-suspenders geo condition is applied here redundantly even though ES already
+     * filtered by geo in step 1, to guarantee correctness when ES geo precision
+     * deviates from PSQL PostGIS precision.</p>
+     *
+     * @param idAllowlist non-null, non-empty collection of resource IDs
+     * @return Optional.empty() when no spatial conditions could be built (caller
+     *         falls back to case-6 path); Optional.of(rows) otherwise.
+     */
+    public Optional<List<Map<String, Object>>> executeJsonPathChainWithSpatial(QueryRequest request,
+            java.util.Collection<String> idAllowlist) throws Exception {
+        if (!request.hasFilters()) {
+            throw new IllegalArgumentException("Filter expression cannot be null or empty");
+        }
+        log.debug("event={} allowlistSize={}", LogEvent.COMBINED_QUERY_START + ".chain", idAllowlist.size());
+
+        Optional<QueryBuilderHelper.QuerySpec> queryOpt = spatialQueryBuilder.buildCombinedWithAllowlist(
+                request.spatial(),
+                request.filters(),
+                request.schemaTypes(),
+                request.schemaContextUrls(),
+                resultLimit(),
+                idAllowlist);
+
+        if (queryOpt.isEmpty()) {
+            log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP + ".chain");
+            return Optional.empty();
+        }
+        List<Map<String, Object>> rows = executeQuery(queryOpt.get(), "jsonpath-chain-spatial",
+                request.transactionId(), "PostgreSQL chain JSONPath+spatial query failed");
+        return Optional.of(rows);
+    }
+
     // ── Path A: Combined ─────────────────────────────────────────────────────
 
     /**
-     * Attempts a single-round-trip combined (JSONPath + spatial) query.
+     * Attempts a single-round-trip combined (JSONPath + spatial) query (Path A).
      *
      * <p>Distinguishes two outcomes via {@link Optional}:</p>
      * <ul>
-     *   <li>{@link Optional#empty()} — spatial conditions could not be built;
-     *       caller MUST fall back to the parallel approach.</li>
+     *   <li>{@link Optional#empty()} — spatial conditions could not be built
+     *       from the request; the caller should raise an error (a well-formed
+     *       J+G request should always produce conditions).</li>
      *   <li>{@code Optional.of(emptyList)} — query ran successfully but
-     *       returned zero rows; caller MUST NOT fall back.</li>
+     *       returned zero rows; treat as a valid "no results" response.</li>
      * </ul>
      */
     public Optional<List<Map<String, Object>>> executeCombinedQuery(QueryRequest request) throws Exception {
@@ -156,11 +223,11 @@ public class PostgreSQLService {
                 resultLimit());
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP);
-            return Optional.empty(); // ← caller must fall back to parallel
+            return Optional.empty();
         }
         List<Map<String, Object>> rows = executeQuery(queryOpt.get(), "combined", request.transactionId(),
                 "Combined JSONPath + spatial query failed");
-        return Optional.of(rows); // ← may be an empty list; caller must NOT re-run
+        return Optional.of(rows);
     }
 
     // ── Utilities ────────────────────────────────────────────────────────────

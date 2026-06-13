@@ -6,8 +6,10 @@ import org.beckn.discover.model.Context;
 import org.beckn.discover.model.Descriptor;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
+import org.beckn.discover.service.elasticsearch.ElasticsearchQueryEngine;
 import org.beckn.discover.service.engine.QueryEngine;
 import org.beckn.discover.service.engine.TextSearchEngine;
+import org.beckn.discover.service.postgresql.PostgreSQLQueryEngine;
 import org.beckn.discover.service.postgresql.ProviderOfferEnricher;
 import org.beckn.discover.service.response.CatalogPipeline;
 import org.beckn.discover.service.response.ResponseProcessor;
@@ -44,6 +46,7 @@ class DiscoveryServiceTest {
     @Mock private ResponseProcessor responseProcessor;
     @Mock private ProviderOfferEnricher providerOfferEnricher;
     @Mock private DiscoveryMetrics metrics;
+    @Mock private PostgreSQLQueryEngine pgQueryEngine;
 
     private DiscoveryProperties properties;
     private ExecutorService queryExecutor;
@@ -61,7 +64,9 @@ class DiscoveryServiceTest {
         discoveryService = new DiscoveryService(
                 queryEngine, textSearchEngine, catalogPipeline,
                 responseProcessor, providerOfferEnricher, metrics,
-                properties, queryExecutor);
+                properties, queryExecutor,
+                Optional.empty(),  // no ES engine in unit tests
+                pgQueryEngine);
     }
 
     @Test

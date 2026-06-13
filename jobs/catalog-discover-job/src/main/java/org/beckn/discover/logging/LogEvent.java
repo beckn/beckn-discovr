@@ -81,9 +81,6 @@ public final class LogEvent {
     // ── Query routing ─────────────────────────────────────────────────────────
     public static final String QUERY_PATH_SELECTED      = "query.path.selected";
     public static final String QUERY_PATH_FALLBACK      = "query.path.fallback";
-    public static final String QUERY_INTERSECT_EMPTY    = "query.intersect.empty";
-    public static final String QUERY_INTERSECT_DONE     = "query.intersect.done";
-    public static final String QUERY_PARALLEL_DONE      = "query.parallel.done";
 
     // ── Embedding ─────────────────────────────────────────────────────────────
     public static final String EMBEDDING_CLIENT_INIT    = "embedding-client.init";
@@ -161,4 +158,14 @@ public final class LogEvent {
     public static final String ES_SPATIAL_UNSUPPORTED_QUANTIFIER = "es.spatial.unsupported-quantifier";
     public static final String ES_SPATIAL_NO_VALID_TARGET        = "es.spatial.no-valid-target";
     public static final String ES_SPATIAL_BUILD_QUERY_FAILED     = "es.spatial.build-query.failed";
+
+    // ── Filter-and-text-search routing (JSONPath + text, cases 6 & 7) ─────────
+    public static final String CHAIN_ROUTE_SELECTED          = "chain.route.selected";
+    public static final String CHAIN_ES_CANDIDATES_FETCHED   = "chain.es.candidates.fetched";
+    public static final String CHAIN_PSQL_ALLOWLIST_APPLIED  = "chain.psql.allowlist.applied";
+    public static final String CHAIN_PSQL_DONE               = "chain.psql.done";
+    public static final String CHAIN_EMPTY_FROM_ES           = "chain.empty.from-es";
+    public static final String CHAIN_EMPTY_AFTER_PSQL        = "chain.empty.after-psql";
+    public static final String CHAIN_TRUNCATED_BY_CAP        = "chain.truncated.by-cap";
+    public static final String CHAIN_ES_ENGINE_ABSENT        = "chain.es.engine.absent";
 }
