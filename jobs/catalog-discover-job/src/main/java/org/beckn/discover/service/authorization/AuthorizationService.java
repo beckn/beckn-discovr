@@ -2,6 +2,7 @@ package org.beckn.discover.service.authorization;
 
 import org.beckn.auth.BecknAuth;
 import org.beckn.auth.exception.BecknAuthException;
+import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.config.AuthProperties;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
@@ -9,6 +10,7 @@ import org.beckn.discover.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
@@ -33,6 +35,13 @@ public class AuthorizationService {
     }
 
     private static final Logger logger = LoggerFactory.getLogger(AuthorizationService.class);
+
+    /**
+     * {@code WWW-Authenticate} challenge value for 401 responses (RFC 7235 §4.1).
+     * The Beckn auth scheme is HTTP Signature ({@code "Signature "} header prefix),
+     * so the challenge advertises the {@code Signature} scheme.
+     */
+    private static final String WWW_AUTHENTICATE_CHALLENGE = "Signature realm=\"beckn\"";
 
     private final BecknAuth becknAuth;
     private final AuthProperties authProperties;
@@ -102,10 +111,40 @@ public class AuthorizationService {
                     LogEvent.AUTH_FAILED,
                     ErrorSanitizer.sanitize(e.getCode()),
                     ErrorSanitizer.sanitize(e.getMessage()));
-            ProblemDetail pd = ProblemDetail.forStatus(e.getHttpStatus());
+            // F-12: A missing or malformed/unparseable Authorization header is an
+            // authentication failure, not a bad request. Per HTTP semantics (RFC 7235)
+            // these must be 401 Unauthorized carrying a WWW-Authenticate challenge — the
+            // SDK historically tagged them as 400. Remap ONLY those header-level cases;
+            // every other status (e.g. crypto-mismatch / timestamp / key-lookup 401s,
+            // registry 502, internal 500) passes through exactly as the SDK produced it.
+            int status = isMissingOrMalformedHeader(e)
+                    ? HttpStatus.UNAUTHORIZED.value() : e.getHttpStatus();
+            ProblemDetail pd = ProblemDetail.forStatus(status);
             pd.setDetail(e.getMessage());
             pd.setProperty("code", e.getCode());
-            throw new ErrorResponseException(HttpStatusCode.valueOf(e.getHttpStatus()), pd, e);
+            HttpStatusCode resolved = HttpStatusCode.valueOf(status);
+            ErrorResponseException ere = new ErrorResponseException(resolved, pd, e);
+            if (HttpStatus.UNAUTHORIZED.value() == status) {
+                // RFC 7235 §3.1 — every 401 response must include a WWW-Authenticate challenge.
+                // getHeaders() returns the live mutable header map; GlobalExceptionHandler
+                // copies these onto the NACK response.
+                ere.getHeaders().add(HttpHeaders.WWW_AUTHENTICATE, WWW_AUTHENTICATE_CHALLENGE);
+            }
+            throw ere;
         }
+    }
+
+    /**
+     * Identifies the header-level authentication failures that must surface as
+     * 401 rather than the SDK's 400: the Authorization header is absent
+     * ({@code SEC_SIGNATURE_MISSING}) or syntactically unparseable
+     * ({@code SEC_SIGNATURE_INVALID}). The crypto-mismatch and timestamp paths
+     * reuse {@code SEC_SIGNATURE_INVALID} but the SDK already tags those 401, so
+     * gating on {@code httpStatus == 400} leaves verification behaviour untouched.
+     */
+    private static boolean isMissingOrMalformedHeader(BecknAuthException e) {
+        return e.getHttpStatus() == HttpStatus.BAD_REQUEST.value()
+                && (ErrorCodes.SEC_SIGNATURE_MISSING.equals(e.getCode())
+                        || ErrorCodes.SEC_SIGNATURE_INVALID.equals(e.getCode()));
     }
 }
