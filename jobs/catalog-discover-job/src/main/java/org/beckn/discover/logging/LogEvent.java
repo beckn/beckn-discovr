@@ -162,10 +162,17 @@ public final class LogEvent {
     // ── Filter-and-text-search routing (JSONPath + text, cases 6 & 7) ─────────
     public static final String CHAIN_ROUTE_SELECTED          = "chain.route.selected";
     public static final String CHAIN_ES_CANDIDATES_FETCHED   = "chain.es.candidates.fetched";
+    public static final String CHAIN_ES_EMPTY_VECTOR         = "chain.es.empty-vector";
     public static final String CHAIN_PSQL_ALLOWLIST_APPLIED  = "chain.psql.allowlist.applied";
     public static final String CHAIN_PSQL_DONE               = "chain.psql.done";
     public static final String CHAIN_EMPTY_FROM_ES           = "chain.empty.from-es";
     public static final String CHAIN_EMPTY_AFTER_PSQL        = "chain.empty.after-psql";
     public static final String CHAIN_TRUNCATED_BY_CAP        = "chain.truncated.by-cap";
     public static final String CHAIN_ES_ENGINE_ABSENT        = "chain.es.engine.absent";
+
+    /** Chain BM25 step 1 reached with no usable text query clause (misconfigured multi-match fields). */
+    public static final String CHAIN_ES_NO_TEXT_QUERY        = "chain.es.no-text-query";
+
+    /** Combined J+G query (case 4) could not build spatial conditions — unrecoverable for a J+G request. */
+    public static final String QUERY_COMBINED_SPATIAL_BUILD_FAILED = "query.combined.spatial-build-failed";
 }

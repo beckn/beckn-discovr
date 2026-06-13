@@ -494,10 +494,23 @@ public class DiscoveryProperties {
         @Min(value = 1, message = "discovery.chain.max-ids must be at least 1")
         private int maxIds = 5000;
 
+        /**
+         * End-to-end timeout (seconds) for the chain pipeline, covering BOTH
+         * ES step 1 and PSQL step 2 sequentially. The single-engine paths use
+         * {@code discovery.postgresql.parallel-query-timeout-seconds} (one
+         * round-trip); the chain makes two, so it gets its own, larger budget.
+         * This is an absolute value in seconds — the default 20 is ~2× the
+         * default single-query timeout (10s); tune both together if changed.
+         */
+        @Min(value = 1, message = "discovery.chain.timeout-seconds must be at least 1")
+        private int timeoutSeconds = 20;
+
         public int getOverfetchFactor() { return overfetchFactor; }
         public void setOverfetchFactor(int overfetchFactor) { this.overfetchFactor = overfetchFactor; }
         public int getMaxIds() { return maxIds; }
         public void setMaxIds(int maxIds) { this.maxIds = maxIds; }
+        public int getTimeoutSeconds() { return timeoutSeconds; }
+        public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
     }
 
     public static class Schema {

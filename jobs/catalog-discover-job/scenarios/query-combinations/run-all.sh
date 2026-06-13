@@ -20,6 +20,11 @@ AUTH_HEADER="${AUTH_HEADER:-}"
 ENDPOINT="$HOST/beckn/discover"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+# Per-run private response file (avoids clobbering a shared /tmp path on
+# concurrent runs); cleaned up on exit.
+RESPONSE_FILE="$(mktemp "${TMPDIR:-/tmp}/discover-response.XXXXXX")"
+trap 'rm -f "$RESPONSE_FILE"' EXIT
+
 declare -a CASES=(
   "case-1-jsonpath-only.json:J only       (PSQL JSONPath)"
   "case-2-geo-only.json:G only            (PSQL/ES spatial)"
@@ -49,7 +54,7 @@ for entry in "${CASES[@]}"; do
     continue
   fi
 
-  curl_args=(-sS -o /tmp/discover-response.json -w '%{http_code}'
+  curl_args=(-sS -o "$RESPONSE_FILE" -w '%{http_code}'
              -X "$METHOD" "$ENDPOINT"
              -H 'Content-Type: application/json'
              --data @"$body_path")
@@ -62,7 +67,7 @@ for entry in "${CASES[@]}"; do
     PASS=$((PASS+1))
   else
     echo "HTTP $status  ✗"
-    cat /tmp/discover-response.json
+    cat "$RESPONSE_FILE"
     echo
     FAIL=$((FAIL+1))
   fi

@@ -218,11 +218,82 @@ class ElasticsearchQueryEngineChainTest {
 
             assertThat(ids).isEmpty();
         }
+
+        @Test
+        @DisplayName("Misconfigured empty multi-match-fields → fails loud, never queries ES (no match-all leak)")
+        void bm25_noTextQueryFields_throwsAndDoesNotSearch() {
+            properties.getElasticsearch().setMultiMatchFields(List.of());
+            var eng = engine(false);
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                    eng.fetchMatchingResourceIds(textOnlyRequest("coffee"), 50))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("multi-match-fields");
+
+            verifyNoInteractions(esClient);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // SOURCE PROJECTION — both modes must restrict _source to [resource_id]
     // ─────────────────────────────────────────────────────────────────────────
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // KNN OVERFETCH — k must never exceed num_candidates (ES rejects k > candidates)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Semantic KNN overfetch — k <= num_candidates <= ES ceiling")
+    class KnnOverfetchBounds {
+
+        private static final int ES_KNN_MAX = 10_000;
+
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        private co.elastic.clients.elasticsearch._types.KnnSearch captureKnn(int size) throws Exception {
+            var eng = engine(true);
+            when(queryEnricher.enrich(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(embeddingClient.embed(any())).thenReturn(Optional.of(List.of(0.1f, 0.2f)));
+            stubSearchReturning(List.of("r1"));
+
+            eng.fetchMatchingResourceIds(textOnlyRequest("anything"), size);
+
+            ArgumentCaptor<Function<SearchRequest.Builder, co.elastic.clients.util.ObjectBuilder<SearchRequest>>> captor =
+                    ArgumentCaptor.forClass(Function.class);
+            verify(esClient).search(captor.capture(), eq(Map.class));
+            SearchRequest built = captor.getValue().apply(new SearchRequest.Builder()).build();
+            assertThat(built.knn()).hasSize(1);
+            return built.knn().get(0);
+        }
+
+        @Test
+        @DisplayName("Overfetch size > knn-candidates: num_candidates raised to k (defaults: size 1000 > 500)")
+        void overfetchLargerThanCandidates_raisesNumCandidatesToK() throws Exception {
+            // knn-candidates = 500 (set in setUp). Real chain size at defaults = 1000.
+            var knn = captureKnn(1000);
+            assertThat(knn.k()).isEqualTo(1000);
+            assertThat(knn.numCandidates()).isGreaterThanOrEqualTo(knn.k());
+            assertThat(knn.numCandidates()).isEqualTo(1000);
+        }
+
+        @Test
+        @DisplayName("Overfetch size < knn-candidates: keeps the larger configured candidate pool")
+        void overfetchSmallerThanCandidates_keepsConfiguredPool() throws Exception {
+            var knn = captureKnn(50);
+            assertThat(knn.k()).isEqualTo(50);
+            // configured knn-candidates (500) > k (50) — pool stays at 500
+            assertThat(knn.numCandidates()).isEqualTo(500);
+            assertThat(knn.numCandidates()).isGreaterThanOrEqualTo(knn.k());
+        }
+
+        @Test
+        @DisplayName("Overfetch size beyond ES ceiling: both k and num_candidates clamped to 10000")
+        void overfetchBeyondCeiling_clampsToEsMax() throws Exception {
+            var knn = captureKnn(20_000);
+            assertThat(knn.k()).isEqualTo(ES_KNN_MAX);
+            assertThat(knn.numCandidates()).isEqualTo(ES_KNN_MAX);
+            assertThat(knn.numCandidates()).isGreaterThanOrEqualTo(knn.k());
+        }
+    }
 
     @Nested
     @DisplayName("_source projection — IDs only in both modes")

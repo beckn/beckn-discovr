@@ -54,6 +54,13 @@ public class ElasticsearchQueryEngine implements QueryEngine {
 
     private static final Logger log = LoggerFactory.getLogger(ElasticsearchQueryEngine.class);
 
+    /**
+     * Elasticsearch hard ceiling for both {@code k} and {@code num_candidates} in a
+     * KNN search (ES rejects values above this). Used to clamp the chain's
+     * overfetched candidate pool in semantic mode.
+     */
+    private static final int ES_KNN_MAX = 10_000;
+
     private final PostgreSQLQueryEngine     pgEngine;
     private final EsSpatialQueryBuilder     spatialBuilder;
     private final ElasticsearchClient       esClient;
@@ -304,6 +311,13 @@ public class ElasticsearchQueryEngine implements QueryEngine {
     @SuppressWarnings("unchecked")
     public List<String> fetchMatchingResourceIds(QueryRequest request, int size) throws Exception {
         Instant start = Instant.now();
+        // Defensive: a non-positive candidate size (only reachable via a zeroed
+        // result-limit / overfetch-factor / max-ids misconfiguration) means "no
+        // candidates to fetch". Both ES KNN (k>0) and the bool window (size>0)
+        // would otherwise reject the request — short-circuit instead.
+        if (size <= 0) {
+            return List.of();
+        }
         String alias = discoveryProperties.getElasticsearch().getAliasName();
         final double minScore = discoveryProperties.getElasticsearch().getMinScore();
 
@@ -327,12 +341,21 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             Optional<List<Float>> vecOpt = embeddingClient.get().embed(enriched);
             if (vecOpt.isEmpty()) {
                 log.warn("event={} mode=semantic reason=empty-vector",
-                        LogEvent.CHAIN_ES_CANDIDATES_FETCHED);
+                        LogEvent.CHAIN_ES_EMPTY_VECTOR);
                 return List.of();
             }
             final List<Float> vec = vecOpt.get();
+            // KNN requires num_candidates >= k, with both <= ES_KNN_MAX. The chain
+            // overfetches (size = limit * overfetch-factor, capped at chain.max-ids),
+            // which routinely exceeds the configured knn-candidates pool — e.g. at
+            // defaults size=1000 > knn-candidates=500. Passing k=size with the smaller
+            // candidate pool makes ES reject the search ("num_candidates cannot be less
+            // than k"). Clamp k to the ES ceiling and raise the candidate pool to at
+            // least k so the KNN request is always valid while preserving the overfetch.
+            final int knnK = Math.min(size, ES_KNN_MAX);
+            final int effectiveCandidates = Math.min(Math.max(knnCandidates, knnK), ES_KNN_MAX);
             log.debug("event={} mode=semantic alias={} k={} numCandidates={} geo={} schema={}",
-                    LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, size, knnCandidates,
+                    LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, knnK, effectiveCandidates,
                     finalGeoFilters.size(), schemaFilters.size());
             if (!schemaFilters.isEmpty()) {
                 log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
@@ -342,7 +365,9 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             try {
                 SearchResponse<Map> response = esClient.search(s -> s
                         .index(alias)
-                        .size(size)
+                        // KNN returns at most knnK hits; bounding size to knnK also keeps
+                        // the request under index.max_result_window for large max-ids.
+                        .size(knnK)
                         .minScore(minScore)
                         // chain step 1 only needs resource_id
                         .source(sf -> sf.filter(f -> f.includes("resource_id")))
@@ -350,8 +375,8 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .knn(k -> {
                             var kb = k.field("resource_vector")
                                     .queryVector(vec)
-                                    .k(size)
-                                    .numCandidates(knnCandidates);
+                                    .k(knnK)
+                                    .numCandidates(effectiveCandidates);
                             finalGeoFilters.forEach(kb::filter);
                             schemaFilters.forEach(kb::filter);
                             return kb;
@@ -391,6 +416,18 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                         .tieBreaker(tieBreaker)
                         .fuzziness(fuzziness)))
                 : null;
+
+        // Guard: with no text clause the bool query would be filter-only and match
+        // every doc passing geo/schema — silently ignoring the text term and feeding
+        // the entire corpus into the PSQL step. That only happens if multi-match-fields
+        // is misconfigured to empty; fail loud instead of returning wrong candidates.
+        if (textMustQuery == null && textShouldQuery == null) {
+            log.error("event={} reason=no-text-query multiMatchFields={}",
+                    LogEvent.CHAIN_ES_NO_TEXT_QUERY, mmFields);
+            throw new IllegalStateException(
+                    "Chain BM25 step 1 has no text query clause — discovery.elasticsearch.multi-match-fields "
+                    + "must contain at least one field (a full_text_blob* and/or scoring field).");
+        }
 
         log.debug("event={} mode=bm25 alias={} size={} geo={} schema={}",
                 LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, size,

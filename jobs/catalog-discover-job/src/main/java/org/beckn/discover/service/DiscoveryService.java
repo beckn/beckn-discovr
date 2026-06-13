@@ -244,24 +244,45 @@ public class DiscoveryService {
         if (qr.hasFilters() && qr.hasSpatial()) {
             // Case 4 (J+G): single SQL via pgEngine.executeCombinedQuery — regardless of
             // discovery.spatial.engine config (design decision #3).
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH_SPATIAL));
+            // transactionId/messageId are carried by MDC on every line — not repeated here.
+            log.info(LogEvent.QUERY_PATH_SELECTED,
+                    value("path", LogMessages.PATH_JSONPATH_SPATIAL),
+                    value("engine", "postgresql"),
+                    value("hasFilters", true),
+                    value("hasSpatial", true),
+                    value("hasTextSearch", false));
             metrics.incrementRouteSelected("A");
             return executeJsonPathAndSpatialQuery(qr, context, tracker);
         }
         if (qr.hasFilters()) {
             // Case 1 (J only).
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH));
+            log.info(LogEvent.QUERY_PATH_SELECTED,
+                    value("path", LogMessages.PATH_JSONPATH),
+                    value("engine", "postgresql"),
+                    value("hasFilters", true),
+                    value("hasSpatial", false),
+                    value("hasTextSearch", false));
             metrics.incrementRouteSelected("B");
             return executeJsonPathQuery(qr, context, tracker);
         }
         if (qr.hasSpatial()) {
             // Cases 2 (G only) and 5 (G+T): spatial engine handles both.
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_SPATIAL));
+            log.info(LogEvent.QUERY_PATH_SELECTED,
+                    value("path", LogMessages.PATH_SPATIAL),
+                    value("engine", properties.getSpatial().getEngine()),
+                    value("hasFilters", false),
+                    value("hasSpatial", true),
+                    value("hasTextSearch", qr.hasTextSearch()));
             metrics.incrementRouteSelected("C");
             return executeSpatialOnlyQuery(qr, context, tracker);
         }
         // Case 3 (T only).
-        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_TEXT_SEARCH));
+        log.info(LogEvent.QUERY_PATH_SELECTED,
+                value("path", LogMessages.PATH_TEXT_SEARCH),
+                value("engine", properties.getTextSearch().getEngine()),
+                value("hasFilters", false),
+                value("hasSpatial", false),
+                value("hasTextSearch", true));
         metrics.incrementRouteSelected("D");
         return executeTextSearchQuery(qr, context, tracker);
     }
@@ -295,8 +316,10 @@ public class DiscoveryService {
 
         if (combined.isEmpty()) {
             // Spatial conditions could not be built — this indicates malformed or unsupported
-            // spatial predicates in a request that was already classified as J+G.
-            log.error(LogEvent.QUERY_PATH_FALLBACK,
+            // spatial predicates in a request that was already classified as J+G. This is an
+            // error path, not a routing fallback — use the dedicated event so log filters can
+            // distinguish it from the benign QUERY_PATH_FALLBACK.
+            log.error(LogEvent.QUERY_COMBINED_SPATIAL_BUILD_FAILED,
                     value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS),
                     value("transactionId", context.getTransactionId()));
             throw new IllegalStateException(
@@ -343,7 +366,9 @@ public class DiscoveryService {
     private DiscoverResponse executeJsonPathAndTextSearchQuery(QueryRequest qr, Context context,
             LatencyTracker tracker) throws Exception {
 
-        int timeoutSec  = properties.getPostgresql().getParallelQueryTimeoutSeconds();
+        // Chain runs ES step 1 + PSQL step 2 sequentially, so it gets its own
+        // (larger) budget rather than the single-query parallel timeout.
+        int timeoutSec  = properties.getChain().getTimeoutSeconds();
         int limit       = properties.getPostgresql().getResultLimit();
         int overfetch   = properties.getChain().getOverfetchFactor();
         int maxIds      = properties.getChain().getMaxIds();
