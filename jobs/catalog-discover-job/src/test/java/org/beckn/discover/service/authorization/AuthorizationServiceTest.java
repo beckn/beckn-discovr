@@ -123,6 +123,65 @@ class AuthorizationServiceTest {
     }
 
     @Test
+    void subscriberNotFound_remappedTo401_withWwwAuthenticate() {
+        // SDK tags a blank subscriber in the keyId as 400 (authenticationRequired), but it
+        // is a credential-level auth failure → must be 401 + challenge (F-12 / RFC 7235).
+        when(becknAuth.verifySignature(any(), any())).thenThrow(
+                BecknAuthException.authenticationRequired(
+                        "Could not identify the requester",
+                        org.beckn.auth.util.ErrorCodes.SEC_SUBSCRIBER_NOT_FOUND, "authorization/keyId"));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.AUTHORIZATION, "Signature keyId=\"|key|ed25519\",...");
+
+        ErrorResponseException ex = catchThrowableOfType(
+                () -> newService().authorizeRequest(RAW_BODY, headers),
+                ErrorResponseException.class);
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getStatusCode().value()).isEqualTo(401);
+        assertThat(ex.getHeaders().getFirst(HttpHeaders.WWW_AUTHENTICATE)).isEqualTo(EXPECTED_CHALLENGE);
+        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.AUT_SUBSCRIBER_NOT_FOUND);
+    }
+
+    @Test
+    void keyExpired_staysAsSdk401_translatedToAutCode() {
+        when(becknAuth.verifySignature(any(), any())).thenThrow(
+                BecknAuthException.keyExpired("registry key is not live"));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.AUTHORIZATION, "Signature keyId=\"a|b|ed25519\",...");
+
+        ErrorResponseException ex = catchThrowableOfType(
+                () -> newService().authorizeRequest(RAW_BODY, headers),
+                ErrorResponseException.class);
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getStatusCode().value()).isEqualTo(401);
+        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.AUT_KEY_EXPIRED_OR_REVOKED);
+        assertThat(ex.getHeaders().getFirst(HttpHeaders.WWW_AUTHENTICATE)).isEqualTo(EXPECTED_CHALLENGE);
+    }
+
+    @Test
+    void timestampExpired_staysAsSdk401_notRemappedFrom400() {
+        // timestampExpired reuses SEC_SIGNATURE_INVALID but is already 401 — the gate
+        // (httpStatus==400) must leave it 401, distinct from the missing/malformed remap.
+        when(becknAuth.verifySignature(any(), any())).thenThrow(
+                BecknAuthException.timestampExpired("signature expired", "authorization"));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.AUTHORIZATION, "Signature keyId=\"a|b|ed25519\",...");
+
+        ErrorResponseException ex = catchThrowableOfType(
+                () -> newService().authorizeRequest(RAW_BODY, headers),
+                ErrorResponseException.class);
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getStatusCode().value()).isEqualTo(401);
+        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.AUT_SIGNATURE_INVALID);
+    }
+
+    @Test
     void registryError_staysAsSdk502_noChallenge() {
         // A 502 must not be flipped to 401 and must not gain a WWW-Authenticate header.
         when(becknAuth.verifySignature(any(), any())).thenThrow(

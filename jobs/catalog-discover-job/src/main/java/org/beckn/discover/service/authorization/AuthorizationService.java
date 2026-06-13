@@ -111,13 +111,15 @@ public class AuthorizationService {
                     LogEvent.AUTH_FAILED,
                     ErrorSanitizer.sanitize(e.getCode()),
                     ErrorSanitizer.sanitize(e.getMessage()));
-            // F-12: A missing or malformed/unparseable Authorization header is an
-            // authentication failure, not a bad request. Per HTTP semantics (RFC 7235)
-            // these must be 401 Unauthorized carrying a WWW-Authenticate challenge — the
-            // SDK historically tagged them as 400. Remap ONLY those header-level cases;
-            // every other status (e.g. crypto-mismatch / timestamp / key-lookup 401s,
-            // registry 502, internal 500) passes through exactly as the SDK produced it.
-            int status = isMissingOrMalformedHeader(e)
+            // F-12: the beckn-auth SDK historically tags header/credential-level
+            // authentication failures (absent header, unparseable header / bad keyId,
+            // blank subscriber in keyId) as HTTP 400. Per RFC 7235 these are all
+            // authentication failures and MUST be 401 Unauthorized with a
+            // WWW-Authenticate challenge. The SDK is an auth library — every 400 it
+            // produces is an auth-credential failure — so any SDK 400 is remapped to
+            // 401. Its genuine server statuses (already-401 crypto/timestamp/key paths,
+            // 502 registry-unreachable, 500 internal) pass through unchanged.
+            int status = isAuthFailureMistaggedAs400(e)
                     ? HttpStatus.UNAUTHORIZED.value() : e.getHttpStatus();
             ProblemDetail pd = ProblemDetail.forStatus(status);
             pd.setDetail(e.getMessage());
@@ -137,29 +139,35 @@ public class AuthorizationService {
     }
 
     /**
-     * Identifies the header-level authentication failures that must surface as
-     * 401 rather than the SDK's 400: the Authorization header is absent
-     * ({@code SEC_SIGNATURE_MISSING}) or syntactically unparseable
-     * ({@code SEC_SIGNATURE_INVALID}). The crypto-mismatch and timestamp paths
-     * reuse {@code SEC_SIGNATURE_INVALID} but the SDK already tags those 401, so
-     * gating on {@code httpStatus == 400} leaves verification behaviour untouched.
+     * Identifies an authentication failure the SDK mistagged as HTTP 400 that must
+     * surface as 401 Unauthorized.
      *
-     * <p>Matches the SDK's own {@link org.beckn.auth.util.ErrorCodes} literals
-     * (the codes the SDK actually emits) — not Discovr's spec-facing {@code AUT_*}
-     * codes, which are the translated output.</p>
+     * <p>The beckn-auth-java-sdk is an authentication library: every exception it
+     * raises is an auth failure. It emits 400 for credential/header-level failures
+     * — absent header ({@code SEC_SIGNATURE_MISSING}), unparseable header / invalid
+     * keyId ({@code SEC_SIGNATURE_INVALID}), and blank subscriber in keyId
+     * ({@code SEC_SUBSCRIBER_NOT_FOUND}) — all of which are RFC 7235 401s. So any
+     * SDK {@code httpStatus == 400} is an auth failure to be remapped to 401.</p>
+     *
+     * <p>The SDK's already-correct 401 paths (crypto-mismatch, timestamp-expired,
+     * key-not-found / expired) and its genuine server statuses (502 registry, 500
+     * internal) are <b>not</b> 400, so they pass through untouched.</p>
      */
-    private static boolean isMissingOrMalformedHeader(BecknAuthException e) {
-        return e.getHttpStatus() == HttpStatus.BAD_REQUEST.value()
-                && (org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_MISSING.equals(e.getCode())
-                        || org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_INVALID.equals(e.getCode()));
+    private static boolean isAuthFailureMistaggedAs400(BecknAuthException e) {
+        return e.getHttpStatus() == HttpStatus.BAD_REQUEST.value();
     }
 
     /**
      * Translates the beckn-auth-java-sdk's legacy {@code SEC_*} authentication
      * error code to the canonical Beckn v2.0 {@code AUT_*} {@code ErrorCode} enum
      * value defined in beckn.yaml. The SDK predates the spec's {@code AUT_} prefix;
-     * Discovr must surface spec-compliant codes to clients. Unknown codes fall back
-     * to {@link ErrorCodes#NET_INTERNAL_ERROR}.
+     * Discovr must surface spec-compliant codes to clients.
+     *
+     * <p>The default ({@link ErrorCodes#NET_INTERNAL_ERROR}) covers the SDK's
+     * non-auth-credential codes that can reach the verify path — its own
+     * {@code INTERNAL_ERROR} (500) and registry {@code NET_INTERNAL_ERROR} (502) —
+     * which are server faults, not authentication failures, so the network-layer
+     * code is the correct surface for them.</p>
      */
     private static String toSpecAuthCode(String sdkCode) {
         if (sdkCode == null) {
