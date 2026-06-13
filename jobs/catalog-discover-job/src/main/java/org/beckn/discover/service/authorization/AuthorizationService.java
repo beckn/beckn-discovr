@@ -121,7 +121,9 @@ public class AuthorizationService {
                     ? HttpStatus.UNAUTHORIZED.value() : e.getHttpStatus();
             ProblemDetail pd = ProblemDetail.forStatus(status);
             pd.setDetail(e.getMessage());
-            pd.setProperty("code", e.getCode());
+            // Surface the canonical Beckn v2.0 AUT_* ErrorCode (beckn.yaml), translated
+            // from the SDK's legacy SEC_* code, so the client-facing NACK is spec-compliant.
+            pd.setProperty("code", toSpecAuthCode(e.getCode()));
             HttpStatusCode resolved = HttpStatusCode.valueOf(status);
             ErrorResponseException ere = new ErrorResponseException(resolved, pd, e);
             if (HttpStatus.UNAUTHORIZED.value() == status) {
@@ -141,10 +143,36 @@ public class AuthorizationService {
      * ({@code SEC_SIGNATURE_INVALID}). The crypto-mismatch and timestamp paths
      * reuse {@code SEC_SIGNATURE_INVALID} but the SDK already tags those 401, so
      * gating on {@code httpStatus == 400} leaves verification behaviour untouched.
+     *
+     * <p>Matches the SDK's own {@link org.beckn.auth.util.ErrorCodes} literals
+     * (the codes the SDK actually emits) — not Discovr's spec-facing {@code AUT_*}
+     * codes, which are the translated output.</p>
      */
     private static boolean isMissingOrMalformedHeader(BecknAuthException e) {
         return e.getHttpStatus() == HttpStatus.BAD_REQUEST.value()
-                && (ErrorCodes.SEC_SIGNATURE_MISSING.equals(e.getCode())
-                        || ErrorCodes.SEC_SIGNATURE_INVALID.equals(e.getCode()));
+                && (org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_MISSING.equals(e.getCode())
+                        || org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_INVALID.equals(e.getCode()));
+    }
+
+    /**
+     * Translates the beckn-auth-java-sdk's legacy {@code SEC_*} authentication
+     * error code to the canonical Beckn v2.0 {@code AUT_*} {@code ErrorCode} enum
+     * value defined in beckn.yaml. The SDK predates the spec's {@code AUT_} prefix;
+     * Discovr must surface spec-compliant codes to clients. Unknown codes fall back
+     * to {@link ErrorCodes#NET_INTERNAL_ERROR}.
+     */
+    private static String toSpecAuthCode(String sdkCode) {
+        if (sdkCode == null) {
+            return ErrorCodes.NET_INTERNAL_ERROR;
+        }
+        return switch (sdkCode) {
+            case org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_MISSING      -> ErrorCodes.AUT_SIGNATURE_MISSING;
+            case org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_INVALID      -> ErrorCodes.AUT_SIGNATURE_INVALID;
+            case org.beckn.auth.util.ErrorCodes.SEC_SUBSCRIBER_NOT_FOUND   -> ErrorCodes.AUT_SUBSCRIBER_NOT_FOUND;
+            case org.beckn.auth.util.ErrorCodes.SEC_KEY_NOT_FOUND          -> ErrorCodes.AUT_KEY_NOT_FOUND;
+            case org.beckn.auth.util.ErrorCodes.SEC_KEY_EXPIRED_OR_REVOKED -> ErrorCodes.AUT_KEY_EXPIRED_OR_REVOKED;
+            case org.beckn.auth.util.ErrorCodes.SEC_UNAUTHORIZED_ACTION    -> ErrorCodes.AUT_UNAUTHORIZED_ACTION;
+            default -> ErrorCodes.NET_INTERNAL_ERROR;
+        };
     }
 }

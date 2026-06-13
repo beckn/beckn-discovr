@@ -341,7 +341,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                         result.andExpect(status().isUnauthorized())
                                         .andExpect(header().string("WWW-Authenticate", "Signature realm=\"beckn\""))
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_MISSING"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("AUT_SIGNATURE_MISSING"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                         containsString("Authorization header is missing")));
                 }
@@ -362,7 +362,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         .andExpect(status().isUnauthorized())
                                         .andExpect(header().string("WWW-Authenticate", "Signature realm=\"beckn\""))
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("AUT_SIGNATURE_INVALID"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                         containsString("Invalid keyId format")));
                 }
@@ -381,7 +381,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                         result.andExpect(status().isUnauthorized())
                                         .andExpect(header().string("WWW-Authenticate", "Signature realm=\"beckn\""))
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("AUT_SIGNATURE_INVALID"))
                                         .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
                                                         containsString("Authorization header format is invalid")));
                 }
@@ -402,7 +402,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         "Signature keyId=\"%s\",algorithm=\"ed25519\",headers=\"(created)\",created=\"%d\",expires=\"%d\",signature=\"abc123invalid\"",
                                         paramKeyId, now, now + 100);
 
-                        // Expected: 401 Unauthorized with NACK response and SEC_KEY_NOT_FOUND code
+                        // Expected: 401 Unauthorized with NACK response and AUT_KEY_NOT_FOUND code
                         ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .header("Authorization", header)
@@ -411,7 +411,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                         result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                                         .andExpect(status().isUnauthorized())
                                         .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_KEY_NOT_FOUND"));
+                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("AUT_KEY_NOT_FOUND"));
                 }
         }
 }
