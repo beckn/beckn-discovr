@@ -50,7 +50,7 @@ class AuthorizationServiceTest {
         when(becknAuth.verifySignature(any(), any())).thenThrow(
                 BecknAuthException.authenticationRequired(
                         "Authorization header is missing",
-                        ErrorCodes.SEC_SIGNATURE_MISSING, "authorization"));
+                        org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_MISSING, "authorization"));
 
         ErrorResponseException ex = catchThrowableOfType(
                 () -> newService().authorizeRequest(RAW_BODY, new HttpHeaders()),
@@ -59,7 +59,7 @@ class AuthorizationServiceTest {
         assertThat(ex).isNotNull();
         assertThat(ex.getStatusCode().value()).isEqualTo(401);
         assertThat(ex.getHeaders().getFirst(HttpHeaders.WWW_AUTHENTICATE)).isEqualTo(EXPECTED_CHALLENGE);
-        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.SEC_SIGNATURE_MISSING);
+        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.AUT_SIGNATURE_MISSING);
     }
 
     @Test
@@ -68,7 +68,7 @@ class AuthorizationServiceTest {
         when(becknAuth.verifySignature(any(), any())).thenThrow(
                 BecknAuthException.invalidHeader(
                         "Authorization header format is invalid",
-                        ErrorCodes.SEC_SIGNATURE_INVALID));
+                        org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_INVALID));
 
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.AUTHORIZATION, "InvalidFormat");
@@ -80,7 +80,7 @@ class AuthorizationServiceTest {
         assertThat(ex).isNotNull();
         assertThat(ex.getStatusCode().value()).isEqualTo(401);
         assertThat(ex.getHeaders().getFirst(HttpHeaders.WWW_AUTHENTICATE)).isEqualTo(EXPECTED_CHALLENGE);
-        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.SEC_SIGNATURE_INVALID);
+        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.AUT_SIGNATURE_INVALID);
     }
 
     @Test
@@ -89,7 +89,7 @@ class AuthorizationServiceTest {
         // It reuses SEC_SIGNATURE_INVALID but is already 401, so the remap must leave it alone.
         when(becknAuth.verifySignature(any(), any())).thenThrow(
                 BecknAuthException.signatureVerificationFailed(
-                        "signature mismatch", ErrorCodes.SEC_SIGNATURE_INVALID));
+                        "signature mismatch", org.beckn.auth.util.ErrorCodes.SEC_SIGNATURE_INVALID));
 
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.AUTHORIZATION, "Signature keyId=\"a|b|ed25519\",...");
@@ -100,7 +100,7 @@ class AuthorizationServiceTest {
 
         assertThat(ex).isNotNull();
         assertThat(ex.getStatusCode().value()).isEqualTo(401);
-        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.SEC_SIGNATURE_INVALID);
+        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.AUT_SIGNATURE_INVALID);
         // 401s also carry the challenge per RFC 7235 — behaviour preserved.
         assertThat(ex.getHeaders().getFirst(HttpHeaders.WWW_AUTHENTICATE)).isEqualTo(EXPECTED_CHALLENGE);
     }
@@ -119,7 +119,7 @@ class AuthorizationServiceTest {
 
         assertThat(ex).isNotNull();
         assertThat(ex.getStatusCode().value()).isEqualTo(401);
-        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.SEC_KEY_NOT_FOUND);
+        assertThat(ex.getBody().getProperties().get("code")).isEqualTo(ErrorCodes.AUT_KEY_NOT_FOUND);
     }
 
     @Test

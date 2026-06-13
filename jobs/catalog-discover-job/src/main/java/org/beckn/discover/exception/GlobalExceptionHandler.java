@@ -133,12 +133,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     private static String safeMessageForCode(String code) {
         if (code == null) return ErrorMessages.NET_INTERNAL_ERROR;
         return switch (code) {
-            case ErrorCodes.SEC_SIGNATURE_MISSING -> ErrorMessages.SEC_SIGNATURE_MISSING;
-            case ErrorCodes.SEC_SIGNATURE_INVALID -> ErrorMessages.SEC_SIGNATURE_INVALID;
-            case ErrorCodes.SEC_SUBSCRIBER_NOT_FOUND -> ErrorMessages.SEC_SUBSCRIBER_NOT_FOUND;
-            case ErrorCodes.SEC_KEY_NOT_FOUND -> ErrorMessages.SEC_KEY_NOT_FOUND;
-            case ErrorCodes.SEC_KEY_EXPIRED_OR_REVOKED -> ErrorMessages.SEC_KEY_EXPIRED_OR_REVOKED;
-            case ErrorCodes.SEC_UNAUTHORIZED_ACTION -> ErrorMessages.SEC_UNAUTHORIZED_ACTION;
+            case ErrorCodes.AUT_SIGNATURE_MISSING -> ErrorMessages.AUT_SIGNATURE_MISSING;
+            case ErrorCodes.AUT_SIGNATURE_INVALID -> ErrorMessages.AUT_SIGNATURE_INVALID;
+            case ErrorCodes.AUT_SUBSCRIBER_NOT_FOUND -> ErrorMessages.AUT_SUBSCRIBER_NOT_FOUND;
+            case ErrorCodes.AUT_KEY_NOT_FOUND -> ErrorMessages.AUT_KEY_NOT_FOUND;
+            case ErrorCodes.AUT_KEY_EXPIRED_OR_REVOKED -> ErrorMessages.AUT_KEY_EXPIRED_OR_REVOKED;
+            case ErrorCodes.AUT_UNAUTHORIZED_ACTION -> ErrorMessages.AUT_UNAUTHORIZED_ACTION;
             case ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED -> ErrorMessages.SCH_SCHEMA_VALIDATION_FAILED;
             case ErrorCodes.SCH_REQUIRED_FIELD_MISSING -> ErrorMessages.SCH_REQUIRED_FIELD_MISSING;
             case ErrorCodes.CTX_INVALID_FIELD -> ErrorMessages.CTX_INVALID_FIELD;
