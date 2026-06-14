@@ -20,3 +20,6 @@ vegan, plant-based
 # General commerce
 discount, offer, deal
 cod, cash delivery
+
+# Government / civic domain
+schema, schemas, scheme, schemes, yojana, program, programs, programme, programmes
