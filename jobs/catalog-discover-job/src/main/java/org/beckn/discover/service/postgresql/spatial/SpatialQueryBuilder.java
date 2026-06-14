@@ -155,7 +155,7 @@ public class SpatialQueryBuilder {
         // JSONPath condition drives the GIN index; spatial EXISTS drives GiST.
         // The filter must be wrapped in exists() — the @@ operator requires a predicate
         // (boolean-valued path), not a path expression that returns elements.
-        QueryTemplate template = QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
+        QueryTemplate template = selectionAwareTemplate(filterExpression);
         if (filterExpression != null && !filterExpression.isBlank()) {
             String pgFilter = toPostgresFilter(filterExpression);
             template.condition(QueryBuilderHelper.JSONPATH_MATCH, pgFilter);
@@ -197,7 +197,7 @@ public class SpatialQueryBuilder {
             return Optional.empty();
         }
 
-        QueryTemplate template = QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
+        QueryTemplate template = selectionAwareTemplate(filterExpression);
         if (filterExpression != null && !filterExpression.isBlank()) {
             String pgFilter = toPostgresFilter(filterExpression);
             template.condition(QueryBuilderHelper.JSONPATH_MATCH, pgFilter);
@@ -240,6 +240,30 @@ public class SpatialQueryBuilder {
             return String.format(QueryBuilderHelper.JSONPATH_EXISTS_PATH, trimmed);
         }
         return String.format(QueryBuilderHelper.JSONPATH_EXISTS_CONDITION, trimmed);
+    }
+
+    /**
+     * Returns the base template for a combined (JSONPath + spatial) query, projecting
+     * the {@code matching_offers} column when the filter is a selection path (starts
+     * with {@code $}). This mirrors {@link org.beckn.discover.service.postgresql.jsonpath.JsonPathQueryBuilder}
+     * so an offer-selection filter (e.g. {@code $.catalogs[*].offers[*] ? (...)}) narrows
+     * the returned offers identically whether or not a spatial constraint is present —
+     * without it, adding geo silently widened the response back to all offers (F-20/Finding 2).
+     *
+     * <p>The single {@code ?} in {@link QueryBuilderHelper#BASE_SELECT_WITH_FILTER_RESULT}
+     * is bound to the processed selection path (added first, so parameter order stays in
+     * lockstep with the SQL placeholders). Non-selection filters fall back to
+     * {@link QueryBuilderHelper#BASE_SELECT}.</p>
+     */
+    private QueryTemplate selectionAwareTemplate(String filterExpression) {
+        if (filterExpression != null && !filterExpression.isBlank()) {
+            String processed = jsonPathConverter.processFilter(filterExpression);
+            if (processed != null && processed.trim().startsWith("$")) {
+                return QueryBuilderHelper.query(
+                        QueryBuilderHelper.BASE_SELECT_WITH_FILTER_RESULT, processed);
+            }
+        }
+        return QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────────
