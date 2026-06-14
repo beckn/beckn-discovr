@@ -52,7 +52,7 @@ class SpatialQueryBuilderCatalogScopeTest {
     @Test
     @DisplayName("spatial-only build() scopes the EXISTS join by item_id AND catalog_id")
     void build_scopedByCatalog() {
-        Optional<QuerySpec> spec = builder.build(dwithin(), List.of(), List.of(), 100);
+        Optional<QuerySpec> spec = builder.build(dwithin(), List.of(), 100);
         assertThat(spec).isPresent();
         assertThat(spec.get().sql()).contains(CATALOG_JOIN);
     }
@@ -61,7 +61,7 @@ class SpatialQueryBuilderCatalogScopeTest {
     @DisplayName("combined J+G buildCombined() scopes the EXISTS join by item_id AND catalog_id")
     void buildCombined_scopedByCatalog() {
         Optional<QuerySpec> spec = builder.buildCombined(
-                dwithin(), "$.catalogs[*] ? (@.isActive == true)", List.of(), List.of(), 100);
+                dwithin(), "$.catalogs[*] ? (@.isActive == true)", List.of(), 100);
         assertThat(spec).isPresent();
         assertThat(spec.get().sql()).contains(CATALOG_JOIN);
     }
@@ -70,7 +70,7 @@ class SpatialQueryBuilderCatalogScopeTest {
     @DisplayName("chain J+G+T buildCombinedWithAllowlist() scopes the EXISTS join by item_id AND catalog_id")
     void buildCombinedWithAllowlist_scopedByCatalog() {
         Optional<QuerySpec> spec = builder.buildCombinedWithAllowlist(
-                dwithin(), "$.catalogs[*] ? (@.isActive == true)", List.of(), List.of(), 100,
+                dwithin(), "$.catalogs[*] ? (@.isActive == true)", List.of(), 100,
                 List.of("res-1", "res-2"));
         assertThat(spec).isPresent();
         assertThat(spec.get().sql()).contains(CATALOG_JOIN);
@@ -79,7 +79,7 @@ class SpatialQueryBuilderCatalogScopeTest {
     @Test
     @DisplayName("join is never item_id-only (the bug that leaked geo across catalogs)")
     void neverItemIdOnlyJoin() {
-        QuerySpec spec = builder.build(dwithin(), List.of(), List.of(), 100).orElseThrow();
+        QuerySpec spec = builder.build(dwithin(), List.of(), 100).orElseThrow();
         // must not contain the bare item_id join immediately followed by a path/geo condition
         assertThat(spec.sql()).doesNotContain("ilc.item_id = i.id AND ST_");
         assertThat(spec.sql()).doesNotContain("ilc.item_id = i.id AND ilc.path = ? AND ST_DWithin(ilc.geom");
