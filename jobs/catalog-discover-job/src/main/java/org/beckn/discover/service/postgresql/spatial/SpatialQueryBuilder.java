@@ -153,13 +153,9 @@ public class SpatialQueryBuilder {
         }
 
         // JSONPath condition drives the GIN index; spatial EXISTS drives GiST.
-        // The filter must be wrapped in exists() — the @@ operator requires a predicate
-        // (boolean-valued path), not a path expression that returns elements.
-        QueryTemplate template = QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
-        if (filterExpression != null && !filterExpression.isBlank()) {
-            String pgFilter = toPostgresFilter(filterExpression);
-            template.condition(QueryBuilderHelper.JSONPATH_MATCH, pgFilter);
-        }
+        // combinedBaseTemplate picks the SELECT (matching_offers projection for selection
+        // paths) and applies the exists()-wrapped @@ predicate from a single processed filter.
+        QueryTemplate template = combinedBaseTemplate(filterExpression);
 
         int added = appendSpatialConditions(template, constraints);
         if (added == 0) {
@@ -197,11 +193,7 @@ public class SpatialQueryBuilder {
             return Optional.empty();
         }
 
-        QueryTemplate template = QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
-        if (filterExpression != null && !filterExpression.isBlank()) {
-            String pgFilter = toPostgresFilter(filterExpression);
-            template.condition(QueryBuilderHelper.JSONPATH_MATCH, pgFilter);
-        }
+        QueryTemplate template = combinedBaseTemplate(filterExpression);
 
         int added = appendSpatialConditions(template, constraints);
         if (added == 0) {
@@ -220,26 +212,46 @@ public class SpatialQueryBuilder {
     // ── Filter conversion ─────────────────────────────────────────────────────
 
     /**
-     * Converts a raw user JSONPath filter into a PostgreSQL-compatible predicate
-     * suitable for the {@code @@} operator.
+     * Builds the base template for a combined (JSONPath + spatial) query AND applies the
+     * JSONPath {@code @@} predicate. The raw filter is processed <b>once</b> here
+     * ({@link JsonPathConverter#processFilter} is deterministic) and reused for both the
+     * SELECT projection and the WHERE predicate, so the two can never desync.
      *
-     * <p>The {@code @@} operator requires a boolean-valued jsonpath expression.
-     * Absolute path filters (starting with {@code $}) are wrapped in
-     * {@code exists(...)} so they evaluate as a boolean predicate.
-     * Relative conditions (starting with {@code @}) are wrapped in
-     * {@code exists($ ? (...))} to apply them to the root document.</p>
-     *
-     * <p>Colon-field names are quoted via
-     * {@link JsonPathConverter} so PostgreSQL parses them correctly.</p>
+     * <p>When the filter is a selection path (starts with {@code $}) the template projects
+     * the {@code matching_offers} column ({@link QueryBuilderHelper#BASE_SELECT_WITH_FILTER_RESULT},
+     * processed filter bound first so parameter order stays in lockstep with the SQL
+     * placeholders) — mirroring
+     * {@link org.beckn.discover.service.postgresql.jsonpath.JsonPathQueryBuilder} so an
+     * offer-selection filter (e.g. {@code $.catalogs[*].offers[*] ? (...)}) narrows the
+     * returned offers identically whether or not a spatial constraint is present
+     * (Finding 2). Non-selection filters use {@link QueryBuilderHelper#BASE_SELECT}; a
+     * blank filter yields a bare {@code BASE_SELECT} with no JSONPath predicate.</p>
      */
-    private String toPostgresFilter(String filterExpression) {
-        String processed = jsonPathConverter.processFilter(filterExpression);
-        if (processed.isBlank()) return QueryBuilderHelper.JSONPATH_EXISTS_ALL;
+    private QueryTemplate combinedBaseTemplate(String filterExpression) {
+        String processed = (filterExpression != null && !filterExpression.isBlank())
+                ? jsonPathConverter.processFilter(filterExpression) : "";
         String trimmed = processed.trim();
-        if (trimmed.startsWith("$")) {
-            return String.format(QueryBuilderHelper.JSONPATH_EXISTS_PATH, trimmed);
+        boolean selectionPath = trimmed.startsWith("$");
+        QueryTemplate template = selectionPath
+                ? QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT_WITH_FILTER_RESULT, processed)
+                : QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
+        if (!trimmed.isEmpty()) {
+            template.condition(QueryBuilderHelper.JSONPATH_MATCH, existsPredicate(trimmed));
         }
-        return String.format(QueryBuilderHelper.JSONPATH_EXISTS_CONDITION, trimmed);
+        return template;
+    }
+
+    /**
+     * Wraps an already-processed jsonpath into the boolean {@code exists(...)} predicate
+     * required by the {@code @@} operator. Absolute paths ({@code $...}) → {@code exists($...)};
+     * relative conditions ({@code @...}) → {@code exists($ ? (...))}.
+     */
+    private static String existsPredicate(String trimmedProcessed) {
+        if (trimmedProcessed.isEmpty()) return QueryBuilderHelper.JSONPATH_EXISTS_ALL;
+        if (trimmedProcessed.startsWith("$")) {
+            return String.format(QueryBuilderHelper.JSONPATH_EXISTS_PATH, trimmedProcessed);
+        }
+        return String.format(QueryBuilderHelper.JSONPATH_EXISTS_CONDITION, trimmedProcessed);
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────────
