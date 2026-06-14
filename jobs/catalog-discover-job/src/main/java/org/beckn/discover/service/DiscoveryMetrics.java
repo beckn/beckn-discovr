@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -136,8 +137,8 @@ public class DiscoveryMetrics {
                 .register(meterRegistry);
 
         List<String> routePaths = List.of("A", "B", "C", "D", "chain");
-        this.routeSelectedCounters = new java.util.HashMap<>();
-        this.routeLatencyTimers    = new java.util.HashMap<>();
+        this.routeSelectedCounters = new HashMap<>();
+        this.routeLatencyTimers    = new HashMap<>();
         for (String path : routePaths) {
             this.routeSelectedCounters.put(path,
                     Counter.builder("discovr.discover.route_selected.total")
