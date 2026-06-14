@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,6 +40,13 @@ public class GeometryExtractor {
     }
 
     /**
+     * One extracted geometry with its absolute (wildcard) path, before a per-path
+     * {@code seq} ordinal is assigned. Multiple entries may share the same path
+     * (e.g. several {@code availableAt[*].geo}); seq is assigned in {@link #extractLocations}.
+     */
+    private record RawLocation(String path, Geometry geom) {}
+
+    /**
      * One entry per supported geometry format.
      * Drives both dispatch in walkJsonTree and the skip-recursion guard — single source of truth.
      */
@@ -62,8 +70,19 @@ public class GeometryExtractor {
      */
     public List<ItemLocationCollection> extractLocations(String resourceId, String catalogId, JsonNode payloadRoot) {
         try {
-            List<ItemLocationCollection> result = new ArrayList<>();
-            walkJsonTree(resourceId, catalogId, payloadRoot, "$", 0, result);
+            List<RawLocation> raw = new ArrayList<>();
+            walkJsonTree(resourceId, catalogId, payloadRoot, "$", 0, raw);
+            // #306: a provider may publish multiple geometries under the SAME wildcard path
+            // (e.g. $.catalogs[*].provider.availableAt[*].geo). Assign a per-path ordinal
+            // (seq) so each becomes a distinct row — the PK now includes seq, so they no
+            // longer collapse to a single row (last-write-wins). The stored path stays a
+            // wildcard, so the discovery side's `ilc.path = ?` matching is unchanged.
+            Map<String, Short> seqByPath = new HashMap<>();
+            List<ItemLocationCollection> result = new ArrayList<>(raw.size());
+            for (RawLocation loc : raw) {
+                short seq = seqByPath.merge(loc.path(), (short) 0, (existing, ignored) -> (short) (existing + 1));
+                result.add(new ItemLocationCollection(resourceId, catalogId, loc.path(), seq, loc.geom()));
+            }
             return List.copyOf(result);
         } catch (Exception e) {
             log.warn("event={} resourceId={}", LogEvent.GEO_EXTRACT_FAILED, resourceId);
@@ -82,7 +101,7 @@ public class GeometryExtractor {
     }
 
     private void walkJsonTree(String resourceId, String catalogId, JsonNode node, String path, int depth,
-            List<ItemLocationCollection> accumulator) {
+            List<RawLocation> accumulator) {
         if (node == null || node.isMissingNode()) return;
         if (depth > MAX_DEPTH) {
             log.warn("event={} resourceId={} path={}", LogEvent.GEO_MAX_DEPTH_EXCEEDED, resourceId, path);
@@ -97,7 +116,7 @@ public class GeometryExtractor {
                 GeometryParser parser = GEOMETRY_PARSERS.get(key);
                 if (parser != null) {
                     parser.parse(entry.getValue(), resourceId, catalogId, segPath)
-                            .map(geom -> new ItemLocationCollection(resourceId, catalogId, segPath, geom))
+                            .map(geom -> new RawLocation(segPath, geom))
                             .ifPresent(accumulator::add);
                 } else {
                     walkJsonTree(resourceId, catalogId, entry.getValue(), segPath, depth + 1, accumulator);
