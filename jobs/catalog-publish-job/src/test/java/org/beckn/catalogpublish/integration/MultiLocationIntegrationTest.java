@@ -1,6 +1,5 @@
 package org.beckn.catalogpublish.integration;
 
-import org.beckn.catalogpublish.model.ItemId;
 import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

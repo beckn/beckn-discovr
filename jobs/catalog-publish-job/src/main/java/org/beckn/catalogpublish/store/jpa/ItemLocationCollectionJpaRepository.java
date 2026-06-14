@@ -17,7 +17,7 @@ public interface ItemLocationCollectionJpaRepository
      * The {@code catalog_id} column on {@code item_location_collection} makes this
      * a direct, catalog-scoped DELETE — no JOIN required, no cross-catalog contamination.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query(value = "DELETE FROM item_location_collection WHERE catalog_id = :catalogId",
             nativeQuery = true)
     int deleteByCatalogId(@Param("catalogId") String catalogId);
@@ -30,7 +30,7 @@ public interface ItemLocationCollectionJpaRepository
      * otherwise stale locations would keep matching spatial queries (#306). Scoped to the
      * published item ids so resources not in a partial MERGE publish are untouched.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query(value = "DELETE FROM item_location_collection WHERE catalog_id = :catalogId AND item_id IN (:itemIds)",
             nativeQuery = true)
     int deleteByItemIdsAndCatalogId(@Param("itemIds") List<String> itemIds,
