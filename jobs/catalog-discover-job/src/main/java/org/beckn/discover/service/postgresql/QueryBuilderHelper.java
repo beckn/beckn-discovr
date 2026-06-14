@@ -72,6 +72,17 @@ public final class QueryBuilderHelper {
 
     /**
      * Correlated EXISTS subquery for spatial filtering.
+     *
+     * <p>The join is scoped by <b>both</b> {@code item_id} AND {@code catalog_id}. The
+     * {@code item} primary key is {@code (id, catalog_id)} — the same resource id can be
+     * published in multiple catalogs at different locations, and
+     * {@code item_location_collection} stores one geo row per (item_id, catalog_id).
+     * Joining on {@code item_id} alone would let a catalog match another catalog's geo
+     * for the same resource id (e.g. a Pune catalog matching a Delhi radius because a
+     * Delhi catalog sells the same service). Scoping by {@code catalog_id} keeps each
+     * catalog's spatial match to its own locations — mirroring the Elasticsearch path,
+     * where each {@code catalogId:resourceId} document carries only its own geo.</p>
+     *
      * <p>Format args: pathCondition, stFunction, geomCast, geoFragment, distanceSuffix
      * <ul>
      *   <li>pathCondition: {@code "TRUE"} or {@code "ilc.path = ?"} or {@code "ilc.path IN (?, ?)"}</li>
@@ -80,7 +91,7 @@ public final class QueryBuilderHelper {
      * </ul>
      */
     public static final String SPATIAL_EXISTS = "EXISTS (SELECT 1 FROM item_location_collection ilc "
-            + "WHERE ilc.item_id = i.id AND %s AND %s(ilc.geom%s, %s%s))";
+            + "WHERE ilc.item_id = i.id AND ilc.catalog_id = i.catalog_id AND %s AND %s(ilc.geom%s, %s%s))";
 
     /** Path condition when no targets: match any geometry. */
     public static final String SPATIAL_PATH_ANY = "TRUE";
