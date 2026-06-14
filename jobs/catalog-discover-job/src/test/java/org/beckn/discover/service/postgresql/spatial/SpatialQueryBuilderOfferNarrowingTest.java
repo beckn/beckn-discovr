@@ -56,7 +56,8 @@ class SpatialQueryBuilderOfferNarrowingTest {
         assertThat(spec.get().sql())
                 .contains("jsonb_path_query_array(i.payload, CAST(? AS jsonpath)) AS matching_offers");
         // processed selection path is bound FIRST (the SELECT projection placeholder)
-        assertThat(spec.get().parameters().get(0)).isEqualTo(OFFER_FILTER);
+        // the bound select param is the PROCESSED filter (== raw here since no colon/quote fields)
+        assertThat(spec.get().parameters().get(0)).isEqualTo(new JsonPathConverter().processFilter(OFFER_FILTER));
     }
 
     @Test
@@ -69,7 +70,8 @@ class SpatialQueryBuilderOfferNarrowingTest {
         String sql = spec.get().sql();
         assertThat(sql).contains("jsonb_path_query_array(i.payload, CAST(? AS jsonpath)) AS matching_offers");
         assertThat(sql).contains("i.id = ANY(string_to_array(?, '|'))");
-        assertThat(spec.get().parameters().get(0)).isEqualTo(OFFER_FILTER);
+        // the bound select param is the PROCESSED filter (== raw here since no colon/quote fields)
+        assertThat(spec.get().parameters().get(0)).isEqualTo(new JsonPathConverter().processFilter(OFFER_FILTER));
     }
 
     @Test
@@ -79,5 +81,52 @@ class SpatialQueryBuilderOfferNarrowingTest {
 
         assertThat(spec).isPresent();
         assertThat(spec.get().sql()).doesNotContain("matching_offers");
+    }
+
+    @Test
+    @DisplayName("resource-selection path also projects matching_offers (assembler's isOfferLike ignores resource nodes)")
+    void buildCombined_resourceSelection_projectsMatchingOffers() {
+        // Any $-path takes the selection branch; the projected matching_offers will contain
+        // resource objects, which PostgreSQLAssembler.isOfferLike() rejects — so offers are
+        // not corrupted. Here we just assert the SQL takes the selection branch consistently.
+        String resourceFilter = "$.catalogs[*].resources[*] ? (@.resourceAttributes.processingTimeDays == 5)";
+        Optional<QuerySpec> spec = builder.buildCombined(dwithin(), resourceFilter, List.of(), List.of(), 100);
+
+        assertThat(spec).isPresent();
+        assertThat(spec.get().sql())
+                .contains("jsonb_path_query_array(i.payload, CAST(? AS jsonpath)) AS matching_offers");
+        assertThat(spec.get().parameters().get(0)).isEqualTo(new JsonPathConverter().processFilter(resourceFilter));
+    }
+
+    @Test
+    @DisplayName("non-selection (relative @) filter falls back to BASE_SELECT but still applies the @@ predicate")
+    void buildCombined_relativeFilter_noProjectionButPredicateApplied() {
+        Optional<QuerySpec> spec = builder.buildCombined(
+                dwithin(), "@.resourceAttributes.processingTimeDays == 5", List.of(), List.of(), 100);
+
+        assertThat(spec).isPresent();
+        assertThat(spec.get().sql()).doesNotContain("matching_offers");
+        assertThat(spec.get().sql()).contains("i.payload @@ CAST(? AS jsonpath)");
+    }
+
+    @Test
+    @DisplayName("full param order: selection + spatial(dwithin) + schema + allowlist line up with placeholders")
+    void buildCombinedWithAllowlist_fullParamOrder() {
+        Optional<QuerySpec> spec = builder.buildCombinedWithAllowlist(
+                dwithin(), OFFER_FILTER, List.of("GroceryItem"),
+                List.of("https://schema.org/Grocery"), 100, List.of("res-1", "res-2"));
+
+        assertThat(spec).isPresent();
+        var p = spec.get().parameters();
+        // [0]=processed select filter, [1]=exists() predicate, then spatial (path, geojson, distance),
+        // then schema type + context, then allowlist (WHERE), then allowlist (ORDER BY)
+        assertThat(p.get(0)).isEqualTo(new JsonPathConverter().processFilter(OFFER_FILTER));
+        assertThat(p.get(1).toString()).contains("exists(");                 // JSONPATH_MATCH predicate
+        assertThat(p).contains("$.catalogs[*].provider.availableAt[*].geo"); // spatial targets path
+        assertThat(p).contains("GroceryItem", "https://schema.org/Grocery"); // schema filters
+        // allowlist appears twice (WHERE ANY + ORDER BY array_position), pipe-joined
+        assertThat(p.stream().filter(x -> "res-1|res-2".equals(x)).count()).isEqualTo(2L);
+        // schema clauses present in SQL
+        assertThat(spec.get().sql()).contains("i.type IN").contains("i.context_url IN");
     }
 }
