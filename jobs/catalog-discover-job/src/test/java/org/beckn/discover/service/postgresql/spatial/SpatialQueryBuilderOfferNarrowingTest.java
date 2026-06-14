@@ -50,7 +50,7 @@ class SpatialQueryBuilderOfferNarrowingTest {
     @Test
     @DisplayName("J+G with offer-selection filter projects matching_offers (offer narrowing preserved with geo)")
     void buildCombined_offerSelection_projectsMatchingOffers() {
-        Optional<QuerySpec> spec = builder.buildCombined(dwithin(), OFFER_FILTER, List.of(), List.of(), 100);
+        Optional<QuerySpec> spec = builder.buildCombined(dwithin(), OFFER_FILTER, List.of(), 100);
 
         assertThat(spec).isPresent();
         assertThat(spec.get().sql())
@@ -64,7 +64,7 @@ class SpatialQueryBuilderOfferNarrowingTest {
     @DisplayName("J+G+T chain step 2 with offer-selection filter also projects matching_offers + keeps allowlist")
     void buildCombinedWithAllowlist_offerSelection_projectsMatchingOffersAndAllowlist() {
         Optional<QuerySpec> spec = builder.buildCombinedWithAllowlist(
-                dwithin(), OFFER_FILTER, List.of(), List.of(), 100, List.of("res-1", "res-2"));
+                dwithin(), OFFER_FILTER, List.of(), 100, List.of("res-1", "res-2"));
 
         assertThat(spec).isPresent();
         String sql = spec.get().sql();
@@ -77,7 +77,7 @@ class SpatialQueryBuilderOfferNarrowingTest {
     @Test
     @DisplayName("geo-only (no filter) does NOT project matching_offers")
     void buildCombined_noFilter_usesBaseSelect() {
-        Optional<QuerySpec> spec = builder.buildCombined(dwithin(), "", List.of(), List.of(), 100);
+        Optional<QuerySpec> spec = builder.buildCombined(dwithin(), "", List.of(), 100);
 
         assertThat(spec).isPresent();
         assertThat(spec.get().sql()).doesNotContain("matching_offers");
@@ -90,7 +90,7 @@ class SpatialQueryBuilderOfferNarrowingTest {
         // resource objects, which PostgreSQLAssembler.isOfferLike() rejects — so offers are
         // not corrupted. Here we just assert the SQL takes the selection branch consistently.
         String resourceFilter = "$.catalogs[*].resources[*] ? (@.resourceAttributes.processingTimeDays == 5)";
-        Optional<QuerySpec> spec = builder.buildCombined(dwithin(), resourceFilter, List.of(), List.of(), 100);
+        Optional<QuerySpec> spec = builder.buildCombined(dwithin(), resourceFilter, List.of(), 100);
 
         assertThat(spec).isPresent();
         assertThat(spec.get().sql())
@@ -102,7 +102,7 @@ class SpatialQueryBuilderOfferNarrowingTest {
     @DisplayName("non-selection (relative @) filter falls back to BASE_SELECT but still applies the @@ predicate")
     void buildCombined_relativeFilter_noProjectionButPredicateApplied() {
         Optional<QuerySpec> spec = builder.buildCombined(
-                dwithin(), "@.resourceAttributes.processingTimeDays == 5", List.of(), List.of(), 100);
+                dwithin(), "@.resourceAttributes.processingTimeDays == 5", List.of(), 100);
 
         assertThat(spec).isPresent();
         assertThat(spec.get().sql()).doesNotContain("matching_offers");
@@ -113,20 +113,21 @@ class SpatialQueryBuilderOfferNarrowingTest {
     @DisplayName("full param order: selection + spatial(dwithin) + schema + allowlist line up with placeholders")
     void buildCombinedWithAllowlist_fullParamOrder() {
         Optional<QuerySpec> spec = builder.buildCombinedWithAllowlist(
-                dwithin(), OFFER_FILTER, List.of("GroceryItem"),
-                List.of("https://schema.org/Grocery"), 100, List.of("res-1", "res-2"));
+                dwithin(), OFFER_FILTER, List.of("https://schema.org/Grocery#GroceryItem"),
+                100, List.of("res-1", "res-2"));
 
         assertThat(spec).isPresent();
         var p = spec.get().parameters();
         // [0]=processed select filter, [1]=exists() predicate, then spatial (path, geojson, distance),
-        // then schema type + context, then allowlist (WHERE), then allowlist (ORDER BY)
+        // then schema pair (context, type), then allowlist (WHERE), then allowlist (ORDER BY)
         assertThat(p.get(0)).isEqualTo(new JsonPathConverter().processFilter(OFFER_FILTER));
         assertThat(p.get(1).toString()).contains("exists(");                 // JSONPATH_MATCH predicate
         assertThat(p).contains("$.catalogs[*].provider.availableAt[*].geo"); // spatial targets path
-        assertThat(p).contains("GroceryItem", "https://schema.org/Grocery"); // schema filters
+        // schema-context pairing (#302): base + fragment bound as a (context, type) pair
+        assertThat(p).contains("https://schema.org/Grocery", "GroceryItem");
         // allowlist appears twice (WHERE ANY + ORDER BY array_position), pipe-joined
         assertThat(p.stream().filter(x -> "res-1|res-2".equals(x)).count()).isEqualTo(2L);
-        // schema clauses present in SQL
-        assertThat(spec.get().sql()).contains("i.type IN").contains("i.context_url IN");
+        // schema clause is the paired form, not independent INs
+        assertThat(spec.get().sql()).contains("(i.context_url = ? AND i.type = ?)");
     }
 }
