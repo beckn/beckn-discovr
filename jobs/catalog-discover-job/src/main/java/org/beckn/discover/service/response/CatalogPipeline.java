@@ -130,10 +130,14 @@ public class CatalogPipeline {
      * No-op when the request has no schema context filter.
      */
     private void filterResourcesBySchemaContext(List<Catalog> catalogs, QueryRequest request) {
-        if (request.schemaContextUrls().isEmpty()) return;
+        // Use the RAW schemaContext entries (url#type), not the pre-split base-URL
+        // list — otherwise the fragment is gone and pairing degrades to context-only,
+        // re-opening the cross-pair leak (spec SC-45 / F-14) on engine paths that rely
+        // on this prune (e.g. NLWeb, whose appliesSchemaFilter() is false).
+        if (request.rawSchemaContextUrls().isEmpty()) return;
 
         int beforeCount = totalResourceCount(catalogs);
-        processor.filterCatalogsBySchemaContext(catalogs, request.schemaContextUrls());
+        processor.filterCatalogsBySchemaContext(catalogs, request.rawSchemaContextUrls());
         int afterCount = totalResourceCount(catalogs);
 
         if (beforeCount != afterCount) {

@@ -158,7 +158,7 @@ public final class QueryBuilderHelper {
      * <pre>
      * QueryBuilderHelper.query(BASE_SELECT)
      *         .condition(JSONPATH_MATCH, filterValue)
-     *         .schemaFilters(schemaTypes, schemaContextUrls)
+     *         .schemaFiltersPaired(rawSchemaContextUrls)
      *         .build(limit);
      * </pre>
      */
@@ -180,13 +180,60 @@ public final class QueryBuilderHelper {
             return this;
         }
 
-        /** Adds schema type and context_url IN-clause filters when present. */
-        public QueryTemplate schemaFilters(List<String> schemaTypes, List<String> schemaContextUrls) {
-            DiscoveryServiceUtil.buildInClause("i.type", schemaTypes, parameters)
-                    .ifPresent(conditions::add);
-            DiscoveryServiceUtil.buildInClause("i.context_url", schemaContextUrls, parameters)
-                    .ifPresent(conditions::add);
-            return this;
+        /**
+         * Adds a schema-context filter that preserves {@code (context, type)} pairing.
+         *
+         * <p>Each {@code schemaContext} entry is a {@code <@context-url>#<@type>}
+         * string: the base (before {@code #}) must match {@code i.context_url} and the
+         * fragment (after {@code #}) must match {@code i.type} <em>on the same row</em>.
+         * Entries are OR'd, so a resource qualifies when it matches at least one full
+         * pair:</p>
+         * <pre>
+         * ( (i.context_url = ? AND i.type = ?)      -- Grocery#GroceryResource
+         *   OR (i.context_url = ? AND i.type = ?)   -- Retail#RetailResource
+         *   OR (i.context_url = ?) )                -- context-only entry (no #type)
+         * </pre>
+         *
+         * <p>This is the SQL twin of {@code EsSchemaFilterBuilder}'s
+         * {@code bool.should[ bool.must[ctx, type] ]} structure. It replaces the old
+         * independent {@code context_url IN (...) AND type IN (...)} form, which lost
+         * pairing and let cross-pair combinations (e.g. Grocery-ctx + Retail-type)
+         * leak through (spec SC-45 / F-14).</p>
+         *
+         * <p>No-op when {@code rawSchemaContextUrls} is null/empty. All values are
+         * bound as {@code ?} parameters — no concatenation of user input.</p>
+         *
+         * @param rawSchemaContextUrls raw {@code url#type} entries (pairing preserved)
+         */
+        public QueryTemplate schemaFiltersPaired(List<String> rawSchemaContextUrls) {
+            if (rawSchemaContextUrls == null || rawSchemaContextUrls.isEmpty()) {
+                return this;
+            }
+            List<String> pairClauses = new ArrayList<>(rawSchemaContextUrls.size());
+            List<Object> pairParams  = new ArrayList<>();
+            for (String raw : rawSchemaContextUrls) {
+                if (raw == null || raw.isBlank()) continue;
+                String base     = DiscoveryServiceUtil.extractBaseUrl(raw);
+                String fragment = DiscoveryServiceUtil.extractFragment(raw);
+                if (base == null || base.isBlank()) continue;
+                if (fragment == null || fragment.isBlank()) {
+                    // Context-only entry: match the context, any type.
+                    pairClauses.add("(i.context_url = ?)");
+                    pairParams.add(base.trim());
+                } else {
+                    // Paired entry: context AND type must match the same row.
+                    pairClauses.add("(i.context_url = ? AND i.type = ?)");
+                    pairParams.add(base.trim());
+                    pairParams.add(fragment.trim());
+                }
+            }
+            if (pairClauses.isEmpty()) {
+                return this;
+            }
+            String combined = pairClauses.size() == 1
+                    ? pairClauses.get(0)
+                    : "(" + String.join(" OR ", pairClauses) + ")";
+            return condition(combined, pairParams.toArray());
         }
 
         /**
