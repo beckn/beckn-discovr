@@ -240,10 +240,14 @@ public class PersistenceStep {
         // MERGE re-derives each published item's locations from its (merged) payload. Clear the
         // published items' existing location rows first so a reduced set of availableAt geometries
         // doesn't leave stale higher-seq rows behind (#306). FULL already cleared the whole catalog
-        // above. Scoped to the published item ids — resources absent from a partial MERGE are untouched.
+        // above. Scoped to the published item ids — resources absent from a partial MERGE are
+        // untouched. Grouped by each item's OWN catalogId, because Phase 3 cross-catalog items
+        // carry a different catalogId than the publishing catalog.
         if (!isFullReplace && !savedResources.isEmpty()) {
-            locationStore.deleteByItemIdsAndCatalogId(
-                    savedResources.stream().map(Item::getId).toList(), catalogId);
+            savedResources.stream()
+                    .collect(Collectors.groupingBy(Item::getCatalogId,
+                            Collectors.mapping(Item::getId, Collectors.toList())))
+                    .forEach((catId, itemIds) -> locationStore.deleteByItemIdsAndCatalogId(itemIds, catId));
         }
         List<ItemLocationCollection> allLocations = savedResources.stream()
                 .flatMap(item -> {
