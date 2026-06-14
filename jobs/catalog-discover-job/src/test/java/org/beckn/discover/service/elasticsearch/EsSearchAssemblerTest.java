@@ -402,6 +402,53 @@ class EsSearchAssemblerTest {
     }
 
     @Test
+    void hitWithDescriptorCodes_populatesCodeOnCatalogResourceAndProvider() {
+        // F-20: descriptor.code must survive the ES path on all three descriptors,
+        // matching the lossless PostgreSQL path.
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
+        doc.put("catalog_descriptor_code", "CATALOG_ACTIVE");
+        doc.put("resource_descriptor_code", "RESOURCE_LIVE");
+        doc.put("catalog_provider", Map.of(
+                "id", "prov-1",
+                "descriptor", Map.of("name", "Prov", "code", "PROVIDER_VERIFIED")));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-code-1");
+
+        Catalog catalog = catalogs.get(0);
+        assertThat(catalog.getDescriptor().getCode()).isEqualTo("CATALOG_ACTIVE");
+        assertThat(catalog.getResources().get(0).getDescriptor().getCode()).isEqualTo("RESOURCE_LIVE");
+        assertThat(catalog.getProvider().getDescriptor().getCode()).isEqualTo("PROVIDER_VERIFIED");
+    }
+
+    @Test
+    void hitWithProviderDescriptorMedia_populatesFullProviderDescriptor() {
+        // F-20: provider descriptor thumbnailImage/docs/mediaFile must round-trip on the
+        // ES path (the full provider node is stored in _source).
+        Map<String, Object> doc = new java.util.HashMap<>(evChargerDoc("cat-1", "item-1", "Charger"));
+        doc.put("catalog_provider", Map.of(
+                "id", "prov-1",
+                "descriptor", Map.of(
+                        "name", "Prov",
+                        "shortDesc", "short",
+                        "longDesc", "long",
+                        "thumbnailImage", "https://example.org/prov-thumb.jpg",
+                        "docs", List.of(Map.of("url", "https://example.org/prov.pdf", "label", "Profile")),
+                        "mediaFile", List.of(Map.of("url", "https://example.org/prov.mp4", "mimetype", "video/mp4")))));
+
+        List<Catalog> catalogs = assembler.assemble(List.of(doc), "tx-prov-desc-1");
+
+        var pd = catalogs.get(0).getProvider().getDescriptor();
+        assertThat(pd.getName()).isEqualTo("Prov");
+        assertThat(pd.getShortDesc()).isEqualTo("short");
+        assertThat(pd.getLongDesc()).isEqualTo("long");
+        assertThat(pd.getThumbnailImage()).isEqualTo("https://example.org/prov-thumb.jpg");
+        assertThat(pd.getDocs()).isNotNull().hasSize(1);
+        assertThat(pd.getDocs().get(0).get("label")).isEqualTo("Profile");
+        assertThat(pd.getMediaFile()).isNotNull().hasSize(1);
+        assertThat(pd.getMediaFile().get(0).get("mimetype")).isEqualTo("video/mp4");
+    }
+
+    @Test
     void hitWithCatalogBppFields_populatesBppIdAndUriOnCatalog() {
         // Field-completeness guard (fabric-support #63): bppId/bppUri must survive the
         // ES path identically to the PostgreSQL path, so the same indexed catalog
