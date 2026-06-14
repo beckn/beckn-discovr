@@ -638,14 +638,17 @@ class DiscoveryServiceRoutingTest {
         }
 
         @Test
-        @DisplayName("Case 4 (J+G): throws IllegalStateException when spatial conditions cannot be built")
+        @DisplayName("Case 4 (J+G): throws IllegalArgumentException (-> 400) when spatial conditions cannot be built")
         void case4_throwsWhenSpatialConditionsCannotBeBuilt() throws Exception {
             var svc = service(false);
             when(pgQueryEngine.executeCombinedQuery(any())).thenReturn(Optional.empty());
 
             var req = buildRequest("$.price > 5", true, null);
 
-            org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
+            // A blank/unsupported spatial op is a client-side validation failure: PostgreSQL is the
+            // only geo enforcement for case 4, so it must reject (400 SCH_) rather than silently drop
+            // geo. IllegalArgumentException is what GlobalExceptionHandler maps to 400.
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                     () -> svc.processDiscoveryRequest(req));
 
             // Verify no empty-response was built — the exception path was taken

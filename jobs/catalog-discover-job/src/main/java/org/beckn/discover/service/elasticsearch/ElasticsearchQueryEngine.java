@@ -308,7 +308,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
      * @throws Exception when ES is unreachable, the query is malformed, or any
      *                   non-benign failure occurs
      */
-    @SuppressWarnings("unchecked")
     public List<String> fetchMatchingResourceIds(QueryRequest request, int size) throws Exception {
         Instant start = Instant.now();
         // Defensive: a non-positive candidate size (only reachable via a zeroed
@@ -340,8 +339,8 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             String enriched = queryEnricher.isPresent() ? queryEnricher.get().enrich(text) : text;
             Optional<List<Float>> vecOpt = embeddingClient.get().embed(enriched);
             if (vecOpt.isEmpty()) {
-                log.warn("event={} mode=semantic reason=empty-vector",
-                        LogEvent.CHAIN_ES_EMPTY_VECTOR);
+                log.warn(LogEvent.CHAIN_ES_EMPTY_VECTOR,
+                        value("mode", "semantic"), value("reason", "empty-vector"));
                 return List.of();
             }
             final List<Float> vec = vecOpt.get();
@@ -354,9 +353,10 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             // least k so the KNN request is always valid while preserving the overfetch.
             final int knnK = Math.min(size, ES_KNN_MAX);
             final int effectiveCandidates = Math.min(Math.max(knnCandidates, knnK), ES_KNN_MAX);
-            log.debug("event={} mode=semantic alias={} k={} numCandidates={} geo={} schema={}",
-                    LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, knnK, effectiveCandidates,
-                    finalGeoFilters.size(), schemaFilters.size());
+            log.debug(LogEvent.CHAIN_ES_CANDIDATES_FETCHED,
+                    value("mode", "semantic"), value("alias", alias), value("k", knnK),
+                    value("numCandidates", effectiveCandidates), value("geo", finalGeoFilters.size()),
+                    value("schema", schemaFilters.size()));
             if (!schemaFilters.isEmpty()) {
                 log.debug(LogEvent.ES_SCHEMA_FILTER_APPLIED,
                         value("path", "chain+semantic"),
@@ -386,8 +386,8 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                 }, Map.class);
 
                 List<String> ids = extractResourceIds(response);
-                log.info("event={} mode=semantic ids={} durationMs={}",
-                        LogEvent.CHAIN_ES_CANDIDATES_FETCHED, ids.size(), elapsed(start));
+                log.info(LogEvent.CHAIN_ES_CANDIDATES_FETCHED,
+                        value("mode", "semantic"), value("ids", ids.size()), value("durationMs", elapsed(start)));
                 return ids;
             } catch (ElasticsearchException e) {
                 return handleResourceIdEsException(e, alias);
@@ -425,16 +425,16 @@ public class ElasticsearchQueryEngine implements QueryEngine {
         // the entire corpus into the PSQL step. That only happens if multi-match-fields
         // is misconfigured to empty; fail loud instead of returning wrong candidates.
         if (textMustQuery == null && textShouldQuery == null) {
-            log.error("event={} reason=no-text-query multiMatchFields={}",
-                    LogEvent.CHAIN_ES_NO_TEXT_QUERY, mmFields);
+            log.error(LogEvent.CHAIN_ES_NO_TEXT_QUERY,
+                    value("reason", "no-text-query"), value("multiMatchFields", mmFields));
             throw new IllegalStateException(
                     "Chain BM25 step 1 has no text query clause — discovery.elasticsearch.multi-match-fields "
                     + "must contain at least one field (a full_text_blob* and/or scoring field).");
         }
 
-        log.debug("event={} mode=bm25 alias={} size={} geo={} schema={}",
-                LogEvent.CHAIN_ES_CANDIDATES_FETCHED, alias, size,
-                finalGeoFilters.size(), schemaFilters.size());
+        log.debug(LogEvent.CHAIN_ES_CANDIDATES_FETCHED,
+                value("mode", "bm25"), value("alias", alias), value("size", size),
+                value("geo", finalGeoFilters.size()), value("schema", schemaFilters.size()));
 
         try {
             SearchResponse<Map> response = esClient.search(s -> {
@@ -454,8 +454,8 @@ public class ElasticsearchQueryEngine implements QueryEngine {
             }, Map.class);
 
             List<String> ids = extractResourceIds(response);
-            log.info("event={} mode=bm25 ids={} durationMs={}",
-                    LogEvent.CHAIN_ES_CANDIDATES_FETCHED, ids.size(), elapsed(start));
+            log.info(LogEvent.CHAIN_ES_CANDIDATES_FETCHED,
+                    value("mode", "bm25"), value("ids", ids.size()), value("durationMs", elapsed(start)));
             return ids;
 
         } catch (ElasticsearchException e) {

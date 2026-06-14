@@ -174,6 +174,15 @@ public class DiscoveryService {
 
             return response;
 
+        } catch (IllegalArgumentException e) {
+            // Client-side validation failure surfaced mid-query — e.g. an unsupported/blank spatial
+            // operation that passed schema validation but the PostGIS builder cannot honour for a
+            // J+G request (case 4). Propagate as-is so GlobalExceptionHandler maps it to 400 SCH_;
+            // wrapping it in the generic RuntimeException below would mask it as a 500 server fault.
+            metrics.recordFailure(start, e, request.getContext().getTransactionId());
+            log.warn(LogEvent.QUERY_FAILED,
+                    value("error", e.getMessage()));
+            throw e;
         } catch (SemanticSearchException e) {
             // Propagate as-is — GlobalExceptionHandler maps this to 503 NET_INTERNAL_ERROR
             metrics.recordFailure(start, e, request.getContext().getTransactionId());
@@ -315,14 +324,18 @@ public class DiscoveryService {
         recordStep(tracker, "jsonpath-spatial.query");
 
         if (combined.isEmpty()) {
-            // Spatial conditions could not be built — this indicates malformed or unsupported
-            // spatial predicates in a request that was already classified as J+G. This is an
-            // error path, not a routing fallback — use the dedicated event so log filters can
-            // distinguish it from the benign QUERY_PATH_FALLBACK.
-            log.error(LogEvent.QUERY_COMBINED_SPATIAL_BUILD_FAILED,
+            // Spatial conditions could not be built — this means the request carried a blank or
+            // unsupported spatial operation that passed schema validation but the PostGIS builder
+            // cannot honour. PostgreSQL is the *only* geo enforcement for case 4 (no ES step), so
+            // returning rows here would silently ignore the geo constraint — instead reject the
+            // request. This is a client-side validation failure (bad spatial op), not a server
+            // fault: WARN + IllegalArgumentException so GlobalExceptionHandler returns 400 (SCH_)
+            // rather than 500. The dedicated event lets log filters distinguish it from the benign
+            // QUERY_PATH_FALLBACK.
+            log.warn(LogEvent.QUERY_COMBINED_SPATIAL_BUILD_FAILED,
                     value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS),
                     value("transactionId", context.getTransactionId()));
-            throw new IllegalStateException(
+            throw new IllegalArgumentException(
                     "Spatial conditions could not be built for a J+G request (transactionId="
                     + context.getTransactionId() + "). Check that spatial constraints use supported operations.");
         }
@@ -498,9 +511,14 @@ public class DiscoveryService {
             if (result.isPresent()) {
                 return result.get();
             }
-            // Spatial conditions could not be built — degrade to case-6 style.
-            log.debug(LogEvent.QUERY_PATH_FALLBACK,
-                    value("reason", "jsonpath-text-spatial-build-failed, falling-back-to-jsonpath-only"));
+            // Spatial conditions could not be built — degrade to case-6 style (JSONPath only).
+            // Geo was already applied in ES step 1 for the candidate IDs, so this PSQL re-apply is
+            // belt-and-suspenders; dropping it does not by itself widen results beyond the ES geo
+            // window. WARN (not DEBUG) because a BAP caller has no other visibility into the geo
+            // degradation, and it signals a likely malformed/unsupported spatial op worth alerting on.
+            log.warn(LogEvent.QUERY_PATH_FALLBACK,
+                    value("reason", "jsonpath-text-spatial-build-failed, falling-back-to-jsonpath-only"),
+                    value("transactionId", qr.transactionId()));
         }
         // Case 6: JSONPath restricted to the resource IDs (no geo).
         return pgQueryEngine.executeJsonPathQueryByResourceIds(qr, resourceIds);
