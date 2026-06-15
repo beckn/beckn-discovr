@@ -9,9 +9,11 @@ import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
+import org.beckn.discover.service.elasticsearch.ElasticsearchQueryEngine;
 import org.beckn.discover.service.engine.QueryEngine;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.engine.TextSearchEngine;
+import org.beckn.discover.service.postgresql.PostgreSQLQueryEngine;
 import org.beckn.discover.service.postgresql.ProviderOfferEnricher;
 import org.beckn.discover.service.response.CatalogPipeline;
 import org.beckn.discover.service.response.ResponseProcessor;
@@ -30,45 +32,70 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
 
 /**
  * Main orchestration service for discovery request processing.
  *
- * <h3>Query routing</h3>
+ * <h3>Query routing — 7 J/G/T cases</h3>
  * <pre>
- * DiscoverRequest
- *        │
- *        ├── filters + spatial → Path A: queryEngine.executeCombinedQuery()
- *        │                        Optional.empty() → parallel B ∥ C + intersect
- *        ├── filters only      → Path B: queryEngine.executeFilterQuery()
- *        ├── spatial only      → Path C: queryEngine.executeSpatialQuery()
- *        └── neither           → Path D: textSearchEngine.search()
+ * ┌───┬───┬───┬───┬───────────┬──────────────────────────────────────────────┐
+ * │ # │ J │ G │ T │   Route   │                 Engine flow                  │
+ * ├───┼───┼───┼───┼───────────┼──────────────────────────────────────────────┤
+ * │ 1 │ ✓ │   │   │ Path B    │ PSQL JSONPath                                │
+ * │ 2 │   │ ✓ │   │ Path C    │ PSQL + PostGIS                               │
+ * │ 3 │   │   │ ✓ │ Path D    │ ES text (BM25 / semantic / NLWeb)            │
+ * │ 4 │ ✓ │ ✓ │   │ Path A    │ PSQL + PostGIS combined (one query)          │
+ * │ 5 │   │ ✓ │ ✓ │ Path C    │ ES (text + geo_shape)                        │
+ * │ 6 │ ✓ │   │ ✓ │ JSONPath  │ ES text → IDs → PSQL JSONPath + IN           │
+ * │   │   │   │   │  + text   │                                              │
+ * │ 7 │ ✓ │ ✓ │ ✓ │ JSONPath  │ ES text+geo → IDs → PSQL JSONPath + geo + IN │
+ * │   │   │   │   │  + text   │                                              │
+ * └───┴───┴───┴───┴───────────┴──────────────────────────────────────────────┘
+ *   J = JSONPath filters    G = spatial (geo)    T = text or semantic search
  * </pre>
  *
  * <h3>Post-processing</h3>
- * After every path the raw {@code List<Catalog>} passes through
+ * After every route the raw {@code List<Catalog>} passes through
  * {@link CatalogPipeline} (schema filter → dedup offers → cross-filter items /
  * offers → remove empty catalogs) before the response is assembled.
+ *
+ * <h3>Semantic search</h3>
+ * When {@code discovery.text-search.engine=els-semantic-search} (i.e. an
+ * {@link org.beckn.discover.service.elasticsearch.EmbeddingClient} bean is present),
+ * the semantic (KNN) path is used everywhere a text condition is involved:
+ * <ul>
+ *   <li>Case 3 (T-only) — via the {@link TextSearchEngine} bean
+ *       ({@code ElasticsearchTextSearchEngine#search}).</li>
+ *   <li>Case 5 (G+T) — via {@code ElasticsearchQueryEngine.executeSpatialQuery},
+ *       which runs KNN with geo_shape as {@code knn.filter}.</li>
+ *   <li>Cases 6 (J+T) and 7 (J+G+T) — via
+ *       {@code ElasticsearchQueryEngine.fetchMatchingResourceIds}, which runs KNN
+ *       restricted to {@code _source: [resource_id]} for the chain's step 1.</li>
+ * </ul>
+ * When the embedding client is absent (e.g. {@code native-els}), all of the above
+ * use lexical BM25 instead. Semantic internals (enrich + embed) live in
+ * {@code QueryEnricher} / {@code EmbeddingClient} and are reused unchanged across
+ * every path — not re-implemented per route.
  *
  * <h3>Design decisions</h3>
  * <ul>
  *   <li>Constructor injection — all fields are {@code final} (AR-3.1).</li>
- *   <li>Path A fallback uses {@code Optional<List<Catalog>>} to distinguish
- *       "no spatial conditions built" from "query ran, zero results" — this
- *       fixes the previous bug where an empty result list incorrectly
- *       triggered the parallel fallback.</li>
- *   <li>MDC is captured before spawning parallel futures so that all threads
- *       carry the same transaction / message / BAP identifiers (NFR-3.3).</li>
- *   <li>Parallel queries use a dedicated I/O thread pool
- *       ({@code discoveryQueryExecutor}), not the JVM ForkJoinPool common
- *       pool.</li>
+ *   <li>Case 4 (J+G) always routes through
+ *       {@link PostgreSQLQueryEngine#executeCombinedQuery}, regardless of
+ *       {@code discovery.spatial.engine} config. If spatial conditions cannot
+ *       be built, an {@link IllegalStateException} is thrown — there is no
+ *       parallel fallback.</li>
+ *   <li>Cases 6 and 7 require the ES engine bean. When ES is absent, the route
+ *       degrades to case 4 (J+G) or case 1 (J only), dropping the text condition.</li>
+ *   <li>MDC is captured before spawning async futures so that all threads carry
+ *       the same transaction / message / BAP identifiers (NFR-3.3).</li>
+ *   <li>Async queries use a dedicated I/O thread pool ({@code discoveryQueryExecutor}),
+ *       not the JVM ForkJoinPool common pool.</li>
  * </ul>
  */
 @Service
@@ -77,32 +104,39 @@ public class DiscoveryService {
     private static final Logger log     = LoggerFactory.getLogger(DiscoveryService.class);
     private static final Logger perfLog = LoggerFactory.getLogger("org.beckn.discover.performance");
 
-    private final QueryEngine        queryEngine;
-    private final TextSearchEngine   textSearchEngine;
-    private final CatalogPipeline    catalogPipeline;
-    private final ResponseProcessor  responseProcessor;
-    private final ProviderOfferEnricher providerOfferEnricher;
-    private final DiscoveryMetrics   metrics;
-    private final DiscoveryProperties properties;
-    private final ExecutorService    queryExecutor;
+    private final QueryEngine             queryEngine;
+    private final TextSearchEngine        textSearchEngine;
+    private final CatalogPipeline         catalogPipeline;
+    private final ResponseProcessor       responseProcessor;
+    private final ProviderOfferEnricher   providerOfferEnricher;
+    private final DiscoveryMetrics        metrics;
+    private final DiscoveryProperties     properties;
+    private final ExecutorService         queryExecutor;
+    // Chain-specific engines — present only when the relevant @ConditionalOnProperty fires.
+    private final Optional<ElasticsearchQueryEngine> esQueryEngine;
+    private final PostgreSQLQueryEngine   pgQueryEngine;
 
     public DiscoveryService(
-            QueryEngine                            queryEngine,
-            TextSearchEngine                       textSearchEngine,
-            CatalogPipeline                        catalogPipeline,
-            ResponseProcessor                      responseProcessor,
-            ProviderOfferEnricher                   providerOfferEnricher,
-            DiscoveryMetrics                       metrics,
-            DiscoveryProperties                    properties,
-            @Qualifier("discoveryQueryExecutor") ExecutorService queryExecutor) {
-        this.queryEngine      = queryEngine;
-        this.textSearchEngine = textSearchEngine;
-        this.catalogPipeline  = catalogPipeline;
-        this.responseProcessor = responseProcessor;
+            QueryEngine                                queryEngine,
+            TextSearchEngine                           textSearchEngine,
+            CatalogPipeline                            catalogPipeline,
+            ResponseProcessor                          responseProcessor,
+            ProviderOfferEnricher                      providerOfferEnricher,
+            DiscoveryMetrics                           metrics,
+            DiscoveryProperties                        properties,
+            @Qualifier("discoveryQueryExecutor") ExecutorService queryExecutor,
+            Optional<ElasticsearchQueryEngine>         esQueryEngine,
+            PostgreSQLQueryEngine                      pgQueryEngine) {
+        this.queryEngine          = queryEngine;
+        this.textSearchEngine     = textSearchEngine;
+        this.catalogPipeline      = catalogPipeline;
+        this.responseProcessor    = responseProcessor;
         this.providerOfferEnricher = providerOfferEnricher;
-        this.metrics           = metrics;
-        this.properties        = properties;
-        this.queryExecutor     = queryExecutor;
+        this.metrics              = metrics;
+        this.properties           = properties;
+        this.queryExecutor        = queryExecutor;
+        this.esQueryEngine        = esQueryEngine;
+        this.pgQueryEngine        = pgQueryEngine;
     }
 
     // ── Public entry points ──────────────────────────────────────────────────
@@ -140,6 +174,15 @@ public class DiscoveryService {
 
             return response;
 
+        } catch (IllegalArgumentException e) {
+            // Client-side validation failure surfaced mid-query — e.g. an unsupported/blank spatial
+            // operation that passed schema validation but the PostGIS builder cannot honour for a
+            // J+G request (case 4). Propagate as-is so GlobalExceptionHandler maps it to 400 SCH_;
+            // wrapping it in the generic RuntimeException below would mask it as a 500 server fault.
+            metrics.recordFailure(start, e, request.getContext().getTransactionId());
+            log.warn(LogEvent.QUERY_FAILED,
+                    value("error", e.getMessage()));
+            throw e;
         } catch (SemanticSearchException e) {
             // Propagate as-is — GlobalExceptionHandler maps this to 503 NET_INTERNAL_ERROR
             metrics.recordFailure(start, e, request.getContext().getTransactionId());
@@ -180,120 +223,313 @@ public class DiscoveryService {
     private DiscoverResponse route(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
 
+        // Routing tree — order matters: most specific predicate combination first.
+        if (qr.hasFilters() && qr.hasTextSearch()) {
+            // Cases 6 (J+T) and 7 (J+G+T): JSONPath+text needs the ES engine for step 1.
+            // If ES engine is absent (e.g. discovery.spatial.engine=postgresql), degrade
+            // gracefully by dropping the text condition and routing to the JSONPath path
+            // (with spatial if present) — returning a silent empty would be worse than
+            // honouring the JSONPath (and, when present, spatial) part of the request.
+            if (esQueryEngine.isEmpty()) {
+                log.warn(LogEvent.CHAIN_ES_ENGINE_ABSENT,
+                        value("reason", LogMessages.REASON_CHAIN_FALLBACK_NO_ES),
+                        value("hasSpatial", qr.hasSpatial()),
+                        value("transactionId", context.getTransactionId()));
+                metrics.incrementChainFallbackNoEs();
+                if (qr.hasSpatial()) {
+                    metrics.incrementRouteSelected("A");
+                    return executeJsonPathAndSpatialQuery(qr, context, tracker);
+                }
+                metrics.incrementRouteSelected("B");
+                return executeJsonPathQuery(qr, context, tracker);
+            }
+            log.info(LogEvent.CHAIN_ROUTE_SELECTED,
+                    value("path", LogMessages.PATH_CHAIN),
+                    value("hasSpatial", qr.hasSpatial()),
+                    value("transactionId", context.getTransactionId()));
+            metrics.incrementRouteSelected("chain");
+            return executeJsonPathAndTextSearchQuery(qr, context, tracker);
+        }
         if (qr.hasFilters() && qr.hasSpatial()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH_SPATIAL));
-            return executeJsonPathWithSpatialQuery(qr, context, tracker);
+            // Case 4 (J+G): single SQL via pgEngine.executeCombinedQuery — regardless of
+            // discovery.spatial.engine config (design decision #3).
+            // transactionId/messageId are carried by MDC on every line — not repeated here.
+            log.info(LogEvent.QUERY_PATH_SELECTED,
+                    value("path", LogMessages.PATH_JSONPATH_SPATIAL),
+                    value("engine", "postgresql"),
+                    value("hasFilters", true),
+                    value("hasSpatial", true),
+                    value("hasTextSearch", false));
+            metrics.incrementRouteSelected("A");
+            return executeJsonPathAndSpatialQuery(qr, context, tracker);
         }
         if (qr.hasFilters()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_JSONPATH));
-            return executeJsonPathFilterQuery(qr, context, tracker);
+            // Case 1 (J only).
+            log.info(LogEvent.QUERY_PATH_SELECTED,
+                    value("path", LogMessages.PATH_JSONPATH),
+                    value("engine", "postgresql"),
+                    value("hasFilters", true),
+                    value("hasSpatial", false),
+                    value("hasTextSearch", false));
+            metrics.incrementRouteSelected("B");
+            return executeJsonPathQuery(qr, context, tracker);
         }
         if (qr.hasSpatial()) {
-            log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_SPATIAL));
+            // Cases 2 (G only) and 5 (G+T): spatial engine handles both.
+            log.info(LogEvent.QUERY_PATH_SELECTED,
+                    value("path", LogMessages.PATH_SPATIAL),
+                    value("engine", properties.getSpatial().getEngine()),
+                    value("hasFilters", false),
+                    value("hasSpatial", true),
+                    value("hasTextSearch", qr.hasTextSearch()));
+            metrics.incrementRouteSelected("C");
             return executeSpatialOnlyQuery(qr, context, tracker);
         }
-        log.debug(LogEvent.QUERY_PATH_SELECTED, value("path", LogMessages.PATH_TEXT_SEARCH));
+        // Case 3 (T only).
+        log.info(LogEvent.QUERY_PATH_SELECTED,
+                value("path", LogMessages.PATH_TEXT_SEARCH),
+                value("engine", properties.getTextSearch().getEngine()),
+                value("hasFilters", false),
+                value("hasSpatial", false),
+                value("hasTextSearch", true));
+        metrics.incrementRouteSelected("D");
         return executeTextSearchQuery(qr, context, tracker);
     }
 
-    // ── JSONPath + Spatial combined query ──────────────────────────────────────
+    // ── JSONPath + spatial combined query (case 4 J+G) ────────────────────────
 
     /**
-     * Attempts a single-round-trip combined JSONPath + spatial query.
-     * Falls back to parallel execution when the engine signals that no
-     * spatial conditions could be built ({@code Optional.empty()}).
+     * Case 4 (J+G): single-round-trip combined JSONPath + spatial query via PostgreSQL.
+     *
+     * <p>Always uses {@link PostgreSQLQueryEngine#executeCombinedQuery} directly,
+     * regardless of {@code discovery.spatial.engine} config (design decision #3).
+     * The ES spatial engine is only for cases 2 and 5.</p>
+     *
+     * <p>If the engine returns {@code Optional.empty()} (spatial conditions could not
+     * be built for a valid J+G request), an {@link IllegalStateException} is thrown.
+     * This should not happen for well-formed requests. There is no parallel fallback.</p>
      */
-    private DiscoverResponse executeJsonPathWithSpatialQuery(QueryRequest qr, Context context, LatencyTracker tracker)
+    private DiscoverResponse executeJsonPathAndSpatialQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
 
         Instant engineStart = Instant.now();
-        Optional<List<Catalog>> combined = queryEngine.executeCombinedQuery(qr);
+        // Design decision #3: always use PostgreSQL for case 4, not the routing-configured engine.
+        Optional<List<Catalog>> combined = pgQueryEngine.executeCombinedQuery(qr);
         Duration engineDuration = Duration.between(engineStart, Instant.now());
         combined.ifPresent(catalogs -> {
             metrics.recordSearchDuration("postgres", engineDuration);
             metrics.recordResultCount("postgres", catalogs.size());
+            metrics.recordRouteLatency("A", engineDuration);
         });
-        recordStep(tracker, "path-a.combined.query");
+        recordStep(tracker, "jsonpath-spatial.query");
 
         if (combined.isEmpty()) {
-            // Engine could not build spatial conditions → fall back to parallel
-            log.debug(LogEvent.QUERY_PATH_FALLBACK, value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS));
-            return executeJsonPathAndSpatialParallel(qr, context, tracker);
+            // Spatial conditions could not be built — this means the request carried a blank or
+            // unsupported spatial operation that passed schema validation but the PostGIS builder
+            // cannot honour. PostgreSQL is the *only* geo enforcement for case 4 (no ES step), so
+            // returning rows here would silently ignore the geo constraint — instead reject the
+            // request. This is a client-side validation failure (bad spatial op), not a server
+            // fault: WARN + IllegalArgumentException so GlobalExceptionHandler returns 400 (SCH_)
+            // rather than 500. The dedicated event lets log filters distinguish it from the benign
+            // QUERY_PATH_FALLBACK.
+            log.warn(LogEvent.QUERY_COMBINED_SPATIAL_BUILD_FAILED,
+                    value("reason", LogMessages.REASON_NO_SPATIAL_CONDITIONS),
+                    value("transactionId", context.getTransactionId()));
+            throw new IllegalArgumentException(
+                    "Spatial conditions could not be built for a J+G request (transactionId="
+                    + context.getTransactionId() + "). Check that spatial constraints use supported operations.");
         }
 
-        // combined.get() may be an empty list — that is a valid "no results" response
-        // Path A uses PostgreSQL (schema already filtered in SQL WHERE)
+        // combined.get() may be an empty list — that is a valid "no results" response.
+        // PostgreSQL JSONPath + spatial — schema already filtered in SQL WHERE.
         List<Catalog> processed = catalogPipeline.process(combined.get(), qr, true);
-        recordStep(tracker, "path-a.pipeline");
+        recordStep(tracker, "jsonpath-spatial.pipeline");
+
+        return buildResponse(processed, context);
+    }
+
+    // ── JSONPath + text search query (cases 6 J+T and 7 J+G+T) ───────────────
+
+    /**
+     * Executes the two-step JSONPath + text search query used when both JSONPath
+     * filters and a text query are present (cases 6 J+T and 7 J+G+T).
+     *
+     * <ol>
+     *   <li>ES step: text [+ geo] query with {@code _source: [resource_id]} only,
+     *       size = {@code min(limit * overfetchFactor, maxIds)}. Runs KNN semantic
+     *       when {@code discovery.text-search.engine=els-semantic-search} (i.e.
+     *       {@code EmbeddingClient} bean present) and lexical BM25 otherwise —
+     *       see {@code ElasticsearchQueryEngine.fetchMatchingResourceIds} for the
+     *       dual-mode logic. Returns a ranked list of matching resource IDs.</li>
+     *   <li>PSQL step: JSONPath query (+ geo redundantly for case 7) restricted
+     *       to those resource IDs; {@code ORDER BY array_position} preserves the ES rank.</li>
+     * </ol>
+     *
+     * <p><b>Semantic search:</b> the KNN path mirrors the structure used by
+     * {@code ElasticsearchTextSearchEngine} (case 3) and {@code executeSpatialQuery}
+     * (case 5) — enrich → embed → KNN with geo/schema as {@code knn.filter}. The
+     * semantic internals are delegated unchanged to {@code QueryEnricher} and
+     * {@code EmbeddingClient}; this method does not modify the semantic engine,
+     * it only uses the same primitives so chain step 1 honours the configured
+     * text-search engine for cases 6 and 7.</p>
+     *
+     * <p>Short-circuits with an empty response when ES returns 0 resource IDs
+     * ({@link LogEvent#CHAIN_EMPTY_FROM_ES}).</p>
+     */
+    private DiscoverResponse executeJsonPathAndTextSearchQuery(QueryRequest qr, Context context,
+            LatencyTracker tracker) throws Exception {
+
+        // Chain runs ES step 1 + PSQL step 2 sequentially, so it gets its own
+        // (larger) budget rather than the single-query parallel timeout.
+        int timeoutSec  = properties.getChain().getTimeoutSeconds();
+        int limit       = properties.getPostgresql().getResultLimit();
+        int overfetch   = properties.getChain().getOverfetchFactor();
+        int maxIds      = properties.getChain().getMaxIds();
+        // Use long to avoid int overflow when both factors are large; clamp by maxIds.
+        long requested  = (long) limit * (long) overfetch;
+        int esSize      = (int) Math.min(requested, (long) maxIds);
+        boolean truncated = requested > maxIds;
+
+        if (truncated) {
+            log.info(LogEvent.CHAIN_TRUNCATED_BY_CAP,
+                    value("requested", requested),
+                    value("cap", maxIds),
+                    value("transactionId", context.getTransactionId()));
+            metrics.incrementChainTruncatedByCap();
+        }
+
+        // Run the full pipeline on the dedicated I/O executor with a single timeout
+        // covering both ES step 1 and PSQL step 2. Without this guard, a stuck ES
+        // call or slow PSQL would tie up the Kafka consumer thread indefinitely.
+        Instant pipelineStart = Instant.now();
+        final int esSizeFinal = esSize;
+        CompletableFuture<DiscoverResponse> pipelineFuture = runAsyncWithMdc(() ->
+                runJsonPathAndTextSearchPipeline(qr, context, tracker, esSizeFinal, limit, pipelineStart));
+
+        try {
+            return pipelineFuture.get(timeoutSec, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            pipelineFuture.cancel(true);
+            log.error(LogEvent.QUERY_TIMEOUT,
+                    value("path", LogMessages.PATH_CHAIN),
+                    value("timeoutSec", timeoutSec),
+                    e);
+            throw new Exception("JSONPath+text query timed out after " + timeoutSec + "s", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+            if (cause instanceof Exception ex) throw ex;
+            throw new Exception("JSONPath+text query failed: " + cause.getMessage(), cause);
+        }
+    }
+
+    /**
+     * Synchronous body of {@link #executeJsonPathAndTextSearchQuery} — executed
+     * inside the async wrapper so a single timeout governs the end-to-end
+     * ES + PSQL round-trip.
+     */
+    private DiscoverResponse runJsonPathAndTextSearchPipeline(QueryRequest qr, Context context,
+            LatencyTracker tracker, int esSize, int limit, Instant pipelineStart) throws Exception {
+
+        // ── Step 1: ES text [+ geo] → matching resource IDs ────────────────────
+        // fetchMatchingResourceIds picks semantic (KNN) when EmbeddingClient is
+        // present, lexical (BM25) otherwise. Internal semantic behaviour is the
+        // same as case 3 / case 5 — see ElasticsearchQueryEngine for the branch.
+        List<String> resourceIds = esQueryEngine
+                .orElseThrow(() -> new IllegalStateException(
+                        "JSONPath+text route reached without ES engine — routing tree should have fallen back."))
+                .fetchMatchingResourceIds(qr, esSize);
+        metrics.recordEsResourceIdsCount(resourceIds.size());
+
+        log.info(LogEvent.CHAIN_ES_CANDIDATES_FETCHED,
+                value("resourceIdsCount", resourceIds.size()),
+                value("esSize", esSize),
+                value("transactionId", context.getTransactionId()));
+        recordStep(tracker, "jsonpath-text.es");
+
+        if (resourceIds.isEmpty()) {
+            metrics.recordRouteLatency("chain", Duration.between(pipelineStart, Instant.now()));
+            log.info(LogEvent.CHAIN_EMPTY_FROM_ES,
+                    value("transactionId", context.getTransactionId()));
+            metrics.incrementChainEmptyResults();
+            return responseProcessor.buildEmptyResponse(context);
+        }
+
+        metrics.recordPsqlAllowlistSize(resourceIds.size());
+        log.info(LogEvent.CHAIN_PSQL_ALLOWLIST_APPLIED,
+                value("allowlistSize", resourceIds.size()),
+                value("transactionId", context.getTransactionId()));
+
+        // ── Step 2: PSQL JSONPath [+ geo] restricted to those resource IDs ─────
+        Instant psqlStart = Instant.now();
+        List<Catalog> catalogs = executeJsonPathOnResourceIds(qr, resourceIds);
+        metrics.recordSearchDuration("postgres", Duration.between(psqlStart, Instant.now()));
+        metrics.recordResultCount("postgres", catalogs.size());
+        // End-to-end pipeline latency (ES step 1 + PSQL step 2) — not ES-only.
+        metrics.recordRouteLatency("chain", Duration.between(pipelineStart, Instant.now()));
+
+        log.info(LogEvent.CHAIN_PSQL_DONE,
+                value("catalogs", catalogs.size()),
+                value("transactionId", context.getTransactionId()));
+        recordStep(tracker, "jsonpath-text.psql");
+
+        if (catalogs.isEmpty()) {
+            log.info(LogEvent.CHAIN_EMPTY_AFTER_PSQL,
+                    value("transactionId", context.getTransactionId()));
+            metrics.incrementChainEmptyResults();
+            return responseProcessor.buildEmptyResponse(context);
+        }
+
+        // PSQL applied schema filter in SQL WHERE; ES already applied text+geo.
+        List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
+        recordStep(tracker, "jsonpath-text.pipeline");
+
+        // Count underreturn: fewer resources actually returned than the request limit
+        // even though the chain had a pre-filtered resource-id list to work from.
+        // Counted AFTER the pipeline so it reflects rows actually returned, not the
+        // raw pre-prune PSQL row count.
+        if (processed.stream().mapToInt(c -> c.getResources() != null ? c.getResources().size() : 0).sum() < limit) {
+            metrics.incrementChainUnderreturn();
+        }
 
         return buildResponse(processed, context);
     }
 
     /**
-     * Fallback: runs JSONPath filter and spatial queries concurrently,
-     * then intersects results by resource ID.
+     * Step 2 helper: runs PSQL JSONPath [+ geo] restricted to the given resource IDs.
+     *
+     * <p>For case 7 (J+G+T): re-applies geo conditions in PSQL (belt-and-suspenders)
+     * even though ES already filtered by geo. Falls back to case-6 style (JSONPath
+     * only, no geo) when PSQL spatial conditions cannot be built.</p>
      */
-    private DiscoverResponse executeJsonPathAndSpatialParallel(QueryRequest qr, Context context, LatencyTracker tracker)
-            throws Exception {
-
-        int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
-        Instant filterStart = Instant.now();
-        CompletableFuture<List<Catalog>> filterFuture = runAsyncWithMdc(() -> {
-            List<Catalog> r = queryEngine.executeFilterQuery(qr);
-            metrics.recordSearchDuration("postgres", Duration.between(filterStart, Instant.now()));
-            metrics.recordResultCount("postgres", r.size());
-            return r;
-        });
-        Instant spatialStart = Instant.now();
-        CompletableFuture<List<Catalog>> spatialFuture = runAsyncWithMdc(() -> {
-            List<Catalog> r = queryEngine.executeSpatialQuery(qr);
-            metrics.recordSearchDuration("postgres", Duration.between(spatialStart, Instant.now()));
-            metrics.recordResultCount("postgres", r.size());
-            return r;
-        });
-
-        try {
-            CompletableFuture.allOf(filterFuture, spatialFuture).get(timeoutSec, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            filterFuture.cancel(true);
-            spatialFuture.cancel(true);
-            throw new RuntimeException("Interrupted during parallel query", e);
-        } catch (Exception e) {
-            log.error(LogEvent.QUERY_TIMEOUT,
-                    value("path", "A-parallel"),
-                    value("timeoutSec", timeoutSec),
-                    e);
-            filterFuture.cancel(true);
-            spatialFuture.cancel(true);
-            throw new Exception("Parallel queries timed out after " + timeoutSec + "s", e);
+    private List<Catalog> executeJsonPathOnResourceIds(QueryRequest qr,
+            List<String> resourceIds) throws Exception {
+        if (qr.hasSpatial()) {
+            // Case 7: combined JSONPath + spatial restricted to the resource IDs.
+            Optional<List<Catalog>> result =
+                    pgQueryEngine.executeJsonPathAndSpatialQueryByResourceIds(qr, resourceIds);
+            if (result.isPresent()) {
+                return result.get();
+            }
+            // Spatial conditions could not be built — degrade to case-6 style (JSONPath only).
+            // Geo was already applied in ES step 1 for the candidate IDs, so this PSQL re-apply is
+            // belt-and-suspenders; dropping it does not by itself widen results beyond the ES geo
+            // window. WARN (not DEBUG) because a BAP caller has no other visibility into the geo
+            // degradation, and it signals a likely malformed/unsupported spatial op worth alerting on.
+            log.warn(LogEvent.QUERY_PATH_FALLBACK,
+                    value("reason", "jsonpath-text-spatial-build-failed, falling-back-to-jsonpath-only"),
+                    value("transactionId", qr.transactionId()));
         }
-
-        List<Catalog> filterQueryResult  = filterFuture.join();
-        List<Catalog> spatialQueryResult = spatialFuture.join();
-        recordStep(tracker, "path-a.parallel.queries");
-
-        log.debug(LogEvent.QUERY_PARALLEL_DONE,
-                value("filterCatalogs", filterQueryResult.size()),
-                value("spatialCatalogs", spatialQueryResult.size()));
-
-        List<Catalog> intersected = intersectByResourceId(filterQueryResult, spatialQueryResult);
-        recordStep(tracker, "path-a.parallel.intersect");
-
-        if (intersected.isEmpty()) {
-            return responseProcessor.buildEmptyResponse(context);
-        }
-
-        // Path A-parallel: PostgreSQL filter + ES spatial — schema filtered in SQL
-        List<Catalog> processed = catalogPipeline.process(intersected, qr, true);
-        recordStep(tracker, "path-a.parallel.pipeline");
-
-        return buildResponse(processed, context);
+        // Case 6: JSONPath restricted to the resource IDs (no geo).
+        return pgQueryEngine.executeJsonPathQueryByResourceIds(qr, resourceIds);
     }
 
-    // ── JSONPath filter only ───────────────────────────────────────────────────
+    // ── JSONPath-only query (case 1 J) ────────────────────────────────────────
 
-    private DiscoverResponse executeJsonPathFilterQuery(QueryRequest qr, Context context, LatencyTracker tracker)
+    /**
+     * Case 1 (J only): JSONPath query via PostgreSQL — no spatial, no text.
+     */
+    private DiscoverResponse executeJsonPathQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
         int timeoutSec = properties.getPostgresql().getParallelQueryTimeoutSeconds();
         Instant engineStart = Instant.now();
@@ -313,18 +549,18 @@ public class DiscoveryService {
                     value("path", "B"),
                     value("timeoutSec", timeoutSec),
                     e);
-            throw new Exception("Filter query timed out after " + timeoutSec + "s", e);
+            throw new Exception("JSONPath query timed out after " + timeoutSec + "s", e);
         } catch (java.util.concurrent.ExecutionException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             if (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
-            throw new Exception("Filter query failed: " + cause.getMessage(), cause);
+            throw new Exception("JSONPath query failed: " + cause.getMessage(), cause);
         }
 
-        recordStep(tracker, "path-b.query");
+        recordStep(tracker, "jsonpath.query");
 
-        // Path B: PostgreSQL — schema already filtered in SQL WHERE clause
+        // PostgreSQL JSONPath — schema already filtered in SQL WHERE clause.
         List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
-        recordStep(tracker, "path-b.pipeline");
+        recordStep(tracker, "jsonpath.pipeline");
 
         return buildResponse(processed, context);
     }
@@ -358,20 +594,29 @@ public class DiscoveryService {
             throw new Exception("Spatial query failed: " + cause.getMessage(), cause);
         }
 
-        recordStep(tracker, "path-c.query");
+        recordStep(tracker, "spatial.query");
 
-        // Path C: ES spatial or PostgreSQL spatial — schema filtered in ES knn.filter or SQL
+        // Spatial-only: ES spatial or PostgreSQL spatial — schema filtered in ES knn.filter or SQL.
         List<Catalog> processed = catalogPipeline.process(catalogs, qr, true);
-        recordStep(tracker, "path-c.pipeline");
+        recordStep(tracker, "spatial.pipeline");
 
         return buildResponse(processed, context);
     }
 
-    // ── Text search ────────────────────────────────────────────────────────────
+    // ── Text-only query — semantic / BM25 / NLWeb dispatch (case 3 T) ─────────
 
     /**
-     * Runs the text-search engine on the dedicated I/O executor so the blocking
-     * HTTP call does not tie up servlet threads under concurrent load.
+     * Case 3 (T only): runs the configured text-search engine on the dedicated
+     * I/O executor so the blocking HTTP call does not tie up servlet threads
+     * under concurrent load.
+     *
+     * <p>Dispatches through {@link TextSearchEngine#search} — implementation is
+     * one of {@code ElasticsearchTextSearchEngine} (semantic KNN or BM25),
+     * {@code NLWebTextSearchEngine} (NLWeb HTTP), depending on
+     * {@code discovery.text-search.engine}. Cases 6 and 7 also honour the
+     * configured text-search engine via
+     * {@link org.beckn.discover.service.elasticsearch.ElasticsearchQueryEngine#fetchMatchingResourceIds}
+     * — see the class-level Javadoc for the full dual-mode picture.</p>
      */
     private DiscoverResponse executeTextSearchQuery(QueryRequest qr, Context context, LatencyTracker tracker)
             throws Exception {
@@ -412,69 +657,6 @@ public class DiscoveryService {
         return buildResponse(processed, context);
     }
 
-    // ── Intersection (Path A parallel fallback) ───────────────────────────────
-
-    /**
-     * Intersects two catalog lists by resource ID.  Retains catalogs / resources
-     * from {@code filterResult} whose resource IDs also appear in
-     * {@code spatialResult}. Filter-result catalogs carry {@code matching_offers}
-     * data and therefore take precedence.
-     */
-    private List<Catalog> intersectByResourceId(
-            List<Catalog> filterResult,
-            List<Catalog> spatialResult) {
-
-        if (filterResult.isEmpty() || spatialResult.isEmpty()) {
-            log.debug(LogEvent.QUERY_INTERSECT_EMPTY);
-            return List.of();
-        }
-
-        Set<String> spatialResourceIds = spatialResult.stream()
-                .filter(c -> c.getResources() != null)
-                .flatMap(c -> c.getResources().stream())
-                .map(r -> r.getId())
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        List<Catalog> intersected = filterResult.stream()
-                .filter(catalog -> catalog.getResources() != null)
-                .map(catalog -> {
-                    List<org.beckn.discover.model.Resource> matchingResources = catalog.getResources().stream()
-                            .filter(r -> r.getId() != null && spatialResourceIds.contains(r.getId()))
-                            .collect(Collectors.toList());
-
-                    if (matchingResources.isEmpty()) return null;
-
-                    // Clone the catalog with only the intersecting resources
-                    Catalog narrowed = shallowCopyCatalog(catalog);
-                    narrowed.setResources(matchingResources);
-                    return narrowed;
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        log.debug(LogEvent.QUERY_INTERSECT_DONE,
-                value("filterCatalogs", filterResult.size()),
-                value("spatialResourceIds", spatialResourceIds.size()),
-                value("intersectedCatalogs", intersected.size()));
-        return intersected;
-    }
-
-    /**
-     * Creates a shallow copy of a catalog preserving all metadata fields but
-     * leaving resources / offers as new empty lists (caller must populate them).
-     */
-    private static Catalog shallowCopyCatalog(Catalog src) {
-        Catalog copy = new Catalog();
-        copy.setId(src.getId());
-        copy.setDescriptor(src.getDescriptor());
-        copy.setProvider(src.getProvider());
-        copy.setValidity(src.getValidity());
-        copy.setOffers(src.getOffers() != null ? new java.util.ArrayList<>(src.getOffers()) : new java.util.ArrayList<>());
-        copy.setResources(new java.util.ArrayList<>());
-        return copy;
-    }
-
     // ── Response building ─────────────────────────────────────────────────────
 
     private DiscoverResponse buildResponse(List<Catalog> processed, Context context) {
@@ -510,8 +692,15 @@ public class DiscoveryService {
         Objects.requireNonNull(request.getContext(), "DiscoverRequest.context must not be null");
     }
 
-    /** Runs a callable asynchronously with MDC propagation and error handling. */
-    private CompletableFuture<List<Catalog>> runAsyncWithMdc(Callable<List<Catalog>> callable) {
+    /**
+     * Runs a callable asynchronously on the dedicated query executor with MDC
+     * propagation and error handling.
+     *
+     * <p>Generic over the return type so the same helper serves both single-engine
+     * queries (returning {@code List<Catalog>}) and multi-step pipelines (returning
+     * a fully built {@code DiscoverResponse}).</p>
+     */
+    private <T> CompletableFuture<T> runAsyncWithMdc(Callable<T> callable) {
         Map<String, String> mdcCopy = MDC.getCopyOfContextMap();
         return CompletableFuture.supplyAsync(() -> {
             restoreMDC(mdcCopy);

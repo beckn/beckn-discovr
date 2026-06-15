@@ -151,6 +151,13 @@ public class EsIndexManager {
     }
 
     private String defaultTemplateJson() {
+        // NOTE: This built-in default is the zero-config fallback used only when
+        // app.catalog.elasticsearch.mapping.template-file is NOT set. It must stay in
+        // FIELD PARITY with config/es-index-template.json (the operator-overridable
+        // source of truth) — any mapping field added there must be mirrored here.
+        // Intentional differences: (1) inline synonyms instead of synonyms_path, so the
+        // fallback is self-contained and never depends on an external synonyms file;
+        // (2) total_fields/depth limits are parameterised from config.
         return """
                 {
                   "index_patterns": ["%s-*"],
@@ -158,6 +165,7 @@ public class EsIndexManager {
                     "settings": {
                       "index.mapping.total_fields.limit": %d,
                       "index.mapping.depth.limit": %d,
+                      "index.refresh_interval": "5s",
                       "analysis": {
                         "filter": {
                           "english_stop":    { "type": "stop",    "stopwords": "_english_" },
@@ -189,49 +197,95 @@ public class EsIndexManager {
                         { "booleans":                 { "match_mapping_type": "boolean", "mapping": { "type": "boolean" } } }
                       ],
                       "properties": {
-                        "catalog_id":              { "type": "keyword" },
-                        "catalog_context":         { "type": "keyword" },
-                        "catalog_type":            { "type": "keyword" },
-                        "catalog_name":            { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                        "catalog_short_desc":      { "type": "text" },
-                        "catalog_long_desc":       { "type": "text" },
+                        "catalog_id":         { "type": "keyword" },
+                        "catalog_context":    { "type": "keyword" },
+                        "catalog_type":       { "type": "keyword" },
+                        "catalog_bpp_id":     { "type": "keyword" },
+                        "catalog_bpp_uri":    { "type": "keyword" },
+                        "catalog_name":       { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "catalog_short_desc": { "type": "text" },
+                        "catalog_long_desc":  { "type": "text" },
+                        "catalog_descriptor_code":            { "type": "keyword" },
                         "catalog_descriptor_thumbnail_image": { "type": "keyword" },
                         "catalog_descriptor_docs":            { "type": "nested" },
                         "catalog_descriptor_media_file":      { "type": "nested" },
-                        "catalog_is_active":       { "type": "boolean" },
+                        "catalog_provider": {
+                          "type": "object",
+                          "dynamic": false,
+                          "properties": {
+                            "id": { "type": "keyword" },
+                            "descriptor": {
+                              "type": "object",
+                              "dynamic": false,
+                              "properties": {
+                                "name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                                "shortDesc": { "type": "text" },
+                                "longDesc":  { "type": "text" },
+                                "code":      { "type": "keyword" }
+                              }
+                            },
+                            "availableAt": {
+                              "type": "nested",
+                              "dynamic": false,
+                              "properties": {
+                                "address": {
+                                  "type": "object",
+                                  "dynamic": false,
+                                  "properties": {
+                                    "streetAddress":   { "type": "text" },
+                                    "extendedAddress": { "type": "text" },
+                                    "addressLocality": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                                    "addressRegion":   { "type": "keyword" },
+                                    "postalCode":      { "type": "keyword" },
+                                    "addressCountry":  { "type": "keyword" }
+                                  }
+                                }
+                              }
+                            },
+                            "providerAttributes": {
+                              "type": "object",
+                              "dynamic": false,
+                              "properties": {
+                                "@context": { "type": "keyword" },
+                                "@type":    { "type": "keyword" }
+                              }
+                            }
+                          }
+                        },
+                        "catalog_is_active":  { "type": "boolean" },
                         "catalog_validity": {
                           "type": "object",
                           "properties": {
-                            "@type":     { "type": "keyword" },
                             "startDate": { "type": "date" },
                             "endDate":   { "type": "date" },
                             "startTime": { "type": "keyword" },
                             "endTime":   { "type": "keyword" }
                           }
                         },
-                        "resource_id":                 { "type": "keyword" },
-                        "resource_context":            { "type": "keyword" },
-                        "resource_type":               { "type": "keyword" },
-                        "network_id":              { "type": "keyword" },
-                        "schema_type":             { "type": "keyword" },
-                        "resource_name":               { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-                        "resource_short_desc":         { "type": "text" },
-                        "resource_long_desc":          { "type": "text" },
-                        "resource_provider_id":        { "type": "keyword" },
-                        "resource_provider_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "resource_id":            { "type": "keyword" },
+                        "resource_context":       { "type": "keyword" },
+                        "resource_type":          { "type": "keyword" },
+                        "network_id":         { "type": "keyword" },
+                        "schema_type":        { "type": "keyword" },
+                        "resource_name":          { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "resource_short_desc":    { "type": "text" },
+                        "resource_long_desc":     { "type": "text" },
+                        "resource_provider_id":   { "type": "keyword" },
+                        "resource_provider_name": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "resource_descriptor_code":            { "type": "keyword" },
                         "resource_descriptor_thumbnail_image": { "type": "keyword" },
                         "resource_descriptor_docs":            { "type": "nested" },
                         "resource_descriptor_media_file":      { "type": "nested" },
-                        "resource_category_code":      { "type": "keyword" },
-                        "resource_category_name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                        "resource_category_code": { "type": "keyword" },
+                        "resource_category_name": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
                         "resource_rating_value":       { "type": "float" },
                         "resource_rating_count":       { "type": "integer" },
                         "resource_rating_review_text": { "type": "text" },
                         "resource_is_active":          { "type": "boolean" },
-                        "resource_rateable":           { "type": "boolean" },
+                        "resource_rateable":      { "type": "boolean" },
                         "resource_attributes": {
                           "type": "object",
-                          "dynamic": true,
+                          "dynamic": false,
                           "properties": {
                             "@context": { "type": "keyword" },
                             "@type":    { "type": "keyword" }
@@ -254,10 +308,102 @@ public class EsIndexManager {
                             "name":  { "type": "keyword" }
                           }
                         },
-                        "offers":                  { "type": "nested" },
-                        "full_text_blob":          { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
-                        "indexed_at":              { "type": "date" },
-                        "resource_vector":             { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }
+                        "offers": {
+                          "type": "nested",
+                          "dynamic": false,
+                          "properties": {
+                            "id":          { "type": "keyword" },
+                            "descriptor": {
+                              "type": "object",
+                              "dynamic": false,
+                              "properties": {
+                                "name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                                "shortDesc": { "type": "text" },
+                                "longDesc":  { "type": "text" },
+                                "code":      { "type": "keyword" }
+                              }
+                            },
+                            "provider": {
+                              "type": "object",
+                              "dynamic": false,
+                              "properties": {
+                                "id": { "type": "keyword" },
+                                "descriptor": {
+                                  "type": "object",
+                                  "dynamic": false,
+                                  "properties": {
+                                    "name":      { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                                    "shortDesc": { "type": "text" },
+                                    "longDesc":  { "type": "text" },
+                                    "code":      { "type": "keyword" }
+                                  }
+                                },
+                                "availableAt": {
+                                  "type": "nested",
+                                  "dynamic": false,
+                                  "properties": {
+                                    "address": {
+                                      "type": "object",
+                                      "dynamic": false,
+                                      "properties": {
+                                        "streetAddress":   { "type": "text" },
+                                        "extendedAddress": { "type": "text" },
+                                        "addressLocality": { "type": "text", "fields": { "raw": { "type": "keyword" } } },
+                                        "addressRegion":   { "type": "keyword" },
+                                        "postalCode":      { "type": "keyword" },
+                                        "addressCountry":  { "type": "keyword" }
+                                      }
+                                    }
+                                  }
+                                },
+                                "providerAttributes": {
+                                  "type": "object",
+                                  "dynamic": false,
+                                  "properties": {
+                                    "@context": { "type": "keyword" },
+                                    "@type":    { "type": "keyword" }
+                                  }
+                                }
+                              }
+                            },
+                            "resourceIds": { "type": "keyword" },
+                            "addOns": {
+                              "type": "nested",
+                              "dynamic": false
+                            },
+                            "considerations": {
+                              "type": "nested",
+                              "dynamic": false
+                            },
+                            "validity": {
+                              "type": "object",
+                              "dynamic": false,
+                              "properties": {
+                                "startDate": { "type": "date" },
+                                "endDate":   { "type": "date" }
+                              }
+                            },
+                            "availableTo": {
+                              "type": "nested",
+                              "dynamic": false,
+                              "properties": {
+                                "type": { "type": "keyword" },
+                                "id":   { "type": "keyword" }
+                              }
+                            },
+                            "offerAttributes": {
+                              "type": "object",
+                              "dynamic": false,
+                              "properties": {
+                                "@context": { "type": "keyword" },
+                                "@type":    { "type": "keyword" }
+                              }
+                            }
+                          }
+                        },
+                        "full_text_blob":     { "type": "text", "analyzer": "beckn_text", "search_analyzer": "beckn_text_search" },
+                        "indexed_at":         { "type": "date" },
+                        "resource_vector":        { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" }
                       }
                     }
                   }

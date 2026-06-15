@@ -32,4 +32,13 @@ public class JpaItemLocationCollectionStore implements ItemLocationCollectionSto
     public int deleteByCatalogId(String catalogId) {
         return repo.deleteByCatalogId(catalogId);
     }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public int deleteByItemIdsAndCatalogId(List<String> itemIds, String catalogId) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return 0;
+        }
+        return repo.deleteByItemIdsAndCatalogId(itemIds, catalogId);
+    }
 }
