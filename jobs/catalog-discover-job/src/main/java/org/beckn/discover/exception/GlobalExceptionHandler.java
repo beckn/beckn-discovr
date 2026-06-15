@@ -90,6 +90,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     private ResponseEntity<Object> buildErrorResponse(Exception ex, HttpStatusCode status) {
         String code;
         String message;
+        HttpHeaders responseHeaders = null;
 
         if (ex instanceof ErrorResponseException ere) {
             ProblemDetail pd = ere.getBody();
@@ -101,6 +102,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             // "Invalid keyId format"). Fall back to the generic constant for unknown codes.
             String detail = pd.getDetail();
             message = (detail != null && !detail.isBlank()) ? detail : safeMessageForCode(code);
+            // Preserve any response headers the exception carries — e.g. the RFC 7235
+            // WWW-Authenticate challenge attached to 401 auth failures.
+            if (!ere.getHeaders().isEmpty()) {
+                responseHeaders = ere.getHeaders();
+            }
         } else if (status == HttpStatus.BAD_REQUEST || ex instanceof IllegalArgumentException) {
             code = ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED;
             message = sanitizeValidationMessage(ex.getMessage());
@@ -115,7 +121,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("error", ex.getMessage()));
 
         AckResponse ackResponse = AckResponse.nack(code, message);
-        return new ResponseEntity<>(ackResponse, status);
+        return responseHeaders != null
+                ? new ResponseEntity<>(ackResponse, responseHeaders, status)
+                : new ResponseEntity<>(ackResponse, status);
     }
 
     /**
@@ -125,12 +133,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     private static String safeMessageForCode(String code) {
         if (code == null) return ErrorMessages.NET_INTERNAL_ERROR;
         return switch (code) {
-            case ErrorCodes.SEC_SIGNATURE_MISSING -> ErrorMessages.SEC_SIGNATURE_MISSING;
-            case ErrorCodes.SEC_SIGNATURE_INVALID -> ErrorMessages.SEC_SIGNATURE_INVALID;
-            case ErrorCodes.SEC_SUBSCRIBER_NOT_FOUND -> ErrorMessages.SEC_SUBSCRIBER_NOT_FOUND;
-            case ErrorCodes.SEC_KEY_NOT_FOUND -> ErrorMessages.SEC_KEY_NOT_FOUND;
-            case ErrorCodes.SEC_KEY_EXPIRED_OR_REVOKED -> ErrorMessages.SEC_KEY_EXPIRED_OR_REVOKED;
-            case ErrorCodes.SEC_UNAUTHORIZED_ACTION -> ErrorMessages.SEC_UNAUTHORIZED_ACTION;
+            case ErrorCodes.AUT_SIGNATURE_MISSING -> ErrorMessages.AUT_SIGNATURE_MISSING;
+            case ErrorCodes.AUT_SIGNATURE_INVALID -> ErrorMessages.AUT_SIGNATURE_INVALID;
+            case ErrorCodes.AUT_SUBSCRIBER_NOT_FOUND -> ErrorMessages.AUT_SUBSCRIBER_NOT_FOUND;
+            case ErrorCodes.AUT_KEY_NOT_FOUND -> ErrorMessages.AUT_KEY_NOT_FOUND;
+            case ErrorCodes.AUT_KEY_EXPIRED_OR_REVOKED -> ErrorMessages.AUT_KEY_EXPIRED_OR_REVOKED;
+            case ErrorCodes.AUT_UNAUTHORIZED_ACTION -> ErrorMessages.AUT_UNAUTHORIZED_ACTION;
             case ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED -> ErrorMessages.SCH_SCHEMA_VALIDATION_FAILED;
             case ErrorCodes.SCH_REQUIRED_FIELD_MISSING -> ErrorMessages.SCH_REQUIRED_FIELD_MISSING;
             case ErrorCodes.CTX_INVALID_FIELD -> ErrorMessages.CTX_INVALID_FIELD;

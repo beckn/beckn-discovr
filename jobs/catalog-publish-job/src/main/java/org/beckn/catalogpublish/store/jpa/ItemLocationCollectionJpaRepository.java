@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 public interface ItemLocationCollectionJpaRepository
         extends JpaRepository<ItemLocationCollection, ItemLocationId> {
 
@@ -15,8 +17,27 @@ public interface ItemLocationCollectionJpaRepository
      * The {@code catalog_id} column on {@code item_location_collection} makes this
      * a direct, catalog-scoped DELETE — no JOIN required, no cross-catalog contamination.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query(value = "DELETE FROM item_location_collection WHERE catalog_id = :catalogId",
             nativeQuery = true)
     int deleteByCatalogId(@Param("catalogId") String catalogId);
+
+    /**
+     * Deletes location rows for the given items within a catalog. Used by MERGE mode to
+     * fully re-derive each published item's locations: a provider may reduce its set of
+     * {@code availableAt} geometries between publishes, so its prior rows (including higher
+     * {@code seq} ordinals) must be cleared before the freshly extracted set is inserted —
+     * otherwise stale locations would keep matching spatial queries (#306). Scoped to the
+     * published item ids so resources not in a partial MERGE publish are untouched.
+     *
+     * <p>{@code flushAutomatically = true} is required: this runs AFTER {@code itemStore.saveAll(...)}
+     * has queued (but not yet flushed) the item upserts in the persistence context. Without an
+     * explicit pre-query flush, {@code clearAutomatically = true} would discard those un-flushed
+     * item writes — we must not rely on Hibernate's implicit native-query auto-flush for that.</p>
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "DELETE FROM item_location_collection WHERE catalog_id = :catalogId AND item_id IN (:itemIds)",
+            nativeQuery = true)
+    int deleteByItemIdsAndCatalogId(@Param("itemIds") List<String> itemIds,
+            @Param("catalogId") String catalogId);
 }

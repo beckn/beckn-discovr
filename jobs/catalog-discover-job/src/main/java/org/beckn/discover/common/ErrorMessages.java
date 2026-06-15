@@ -34,7 +34,7 @@ public final class ErrorMessages {
     public static final String NET_SEARCH_SERVICE_UNAVAILABLE =
             "Search service is temporarily unavailable. Try again later";
 
-    // ── Authorization Errors (pair with SEC_* codes from beckn-auth-java-sdk) ──
+    // ── Authentication Errors (user-facing messages for the AUT_* codes) ──────
     public static final String AUTH_HEADER_MISSING = "Authorization header is missing. Include an Authorization header with your request";
     public static final String AUTH_INVALID_FORMAT = "Authorization header format is invalid. Refer to the API documentation for the correct format";
     public static final String AUTH_FUTURE_CREATED =
@@ -54,12 +54,12 @@ public final class ErrorMessages {
     public static final String REGISTRY_RECORD_NOT_FOUND =
             "Credentials not found. Ensure your account is registered and active";
 
-    // ── SEC_* aliases (1:1 match with ErrorCodes.SEC_*) ──────────────────────
-    public static final String SEC_SIGNATURE_MISSING = AUTH_HEADER_MISSING;
-    public static final String SEC_SIGNATURE_INVALID = AUTH_VERIFICATION_FAILED;
-    public static final String SEC_SUBSCRIBER_NOT_FOUND = AUTH_SUBSCRIBER_NOT_FOUND;
-    public static final String SEC_KEY_NOT_FOUND = REGISTRY_RECORD_NOT_FOUND;
-    public static final String SEC_KEY_EXPIRED_OR_REVOKED = AUTH_PUBLIC_KEY_EXPIRED;
-    public static final String SEC_UNAUTHORIZED_ACTION = "You are not authorized to perform this action. Contact your administrator for access";
+    // ── AUT_* message aliases (1:1 match with ErrorCodes.AUT_*) ──────────────
+    public static final String AUT_SIGNATURE_MISSING = AUTH_HEADER_MISSING;
+    public static final String AUT_SIGNATURE_INVALID = AUTH_VERIFICATION_FAILED;
+    public static final String AUT_SUBSCRIBER_NOT_FOUND = AUTH_SUBSCRIBER_NOT_FOUND;
+    public static final String AUT_KEY_NOT_FOUND = REGISTRY_RECORD_NOT_FOUND;
+    public static final String AUT_KEY_EXPIRED_OR_REVOKED = AUTH_PUBLIC_KEY_EXPIRED;
+    public static final String AUT_UNAUTHORIZED_ACTION = "You are not authorized to perform this action. Contact your administrator for access";
 }
 

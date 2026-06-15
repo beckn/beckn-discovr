@@ -1,0 +1,66 @@
+# Discovr reliability — cluster + load infrastructure config
+#
+# IMPORTANT: The agent reads this file on every run and ABORTS if any value is
+# missing or if runtime values (kubectl context, namespaces touched) do not match.
+# Fill in all placeholders before running.
+
+cluster:
+  # Exact kubectl context name. Agent runs `kubectl config current-context` and
+  # aborts if the result is not equal to this string.
+  context: "<FILL_KUBECTL_CONTEXT>"          # e.g. "gke_<project>_<region>_<cluster>"
+  project: "<FILL_GCP_PROJECT>"
+  region: "<FILL_GCP_REGION>"
+
+namespaces:
+  allowed:
+    - "<FILL_DISCOVR_NAMESPACE>"             # e.g. "discovr-staging"
+    - "<FILL_KAFKA_NAMESPACE>"
+    - "<FILL_POSTGRES_NAMESPACE>"
+    - "<FILL_ELASTICSEARCH_NAMESPACE>"
+
+jmeter:
+  vm_name: "<FILL_JMETER_VM_NAME>"
+  zone: "<FILL_JMETER_VM_ZONE>"
+  user: "<FILL_SSH_USER>"
+  scripts_dir: "/opt/jmeter/scripts"
+  results_dir: "/opt/jmeter/results"
+  jmeter_bin: "/opt/jmeter/bin/jmeter"
+
+clickstack:
+  base_url: "<FILL_CLICKSTACK_BASE_URL>"
+  api_key_env: "CLICKSTACK_API_KEY"
+
+endpoints:
+  discovr_discover: "<FILL_DISCOVR_DISCOVER_URL>"   # e.g. "https://discovr.staging.example.com/beckn/discover"
+  discovr_push:     "<FILL_DISCOVR_PUSH_URL>"       # e.g. "https://discovr.staging.example.com/catalog/push"
+
+# External enrichment API that on_discover invokes. Some scenarios fault this.
+external_enrichment:
+  url: "<FILL_EXTERNAL_ENRICHMENT_URL>"
+  # Scenarios that need a slow/failing endpoint may point this at a controllable mock.
+  mock_url: "<FILL_EXTERNAL_ENRICHMENT_MOCK_URL>"
+
+services:
+  publish: "catalog-publish-job"
+  discover: "catalog-discover-job"
+  dispatcher: "response-dispatcher"
+
+# Kafka topics
+kafka:
+  topics:
+    push_in: "<FILL_PUSH_IN_TOPIC>"
+    discover_events: "<FILL_DISCOVER_EVENTS_TOPIC>"
+    on_discover_out: "<FILL_ON_DISCOVER_OUT_TOPIC>"
+  consumer_groups:
+    publish: "catalog-publish-job"
+    discover: "catalog-discover-job"
+    dispatcher: "response-dispatcher"
+
+# Datastores
+postgres:
+  service: "<FILL_POSTGRES_SERVICE>"           # e.g. "postgres-discovr"
+elasticsearch:
+  service: "<FILL_ES_SERVICE>"                 # e.g. "elasticsearch-discovr"
+
+reports:
+  dir: "reliability/reports"
