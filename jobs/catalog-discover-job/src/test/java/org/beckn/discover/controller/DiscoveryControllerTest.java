@@ -119,11 +119,15 @@ class DiscoveryControllerTest {
         doReturn(new AuthIdentity("bpp.seller.io", "bpp-key-001"))
                 .when(authorizationService).authorizeRequest(any(), any());
 
+        String messageId = UUID.randomUUID().toString();
+        String transactionId = UUID.randomUUID().toString();
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
+                        .content(buildPayload(messageId, transactionId)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
 
         @SuppressWarnings("rawtypes")
         var captor = ArgumentCaptor.forClass(ProducerRecord.class);
@@ -149,11 +153,15 @@ class DiscoveryControllerTest {
         doReturn(AuthIdentity.anonymous())
                 .when(authorizationService).authorizeRequest(any(), any());
 
+        String messageId = UUID.randomUUID().toString();
+        String transactionId = UUID.randomUUID().toString();
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
+                        .content(buildPayload(messageId, transactionId)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
 
         @SuppressWarnings("rawtypes")
         var captor = ArgumentCaptor.forClass(ProducerRecord.class);
@@ -183,12 +191,16 @@ class DiscoveryControllerTest {
                 BecknAuthException.signatureVerificationFailed("bad sig", "SEC_SIGNATURE_INVALID")))
                 .when(authorizationService).authorizeRequest(any(), any());
 
+        String messageId = UUID.randomUUID().toString();
+        String transactionId = UUID.randomUUID().toString();
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
+                        .content(buildPayload(messageId, transactionId)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message.status").value("NACK"))
-                .andExpect(jsonPath("$.message.error.code").value("AUT_SIGNATURE_INVALID"));
+                .andExpect(jsonPath("$.message.error.code").value("AUT_SIGNATURE_INVALID"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
 
         verify(kafkaTemplate, never()).send(any(ProducerRecord.class));
     }

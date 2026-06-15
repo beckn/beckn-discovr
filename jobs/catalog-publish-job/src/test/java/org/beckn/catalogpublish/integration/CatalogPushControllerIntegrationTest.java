@@ -231,7 +231,10 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.message.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                // ACK echoes the request's messageId; transactionId absent here, so it is omitted
+                .andExpect(jsonPath("$.message.messageId").value("msg-ctx-fields"))
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)

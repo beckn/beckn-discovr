@@ -184,7 +184,7 @@ public class DiscoveryService {
                     value("error", e.getMessage()));
             throw e;
         } catch (SemanticSearchException e) {
-            // Propagate as-is — GlobalExceptionHandler maps this to 503 NET_INTERNAL_ERROR
+            // Propagate as-is — GlobalExceptionHandler maps this to 500 NET_DOWNSTREAM_UNAVAILABLE
             metrics.recordFailure(start, e, request.getContext().getTransactionId());
             throw e;
         } catch (Exception e) {

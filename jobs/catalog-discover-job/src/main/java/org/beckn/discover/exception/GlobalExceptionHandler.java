@@ -35,7 +35,7 @@ import static net.logstash.logback.argument.StructuredArguments.value;
  * <ol>
  *   <li>{@link ResponseEntityExceptionHandler} — Spring MVC infrastructure exceptions (400/405/415…)</li>
  *   <li>{@link ErrorResponseException} — Beckn auth / validation errors with embedded code/paths</li>
- *   <li>{@link SemanticSearchException} — embedding/LLM provider unavailable → 503 NET_DOWNSTREAM_UNAVAILABLE</li>
+ *   <li>{@link SemanticSearchException} — embedding/LLM provider unavailable → 500 NET_DOWNSTREAM_UNAVAILABLE</li>
  *   <li>{@link IllegalArgumentException} — schema validation failures → 400</li>
  *   <li>{@link Exception} — catch-all → 500</li>
  * </ol>
@@ -62,7 +62,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("error", ex.getMessage()),
                 value("cause", ex.getCause() != null ? ex.getCause().getMessage() : "none"),
                 ex);
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(),
                 ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
                 ErrorMessages.NET_SEARCH_SERVICE_UNAVAILABLE);
         // Spec maps transient server-side failures to 500 ServerError; /discover does not
@@ -75,7 +75,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.error(LogEvent.NACK_RESPONSE,
                 value("errorCode", ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE),
                 value("error", ex.getMessage()));
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(),
                 ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
                 ErrorMessages.NET_DOWNSTREAM_UNAVAILABLE);
         // Spec maps transient server-side failures to 500 ServerError; /discover does not
@@ -128,21 +128,31 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("httpStatus", status.value()),
                 value("error", ex.getMessage()));
 
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(), code, message);
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(),code, message);
         return responseHeaders != null
                 ? new ResponseEntity<>(ackResponse, responseHeaders, status)
                 : new ResponseEntity<>(ackResponse, status);
     }
 
-    /**
-     * Best-effort retrieval of the request messageId stored by {@link DiscoveryController}
-     * as a servlet request attribute. Returns {@code null} when the request is unavailable
-     * (e.g. malformed JSON) — the messageId field is then omitted from the NACK body.
-     */
+    /** Best-effort: request messageId stored as a servlet attribute by {@link DiscoveryController}. */
     private static String currentMessageId() {
+        return requestAttr(DiscoveryController.MESSAGE_ID_ATTR);
+    }
+
+    /** Best-effort: request transactionId stored as a servlet attribute by {@link DiscoveryController}. */
+    private static String currentTransactionId() {
+        return requestAttr(DiscoveryController.TRANSACTION_ID_ATTR);
+    }
+
+    /**
+     * Reads a String request attribute via {@link org.springframework.web.context.request.RequestContextHolder}.
+     * Returns {@code null} when the request/attribute is unavailable (e.g. malformed JSON) — the
+     * corresponding response field is then omitted rather than fabricated.
+     */
+    private static String requestAttr(String name) {
         var attrs = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
         if (attrs instanceof ServletRequestAttributes sra) {
-            Object v = sra.getRequest().getAttribute(DiscoveryController.MESSAGE_ID_ATTR);
+            Object v = sra.getRequest().getAttribute(name);
             return (v instanceof String s && !s.isBlank()) ? s : null;
         }
         return null;
