@@ -116,7 +116,7 @@ Output a summary of changes made.
 - **Keep existing `_postman_id`** — don't regenerate
 - **Use realistic sample data** in request bodies (Beckn grocery domain examples)
 - **All endpoints with bodies must have** `Content-Type: application/json` header
-- **Error format** is always `{ errorCode, errorMessage }` — never `{ code, message }`
+- **ACK/NACK wrapped in `message`** — ACK `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}`; NACK adds `error:{code,message}`. Both echo request `messageId` + `transactionId`. Error fields are `code`/`message` — never `errorCode`/`errorMessage`. `error.code` is a canonical `ErrorCode` enum value.
 - **`catalogs` (plural)** in all response examples — never `catalog` singular
 - **No underscore action variants** — only `discover`, `on_discover`, `catalog/push`
 - **GET /beckn/discover** is synchronous (returns on_discover response directly)
