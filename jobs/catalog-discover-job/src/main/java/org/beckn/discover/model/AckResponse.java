@@ -7,14 +7,15 @@ import org.beckn.discover.common.BecknFields;
 /**
  * ACK/NACK Response DTO — Beckn Protocol v2.0 schema.
  *
- * ACK:  {@code {"message":{"status":"ACK","messageId":"<uuid>"}}}
- * NACK: {@code {"message":{"status":"NACK","messageId":"<uuid>","error":{"code":"...","message":"..."}}}}
+ * ACK:  {@code {"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}}
+ * NACK: {@code {"message":{"status":"NACK","messageId":"<uuid>","transactionId":"<uuid>","error":{"code":"...","message":"..."}}}}
  *
- * <p>{@code message.messageId} echoes the request's {@code context.messageId}.
- * When the request is unparseable (malformed JSON) and no messageId is recoverable,
- * the field is simply omitted ({@code @JsonInclude(NON_NULL)}) — never fabricated.</p>
+ * <p>{@code message.messageId} and {@code message.transactionId} echo the request's
+ * {@code context.messageId} / {@code context.transactionId}. When the request is unparseable
+ * (malformed JSON) and a value is unrecoverable, that field is simply omitted
+ * ({@code @JsonInclude(NON_NULL)}) — never fabricated.</p>
  *
- * @version 2.0.0
+ * @version Beckn Protocol 2.0.0
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AckResponse {
@@ -28,14 +29,14 @@ public class AckResponse {
         this.message = message;
     }
 
-    /** Factory: accepted request. */
-    public static AckResponse ack(String messageId) {
-        return new AckResponse(new Message("ACK", messageId, null));
+    /** Factory: accepted request. Echoes the request's messageId and transactionId. */
+    public static AckResponse ack(String messageId, String transactionId) {
+        return new AckResponse(new Message("ACK", messageId, transactionId, null));
     }
 
-    /** Factory: rejected request. */
-    public static AckResponse nack(String messageId, String code, String message) {
-        return new AckResponse(new Message("NACK", messageId, new ErrorDetail(code, message)));
+    /** Factory: rejected request. Echoes the request's messageId and transactionId. */
+    public static AckResponse nack(String messageId, String transactionId, String code, String message) {
+        return new AckResponse(new Message("NACK", messageId, transactionId, new ErrorDetail(code, message)));
     }
 
     public Message getMessage() { return message; }
@@ -47,7 +48,8 @@ public class AckResponse {
     }
 
     /**
-     * The {@code message} wrapper — carries {@code status}, {@code messageId}, and optional {@code error}.
+     * The {@code message} wrapper — carries {@code status}, {@code messageId},
+     * {@code transactionId}, and optional {@code error}.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Message {
@@ -58,14 +60,18 @@ public class AckResponse {
         @JsonProperty(BecknFields.MESSAGE_ID)
         private String messageId;
 
+        @JsonProperty(BecknFields.TRANSACTION_ID)
+        private String transactionId;
+
         @JsonProperty(BecknFields.ERROR)
         private ErrorDetail error;
 
         public Message() {}
 
-        public Message(String status, String messageId, ErrorDetail error) {
+        public Message(String status, String messageId, String transactionId, ErrorDetail error) {
             this.status = status;
             this.messageId = messageId;
+            this.transactionId = transactionId;
             this.error = error;
         }
 
@@ -75,12 +81,16 @@ public class AckResponse {
         public String getMessageId() { return messageId; }
         public void setMessageId(String messageId) { this.messageId = messageId; }
 
+        public String getTransactionId() { return transactionId; }
+        public void setTransactionId(String transactionId) { this.transactionId = transactionId; }
+
         public ErrorDetail getError() { return error; }
         public void setError(ErrorDetail error) { this.error = error; }
 
         @Override
         public String toString() {
-            return "Message{status='" + status + "', messageId='" + messageId + "', error=" + error + '}';
+            return "Message{status='" + status + "', messageId='" + messageId
+                    + "', transactionId='" + transactionId + "', error=" + error + '}';
         }
     }
 

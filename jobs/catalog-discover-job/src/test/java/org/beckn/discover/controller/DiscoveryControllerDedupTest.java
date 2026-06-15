@@ -94,19 +94,23 @@ class DiscoveryControllerDedupTest {
         String transactionId = UUID.randomUUID().toString();
         String payload = buildPayload(messageId, transactionId);
 
-        // First request — should publish to Kafka
+        // First request — should publish to Kafka. ACK must echo the request's messageId + transactionId.
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
 
-        // Second request with same messageId — should be deduplicated
+        // Second request with same messageId — should be deduplicated (still echoes correlation ids)
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
 
         // Kafka must have been called exactly once
         verify(kafkaTemplate, times(1)).send(any(org.apache.kafka.clients.producer.ProducerRecord.class));

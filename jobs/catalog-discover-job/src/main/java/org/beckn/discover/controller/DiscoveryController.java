@@ -221,7 +221,7 @@ public class DiscoveryController {
                 log.info(LogEvent.REQUEST_RECEIVED + ".duplicate-suppressed",
                         value("messageId", messageId),
                         value("transactionId", transactionId));
-                return ResponseEntity.ok(AckResponse.ack(messageId));
+                return ResponseEntity.ok(AckResponse.ack(messageId, transactionId));
             }
 
             String kafkaKey = transactionId != null ? transactionId : messageId;
@@ -279,7 +279,7 @@ public class DiscoveryController {
                         value("error", kafkaEx.getMessage()));
             }
 
-            return ResponseEntity.ok(AckResponse.ack(messageId));
+            return ResponseEntity.ok(AckResponse.ack(messageId, transactionId));
         } finally {
             BecknMdcContext.clear();
         }
