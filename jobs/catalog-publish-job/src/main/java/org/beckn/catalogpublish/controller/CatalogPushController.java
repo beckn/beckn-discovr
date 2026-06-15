@@ -12,7 +12,6 @@ import org.beckn.catalogpublish.util.CorrelationContext;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,9 +24,11 @@ import java.util.Map;
 /**
  * POST /catalog/push — Beckn subscriber callback endpoint.
  *
- * <p>Accepts a catalog payload from a BPP, returns {@code 202 Accepted}
+ * <p>Accepts a catalog payload from a BPP, returns {@code 200 Ack}
  * immediately, and processes the catalog asynchronously through the
- * existing publish pipeline.</p>
+ * existing publish pipeline. A {@code catalog/on_publish} callback follows,
+ * so the synchronous response is a Beckn {@code Ack} (200), not
+ * {@code AckNoCallback} (202).</p>
  */
 @RestController
 public class CatalogPushController {
@@ -54,8 +55,10 @@ public class CatalogPushController {
 
         if (rawBytes.length > maxPayloadSize) {
             log.warn("event={} sizeBytes={} limit={}", LogEvent.PUSH_REJECTED, rawBytes.length, maxPayloadSize);
-            // Payload not parsed — no correlation ids recoverable; messageId/transactionId omitted.
-            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(
+            // An oversized body is a client error → 400 NackBadRequest. 413 is not part of the
+            // Beckn response set (200/400/401/429/500). Payload not parsed — no correlation ids
+            // recoverable; messageId/transactionId omitted.
+            return ResponseEntity.badRequest().body(
                     nackBody(null, null, ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED, ErrorMessages.REQUEST_TOO_LARGE));
         }
 
@@ -84,7 +87,10 @@ public class CatalogPushController {
         log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
         pushService.enqueueForProcessing(rawBody);
 
-        return ResponseEntity.accepted().body(ackBody(messageId, transactionId));
+        // 200 Ack: the request is accepted for async processing and a catalog/on_publish
+        // callback follows. Beckn maps 202 to AckNoCallback (which requires an error and
+        // signals that NO callback will follow), so 200 Ack is the correct code here.
+        return ResponseEntity.ok(ackBody(messageId, transactionId));
     }
 
     /**
