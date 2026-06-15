@@ -114,6 +114,41 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         }
 
         @Test
+        void postDiscoverWithMalformedJsonReturnsBadRequestInvalidJson() throws Exception {
+                // An unparseable body is a client error: 400 NACK with SCH_INVALID_JSON,
+                // NOT 500 NET_INTERNAL_ERROR. messageId/transactionId are omitted (unparseable).
+                String malformed = "{\"context\":{\"action\":\"discover\" BROKEN";
+
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(malformed));
+
+                result.andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_INVALID_JSON))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, containsString("not valid JSON")))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.MESSAGE_ID).doesNotExist())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.TRANSACTION_ID).doesNotExist());
+        }
+
+        @Test
+        void getDiscoverWithMalformedJsonReturnsBadRequestInvalidJson() throws Exception {
+                // The GET endpoint reads the same raw-byte body and parses with readTree,
+                // so a malformed body must also surface as 400 SCH_INVALID_JSON, not 500.
+                String malformed = "{\"context\":{\"action\":\"discover\" BROKEN";
+
+                ResultActions result = mockMvc.perform(get(DISCOVER_PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(malformed));
+
+                result.andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_INVALID_JSON))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.MESSAGE_ID).doesNotExist())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.TRANSACTION_ID).doesNotExist());
+        }
+
+        @Test
         void getDiscoverWithInvalidSchemaReturnsBadRequest() throws Exception {
                 String payload = readFixture("invalid_missing_context.json");
 
