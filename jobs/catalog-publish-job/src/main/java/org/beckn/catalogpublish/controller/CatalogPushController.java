@@ -56,10 +56,9 @@ public class CatalogPushController {
         if (rawBytes.length > maxPayloadSize) {
             log.warn("event={} sizeBytes={} limit={}", LogEvent.PUSH_REJECTED, rawBytes.length, maxPayloadSize);
             // An oversized body is a client error → 400 NackBadRequest. 413 is not part of the
-            // Beckn response set (200/400/401/429/500). Payload not parsed — no correlation ids
-            // recoverable; messageId/transactionId omitted.
+            // Beckn response set (200/400/401/429/500). Payload not parsed — messageId omitted.
             return ResponseEntity.badRequest().body(
-                    nackBody(null, null, ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED, ErrorMessages.REQUEST_TOO_LARGE));
+                    nackBody(null, ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED, ErrorMessages.REQUEST_TOO_LARGE));
         }
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
@@ -69,19 +68,18 @@ public class CatalogPushController {
         // Parse once; reuse the tree for correlation-id extraction and context validation.
         JsonNode root = tryParse(rawBody);
         if (root == null) {
-            // Unparseable JSON — distinct from a missing context. No correlation ids recoverable.
+            // Unparseable JSON — distinct from a missing context. No messageId recoverable.
             return ResponseEntity.badRequest().body(
-                    nackBody(null, null, ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON));
+                    nackBody(null, ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON));
         }
 
         String messageId = contextText(root, BecknFields.MESSAGE_ID);
-        String transactionId = contextText(root, BecknFields.TRANSACTION_ID);
 
         // Validate required context — reject with NACK if missing. The NACK still echoes
-        // whatever correlation ids were present so the caller can correlate the failure.
+        // the messageId when present so the caller can correlate the failure.
         if (!hasRequiredContext(root)) {
             return ResponseEntity.badRequest().body(
-                    nackBody(messageId, transactionId, ErrorCodes.CTX_MISSING_FIELD, ErrorMessages.SCH_MISSING_CONTEXT));
+                    nackBody(messageId, ErrorCodes.CTX_MISSING_FIELD, ErrorMessages.SCH_MISSING_CONTEXT));
         }
 
         log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
@@ -90,19 +88,18 @@ public class CatalogPushController {
         // 200 Ack: the request is accepted for async processing and a catalog/on_publish
         // callback follows. Beckn maps 202 to AckNoCallback (which requires an error and
         // signals that NO callback will follow), so 200 Ack is the correct code here.
-        return ResponseEntity.ok(ackBody(messageId, transactionId));
+        return ResponseEntity.ok(ackBody(messageId));
     }
 
     /**
      * Builds a spec-compliant ACK body:
-     * {@code {"message":{"status":"ACK","messageId":"<id>","transactionId":"<id>"}}}
-     * Correlation ids that are absent (null/blank) are omitted, never fabricated.
+     * {@code {"message":{"status":"ACK","messageId":"<id>"}}}
+     * The messageId is omitted when absent (null/blank), never fabricated.
      */
-    static Map<String, Object> ackBody(String messageId, String transactionId) {
+    static Map<String, Object> ackBody(String messageId) {
         Map<String, Object> inner = new HashMap<>();
         inner.put(BecknFields.STATUS, "ACK");
         putIfPresent(inner, BecknFields.MESSAGE_ID, messageId);
-        putIfPresent(inner, BecknFields.TRANSACTION_ID, transactionId);
         Map<String, Object> outer = new HashMap<>();
         outer.put(BecknFields.MESSAGE, inner);
         return outer;
@@ -110,10 +107,10 @@ public class CatalogPushController {
 
     /**
      * Builds a spec-compliant NACK body:
-     * {@code {"message":{"status":"NACK","messageId":"<id>","transactionId":"<id>","error":{"code":"...","message":"..."}}}}
-     * Correlation ids that are absent (null/blank) are omitted, never fabricated.
+     * {@code {"message":{"status":"NACK","messageId":"<id>","error":{"code":"...","message":"..."}}}}
+     * The messageId is omitted when absent (null/blank), never fabricated.
      */
-    static Map<String, Object> nackBody(String messageId, String transactionId, String code, String message) {
+    static Map<String, Object> nackBody(String messageId, String code, String message) {
         Map<String, Object> error = new HashMap<>();
         error.put(BecknFields.CODE, code);
         error.put(BecknFields.MESSAGE, message);
@@ -121,7 +118,6 @@ public class CatalogPushController {
         Map<String, Object> inner = new HashMap<>();
         inner.put(BecknFields.STATUS, "NACK");
         putIfPresent(inner, BecknFields.MESSAGE_ID, messageId);
-        putIfPresent(inner, BecknFields.TRANSACTION_ID, transactionId);
         inner.put(BecknFields.ERROR, error);
 
         Map<String, Object> outer = new HashMap<>();

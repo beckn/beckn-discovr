@@ -127,7 +127,7 @@ class DiscoveryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message.status").value("ACK"))
                 .andExpect(jsonPath("$.message.messageId").value(messageId))
-                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         @SuppressWarnings("rawtypes")
         var captor = ArgumentCaptor.forClass(ProducerRecord.class);
@@ -161,7 +161,7 @@ class DiscoveryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message.status").value("ACK"))
                 .andExpect(jsonPath("$.message.messageId").value(messageId))
-                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         @SuppressWarnings("rawtypes")
         var captor = ArgumentCaptor.forClass(ProducerRecord.class);
@@ -200,7 +200,7 @@ class DiscoveryControllerTest {
                 .andExpect(jsonPath("$.message.status").value("NACK"))
                 .andExpect(jsonPath("$.message.error.code").value("AUT_SIGNATURE_INVALID"))
                 .andExpect(jsonPath("$.message.messageId").value(messageId))
-                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         verify(kafkaTemplate, never()).send(any(ProducerRecord.class));
     }

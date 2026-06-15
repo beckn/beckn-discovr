@@ -101,7 +101,7 @@ class DiscoveryControllerDedupTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message.status").value("ACK"))
                 .andExpect(jsonPath("$.message.messageId").value(messageId))
-                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         // Second request with same messageId — should be deduplicated (still echoes correlation ids)
         mockMvc.perform(post(DISCOVER_PATH)
@@ -110,7 +110,7 @@ class DiscoveryControllerDedupTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message.status").value("ACK"))
                 .andExpect(jsonPath("$.message.messageId").value(messageId))
-                .andExpect(jsonPath("$.message.transactionId").value(transactionId));
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         // Kafka must have been called exactly once
         verify(kafkaTemplate, times(1)).send(any(org.apache.kafka.clients.producer.ProducerRecord.class));
