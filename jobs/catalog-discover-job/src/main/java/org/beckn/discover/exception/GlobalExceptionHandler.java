@@ -2,6 +2,7 @@ package org.beckn.discover.exception;
 
 import java.util.Map;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.common.ErrorMessages;
 import org.beckn.discover.controller.DiscoveryController;
@@ -26,16 +27,21 @@ import static net.logstash.logback.argument.StructuredArguments.value;
 /**
  * Global exception handler — converts all unhandled exceptions into Beckn NACK responses.
  *
- * <p>Extends {@link ResponseEntityExceptionHandler} so that Spring MVC exceptions
- * (e.g. {@code HttpMessageNotReadableException} from malformed JSON input) are
- * returned as {@code 400 Bad Request} NACK responses rather than the default
- * {@code 500 Internal Server Error}.</p>
+ * <p>Extends {@link ResponseEntityExceptionHandler} so that Spring MVC infrastructure
+ * exceptions (wrong method, unsupported media type, …) are returned as Beckn NACK
+ * responses rather than Spring's default error body. Note that malformed JSON does NOT
+ * arrive as {@code HttpMessageNotReadableException} here: the controller reads the raw
+ * request bytes and parses them itself, so a bad body surfaces as a
+ * {@link JsonProcessingException} handled explicitly below.</p>
  *
  * <h3>Exception handler priority</h3>
+ * <p>(Spring resolves by exception-type specificity, not declaration order — the list
+ * below is the conceptual most-specific-first grouping.)</p>
  * <ol>
  *   <li>{@link ResponseEntityExceptionHandler} — Spring MVC infrastructure exceptions (400/405/415…)</li>
  *   <li>{@link ErrorResponseException} — Beckn auth / validation errors with embedded code/paths</li>
  *   <li>{@link SemanticSearchException} — embedding/LLM provider unavailable → 500 NET_DOWNSTREAM_UNAVAILABLE</li>
+ *   <li>{@link JsonProcessingException} — malformed request body → 400 SCH_INVALID_JSON</li>
  *   <li>{@link IllegalArgumentException} — schema validation failures → 400</li>
  *   <li>{@link Exception} — catch-all → 500</li>
  * </ol>
@@ -86,6 +92,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler({ IllegalArgumentException.class })
     public ResponseEntity<Object> handleBadRequest(Exception ex) {
         return buildErrorResponse(ex, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
+     * Malformed request body. The controller reads the raw bytes and parses them with
+     * {@code objectMapper.readTree(...)}, so a syntactically invalid body surfaces as a
+     * {@link JsonProcessingException} (NOT Spring's {@code HttpMessageNotReadableException}).
+     * An unparseable payload is a client error → {@code 400} NACK with {@code SCH_INVALID_JSON}.
+     * messageId / transactionId are omitted because they could not be parsed from the body.
+     */
+    @ExceptionHandler({ JsonProcessingException.class })
+    public ResponseEntity<Object> handleMalformedJson(JsonProcessingException ex) {
+        log.warn(LogEvent.NACK_RESPONSE,
+                value("errorCode", ErrorCodes.SCH_INVALID_JSON),
+                value("httpStatus", HttpStatus.BAD_REQUEST.value()),
+                value("error", ex.getOriginalMessage()));
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(),
+                ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON);
+        return new ResponseEntity<>(ackResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler({ Exception.class })
