@@ -128,7 +128,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("httpStatus", status.value()),
                 value("error", ex.getMessage()));
 
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(),code, message);
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(), code, message);
         return responseHeaders != null
                 ? new ResponseEntity<>(ackResponse, responseHeaders, status)
                 : new ResponseEntity<>(ackResponse, status);

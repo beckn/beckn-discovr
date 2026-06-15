@@ -15,6 +15,10 @@ import org.beckn.discover.common.BecknFields;
  * (malformed JSON) and a value is unrecoverable, that field is simply omitted
  * ({@code @JsonInclude(NON_NULL)}) — never fabricated.</p>
  *
+ * <p><b>Note:</b> the spec {@code Ack}/{@code Nack*} schemas declare only {@code messageId} as
+ * required; {@code transactionId} is a deliberate, spec-compatible extension (the schemas do not
+ * set {@code additionalProperties: false}) added for end-to-end caller correlation.</p>
+ *
  * @version Beckn Protocol 2.0.0
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
