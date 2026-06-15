@@ -1,0 +1,16 @@
+{
+  "context": {
+    "action": "discover",
+    "version": "2.0.0",
+    "networkId": "bap.net/ev-charging",
+    "transactionId": "33333333-3333-4333-8333-333333333333",
+    "messageId": "33333333-3333-4333-8333-cccccccccccc",
+    "timestamp": "2026-06-13T10:00:00.000Z",
+    "ttl": "PT30S"
+  },
+  "message": {
+    "intent": {
+      "textSearch": "ev charging stations near MG Road"
+    }
+  }
+}

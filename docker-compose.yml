@@ -240,6 +240,20 @@ services:
       - ES_FUZZINESS=AUTO
       - ES_CONNECT_TIMEOUT_MS=5000
       - ES_SOCKET_TIMEOUT_MS=30000
+      # Per-query timeout (seconds) for the single-path engines — cases B/C/D and the
+      # case-4 J+G combined query. Maps to discovery.parallel-query-timeout-seconds.
+      # This is NOT a chain setting; the ES->PSQL chain has its own end-to-end budget
+      # in DISCOVERY_CHAIN_TIMEOUT_SECONDS below.
+      - DISCOVERY_PARALLEL_QUERY_TIMEOUT_SECONDS=10
+      # ── ES-text -> PSQL-JSONPath chain (cases J+T and J+G+T) ─────────────────
+      # The chain only runs when DISCOVERY_SPATIAL_ENGINE=elasticsearch (above) so
+      # the ES engine bean exists; otherwise J+T / J+G+T drop the text term and run
+      # as J / J+G. ES candidate pool = min(result-limit * overfetch-factor, max-ids).
+      - DISCOVERY_CHAIN_OVERFETCH_FACTOR=10
+      - DISCOVERY_CHAIN_MAX_IDS=5000
+      # End-to-end chain timeout in seconds (ES step 1 + PSQL step 2). Absolute
+      # value; 20 ~= 2x DISCOVERY_PARALLEL_QUERY_TIMEOUT_SECONDS (two sequential calls).
+      - DISCOVERY_CHAIN_TIMEOUT_SECONDS=20
       # ── Text Search ─────────────────────────────────────────────────────────
       # Engine options: native-els | els-semantic-search | nlweb
       # native-els        — keyword BM25, no AI dependency (default)
