@@ -372,7 +372,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .content(payload))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message.status").value("NACK"))
-                .andExpect(jsonPath("$.message.error.code").value(ErrorCodes.CTX_INVALID_FIELD));
+                .andExpect(jsonPath("$.message.error.code").value(ErrorCodes.CTX_MISSING_FIELD));
 
         // Rejected synchronously — nothing persisted
         assertThat(itemRepository.count()).isEqualTo(countBefore);

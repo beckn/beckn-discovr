@@ -65,6 +65,12 @@ public class CatalogPushController {
 
         // Parse once; reuse the tree for correlation-id extraction and context validation.
         JsonNode root = tryParse(rawBody);
+        if (root == null) {
+            // Unparseable JSON — distinct from a missing context. No correlation ids recoverable.
+            return ResponseEntity.badRequest().body(
+                    nackBody(null, null, ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON));
+        }
+
         String messageId = contextText(root, BecknFields.MESSAGE_ID);
         String transactionId = contextText(root, BecknFields.TRANSACTION_ID);
 
