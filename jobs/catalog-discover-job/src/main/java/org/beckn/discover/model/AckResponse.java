@@ -7,17 +7,16 @@ import org.beckn.discover.common.BecknFields;
 /**
  * ACK/NACK Response DTO — Beckn Protocol v2.0 schema.
  *
- * ACK:  {@code {"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}}
- * NACK: {@code {"message":{"status":"NACK","messageId":"<uuid>","transactionId":"<uuid>","error":{"code":"...","message":"..."}}}}
+ * ACK:  {@code {"message":{"status":"ACK","messageId":"<uuid>"}}}
+ * NACK: {@code {"message":{"status":"NACK","messageId":"<uuid>","error":{"code":"...","message":"..."}}}}
  *
- * <p>{@code message.messageId} and {@code message.transactionId} echo the request's
- * {@code context.messageId} / {@code context.transactionId}. When the request is unparseable
- * (malformed JSON) and a value is unrecoverable, that field is simply omitted
+ * <p>{@code message.messageId} echoes the request's {@code context.messageId}. When the request
+ * is unparseable (malformed JSON) and the value is unrecoverable, the field is simply omitted
  * ({@code @JsonInclude(NON_NULL)}) — never fabricated.</p>
  *
- * <p><b>Note:</b> the spec {@code Ack}/{@code Nack*} schemas declare only {@code messageId} as
- * required; {@code transactionId} is a deliberate, spec-compatible extension (the schemas do not
- * set {@code additionalProperties: false}) added for end-to-end caller correlation.</p>
+ * <p>Per the spec {@code Ack}/{@code Nack*} schemas, the {@code message} object carries only
+ * {@code status}, {@code messageId}, and {@code error} — {@code transactionId} lives on the
+ * request {@code Context}, never in the synchronous ACK/NACK body.</p>
  *
  * @version Beckn Protocol 2.0.0
  */
@@ -33,14 +32,14 @@ public class AckResponse {
         this.message = message;
     }
 
-    /** Factory: accepted request. Echoes the request's messageId and transactionId. */
-    public static AckResponse ack(String messageId, String transactionId) {
-        return new AckResponse(new Message("ACK", messageId, transactionId, null));
+    /** Factory: accepted request. Echoes the request's messageId. */
+    public static AckResponse ack(String messageId) {
+        return new AckResponse(new Message("ACK", messageId, null));
     }
 
-    /** Factory: rejected request. Echoes the request's messageId and transactionId. */
-    public static AckResponse nack(String messageId, String transactionId, String code, String message) {
-        return new AckResponse(new Message("NACK", messageId, transactionId, new ErrorDetail(code, message)));
+    /** Factory: rejected request. Echoes the request's messageId. */
+    public static AckResponse nack(String messageId, String code, String message) {
+        return new AckResponse(new Message("NACK", messageId, new ErrorDetail(code, message)));
     }
 
     public Message getMessage() { return message; }
@@ -53,7 +52,7 @@ public class AckResponse {
 
     /**
      * The {@code message} wrapper — carries {@code status}, {@code messageId},
-     * {@code transactionId}, and optional {@code error}.
+     * and optional {@code error}.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Message {
@@ -64,18 +63,14 @@ public class AckResponse {
         @JsonProperty(BecknFields.MESSAGE_ID)
         private String messageId;
 
-        @JsonProperty(BecknFields.TRANSACTION_ID)
-        private String transactionId;
-
         @JsonProperty(BecknFields.ERROR)
         private ErrorDetail error;
 
         public Message() {}
 
-        public Message(String status, String messageId, String transactionId, ErrorDetail error) {
+        public Message(String status, String messageId, ErrorDetail error) {
             this.status = status;
             this.messageId = messageId;
-            this.transactionId = transactionId;
             this.error = error;
         }
 
@@ -85,16 +80,13 @@ public class AckResponse {
         public String getMessageId() { return messageId; }
         public void setMessageId(String messageId) { this.messageId = messageId; }
 
-        public String getTransactionId() { return transactionId; }
-        public void setTransactionId(String transactionId) { this.transactionId = transactionId; }
-
         public ErrorDetail getError() { return error; }
         public void setError(ErrorDetail error) { this.error = error; }
 
         @Override
         public String toString() {
             return "Message{status='" + status + "', messageId='" + messageId
-                    + "', transactionId='" + transactionId + "', error=" + error + '}';
+                    + "', error=" + error + '}';
         }
     }
 

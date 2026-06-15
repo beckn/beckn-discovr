@@ -84,9 +84,9 @@ All three jobs are fully migrated to Beckn Protocol v2.0. **No legacy v1.0 suppo
 `id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`. **No `@context`/`@type` on Offer itself — those belong only on `offerAttributes`.**
 
 ### ACK/NACK format
-Wrapped in a `message` object per beckn.yaml `Ack`/`Nack*`. Both ACK and NACK echo the request's `messageId` AND `transactionId` (omitted only when the request is unparseable — never fabricated). Error object uses `code`/`message` (NOT `errorCode`/`errorMessage`).
-- ACK: `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}`
-- NACK: `{"message":{"status":"NACK","messageId":"<uuid>","transactionId":"<uuid>","error":{"code":"...","message":"..."}}}`
+Wrapped in a `message` object per beckn.yaml `Ack`/`Nack*`. The `message` object carries **only** `status`, `messageId`, and (for NACK) `error` — these are the only fields the schema defines. Both ACK and NACK echo the request's `messageId` (omitted only when the request is unparseable — never fabricated). **No `transactionId` in the ACK/NACK body** — `transactionId` lives on the request `Context`, not in the synchronous response. Error object uses `code`/`message` (NOT `errorCode`/`errorMessage`).
+- ACK: `{"message":{"status":"ACK","messageId":"<uuid>"}}`
+- NACK: `{"message":{"status":"NACK","messageId":"<uuid>","error":{"code":"...","message":"..."}}}`
 - `error.code` MUST be a canonical `ErrorCode` enum value from beckn.yaml (e.g. `SCH_SCHEMA_VALIDATION_FAILED`, `AUT_SIGNATURE_INVALID`, `CTX_MISSING_FIELD`, `NET_DOWNSTREAM_UNAVAILABLE`). No `NET_SERVICE_UNAVAILABLE`, no `SEC_*`, no `REQUEST_TOO_LARGE`.
 - `/discover` HTTP responses are limited to the schema set: 200, 202, 400, 401, 403, 429, 500. Transient failures (downstream/semantic-search unavailable, schema-not-initialized) return **500** — never 503.
 - HTTP 409 = `AckNoCallback` — log and skip, not an error
@@ -123,7 +123,7 @@ Wrapped in a `message` object per beckn.yaml `Ack`/`Nack*`. Both ACK and NACK ec
 POST /beckn/discover
   → Auth (Beckn HTTP Signature)
   → Schema validation
-  → Publish to Kafka request topic → ACK {"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}
+  → Publish to Kafka request topic → ACK {"message":{"status":"ACK","messageId":"<uuid>"}}
 
 DiscoveryEventConsumer (async):
   → QueryEngine — routed by J/G/T criteria (see Query Routing below)

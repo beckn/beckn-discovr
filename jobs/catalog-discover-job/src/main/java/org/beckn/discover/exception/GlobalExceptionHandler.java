@@ -68,7 +68,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("error", ex.getMessage()),
                 value("cause", ex.getCause() != null ? ex.getCause().getMessage() : "none"),
                 ex);
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(),
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
                 ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
                 ErrorMessages.NET_SEARCH_SERVICE_UNAVAILABLE);
         // Spec maps transient server-side failures to 500 ServerError; /discover does not
@@ -81,7 +81,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.error(LogEvent.NACK_RESPONSE,
                 value("errorCode", ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE),
                 value("error", ex.getMessage()));
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(),
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
                 ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
                 ErrorMessages.NET_DOWNSTREAM_UNAVAILABLE);
         // Spec maps transient server-side failures to 500 ServerError; /discover does not
@@ -99,7 +99,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      * {@code objectMapper.readTree(...)}, so a syntactically invalid body surfaces as a
      * {@link JsonProcessingException} (NOT Spring's {@code HttpMessageNotReadableException}).
      * An unparseable payload is a client error → {@code 400} NACK with {@code SCH_INVALID_JSON}.
-     * messageId / transactionId are omitted because they could not be parsed from the body.
+     * messageId is omitted because it could not be parsed from the body.
      */
     @ExceptionHandler({ JsonProcessingException.class })
     public ResponseEntity<Object> handleMalformedJson(JsonProcessingException ex) {
@@ -107,7 +107,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("errorCode", ErrorCodes.SCH_INVALID_JSON),
                 value("httpStatus", HttpStatus.BAD_REQUEST.value()),
                 value("error", ex.getOriginalMessage()));
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(),
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
                 ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON);
         return new ResponseEntity<>(ackResponse, HttpStatus.BAD_REQUEST);
     }
@@ -152,7 +152,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("httpStatus", status.value()),
                 value("error", ex.getMessage()));
 
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(), currentTransactionId(), code, message);
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(), code, message);
         return responseHeaders != null
                 ? new ResponseEntity<>(ackResponse, responseHeaders, status)
                 : new ResponseEntity<>(ackResponse, status);
@@ -161,11 +161,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     /** Best-effort: request messageId stored as a servlet attribute by {@link DiscoveryController}. */
     private static String currentMessageId() {
         return requestAttr(DiscoveryController.MESSAGE_ID_ATTR);
-    }
-
-    /** Best-effort: request transactionId stored as a servlet attribute by {@link DiscoveryController}. */
-    private static String currentTransactionId() {
-        return requestAttr(DiscoveryController.TRANSACTION_ID_ATTR);
     }
 
     /**

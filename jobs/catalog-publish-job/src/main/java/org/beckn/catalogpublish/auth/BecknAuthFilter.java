@@ -133,8 +133,8 @@ public class BecknAuthFilter extends OncePerRequestFilter {
 
     /**
      * Writes a spec-compliant NACK body:
-     * {@code {"message":{"status":"NACK","messageId":"<id>","transactionId":"<id>","error":{"code":...,"message":...}}}}
-     * Correlation ids are echoed from the request context when present, omitted otherwise.
+     * {@code {"message":{"status":"NACK","messageId":"<id>","error":{"code":...,"message":...}}}}
+     * The messageId is echoed from the request context when present, omitted otherwise.
      */
     private void sendNack(HttpServletResponse response, int httpStatus, String code, String message,
             byte[] bodyBytes) throws IOException {
@@ -147,7 +147,6 @@ public class BecknAuthFilter extends OncePerRequestFilter {
         Map<String, Object> inner = new HashMap<>();
         inner.put(BecknFields.STATUS, "NACK");
         putIfPresent(inner, BecknFields.MESSAGE_ID, contextText(ctx, BecknFields.MESSAGE_ID));
-        putIfPresent(inner, BecknFields.TRANSACTION_ID, contextText(ctx, BecknFields.TRANSACTION_ID));
         inner.put(BecknFields.ERROR, error);
 
         Map<String, Object> outer = new HashMap<>();
