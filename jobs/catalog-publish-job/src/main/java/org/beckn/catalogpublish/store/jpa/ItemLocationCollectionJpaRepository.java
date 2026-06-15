@@ -29,8 +29,13 @@ public interface ItemLocationCollectionJpaRepository
      * {@code seq} ordinals) must be cleared before the freshly extracted set is inserted —
      * otherwise stale locations would keep matching spatial queries (#306). Scoped to the
      * published item ids so resources not in a partial MERGE publish are untouched.
+     *
+     * <p>{@code flushAutomatically = true} is required: this runs AFTER {@code itemStore.saveAll(...)}
+     * has queued (but not yet flushed) the item upserts in the persistence context. Without an
+     * explicit pre-query flush, {@code clearAutomatically = true} would discard those un-flushed
+     * item writes — we must not rely on Hibernate's implicit native-query auto-flush for that.</p>
      */
-    @Modifying(clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = "DELETE FROM item_location_collection WHERE catalog_id = :catalogId AND item_id IN (:itemIds)",
             nativeQuery = true)
     int deleteByItemIdsAndCatalogId(@Param("itemIds") List<String> itemIds,

@@ -40,6 +40,10 @@ class MultiLocationIntegrationTest extends BaseIntegrationTest {
     }
 
     private static String publish(String messageId, String updateMode, String geoArray) {
+        return publish(messageId, updateMode, geoArray, "ML Resource");
+    }
+
+    private static String publish(String messageId, String updateMode, String geoArray, String name) {
         String directives = updateMode == null ? ""
                 : "\"publishDirectives\":[{\"catalogId\":\"cat-ml\",\"catalogType\":\"regular\",\"updateMode\":\"" + updateMode + "\"}],";
         return """
@@ -52,13 +56,13 @@ class MultiLocationIntegrationTest extends BaseIntegrationTest {
                       "id": "cat-ml",
                       "resources": [{
                         "id": "res-ml",
-                        "descriptor": {"name": "ML Resource"},
+                        "descriptor": {"name": "%s"},
                         "availableAt": %s
                       }],
                       "offers": []
                     }]
                   }
-                }""".formatted(messageId, messageId, directives, geoArray);
+                }""".formatted(messageId, messageId, directives, name, geoArray);
     }
 
     private static final String DELHI  = "{\"geo\":{\"type\":\"Point\",\"coordinates\":[77.10,28.70]}}";
@@ -99,6 +103,32 @@ class MultiLocationIntegrationTest extends BaseIntegrationTest {
 
         assertThat(locationCount("cat-ml", "res-ml")).isEqualTo(3);
         assertThat(seqs("cat-ml", "res-ml")).containsExactly((short) 0, (short) 1, (short) 2);
+    }
+
+    @Test
+    void mergeRepublish_itemRowSurvivesAndPayloadUpdated_noDataLoss() {
+        // Round 1 (MERGE): item "Old Name" with two locations.
+        orchestrator.processPublish(publish("m1", null, "[" + DELHI + "," + MUMBAI + "]", "Old Name"));
+
+        // Round 2 (MERGE): the per-item location delete runs with clearAutomatically=true AFTER
+        // the item upsert is queued. flushAutomatically=true must flush that upsert to the DB
+        // before the context is cleared — otherwise the item row's update is silently discarded
+        // (data loss). Change BOTH the descriptor (independent of geo handling) and the location set.
+        orchestrator.processPublish(publish("m2", null, "[" + DELHI + "]", "New Name"));
+
+        // The item row must exist exactly once and reflect ROUND 2 — proving the upsert was
+        // persisted, not dropped by the context clear.
+        var items = itemRepository.findAllByIdInAndCatalogId(List.of("res-ml"), "cat-ml");
+        assertThat(items).hasSize(1);
+        String payload = items.get(0).getPayload();
+        assertThat(payload).contains("New Name");        // round-2 descriptor persisted
+        assertThat(payload).doesNotContain("Old Name");   // round-1 payload fully replaced
+        assertThat(payload).contains("77.1");             // Delhi retained
+        assertThat(payload).doesNotContain("72.87");       // Mumbai removed from payload
+
+        // And the location rows match the reduced set (no stale Mumbai row).
+        assertThat(locationCount("cat-ml", "res-ml")).isEqualTo(1);
+        assertThat(seqs("cat-ml", "res-ml")).containsExactly((short) 0);
     }
 
     @Test
