@@ -29,8 +29,11 @@ public final class ErrorMessages {
 
     // ── Network / Infrastructure Errors (pair with ErrorCodes.NET_*) ────────
     public static final String NET_INTERNAL_ERROR = "An unexpected server error occurred. Try again later or contact support if the issue persists";
-    public static final String NET_SERVICE_UNAVAILABLE =
+    public static final String NET_DOWNSTREAM_UNAVAILABLE =
             "Service is starting up. Try again in a few seconds";
+    /** @deprecated Use {@link #NET_DOWNSTREAM_UNAVAILABLE}. */
+    @Deprecated
+    public static final String NET_SERVICE_UNAVAILABLE = NET_DOWNSTREAM_UNAVAILABLE;
     public static final String NET_SEARCH_SERVICE_UNAVAILABLE =
             "Search service is temporarily unavailable. Try again later";
 

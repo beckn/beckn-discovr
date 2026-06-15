@@ -99,14 +99,14 @@ class DiscoveryControllerDedupTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         // Second request with same messageId — should be deduplicated
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         // Kafka must have been called exactly once
         verify(kafkaTemplate, times(1)).send(any(org.apache.kafka.clients.producer.ProducerRecord.class));
@@ -123,13 +123,13 @@ class DiscoveryControllerDedupTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload1))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload2))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         // Two distinct messageIds — Kafka must receive both
         verify(kafkaTemplate, times(2)).send(any(org.apache.kafka.clients.producer.ProducerRecord.class));

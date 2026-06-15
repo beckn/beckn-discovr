@@ -27,7 +27,7 @@ public final class ErrorCodes {
 
     // ── Network / Infrastructure Errors ─────────────────────────────────────
     public static final String NET_INTERNAL_ERROR = "NET_INTERNAL_ERROR";
-    public static final String NET_SERVICE_UNAVAILABLE = "NET_SERVICE_UNAVAILABLE";
+    public static final String NET_DOWNSTREAM_UNAVAILABLE = "NET_DOWNSTREAM_UNAVAILABLE";
 
     // ── Authentication / Trust Errors (Beckn v2.0 ErrorCode enum, beckn.yaml) ──
     // Canonical AUT_* codes per the spec's ErrorCode enum. The beckn-auth-java-sdk
