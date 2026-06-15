@@ -66,6 +66,8 @@ public class DiscoveryController {
 
     /** Request attribute key used to propagate the transaction ID to the exception handler. */
     public static final String TRANSACTION_ID_ATTR = "beckn.transactionId";
+    /** Request attribute key used to propagate the messageId to the exception handler for NACK bodies. */
+    public static final String MESSAGE_ID_ATTR = "beckn.messageId";
 
     private static final Logger log = LoggerFactory.getLogger(DiscoveryController.class);
 
@@ -145,6 +147,10 @@ public class DiscoveryController {
             if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
                 httpRequest.setAttribute(TRANSACTION_ID_ATTR, txnNode.asText());
             }
+            JsonNode msgIdNode = contextNode.path(BecknFields.MESSAGE_ID);
+            if (msgIdNode.isTextual() && !msgIdNode.asText().isBlank()) {
+                httpRequest.setAttribute(MESSAGE_ID_ATTR, msgIdNode.asText());
+            }
 
             log.info(LogEvent.REQUEST_RECEIVED,
                     value("method", httpRequest.getMethod()),
@@ -185,6 +191,13 @@ public class DiscoveryController {
                 httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
             }
 
+            // Extract messageId early so the exception handler can echo it in NACK bodies
+            // even when auth or validation throw before we reach the dedup check below.
+            String messageId = contextNode.path(BecknFields.MESSAGE_ID).asText(null);
+            if (messageId != null && !messageId.isBlank()) {
+                httpRequest.setAttribute(MESSAGE_ID_ATTR, messageId);
+            }
+
             log.info(LogEvent.REQUEST_RECEIVED,
                     value("method", "POST"),
                     value("transactionId", transactionId));
@@ -201,8 +214,6 @@ public class DiscoveryController {
 
             validateSchema(requestNode, rawBody);
 
-            String messageId = contextNode.path(BecknFields.MESSAGE_ID).asText();
-
             // M10: Idempotency check — if same messageId was seen within dedupCacheTtlSeconds,
             // return ACK immediately without re-publishing to Kafka.
             if (messageId != null && !messageId.isBlank()
@@ -210,7 +221,7 @@ public class DiscoveryController {
                 log.info(LogEvent.REQUEST_RECEIVED + ".duplicate-suppressed",
                         value("messageId", messageId),
                         value("transactionId", transactionId));
-                return ResponseEntity.ok(AckResponse.ack());
+                return ResponseEntity.ok(AckResponse.ack(messageId));
             }
 
             String kafkaKey = transactionId != null ? transactionId : messageId;
@@ -268,7 +279,7 @@ public class DiscoveryController {
                         value("error", kafkaEx.getMessage()));
             }
 
-            return ResponseEntity.ok(AckResponse.ack());
+            return ResponseEntity.ok(AckResponse.ack(messageId));
         } finally {
             BecknMdcContext.clear();
         }

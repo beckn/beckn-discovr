@@ -43,7 +43,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -108,9 +108,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, containsString("Schema validation failed")));
         }
 
         @Test
@@ -122,9 +122,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, containsString("Schema validation failed")));
         }
 
         @Test
@@ -137,8 +137,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
         }
 
         @Test
@@ -150,9 +150,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, anyOf(
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, anyOf(
                                                 containsString(BecknFields.TRANSACTION_ID),
                                                 containsString(BecknFields.MESSAGE_ID),
                                                 containsString("invalid uuid"))));
@@ -167,8 +167,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
         }
 
         @Test
@@ -181,7 +181,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -194,7 +194,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -208,9 +208,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, containsString("Schema validation failed")));
         }
 
         @Test
@@ -223,7 +223,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -235,9 +235,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE,
                                                 containsString("absolute JSONPath")));
         }
 
@@ -251,7 +251,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -264,7 +264,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -277,7 +277,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         private String readFixture(String fileName) {
@@ -304,7 +304,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         /**
@@ -340,9 +340,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         result.andExpect(status().isUnauthorized())
                                         .andExpect(header().string("WWW-Authenticate", "Signature realm=\"beckn\""))
-                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("AUT_SIGNATURE_MISSING"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value("AUT_SIGNATURE_MISSING"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE,
                                                         containsString("Authorization header is missing")));
                 }
 
@@ -361,9 +361,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                         result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                                         .andExpect(status().isUnauthorized())
                                         .andExpect(header().string("WWW-Authenticate", "Signature realm=\"beckn\""))
-                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("AUT_SIGNATURE_INVALID"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value("AUT_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE,
                                                         containsString("Invalid keyId format")));
                 }
 
@@ -380,9 +380,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         result.andExpect(status().isUnauthorized())
                                         .andExpect(header().string("WWW-Authenticate", "Signature realm=\"beckn\""))
-                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("AUT_SIGNATURE_INVALID"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value("AUT_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE,
                                                         containsString("Authorization header format is invalid")));
                 }
 
@@ -410,8 +410,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                                         .andExpect(status().isUnauthorized())
-                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("AUT_KEY_NOT_FOUND"));
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value("AUT_KEY_NOT_FOUND"));
                 }
         }
 }

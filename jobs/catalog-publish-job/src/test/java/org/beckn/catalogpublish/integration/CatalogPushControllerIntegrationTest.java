@@ -54,7 +54,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         // Wait for async pipeline to drain so this test doesn't pollute later tests
         await().atMost(10, TimeUnit.SECONDS)
@@ -159,7 +159,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{this is not valid json}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value("NACK"));
+                .andExpect(jsonPath("$.message.status").value("NACK"));
 
         // Invalid JSON rejected at controller level — nothing persisted
         assertThat(itemRepository.count()).isEqualTo(countBefore);
@@ -188,7 +188,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         // Assert that no item was persisted for catalog "cat-x" specifically.
         // Checking the global count is unreliable because in-flight Kafka consumers
@@ -231,7 +231,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
@@ -262,7 +262,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
@@ -303,7 +303,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         // Resource has no descriptor — isRealResource returns false, pipeline skips it
         await().atMost(5, TimeUnit.SECONDS)
@@ -368,8 +368,8 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value("NACK"))
-                .andExpect(jsonPath("$.error.errorCode").value(ErrorCodes.CTX_INVALID_FIELD));
+                .andExpect(jsonPath("$.message.status").value("NACK"))
+                .andExpect(jsonPath("$.message.error.code").value(ErrorCodes.CTX_INVALID_FIELD));
 
         // Rejected synchronously — nothing persisted
         assertThat(itemRepository.count()).isEqualTo(countBefore);

@@ -4,6 +4,7 @@ import java.util.Map;
 
 import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.common.ErrorMessages;
+import org.beckn.discover.controller.DiscoveryController;
 import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
@@ -33,7 +35,7 @@ import static net.logstash.logback.argument.StructuredArguments.value;
  * <ol>
  *   <li>{@link ResponseEntityExceptionHandler} — Spring MVC infrastructure exceptions (400/405/415…)</li>
  *   <li>{@link ErrorResponseException} — Beckn auth / validation errors with embedded code/paths</li>
- *   <li>{@link SemanticSearchException} — embedding/LLM provider unavailable → 503 NET_INTERNAL_ERROR</li>
+ *   <li>{@link SemanticSearchException} — embedding/LLM provider unavailable → 503 NET_DOWNSTREAM_UNAVAILABLE</li>
  *   <li>{@link IllegalArgumentException} — schema validation failures → 400</li>
  *   <li>{@link Exception} — catch-all → 500</li>
  * </ol>
@@ -56,23 +58,29 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler({ SemanticSearchException.class })
     public ResponseEntity<Object> handleSemanticSearchFailure(SemanticSearchException ex, WebRequest request) {
         log.error(LogEvent.NACK_RESPONSE,
-                value("errorCode", ErrorCodes.NET_SERVICE_UNAVAILABLE),
+                value("errorCode", ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE),
                 value("error", ex.getMessage()),
                 value("cause", ex.getCause() != null ? ex.getCause().getMessage() : "none"),
                 ex);
-        AckResponse ackResponse = AckResponse.nack(ErrorCodes.NET_SERVICE_UNAVAILABLE,
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+                ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
                 ErrorMessages.NET_SEARCH_SERVICE_UNAVAILABLE);
-        return new ResponseEntity<>(ackResponse, HttpStatus.SERVICE_UNAVAILABLE);
+        // Spec maps transient server-side failures to 500 ServerError; /discover does not
+        // declare a 503 response. Both unavailability cases surface as 500.
+        return new ResponseEntity<>(ackResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler({ SchemaNotInitializedException.class })
     public ResponseEntity<Object> handleSchemaNotInitialized(SchemaNotInitializedException ex, WebRequest request) {
         log.error(LogEvent.NACK_RESPONSE,
-                value("errorCode", ErrorCodes.NET_SERVICE_UNAVAILABLE),
+                value("errorCode", ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE),
                 value("error", ex.getMessage()));
-        AckResponse ackResponse = AckResponse.nack(ErrorCodes.NET_SERVICE_UNAVAILABLE,
-                ErrorMessages.NET_SERVICE_UNAVAILABLE);
-        return new ResponseEntity<>(ackResponse, HttpStatus.SERVICE_UNAVAILABLE);
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+                ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
+                ErrorMessages.NET_DOWNSTREAM_UNAVAILABLE);
+        // Spec maps transient server-side failures to 500 ServerError; /discover does not
+        // declare a 503 response. Both unavailability cases surface as 500.
+        return new ResponseEntity<>(ackResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler({ IllegalArgumentException.class })
@@ -120,10 +128,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("httpStatus", status.value()),
                 value("error", ex.getMessage()));
 
-        AckResponse ackResponse = AckResponse.nack(code, message);
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(), code, message);
         return responseHeaders != null
                 ? new ResponseEntity<>(ackResponse, responseHeaders, status)
                 : new ResponseEntity<>(ackResponse, status);
+    }
+
+    /**
+     * Best-effort retrieval of the request messageId stored by {@link DiscoveryController}
+     * as a servlet request attribute. Returns {@code null} when the request is unavailable
+     * (e.g. malformed JSON) — the messageId field is then omitted from the NACK body.
+     */
+    private static String currentMessageId() {
+        var attrs = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        if (attrs instanceof ServletRequestAttributes sra) {
+            Object v = sra.getRequest().getAttribute(DiscoveryController.MESSAGE_ID_ATTR);
+            return (v instanceof String s && !s.isBlank()) ? s : null;
+        }
+        return null;
     }
 
     /**

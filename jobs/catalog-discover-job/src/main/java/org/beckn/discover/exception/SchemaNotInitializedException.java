@@ -5,7 +5,7 @@ package org.beckn.discover.exception;
  * initialized yet (typically during application startup).
  *
  * <p>{@link GlobalExceptionHandler} maps this to a 503 Service Unavailable
- * NACK response with {@code NET_SERVICE_UNAVAILABLE} error code.</p>
+ * NACK response with {@code NET_DOWNSTREAM_UNAVAILABLE} error code.</p>
  */
 public class SchemaNotInitializedException extends RuntimeException {
 

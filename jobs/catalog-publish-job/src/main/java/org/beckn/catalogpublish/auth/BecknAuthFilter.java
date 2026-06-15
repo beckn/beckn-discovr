@@ -110,7 +110,7 @@ public class BecknAuthFilter extends OncePerRequestFilter {
                     value("path", sanitizedPath),
                     value("code", code),
                     value("message", e.getMessage()));
-            sendNack(response, httpStatus, code, safeMessageForCode(code));
+            sendNack(response, httpStatus, code, safeMessageForCode(code), bodyBytes);
             return;
         } catch (Exception e) {
             // Catch-all: log full detail, send fixed constant to client (never raw exception message).
@@ -120,21 +120,52 @@ public class BecknAuthFilter extends OncePerRequestFilter {
                     value("message", ErrorSanitizer.sanitize(e.getMessage())));
             sendNack(response, HttpServletResponse.SC_UNAUTHORIZED,
                     ErrorCodes.SEC_SIGNATURE_INVALID,
-                    ErrorMessages.AUTH_VERIFICATION_FAILED);
+                    ErrorMessages.AUTH_VERIFICATION_FAILED, bodyBytes);
             return;
         }
 
         chain.doFilter(new CachedBodyRequestWrapper(request, bodyBytes), response);
     }
 
-    private void sendNack(HttpServletResponse response, int httpStatus, String code, String message)
-            throws IOException {
+    private void sendNack(HttpServletResponse response, int httpStatus, String code, String message,
+            byte[] bodyBytes) throws IOException {
+        String messageId = extractMessageId(bodyBytes);
+
+        java.util.Map<String, Object> error = new java.util.HashMap<>();
+        error.put("code", code);
+        error.put("message", message);
+
+        java.util.Map<String, Object> inner = new java.util.HashMap<>();
+        inner.put("status", "NACK");
+        if (messageId != null) {
+            inner.put("messageId", messageId);
+        }
+        inner.put("error", error);
+
+        java.util.Map<String, Object> outer = new java.util.HashMap<>();
+        outer.put("message", inner);
+
         response.setStatus(httpStatus);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        Map<String, Object> nack = Map.of(
-                "status", "NACK",
-                "error", Map.of("errorCode", code, "errorMessage", message));
-        response.getWriter().write(objectMapper.writeValueAsString(nack));
+        response.getWriter().write(objectMapper.writeValueAsString(outer));
+    }
+
+    /** Best-effort extraction of {@code context.messageId} from raw request bytes. */
+    private String extractMessageId(byte[] bodyBytes) {
+        if (bodyBytes == null || bodyBytes.length == 0) return null;
+        try {
+            com.fasterxml.jackson.databind.JsonNode root =
+                    objectMapper.readTree(bodyBytes);
+            com.fasterxml.jackson.databind.JsonNode ctx = root.path("context");
+            if (ctx.isMissingNode() || !ctx.isObject()) return null;
+            com.fasterxml.jackson.databind.JsonNode msgId = ctx.path("messageId");
+            if (!msgId.isMissingNode() && msgId.isTextual() && !msgId.asText("").isBlank()) {
+                return msgId.asText();
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String safeMessageForCode(String code) {

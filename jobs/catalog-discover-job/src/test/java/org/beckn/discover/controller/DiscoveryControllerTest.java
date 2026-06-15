@@ -123,7 +123,7 @@ class DiscoveryControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         @SuppressWarnings("rawtypes")
         var captor = ArgumentCaptor.forClass(ProducerRecord.class);
@@ -153,7 +153,7 @@ class DiscoveryControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         @SuppressWarnings("rawtypes")
         var captor = ArgumentCaptor.forClass(ProducerRecord.class);
@@ -187,8 +187,8 @@ class DiscoveryControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.status").value("NACK"))
-                .andExpect(jsonPath("$.error.errorCode").value("AUT_SIGNATURE_INVALID"));
+                .andExpect(jsonPath("$.message.status").value("NACK"))
+                .andExpect(jsonPath("$.message.error.code").value("AUT_SIGNATURE_INVALID"));
 
         verify(kafkaTemplate, never()).send(any(ProducerRecord.class));
     }
