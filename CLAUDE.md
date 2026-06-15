@@ -25,10 +25,15 @@ BAPs send `discover` requests → Discovr queries the catalog index → delivers
 | REST entry point (GET + POST /beckn/discover) | `controller/DiscoveryController.java` |
 | Global NACK handler | `exception/GlobalExceptionHandler.java` |
 | Discovery orchestration | `service/DiscoveryService.java` |
-| PostgreSQL query engine | `service/postgresql/PostgreSQLQueryEngine.java` |
+| PostgreSQL query engine (J / J+G) | `service/postgresql/PostgreSQLQueryEngine.java` |
 | PostgreSQL assembler | `service/postgresql/PostgreSQLAssembler.java` |
+| SQL builder helper (JSONPath + spatial) | `service/postgresql/QueryBuilderHelper.java` |
+| Provider-level offer enrichment (post-pipeline) | `service/postgresql/ProviderOfferEnricher.java` |
+| Elasticsearch query engine (G / G+T / chain) | `service/elasticsearch/ElasticsearchQueryEngine.java` |
+| ES schema-context pushdown filter | `service/elasticsearch/EsSchemaFilterBuilder.java` |
 | Elasticsearch text search | `service/elasticsearch/ElasticsearchTextSearchEngine.java` |
 | NLWeb text search | `service/nlweb/NLWebTextSearchEngine.java` |
+| Query request model (J/G/T flags) | `service/engine/QueryRequest.java` |
 | Response pipeline (schema filter → dedup → prune) | `service/response/CatalogPipeline.java` |
 | Catalog/item normalization & offer ops | `service/response/CatalogProcessor.java` |
 | on_discover response assembly | `service/response/ResponseProcessor.java` |
@@ -79,8 +84,11 @@ All three jobs are fully migrated to Beckn Protocol v2.0. **No legacy v1.0 suppo
 `id`, `descriptor`, `resourceIds` (not `items`), `validity` (`startDate`/`endDate`), `offerAttributes`. **No `@context`/`@type` on Offer itself — those belong only on `offerAttributes`.**
 
 ### ACK/NACK format
-- ACK: `{"status":"ACK"}` — no transactionId, no timestamp
-- NACK: `{"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}`
+Wrapped in a `message` object per beckn.yaml `Ack`/`Nack*`. Both ACK and NACK echo the request's `messageId` AND `transactionId` (omitted only when the request is unparseable — never fabricated). Error object uses `code`/`message` (NOT `errorCode`/`errorMessage`).
+- ACK: `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}`
+- NACK: `{"message":{"status":"NACK","messageId":"<uuid>","transactionId":"<uuid>","error":{"code":"...","message":"..."}}}`
+- `error.code` MUST be a canonical `ErrorCode` enum value from beckn.yaml (e.g. `SCH_SCHEMA_VALIDATION_FAILED`, `AUT_SIGNATURE_INVALID`, `CTX_MISSING_FIELD`, `NET_DOWNSTREAM_UNAVAILABLE`). No `NET_SERVICE_UNAVAILABLE`, no `SEC_*`, no `REQUEST_TOO_LARGE`.
+- `/discover` HTTP responses are limited to the schema set: 200, 202, 400, 401, 403, 429, 500. Transient failures (downstream/semantic-search unavailable, schema-not-initialized) return **500** — never 503.
 - HTTP 409 = `AckNoCallback` — log and skip, not an error
 
 ### Action values (from spec endpoint paths)
@@ -115,19 +123,43 @@ All three jobs are fully migrated to Beckn Protocol v2.0. **No legacy v1.0 suppo
 POST /beckn/discover
   → Auth (Beckn HTTP Signature)
   → Schema validation
-  → Publish to Kafka request topic → ACK {"status":"ACK"}
+  → Publish to Kafka request topic → ACK {"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}
 
 DiscoveryEventConsumer (async):
-  → QueryEngine (PostgreSQL / Elasticsearch / NLWeb)
+  → QueryEngine — routed by J/G/T criteria (see Query Routing below)
   → CatalogPipeline:
       1. Schema context filter
       2. Dedup offers
       3. Filter items by offer refs
       4. Filter offers by item ids
       5. Remove empty catalogs
+  → ProviderOfferEnricher (appends provider-level offers — runs AFTER the pipeline)
   → ResponseProcessor (copy context, set action="on_discover")
   → Publish to Kafka response topic
+```
 
+### Query Routing — J/G/T combinations
+
+`DiscoveryService` selects an engine path from three independent criteria:
+**J** = JSONPath attribute filter (PostgreSQL), **G** = geo/spatial, **T** = text/semantic.
+
+| Combo | Engine flow |
+|-------|-------------|
+| J | PostgreSQL JSONPath |
+| G | PostgreSQL/PostGIS *or* Elasticsearch (`discovery.spatial.engine`) |
+| T | Elasticsearch (BM25 / semantic) or NLWeb |
+| J+G | PostgreSQL — single combined SQL |
+| G+T | Elasticsearch (text + `geo_shape`) |
+| J+T | chain: ES → resource IDs → PostgreSQL |
+| J+G+T | chain: ES+geo → resource IDs → PostgreSQL |
+
+Chain combos (J+T, J+G+T) require the Elasticsearch engine bean
+(`discovery.spatial.engine=elasticsearch`); otherwise they degrade to J / J+G with the text
+term dropped (logged + counted). **Provider-level offers** (offers with no `resourceIds`) are
+resolved at search time by `ProviderOfferEnricher` after the pipeline, so they are not filtered
+out by `filterOffersByResourceIds`.
+
+```
 ResponseDispatcher:
   → Consumes response topic
   → Signs with Beckn HTTP Signature
