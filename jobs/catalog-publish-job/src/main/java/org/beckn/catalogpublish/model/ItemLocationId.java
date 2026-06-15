@@ -24,4 +24,10 @@ public class ItemLocationId implements Serializable {
 
     @Column(name = "path")
     private String path;
+
+    // #306: per-path ordinal. A provider may publish multiple geometries under one
+    // wildcard path (e.g. availableAt[*].geo); seq makes each its own row so they
+    // no longer collide on the (item_id, catalog_id, path) key.
+    @Column(name = "seq")
+    private short seq;
 }
