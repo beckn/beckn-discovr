@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -91,16 +92,14 @@ public class SpatialQueryBuilder {
      * WHERE clause.  Multiple constraints are ANDed — all must match.</p>
      *
      * @param constraints       the spatial constraints to apply; must not be null
-     * @param schemaTypes       optional {@code item.type} IN-filter
-     * @param schemaContextUrls optional {@code item.context_url} IN-filter
+     * @param rawSchemaContextUrls optional schemaContext url#type entries (paired filter)
      * @param limit             maximum number of rows to return
      * @return a ready-to-execute spec, or {@link Optional#empty()} when no
      *         valid conditions could be built
      */
     public Optional<QuerySpec> build(
             List<DiscoverRequest.SpatialConstraint> constraints,
-            List<String> schemaTypes,
-            List<String> schemaContextUrls,
+            List<String> rawSchemaContextUrls,
             int limit) {
 
         if (constraints == null || constraints.isEmpty()) {
@@ -116,7 +115,7 @@ public class SpatialQueryBuilder {
             return Optional.empty();
         }
 
-        template.schemaFilters(schemaTypes, schemaContextUrls);
+        template.schemaFiltersPaired(rawSchemaContextUrls);
         QuerySpec spec = template.build(limit);
         log.debug("event={} added={} params={}", LogEvent.SPATIAL_BUILD_DONE, added, spec.parameters().size());
         return Optional.of(spec);
@@ -128,14 +127,12 @@ public class SpatialQueryBuilder {
      *
      * <p>Both the GIN index (on {@code item.payload} for JSONPath) and the
      * GiST index (on {@code item_location_collection.geom} for spatial) are
-     * available to the PostgreSQL planner in one query plan — eliminating two
-     * round-trips and the Java-side intersection overhead of the parallel
-     * approach.</p>
+     * available to the PostgreSQL planner in one query plan, eliminating
+     * Java-side intersection of two separately-bounded result sets.</p>
      *
      * @param constraints       the spatial constraints from the request
      * @param filterExpression  already-validated JSONPath filter expression
-     * @param schemaTypes       optional {@code item.type} IN-filter
-     * @param schemaContextUrls optional {@code item.context_url} IN-filter
+     * @param rawSchemaContextUrls optional schemaContext url#type entries (paired filter)
      * @param limit             maximum number of rows to return
      * @return a ready-to-execute spec, or {@link Optional#empty()} when no
      *         valid spatial conditions could be built (caller must fall back)
@@ -143,8 +140,7 @@ public class SpatialQueryBuilder {
     public Optional<QuerySpec> buildCombined(
             List<DiscoverRequest.SpatialConstraint> constraints,
             String filterExpression,
-            List<String> schemaTypes,
-            List<String> schemaContextUrls,
+            List<String> rawSchemaContextUrls,
             int limit) {
 
         if (constraints == null || constraints.isEmpty()) {
@@ -153,13 +149,9 @@ public class SpatialQueryBuilder {
         }
 
         // JSONPath condition drives the GIN index; spatial EXISTS drives GiST.
-        // The filter must be wrapped in exists() — the @@ operator requires a predicate
-        // (boolean-valued path), not a path expression that returns elements.
-        QueryTemplate template = QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
-        if (filterExpression != null && !filterExpression.isBlank()) {
-            String pgFilter = toPostgresFilter(filterExpression);
-            template.condition(QueryBuilderHelper.JSONPATH_MATCH, pgFilter);
-        }
+        // combinedBaseTemplate picks the SELECT (matching_offers projection for selection
+        // paths) and applies the exists()-wrapped @@ predicate from a single processed filter.
+        QueryTemplate template = combinedBaseTemplate(filterExpression);
 
         int added = appendSpatialConditions(template, constraints);
         if (added == 0) {
@@ -167,35 +159,94 @@ public class SpatialQueryBuilder {
             return Optional.empty();
         }
 
-        template.schemaFilters(schemaTypes, schemaContextUrls);
+        template.schemaFiltersPaired(rawSchemaContextUrls);
         QuerySpec spec = template.build(limit);
         log.debug("event={} added={} params={}", LogEvent.SPATIAL_COMBINED_BUILT, added, spec.parameters().size());
+        return Optional.of(spec);
+    }
+
+    /**
+     * Builds a combined JSONPath + spatial + ID-allowlist query (chain step 2, case 7).
+     *
+     * <p>Identical to {@link #buildCombined} but adds {@code AND i.id = ANY(?)} and
+     * switches {@code ORDER BY} to {@code array_position(?, i.id)} so ES relevance
+     * order is preserved while geo conditions are redundantly enforced belt-and-
+     * suspenders style.</p>
+     *
+     * @param idAllowlist non-null, non-empty collection of resource IDs from ES step 1
+     * @return {@link Optional#empty()} when no valid spatial conditions could be built
+     */
+    public Optional<QuerySpec> buildCombinedWithAllowlist(
+            List<DiscoverRequest.SpatialConstraint> constraints,
+            String filterExpression,
+            List<String> rawSchemaContextUrls,
+            int limit,
+            Collection<String> idAllowlist) {
+
+        if (constraints == null || constraints.isEmpty()) {
+            log.debug("event={} reason=no-constraints", LogEvent.SPATIAL_COMBINED_SKIP);
+            return Optional.empty();
+        }
+
+        QueryTemplate template = combinedBaseTemplate(filterExpression);
+
+        int added = appendSpatialConditions(template, constraints);
+        if (added == 0) {
+            log.warn("event={} reason=no-valid-spatial-conditions", LogEvent.SPATIAL_COMBINED_SKIP);
+            return Optional.empty();
+        }
+
+        template.schemaFiltersPaired(rawSchemaContextUrls)
+                .idAllowlist(idAllowlist);
+        QuerySpec spec = template.build(limit);
+        log.debug("event={} added={} allowlistSize={} params={}",
+                LogEvent.SPATIAL_COMBINED_BUILT + ".chain", added, idAllowlist.size(), spec.parameters().size());
         return Optional.of(spec);
     }
 
     // ── Filter conversion ─────────────────────────────────────────────────────
 
     /**
-     * Converts a raw user JSONPath filter into a PostgreSQL-compatible predicate
-     * suitable for the {@code @@} operator.
+     * Builds the base template for a combined (JSONPath + spatial) query AND applies the
+     * JSONPath {@code @@} predicate. The raw filter is processed <b>once</b> here
+     * ({@link JsonPathConverter#processFilter} is deterministic) and reused for both the
+     * SELECT projection and the WHERE predicate, so the two can never desync.
      *
-     * <p>The {@code @@} operator requires a boolean-valued jsonpath expression.
-     * Absolute path filters (starting with {@code $}) are wrapped in
-     * {@code exists(...)} so they evaluate as a boolean predicate.
-     * Relative conditions (starting with {@code @}) are wrapped in
-     * {@code exists($ ? (...))} to apply them to the root document.</p>
-     *
-     * <p>Colon-field names are quoted via
-     * {@link JsonPathConverter} so PostgreSQL parses them correctly.</p>
+     * <p>When the filter is a selection path (starts with {@code $}) the template projects
+     * the {@code matching_offers} column ({@link QueryBuilderHelper#BASE_SELECT_WITH_FILTER_RESULT},
+     * processed filter bound first so parameter order stays in lockstep with the SQL
+     * placeholders) — mirroring
+     * {@link org.beckn.discover.service.postgresql.jsonpath.JsonPathQueryBuilder} so an
+     * offer-selection filter (e.g. {@code $.catalogs[*].offers[*] ? (...)}) narrows the
+     * returned offers identically whether or not a spatial constraint is present
+     * (Finding 2). Non-selection filters use {@link QueryBuilderHelper#BASE_SELECT}; a
+     * blank filter yields a bare {@code BASE_SELECT} with no JSONPath predicate.</p>
      */
-    private String toPostgresFilter(String filterExpression) {
-        String processed = jsonPathConverter.processFilter(filterExpression);
-        if (processed.isBlank()) return QueryBuilderHelper.JSONPATH_EXISTS_ALL;
+    private QueryTemplate combinedBaseTemplate(String filterExpression) {
+        String processed = (filterExpression != null && !filterExpression.isBlank())
+                ? jsonPathConverter.processFilter(filterExpression) : "";
         String trimmed = processed.trim();
-        if (trimmed.startsWith("$")) {
-            return String.format(QueryBuilderHelper.JSONPATH_EXISTS_PATH, trimmed);
+        boolean selectionPath = trimmed.startsWith("$");
+        QueryTemplate template = selectionPath
+                ? QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT_WITH_FILTER_RESULT, processed)
+                : QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
+        if (!trimmed.isEmpty()) {
+            template.condition(QueryBuilderHelper.JSONPATH_MATCH, existsPredicate(trimmed));
         }
-        return String.format(QueryBuilderHelper.JSONPATH_EXISTS_CONDITION, trimmed);
+        return template;
+    }
+
+    /**
+     * Wraps an already-processed jsonpath into the boolean {@code exists(...)} predicate
+     * required by the {@code @@} operator. Absolute paths ({@code $...}) → {@code exists($...)};
+     * relative conditions ({@code @...}) → {@code exists($ ? (...))}.
+     */
+    private static String existsPredicate(String trimmedProcessed) {
+        if (trimmedProcessed.isEmpty()) return QueryBuilderHelper.JSONPATH_EXISTS_ALL;
+        if (trimmedProcessed.startsWith("$")) {
+            return String.format(QueryBuilderHelper.JSONPATH_EXISTS_PATH, trimmedProcessed);
+        }
+        return String.format(QueryBuilderHelper.JSONPATH_EXISTS_CONDITION, trimmedProcessed);
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────────

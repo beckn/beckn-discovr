@@ -295,6 +295,52 @@ class CatalogDocumentAssemblerTest {
         assertThat(doc.get("resource_descriptor_thumbnail_image")).isEqualTo("https://example.org/thumb.jpg");
     }
 
+    // ── descriptor.code (F-20) ────────────────────────────────────────────────
+
+    @Test
+    void assemble_itemWithDescriptorCode_populatesResourceDescriptorCode() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-code",
+                  "descriptor": { "name": "Coded Item", "code": "RESOURCE_LIVE" },
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.get("resource_descriptor_code")).isEqualTo("RESOURCE_LIVE");
+    }
+
+    @Test
+    void assemble_catalogWithDescriptorCode_populatesCatalogDescriptorCode() throws Exception {
+        JsonNode payload = OM.readTree("""
+                {
+                  "catalogs": [
+                    {
+                      "id": "cat-1",
+                      "descriptor": {"name": "Test Catalog", "code": "CATALOG_ACTIVE"},
+                      "provider": {"id": "prov-catalog", "descriptor": {"name": "Catalog Provider"}},
+                      "resources": [
+                        {
+                          "id": "item-1",
+                          "descriptor": {"name": "Item"},
+                          "provider": {"id": "prov-1"},
+                          "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                        }
+                      ],
+                      "offers": []
+                    }
+                  ]
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.get("catalog_descriptor_code")).isEqualTo("CATALOG_ACTIVE");
+    }
+
     // ── item_descriptor_docs ──────────────────────────────────────────────────
 
     @Test

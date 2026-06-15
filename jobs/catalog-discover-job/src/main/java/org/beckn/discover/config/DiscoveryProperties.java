@@ -3,6 +3,7 @@ package org.beckn.discover.config;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -26,6 +27,15 @@ public class DiscoveryProperties {
     @Valid private TextSearch textSearch = new TextSearch();
     @Valid private Spatial spatial = new Spatial();
     @Valid private Elasticsearch elasticsearch = new Elasticsearch();
+    @Valid private Chain chain = new Chain();
+
+    public Chain getChain() {
+        return chain;
+    }
+
+    public void setChain(Chain chain) {
+        this.chain = chain;
+    }
 
     public Kafka getKafka() {
         return kafka;
@@ -464,6 +474,43 @@ public class DiscoveryProperties {
         public void setParallelQueryWorkers(int parallelQueryWorkers) {
             this.parallelQueryWorkers = parallelQueryWorkers;
         }
+    }
+
+    /**
+     * Configuration for the ES-text → PSQL-JSONPath chain (cases 6 & 7).
+     */
+    public static class Chain {
+        /**
+         * ES candidate pool multiplier: {@code esSize = min(limit * overfetchFactor, maxIds)}.
+         * Higher values improve recall at the cost of more ES work.
+         * Must be at least 1.
+         */
+        @Min(value = 1, message = "discovery.chain.overfetch-factor must be at least 1")
+        private int overfetchFactor = 10;
+        /**
+         * Hard cap on the number of resource IDs passed from ES step 1 to PSQL step 2.
+         * Prevents runaway IN-clause sizes. Must be at least 1.
+         */
+        @Min(value = 1, message = "discovery.chain.max-ids must be at least 1")
+        private int maxIds = 5000;
+
+        /**
+         * End-to-end timeout (seconds) for the chain pipeline, covering BOTH
+         * ES step 1 and PSQL step 2 sequentially. The single-engine paths use
+         * {@code discovery.postgresql.parallel-query-timeout-seconds} (one
+         * round-trip); the chain makes two, so it gets its own, larger budget.
+         * This is an absolute value in seconds — the default 20 is ~2× the
+         * default single-query timeout (10s); tune both together if changed.
+         */
+        @Min(value = 1, message = "discovery.chain.timeout-seconds must be at least 1")
+        private int timeoutSeconds = 20;
+
+        public int getOverfetchFactor() { return overfetchFactor; }
+        public void setOverfetchFactor(int overfetchFactor) { this.overfetchFactor = overfetchFactor; }
+        public int getMaxIds() { return maxIds; }
+        public void setMaxIds(int maxIds) { this.maxIds = maxIds; }
+        public int getTimeoutSeconds() { return timeoutSeconds; }
+        public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
     }
 
     public static class Schema {

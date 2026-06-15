@@ -84,6 +84,30 @@ discovery:
     max-retries: ${SCHEMA_FETCH_MAX_RETRIES:3}
     retry-delay-ms: ${SCHEMA_FETCH_RETRY_DELAY_MS:1000}
   
+  # ═══ Query routing — which engine serves each J/G/T combination ═══════════
+  # A discover intent may carry any mix of: J = JSONPath filter, G = spatial
+  # (geo), T = text/semantic search. The combination decides the engine(s):
+  #
+  #   Combo   | Engine(s)                         | Driven by
+  #   --------|-----------------------------------|---------------------------------
+  #   J       | PostgreSQL (JSONPath)             | always
+  #   G       | PostgreSQL OR Elasticsearch       | discovery.spatial.engine
+  #   T       | Elasticsearch (BM25 or semantic)  | discovery.text-search.engine
+  #   J+G     | PostgreSQL — single combined SQL  | ALWAYS Postgres (ignores spatial.engine)
+  #   G+T     | Elasticsearch (text + geo_shape)  | discovery.text-search.engine
+  #   J+T     | chain: ES -> ids -> PostgreSQL    | needs spatial.engine=elasticsearch
+  #   J+G+T   | chain: ES+geo -> ids -> PostgreSQL| needs spatial.engine=elasticsearch
+  #
+  # Notes:
+  #  * J+G stays in PostgreSQL because one SQL query can use both the GIN
+  #    (JSONPath) and GiST (PostGIS) indexes — more accurate than splitting engines.
+  #  * The "chain" (J+T, J+G+T) needs the Elasticsearch engine bean, which only
+  #    exists when discovery.spatial.engine=elasticsearch. If it is "postgresql",
+  #    those combos DEGRADE: the text term is dropped and they run as J / J+G.
+  #  * For a SEMANTIC chain you must set BOTH discovery.spatial.engine=elasticsearch
+  #    AND discovery.text-search.engine=els-semantic-search.
+  # ═══════════════════════════════════════════════════════════════════════════
+
   # ─── Text Search ──────────────────────────────────────────────────────────
   # Controls how free-text queries (message.text_search) are resolved.
   #
@@ -133,9 +157,26 @@ discovery:
       temperature: ${DISCOVERY_TEXT_SEARCH_LLM_TEMPERATURE:0.0}
       system-prompt: ${DISCOVERY_TEXT_SEARCH_LLM_SYSTEM_PROMPT:You are a search query enricher for a product and service catalog. Append up to 5 highly relevant synonyms or specifications to the original query. Keep the original query words first, then add only closely related terms. Return only the expanded query as a single short line. Do not add loosely related terms, brands, or categories. No explanation. No formatting.}
 
-  # Spatial search engine — "postgresql" (default) or "elasticsearch"
+  # Spatial (geo) engine for G-only and G+T — "postgresql" (default) or "elasticsearch".
+  # IMPORTANT — this setting does more than pick the geo engine:
+  #   * J+G (case 4) ALWAYS uses PostgreSQL and ignores this value (single combined SQL).
+  #   * It ALSO gates the Elasticsearch engine bean that the J+T / J+G+T chain needs.
+  #     Set to "elasticsearch" for those text-chain combos to use text search; otherwise
+  #     they degrade to J / J+G (text term dropped). See the routing matrix above.
   spatial:
     engine: ${DISCOVERY_SPATIAL_ENGINE:postgresql}
+
+  # ES-text → PSQL-JSONPath chain configuration (cases 6 & 7: JSONPath + text).
+  # ES candidate pool = min(limit * overfetch-factor, max-ids).
+  # Increase overfetch-factor for better recall; cap max-ids to bound IN-clause size.
+  chain:
+    overfetch-factor: ${DISCOVERY_CHAIN_OVERFETCH_FACTOR:10}
+    max-ids: ${DISCOVERY_CHAIN_MAX_IDS:5000}
+    # End-to-end timeout (seconds) for the two-step chain (ES step 1 + PSQL step 2).
+    # Absolute seconds. Default 20 ~= 2x the single-query timeout
+    # (discovery.postgresql.parallel-query-timeout-seconds, default 10) since the
+    # chain makes two sequential calls; tune both together.
+    timeout-seconds: ${DISCOVERY_CHAIN_TIMEOUT_SECONDS:20}
 
   # Elasticsearch configuration (active when text-search.engine or spatial.engine=elasticsearch)
   elasticsearch:
