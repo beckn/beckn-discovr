@@ -102,7 +102,8 @@ public class PostgreSQLService {
         QueryBuilderHelper.QuerySpec query = jsonPathQueryBuilder.build(
                 request.filters(),
                 request.rawSchemaContextUrls(),
-                resultLimit());
+                resultLimit(),
+                request.networkId());
         return executeQuery(query, "jsonpath", request.transactionId(), "PostgreSQL JSONPath query failed");
     }
 
@@ -123,7 +124,8 @@ public class PostgreSQLService {
         Optional<QueryBuilderHelper.QuerySpec> queryOpt = spatialQueryBuilder.build(
                 request.spatial(),
                 request.rawSchemaContextUrls(),
-                resultLimit());
+                resultLimit(),
+                request.networkId());
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-conditions", LogEvent.SPATIAL_QUERY_SKIP);
             return new ArrayList<>();
@@ -153,7 +155,8 @@ public class PostgreSQLService {
                 request.filters(),
                 request.rawSchemaContextUrls(),
                 resultLimit(),
-                idAllowlist);
+                idAllowlist,
+                request.networkId());
         return executeQuery(query, "jsonpath-chain", request.transactionId(), "PostgreSQL chain JSONPath query failed");
     }
 
@@ -184,7 +187,8 @@ public class PostgreSQLService {
                 request.filters(),
                 request.rawSchemaContextUrls(),
                 resultLimit(),
-                idAllowlist);
+                idAllowlist,
+                request.networkId());
 
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP + ".chain");
@@ -215,7 +219,8 @@ public class PostgreSQLService {
                 request.spatial(),
                 request.filters(),
                 request.rawSchemaContextUrls(),
-                resultLimit());
+                resultLimit(),
+                request.networkId());
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP);
             return Optional.empty();
