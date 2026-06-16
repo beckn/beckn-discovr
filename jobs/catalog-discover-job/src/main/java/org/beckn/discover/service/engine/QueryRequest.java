@@ -32,7 +32,13 @@ public record QueryRequest(
         List<String> schemaTypes,
         List<String> schemaContextUrls,
         /** Raw schemaContext URLs preserving fragment pairing (e.g. "https://schema.org#GroceryItem"). */
-        List<String> rawSchemaContextUrls
+        List<String> rawSchemaContextUrls,
+        /**
+         * Requesting network id (from {@code context.networkId}). Used to scope query
+         * results to catalogs published to this network (#309). May be {@code null}/blank,
+         * in which case no network filter is applied (results are network-agnostic).
+         */
+        String networkId
 ) {
 
     /**
@@ -50,12 +56,21 @@ public record QueryRequest(
         rawSchemaContextUrls = rawSchemaContextUrls != null ? List.copyOf(rawSchemaContextUrls) : List.of();
     }
 
-    /** Backward-compatible 7-arg constructor (rawSchemaContextUrls defaults to empty). */
+    /** Backward-compatible 7-arg constructor (rawSchemaContextUrls + networkId default to empty/null). */
     public QueryRequest(String transactionId, String messageId, String filters,
                         List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
                         List<String> schemaTypes, List<String> schemaContextUrls) {
         this(transactionId, messageId, filters, spatial, textSearch,
-                schemaTypes, schemaContextUrls, List.of());
+                schemaTypes, schemaContextUrls, List.of(), null);
+    }
+
+    /** Backward-compatible 8-arg constructor (networkId defaults to null — no network scoping). */
+    public QueryRequest(String transactionId, String messageId, String filters,
+                        List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
+                        List<String> schemaTypes, List<String> schemaContextUrls,
+                        List<String> rawSchemaContextUrls) {
+        this(transactionId, messageId, filters, spatial, textSearch,
+                schemaTypes, schemaContextUrls, rawSchemaContextUrls, null);
     }
 
     // ── Factory ─────────────────────────────────────────────────────────────
@@ -84,8 +99,14 @@ public record QueryRequest(
                 request.getTextSearch(),
                 parts.types(),
                 parts.urls(),
-                schemaContextUrls
+                schemaContextUrls,
+                request.getContext().getNetworkId()
         );
+    }
+
+    /** {@code true} when a network id is present to scope results by (#309). */
+    public boolean hasNetworkFilter() {
+        return networkId != null && !networkId.isBlank();
     }
 
     private static List<String> resolveSchemaContext(DiscoverRequest request) {

@@ -32,7 +32,12 @@ public class JsonPathQueryBuilder {
      * When filter is a selection path (starts with $), always adds filter-result column so
      * response can show only matched offers/items regardless of expression format.
      */
+    /** Network-agnostic overload (no {@code networkId} scoping) — for tests / non-network callers. */
     public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit) {
+        return build(filters, rawSchemaContextUrls, limit, null);
+    }
+
+    public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit, String networkId) {
         String processedFilter = jsonPathConverter.processFilter(filters);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
         String postgresFilter = toPostgresFilter(processedFilter);
@@ -43,6 +48,7 @@ public class JsonPathQueryBuilder {
         QuerySpec query = template
                 .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
                 .schemaFiltersPaired(rawSchemaContextUrls)
+                .networkFilter(networkId)
                 .build(limit);
         log.debug("Built JSONPath query with {} parameters, limit {}", query.parameters().size(), limit);
         return query;
@@ -56,8 +62,14 @@ public class JsonPathQueryBuilder {
      *
      * @param idAllowlist non-null, non-empty collection of resource IDs from ES step 1
      */
+    /** Network-agnostic overload (no {@code networkId} scoping) — for tests / non-network callers. */
     public QuerySpec buildWithAllowlist(String filters, List<String> rawSchemaContextUrls,
                                         int limit, Collection<String> idAllowlist) {
+        return buildWithAllowlist(filters, rawSchemaContextUrls, limit, idAllowlist, null);
+    }
+
+    public QuerySpec buildWithAllowlist(String filters, List<String> rawSchemaContextUrls,
+                                        int limit, Collection<String> idAllowlist, String networkId) {
         String processedFilter = jsonPathConverter.processFilter(filters);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
         String postgresFilter = toPostgresFilter(processedFilter);
@@ -68,6 +80,7 @@ public class JsonPathQueryBuilder {
         QuerySpec query = template
                 .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
                 .schemaFiltersPaired(rawSchemaContextUrls)
+                .networkFilter(networkId)
                 .idAllowlist(idAllowlist)
                 .build(limit);
         log.debug("Built chain JSONPath query with allowlist size={} params={} limit={}",
