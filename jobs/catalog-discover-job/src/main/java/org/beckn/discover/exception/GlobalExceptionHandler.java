@@ -127,8 +127,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (ex instanceof ErrorResponseException ere) {
             ProblemDetail pd = ere.getBody();
             Map<String, Object> props = pd.getProperties();
+            // Spring MVC infra exceptions (405 method-not-allowed, 404 no-handler, 415 media-type)
+            // carry a 4xx status but no "code" property. Default to a client-error code matching the
+            // status class — never NET_INTERNAL_ERROR (a 5xx code) on a 4xx response.
             code = props != null && props.containsKey("code") ? (String) props.get("code")
-                    : ErrorCodes.NET_INTERNAL_ERROR;
+                    : (status.is4xxClientError() ? ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED
+                                                 : ErrorCodes.NET_INTERNAL_ERROR);
             // Use the SDK-provided detail message when available — it contains the specific,
             // controlled format error message (e.g. "Authorization header format is invalid",
             // "Invalid keyId format"). Fall back to the generic constant for unknown codes.
@@ -139,7 +143,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             if (!ere.getHeaders().isEmpty()) {
                 responseHeaders = ere.getHeaders();
             }
-        } else if (status == HttpStatus.BAD_REQUEST || ex instanceof IllegalArgumentException) {
+        } else if (status.is4xxClientError() || ex instanceof IllegalArgumentException) {
+            // Any 4xx (400 schema, 404 no-handler, 405 method-not-allowed, 415 media-type) is a
+            // client error → client-error code, never NET_INTERNAL_ERROR (a 5xx code) on a 4xx status.
             code = ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED;
             message = sanitizeValidationMessage(ex.getMessage());
         } else {
