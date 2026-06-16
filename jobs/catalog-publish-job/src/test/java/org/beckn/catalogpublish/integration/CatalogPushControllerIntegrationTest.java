@@ -312,20 +312,33 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message.status").value("ACK"));
 
-        // Resource has no descriptor — isRealResource returns false, pipeline skips it
+        // Resource has no descriptor — isRealResource returns false, pipeline skips it.
+        // Assert no item was persisted for "cat-no-desc" specifically. A global count is
+        // unreliable: in-flight Kafka consumers from prior tests can insert rows for other
+        // catalog IDs after @BeforeEach clears (see push_missingBppId).
         await().atMost(5, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+                .untilAsserted(() -> {
+                    long catCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-no-desc");
+                    assertThat(catCount).isZero();
+                });
     }
 
     @Test
     void push_emptyCatalogsList_returns200ButDoesNotPersist() throws Exception {
-        long countBefore = itemRepository.count();
-
-        String payload = """
+        // An empty catalogs array is structurally incapable of persisting an item (catalog_id
+        // is NOT NULL and there are zero catalogs to iterate). A global item-count assertion
+        // is therefore meaningless here and flaky: in-flight Kafka consumers from prior tests
+        // can insert rows after @BeforeEach clears. Instead, drain deterministically with a
+        // sentinel that shares the empty payload's Kafka partition key (bppId), so it is
+        // processed strictly after the empty payload (same-key ordering is the FULL/MERGE
+        // guarantee in CatalogPushService). When the sentinel item appears, the empty payload
+        // is known-processed; we then assert exactly one item exists for this test's scope.
+        String emptyPayload = """
                 {
                   "context": {
-                    "bppId": "bpp.test",
+                    "bppId": "bpp.empty-drain",
                     "bppUri": "https://example.com",
                     "networkId": "test-net",
                     "messageId": "msg-empty-catalogs"
@@ -338,12 +351,49 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
+                        .content(emptyPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
+
+        String sentinelPayload = """
+                {
+                  "context": {
+                    "bppId": "bpp.empty-drain",
+                    "bppUri": "https://example.com",
+                    "networkId": "test-net",
+                    "messageId": "msg-empty-sentinel"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-empty-sentinel",
+                      "resources": [{
+                        "id": "item-empty-sentinel",
+                        "descriptor": {"name": "Sentinel"}
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post(PUSH_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sentinelPayload))
                 .andExpect(status().isOk());
 
-        await().atMost(5, TimeUnit.SECONDS)
+        // Sentinel landed → empty payload (ordered before it on the same partition) is done.
+        await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+                .untilAsserted(() -> {
+                    long sentinelCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-empty-sentinel");
+                    assertThat(sentinelCount).isEqualTo(1L);
+                });
+
+        // The empty catalogs array produced no catalog, so no item can carry its (absent)
+        // catalog id — confirms it persisted nothing.
+        long emptyDerived = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM item WHERE catalog_id IS NULL OR catalog_id = ''", Long.class);
+        assertThat(emptyDerived).isZero();
     }
 
     @Test
