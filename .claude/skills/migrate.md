@@ -34,14 +34,15 @@ Apply Beckn Protocol v2.0 migrations to the Beckn Discovr project.
 | `schema:image` | `images` |
 
 ### Test assertions
+ACK/NACK are wrapped in a `message` object and echo the request's `messageId` + `transactionId`.
 | Old | New |
 |-----|-----|
-| `$.ack_status` | `$.status` |
-| `$.transaction_id` | remove |
+| `$.ack_status` / `$.status` | `$.message.status` |
 | `$.timestamp` (in ACK) | remove |
-| `$.error.code` | `$.error.errorCode` |
+| `$.error.errorCode` | `$.message.error.code` |
 | `$.error.paths` | remove |
-| `$.error.message` | `$.error.errorMessage` |
+| `$.error.errorMessage` | `$.message.error.message` |
+| (new) | assert `$.message.messageId` and `$.message.transactionId` echo the request context |
 
 ## Steps
 

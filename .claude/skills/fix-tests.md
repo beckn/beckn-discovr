@@ -11,10 +11,10 @@ Fix failing tests in the Beckn Discovr project.
 2. **Diagnose** — read the failing file at the indicated line. Common patterns:
    - Fixture JSON still has v1 field names: `transaction_id`→`transactionId`, `bap_id`→`bapId`, `bap_uri`→`bapUri`, `network_id`→`networkId`, `beckn:id`→`id`
    - `network_id` array `["x"]` → plain string `"x"` (networkId changed to String in v2.0)
-   - Test asserts `$.ack_status` → change to `$.status`
-   - Test asserts `$.error.code` → change to `$.error.errorCode`
+   - ACK/NACK are wrapped in `message`: assert `$.message.status` (not `$.status`/`$.ack_status`)
+   - Error fields: `$.message.error.code` / `$.message.error.message` (NOT `errorCode`/`errorMessage`)
+   - Assert `$.message.messageId` AND `$.message.transactionId` are echoed from the request context on both ACK and NACK
    - Test asserts `$.error.paths` → remove (not in v2.0 NACK)
-   - Test asserts `$.transaction_id` in ACK body → remove (not in v2.0 ACK)
    - Test asserts `$.timestamp` in ACK body → remove
    - Test calls `context.setCoreVersion(...)` → remove (field deleted in v2.0)
    - Test calls `context.setNetworkId(List.of(...))` → change to `context.setNetworkId("...")` (String)

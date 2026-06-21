@@ -5,7 +5,7 @@ package org.beckn.discover.exception;
  * times out, or returns a response that cannot be parsed as valid JSON.
  *
  * <p>This is an unrecoverable error: callers must NOT fall back to keyword search.
- * {@link GlobalExceptionHandler} maps this to a 503 NACK response.</p>
+ * {@link GlobalExceptionHandler} maps this to a 500 ServerError NACK response.</p>
  */
 public class SemanticSearchException extends RuntimeException {
 

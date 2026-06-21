@@ -2,8 +2,10 @@ package org.beckn.discover.exception;
 
 import java.util.Map;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.common.ErrorMessages;
+import org.beckn.discover.controller.DiscoveryController;
 import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
@@ -24,16 +27,21 @@ import static net.logstash.logback.argument.StructuredArguments.value;
 /**
  * Global exception handler — converts all unhandled exceptions into Beckn NACK responses.
  *
- * <p>Extends {@link ResponseEntityExceptionHandler} so that Spring MVC exceptions
- * (e.g. {@code HttpMessageNotReadableException} from malformed JSON input) are
- * returned as {@code 400 Bad Request} NACK responses rather than the default
- * {@code 500 Internal Server Error}.</p>
+ * <p>Extends {@link ResponseEntityExceptionHandler} so that Spring MVC infrastructure
+ * exceptions (wrong method, unsupported media type, …) are returned as Beckn NACK
+ * responses rather than Spring's default error body. Note that malformed JSON does NOT
+ * arrive as {@code HttpMessageNotReadableException} here: the controller reads the raw
+ * request bytes and parses them itself, so a bad body surfaces as a
+ * {@link JsonProcessingException} handled explicitly below.</p>
  *
  * <h3>Exception handler priority</h3>
+ * <p>(Spring resolves by exception-type specificity, not declaration order — the list
+ * below is the conceptual most-specific-first grouping.)</p>
  * <ol>
  *   <li>{@link ResponseEntityExceptionHandler} — Spring MVC infrastructure exceptions (400/405/415…)</li>
  *   <li>{@link ErrorResponseException} — Beckn auth / validation errors with embedded code/paths</li>
- *   <li>{@link SemanticSearchException} — embedding/LLM provider unavailable → 503 NET_INTERNAL_ERROR</li>
+ *   <li>{@link SemanticSearchException} — embedding/LLM provider unavailable → 500 NET_DOWNSTREAM_UNAVAILABLE</li>
+ *   <li>{@link JsonProcessingException} — malformed request body → 400 SCH_INVALID_JSON</li>
  *   <li>{@link IllegalArgumentException} — schema validation failures → 400</li>
  *   <li>{@link Exception} — catch-all → 500</li>
  * </ol>
@@ -56,28 +64,52 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler({ SemanticSearchException.class })
     public ResponseEntity<Object> handleSemanticSearchFailure(SemanticSearchException ex, WebRequest request) {
         log.error(LogEvent.NACK_RESPONSE,
-                value("errorCode", ErrorCodes.NET_SERVICE_UNAVAILABLE),
+                value("errorCode", ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE),
                 value("error", ex.getMessage()),
                 value("cause", ex.getCause() != null ? ex.getCause().getMessage() : "none"),
                 ex);
-        AckResponse ackResponse = AckResponse.nack(ErrorCodes.NET_SERVICE_UNAVAILABLE,
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+                ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
                 ErrorMessages.NET_SEARCH_SERVICE_UNAVAILABLE);
-        return new ResponseEntity<>(ackResponse, HttpStatus.SERVICE_UNAVAILABLE);
+        // Spec maps transient server-side failures to 500 ServerError; /discover does not
+        // declare a 503 response. Both unavailability cases surface as 500.
+        return new ResponseEntity<>(ackResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler({ SchemaNotInitializedException.class })
     public ResponseEntity<Object> handleSchemaNotInitialized(SchemaNotInitializedException ex, WebRequest request) {
         log.error(LogEvent.NACK_RESPONSE,
-                value("errorCode", ErrorCodes.NET_SERVICE_UNAVAILABLE),
+                value("errorCode", ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE),
                 value("error", ex.getMessage()));
-        AckResponse ackResponse = AckResponse.nack(ErrorCodes.NET_SERVICE_UNAVAILABLE,
-                ErrorMessages.NET_SERVICE_UNAVAILABLE);
-        return new ResponseEntity<>(ackResponse, HttpStatus.SERVICE_UNAVAILABLE);
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+                ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
+                ErrorMessages.NET_DOWNSTREAM_UNAVAILABLE);
+        // Spec maps transient server-side failures to 500 ServerError; /discover does not
+        // declare a 503 response. Both unavailability cases surface as 500.
+        return new ResponseEntity<>(ackResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler({ IllegalArgumentException.class })
     public ResponseEntity<Object> handleBadRequest(Exception ex) {
         return buildErrorResponse(ex, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
+     * Malformed request body. The controller reads the raw bytes and parses them with
+     * {@code objectMapper.readTree(...)}, so a syntactically invalid body surfaces as a
+     * {@link JsonProcessingException} (NOT Spring's {@code HttpMessageNotReadableException}).
+     * An unparseable payload is a client error → {@code 400} NACK with {@code SCH_INVALID_JSON}.
+     * messageId is omitted because it could not be parsed from the body.
+     */
+    @ExceptionHandler({ JsonProcessingException.class })
+    public ResponseEntity<Object> handleMalformedJson(JsonProcessingException ex) {
+        log.warn(LogEvent.NACK_RESPONSE,
+                value("errorCode", ErrorCodes.SCH_INVALID_JSON),
+                value("httpStatus", HttpStatus.BAD_REQUEST.value()),
+                value("error", ex.getOriginalMessage()));
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+                ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON);
+        return new ResponseEntity<>(ackResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler({ Exception.class })
@@ -120,10 +152,29 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("httpStatus", status.value()),
                 value("error", ex.getMessage()));
 
-        AckResponse ackResponse = AckResponse.nack(code, message);
+        AckResponse ackResponse = AckResponse.nack(currentMessageId(), code, message);
         return responseHeaders != null
                 ? new ResponseEntity<>(ackResponse, responseHeaders, status)
                 : new ResponseEntity<>(ackResponse, status);
+    }
+
+    /** Best-effort: request messageId stored as a servlet attribute by {@link DiscoveryController}. */
+    private static String currentMessageId() {
+        return requestAttr(DiscoveryController.MESSAGE_ID_ATTR);
+    }
+
+    /**
+     * Reads a String request attribute via {@link org.springframework.web.context.request.RequestContextHolder}.
+     * Returns {@code null} when the request/attribute is unavailable (e.g. malformed JSON) — the
+     * corresponding response field is then omitted rather than fabricated.
+     */
+    private static String requestAttr(String name) {
+        var attrs = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        if (attrs instanceof ServletRequestAttributes sra) {
+            Object v = sra.getRequest().getAttribute(name);
+            return (v instanceof String s && !s.isBlank()) ? s : null;
+        }
+        return null;
     }
 
     /**

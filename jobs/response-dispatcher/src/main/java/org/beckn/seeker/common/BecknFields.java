@@ -28,8 +28,7 @@ public final class BecknFields {
     // ── AckResponse / on_discover fields ────────────────────────────────────
     public static final String STATUS          = "status";
     public static final String ERROR           = "error";
-    public static final String ERROR_CODE      = "errorCode";
-    public static final String ERROR_MESSAGE   = "errorMessage";
+    public static final String CODE            = "code";
 
     // ── Catalog / Item fields (v2.0 — no beckn: prefix) ─────────────────────
     public static final String ID              = "id";

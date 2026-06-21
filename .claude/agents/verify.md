@@ -170,8 +170,8 @@ Use `uuidgen | tr '[:upper:]' '[:lower:]'` for all messageId/transactionId value
 
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
-| SC-01 | Push catalog to Discovr | POST `http://localhost:8085/catalog/push` | HTTP 202 `{"status":"ACK"}` |
-| SC-02 | Push with missing bppId | POST without `bppId` in context | HTTP 400 NACK with `errorCode = "INVALID_REQUEST"`, `errorMessage` mentions bppId |
+| SC-01 | Push catalog to Discovr | POST `http://localhost:8085/catalog/push` | HTTP 202 `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}` |
+| SC-02 | Push with missing bppId | POST without `bppId` in context | HTTP 400 NACK with `message.error.code` set, `message.error.message` mentions bppId |
 | SC-03 | Push with missing bppUri | POST without `bppUri` in context | HTTP 400 NACK |
 | SC-04 | Items indexed in Discovr postgres | DB query on discovery-service-postgres | `SELECT id, catalog_id FROM item WHERE catalog_id = 'DSC-VERIFY-<TS>'` → 3 rows |
 | SC-05 | Elasticsearch document created | `curl -s 'http://localhost:9200/beckn-catalog-*/_search?q=catalog_id:DSC-VERIFY-<TS>'` | `hits.total.value` >= 3 |
@@ -191,7 +191,7 @@ docker inspect catalog-discover-job --format '{{range .Config.Env}}{{println .}}
 | SC-07 | Text search — response field validation | Same response as SC-06 | Each catalog has `id`, `descriptor.name`, `resources[].id`, `resources[].descriptor`. No `rateable: false` or `ratingValue: 0` on items without ratings |
 | SC-08 | Spatial search (s_dwithin near Bengaluru) | GET with spatial near [77.5946, 12.9716], distanceMeters 5000 | `context.action = "on_discover"`, `message.catalogs` may include test item |
 | SC-09 | Spatial search (far away — no results) | GET with coordinates [0.0, 0.0], distanceMeters 1000 | `message.catalogs` = empty array |
-| SC-10 | Wrong action | GET with `"action": "wrong"` | `{"status":"NACK","error":{"errorCode":"SCHEMA_VALIDATION_FAILED",...}}` |
+| SC-10 | Wrong action | GET with `"action": "wrong"` | `{"message":{"status":"NACK","messageId":"<uuid>","transactionId":"<uuid>","error":{"code":"SCH_SCHEMA_VALIDATION_FAILED",...}}}` |
 | SC-11 | Missing transactionId | GET without `transactionId` | `{"status":"NACK",...}` |
 | SC-12 | Missing bapId | GET without `bapId` | `{"status":"NACK",...}` |
 | SC-13 | Missing intent (empty) | GET with `message.intent: {}` | `{"status":"NACK",...}` (at least one search criterion required) |
@@ -205,7 +205,7 @@ docker inspect catalog-discover-job --format '{{range .Config.Env}}{{println .}}
 
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
-| SC-16 | Async discover | POST `http://localhost:8082/beckn/discover` with textSearch | HTTP 200 `{"status":"ACK"}` |
+| SC-16 | Async discover | POST `http://localhost:8082/beckn/discover` with textSearch | HTTP 200 `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}` |
 | SC-17 | Response dispatcher log | `docker logs response-dispatcher` | Log entry showing `on_discover` callback attempt to `bapUri` |
 
 ### 4. MERGE Mode (re-publish same catalog)
@@ -214,7 +214,7 @@ docker inspect catalog-discover-job --format '{{range .Config.Env}}{{println .}}
 
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
-| SC-18 | MERGE: add R4, update OFFER-1 discount to 25% | POST push same catalog `DSC-VERIFY-<TS>` with R4 + updated OFFER-1 (no `updateMode` → defaults MERGE) | HTTP 202 `{"status":"ACK"}` |
+| SC-18 | MERGE: add R4, update OFFER-1 discount to 25% | POST push same catalog `DSC-VERIFY-<TS>` with R4 + updated OFFER-1 (no `updateMode` → defaults MERGE) | HTTP 202 `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}` |
 | SC-19 | DB: 4 resources after MERGE | `SELECT id FROM item WHERE catalog_id = 'DSC-VERIFY-<TS>'` | 4 rows (R1, R2, R3 preserved + R4 added) |
 | SC-20 | DB: offer propagated to R1 and R2 | `SELECT payload FROM item WHERE id = 'R1-<TS>'` | Payload JSON contains offer with `discount: "25%"` |
 | SC-21 | Catalog-publish logs show MERGE mode | `docker logs catalog-publish` | Log entry with `mode=MERGE` and `inserted=1 updated=` |
@@ -259,7 +259,7 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
 | SC-32 | Subscribe via Catalg API | POST `http://localhost:3000/catalog/subscription` with callback URL `http://catalog-publish:8080/catalog/push` | `status = "ACTIVE"` |
-| SC-33 | Publish via Catalg API | POST `http://localhost:3000/catalog/publish` | `{"status":"ACK"}` |
+| SC-33 | Publish via Catalg API | POST `http://localhost:3000/catalog/publish` | `{"status":"ACK"}` (Catalg Node.js API — separate repo, not yet migrated to the wrapped `message` form) |
 | SC-34 | Wait for pipeline: indexer → evaluator → delivery → push | Poll Discovr postgres for item rows | Items from SC-33 appear in Discovr DB (max 60s) |
 | SC-35 | Discover catalog published via full pipeline | GET discover with matching textSearch | `message.catalogs` includes the SC-33 catalog |
 
@@ -288,8 +288,8 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
 | RV-01 | Discover response `action` = `"on_discover"` | SC-06, SC-08 |
 | RV-02 | Response uses `resources` field (not `items`) | SC-06 response body |
 | RV-03 | No `@context`/`@type` on Resource/Descriptor — only on `resourceAttributes`/`offerAttributes` | SC-06 response body |
-| RV-04 | Push response is HTTP 202 with `{"status":"ACK"}` | SC-01 |
-| RV-05 | Push NACK responses have `status` + `error.errorCode` + `error.errorMessage` | SC-02, SC-03 |
+| RV-04 | Push response is HTTP 202 with `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}` | SC-01 |
+| RV-05 | Push NACK responses have `message.status` + `message.error.code` + `message.error.message`, and echo `message.messageId` + `message.transactionId` | SC-02, SC-03 |
 | RV-06 | No `publishDirectives` in any response payload | SC-04 (DB), SC-05 (ES) |
 | RV-07 | MERGE mode: existing resources preserved after upsert | SC-19 |
 | RV-08 | FULL mode: old resources completely removed | SC-25 |
