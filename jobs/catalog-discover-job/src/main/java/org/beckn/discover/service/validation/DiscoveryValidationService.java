@@ -236,7 +236,7 @@ public class DiscoveryValidationService {
             if (discoverActionSchema == null) {
                 logger.error(LogEvent.VALIDATE_FAILED, value("reason", LogMessages.REASON_SCHEMA_NOT_INITIALIZED));
                 throw new org.beckn.discover.exception.SchemaNotInitializedException(
-                        ErrorMessages.NET_SERVICE_UNAVAILABLE);
+                        ErrorMessages.NET_DOWNSTREAM_UNAVAILABLE);
             }
 
             // Presence checks — these always run and give clearer error messages than schema failures

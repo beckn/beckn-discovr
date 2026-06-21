@@ -45,8 +45,9 @@ Read first. Read every file you will touch or depend on. Find how similar things
 - Provider: requires `id` + `descriptor`. `additionalProperties: false`.
 - Subscription: action `catalog/subscription` / `catalog/on_subscription`. Path `/catalog/subscription`.
 - `requestDigest` (not `inReplyTo`) for callback binding.
-- ACK: `{"status":"ACK"}`.
-- NACK: `{"status":"NACK","error":{"errorCode":"...","errorMessage":"..."}}`.
+- ACK: `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}` — wrapped in `message`; echoes request `messageId` + `transactionId`.
+- NACK: `{"message":{"status":"NACK","messageId":"<uuid>","transactionId":"<uuid>","error":{"code":"...","message":"..."}}}` — error fields `code`/`message` (NOT `errorCode`/`errorMessage`); `error.code` from the canonical `ErrorCode` enum.
+- `/discover` HTTP statuses limited to 200/202/400/401/403/429/500 — transient failures return 500, never 503.
 - HTTP 409 = AckNoCallback — log and skip, not an error.
 - Action values: `discover`, `on_discover`, `catalog/publish`, `catalog/on_publish`, `catalog/subscription`, `catalog/on_subscription`.
 - Schema type derived from `resourceAttributes.@context + "#" + @type` — not from Resource or Catalog level.

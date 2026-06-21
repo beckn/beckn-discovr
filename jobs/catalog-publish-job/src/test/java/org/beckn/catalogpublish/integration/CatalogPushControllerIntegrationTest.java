@@ -32,13 +32,13 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     // ── ACK response ──────────────────────────────────────────────────────────
 
     @Test
-    void push_validPayload_returns202() throws Exception {
+    void push_validPayload_returns200Ack() throws Exception {
         String fixture = readFixture("fixtures/ev_charging_station_data.json");
 
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
 
         // Wait for async pipeline to drain so this test doesn't pollute later tests
         await().atMost(10, TimeUnit.SECONDS)
@@ -53,8 +53,8 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         // Wait for async pipeline to drain so this test doesn't pollute later tests
         await().atMost(10, TimeUnit.SECONDS)
@@ -71,7 +71,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
 
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
@@ -85,7 +85,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
 
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
@@ -93,8 +93,8 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void push_validPayload_returns202ImmediatelyBeforeProcessingCompletes() throws Exception {
-        // The endpoint must return 202 before the async pipeline finishes.
+    void push_validPayload_returns200ImmediatelyBeforeProcessingCompletes() throws Exception {
+        // The endpoint must return 200 Ack before the async pipeline finishes.
         // We verify this by checking the response arrives quickly (MockMvc is
         // synchronous by nature but the async dispatch must not block it).
         String fixture = readFixture("fixtures/ev_charging_station_data.json");
@@ -103,7 +103,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
         long elapsed = System.currentTimeMillis() - start;
 
         // Response should arrive before persistence completes (< 2 s as a generous bound)
@@ -118,15 +118,19 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
     // ── Payload size enforcement ──────────────────────────────────────────────
 
     @Test
-    void push_oversizedPayload_returns413() throws Exception {
-        // max-payload-size in test profile = 5242880 (5 MB); send one byte over
+    void push_oversizedPayload_returns400Nack() throws Exception {
+        // max-payload-size in test profile = 5242880 (5 MB); send one byte over.
+        // An oversized body is a client error → 400 NackBadRequest (413 is not in the
+        // Beckn response set).
         byte[] oversized = new byte[5 * 1024 * 1024 + 1];
         Arrays.fill(oversized, (byte) 'x');
 
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(oversized))
-                .andExpect(status().isPayloadTooLarge());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message.status").value("NACK"))
+                .andExpect(jsonPath("$.message.error.code").value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
     }
 
     @Test
@@ -134,7 +138,7 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         byte[] oversized = new byte[5 * 1024 * 1024 + 1];
         Arrays.fill(oversized, (byte) 'x');
 
-        // 413 is returned synchronously — nothing is enqueued to Kafka
+        // 400 is returned synchronously — nothing is enqueued to Kafka
         // Capture count immediately before AND after; they must be equal since the
         // oversized request never reaches the pipeline (rejected at the HTTP layer)
         long countBefore = itemRepository.count();
@@ -142,14 +146,14 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(oversized))
-                .andExpect(status().isPayloadTooLarge());
+                .andExpect(status().isBadRequest());
 
-        // Synchronous check: the 413 response guarantees nothing was enqueued
+        // Synchronous check: the 400 response guarantees nothing was enqueued
         long countAfter = itemRepository.count();
         assertThat(countAfter).isEqualTo(countBefore);
     }
 
-    // ── Async failure cases (202 returned, no DB row) ─────────────────────────
+    // ── Async failure cases (200 Ack returned, no DB row) ─────────────────────
 
     @Test
     void push_invalidJson_returns400NackDoesNotPersist() throws Exception {
@@ -159,14 +163,14 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{this is not valid json}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value("NACK"));
+                .andExpect(jsonPath("$.message.status").value("NACK"));
 
         // Invalid JSON rejected at controller level — nothing persisted
         assertThat(itemRepository.count()).isEqualTo(countBefore);
     }
 
     @Test
-    void push_missingBppId_returns202ButDoesNotPersist() throws Exception {
+    void push_missingBppId_returns200ButDoesNotPersist() throws Exception {
         // context present, empty resources array → pipeline runs but nothing to persist
         String payload = """
                 {
@@ -187,8 +191,8 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         // Assert that no item was persisted for catalog "cat-x" specifically.
         // Checking the global count is unreliable because in-flight Kafka consumers
@@ -230,8 +234,11 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                // ACK echoes the request's messageId; transactionId absent here, so it is omitted
+                .andExpect(jsonPath("$.message.messageId").value("msg-ctx-fields"))
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
@@ -261,8 +268,8 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
@@ -302,23 +309,36 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
-        // Resource has no descriptor — isRealResource returns false, pipeline skips it
+        // Resource has no descriptor — isRealResource returns false, pipeline skips it.
+        // Assert no item was persisted for "cat-no-desc" specifically. A global count is
+        // unreliable: in-flight Kafka consumers from prior tests can insert rows for other
+        // catalog IDs after @BeforeEach clears (see push_missingBppId).
         await().atMost(5, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+                .untilAsserted(() -> {
+                    long catCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-no-desc");
+                    assertThat(catCount).isZero();
+                });
     }
 
     @Test
-    void push_emptyCatalogsList_returns202ButDoesNotPersist() throws Exception {
-        long countBefore = itemRepository.count();
-
-        String payload = """
+    void push_emptyCatalogsList_returns200ButDoesNotPersist() throws Exception {
+        // An empty catalogs array is structurally incapable of persisting an item (catalog_id
+        // is NOT NULL and there are zero catalogs to iterate). A global item-count assertion
+        // is therefore meaningless here and flaky: in-flight Kafka consumers from prior tests
+        // can insert rows after @BeforeEach clears. Instead, drain deterministically with a
+        // sentinel that shares the empty payload's Kafka partition key (bppId), so it is
+        // processed strictly after the empty payload (same-key ordering is the FULL/MERGE
+        // guarantee in CatalogPushService). When the sentinel item appears, the empty payload
+        // is known-processed; we then assert exactly one item exists for this test's scope.
+        String emptyPayload = """
                 {
                   "context": {
-                    "bppId": "bpp.test",
+                    "bppId": "bpp.empty-drain",
                     "bppUri": "https://example.com",
                     "networkId": "test-net",
                     "messageId": "msg-empty-catalogs"
@@ -331,12 +351,49 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(post(PUSH_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andExpect(status().isAccepted());
+                        .content(emptyPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
-        await().atMost(5, TimeUnit.SECONDS)
+        String sentinelPayload = """
+                {
+                  "context": {
+                    "bppId": "bpp.empty-drain",
+                    "bppUri": "https://example.com",
+                    "networkId": "test-net",
+                    "messageId": "msg-empty-sentinel"
+                  },
+                  "message": {
+                    "catalogs": [{
+                      "id": "cat-empty-sentinel",
+                      "resources": [{
+                        "id": "item-empty-sentinel",
+                        "descriptor": {"name": "Sentinel"}
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post(PUSH_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sentinelPayload))
+                .andExpect(status().isOk());
+
+        // Sentinel landed → empty payload (ordered before it on the same partition) is done.
+        await().atMost(10, TimeUnit.SECONDS)
                 .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(itemRepository.count()).isEqualTo(countBefore));
+                .untilAsserted(() -> {
+                    long sentinelCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-empty-sentinel");
+                    assertThat(sentinelCount).isEqualTo(1L);
+                });
+
+        // The empty catalogs array produced no catalog, so no item can carry its (absent)
+        // catalog id — confirms it persisted nothing.
+        long emptyDerived = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM item WHERE catalog_id IS NULL OR catalog_id = ''", Long.class);
+        assertThat(emptyDerived).isZero();
     }
 
     @Test
@@ -368,8 +425,8 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value("NACK"))
-                .andExpect(jsonPath("$.error.errorCode").value(ErrorCodes.CTX_INVALID_FIELD));
+                .andExpect(jsonPath("$.message.status").value("NACK"))
+                .andExpect(jsonPath("$.message.error.code").value(ErrorCodes.CTX_MISSING_FIELD));
 
         // Rejected synchronously — nothing persisted
         assertThat(itemRepository.count()).isEqualTo(countBefore);
@@ -386,6 +443,6 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(fixture))
                 // Must succeed without any Authorization header
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
     }
 }

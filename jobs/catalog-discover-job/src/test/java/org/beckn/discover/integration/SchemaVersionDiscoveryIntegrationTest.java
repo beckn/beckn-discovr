@@ -55,15 +55,17 @@ class SchemaVersionDiscoveryIntegrationTest extends BaseIntegrationTest {
     private void insertItem(String itemId, String payloadJson) {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO item (id, catalog_id, context_url, type, offer_ids, payload, updated_at) "
-                            + "VALUES (?, ?, ?, ?, ARRAY[]::TEXT[], ?, ?) "
+                    "INSERT INTO item (id, catalog_id, context_url, type, network_id, offer_ids, payload, updated_at) "
+                            + "VALUES (?, ?, ?, ?, ?, ARRAY[]::TEXT[], ?, ?) "
                             + "ON CONFLICT (id, catalog_id) DO UPDATE SET payload = EXCLUDED.payload");
             ps.setString(1, itemId);
             ps.setString(2, CAT_ID);
             ps.setString(3, CONTEXT_URL);
             ps.setString(4, "ChargingService");
-            ps.setObject(5, pgJsonb(payloadJson));
-            ps.setTimestamp(6, Timestamp.from(OffsetDateTime.now().toInstant()));
+            // Discover scopes by context.networkId (#309); seed the network the request queries on.
+            ps.setArray(5, connection.createArrayOf("text", new String[]{DEFAULT_TEST_NETWORK}));
+            ps.setObject(6, pgJsonb(payloadJson));
+            ps.setTimestamp(7, Timestamp.from(OffsetDateTime.now().toInstant()));
             return ps;
         });
     }

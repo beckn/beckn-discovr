@@ -32,8 +32,6 @@ public final class BecknFields {
     // ── AckResponse fields ───────────────────────────────────────────────────
     public static final String STATUS          = "status";
     public static final String ERROR           = "error";
-    public static final String ERROR_CODE      = "errorCode";
-    public static final String ERROR_MESSAGE   = "errorMessage";
 
     // ── JSON-LD fields ────────────────────────────────────────────────────────
     public static final String AT_CONTEXT      = "@context";

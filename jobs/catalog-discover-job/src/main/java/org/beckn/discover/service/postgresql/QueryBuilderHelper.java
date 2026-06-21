@@ -51,6 +51,13 @@ public final class QueryBuilderHelper {
     /** WHERE condition: JSONPath filter match against the item payload. */
     public static final String JSONPATH_MATCH = "i.payload @@ CAST(? AS jsonpath)";
 
+    /**
+     * WHERE condition: network membership. {@code item.network_id} is a {@code text[]};
+     * {@code ? = ANY(...)} matches when the resource was published to the requesting
+     * network. Binds one {@code String} parameter (the network id). See #309.
+     */
+    public static final String NETWORK_MATCH = "? = ANY(i.network_id)";
+
     /** JSONPath exists — match everything (no filter provided). */
     public static final String JSONPATH_EXISTS_ALL = "exists($)";
 
@@ -178,6 +185,21 @@ public final class QueryBuilderHelper {
             conditions.add(clause);
             Collections.addAll(parameters, params);
             return this;
+        }
+
+        /**
+         * Restricts results to catalogs published to {@code networkId} (#309).
+         *
+         * <p>Adds {@code AND ? = ANY(i.network_id)}. No-op when {@code networkId} is
+         * null/blank so callers without a network context (or tests) stay
+         * network-agnostic. The value is bound as a {@code ?} parameter — never
+         * concatenated.</p>
+         */
+        public QueryTemplate networkFilter(String networkId) {
+            if (networkId == null || networkId.isBlank()) {
+                return this;
+            }
+            return condition(NETWORK_MATCH, networkId);
         }
 
         /**
