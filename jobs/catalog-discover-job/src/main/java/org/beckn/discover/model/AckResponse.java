@@ -5,80 +5,120 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.beckn.discover.common.BecknFields;
 
 /**
- * ACK/NACK Response DTO — Beckn Protocol v2.0 format.
+ * ACK/NACK Response DTO — Beckn Protocol v2.0 schema.
  *
- * ACK:  {@code {"status": "ACK"}}
- * NACK: {@code {"status": "NACK", "error": {"errorCode": "...", "errorMessage": "..."}}}
+ * ACK:  {@code {"message":{"status":"ACK","messageId":"<uuid>"}}}
+ * NACK: {@code {"message":{"status":"NACK","messageId":"<uuid>","error":{"code":"...","message":"..."}}}}
  *
- * @version 2.0.0
+ * <p>{@code message.messageId} echoes the request's {@code context.messageId}. When the request
+ * is unparseable (malformed JSON) and the value is unrecoverable, the field is simply omitted
+ * ({@code @JsonInclude(NON_NULL)}) — never fabricated.</p>
+ *
+ * <p>Per the spec {@code Ack}/{@code Nack*} schemas, the {@code message} object carries only
+ * {@code status}, {@code messageId}, and {@code error} — {@code transactionId} lives on the
+ * request {@code Context}, never in the synchronous ACK/NACK body.</p>
+ *
+ * @version Beckn Protocol 2.0.0
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AckResponse {
 
-    @JsonProperty(BecknFields.STATUS)
-    private String status; // "ACK" or "NACK"
-
-    @JsonProperty(BecknFields.ERROR)
-    private ErrorDetail error;
+    @JsonProperty(BecknFields.MESSAGE)
+    private Message message;
 
     public AckResponse() {}
 
-    public AckResponse(String status) {
-        this.status = status;
+    public AckResponse(Message message) {
+        this.message = message;
     }
 
-    public AckResponse(String status, ErrorDetail error) {
-        this.status = status;
-        this.error = error;
+    /** Factory: accepted request. Echoes the request's messageId. */
+    public static AckResponse ack(String messageId) {
+        return new AckResponse(new Message("ACK", messageId, null));
     }
 
-    // Static factory methods
-    public static AckResponse ack() {
-        return new AckResponse("ACK");
+    /** Factory: rejected request. Echoes the request's messageId. */
+    public static AckResponse nack(String messageId, String code, String message) {
+        return new AckResponse(new Message("NACK", messageId, new ErrorDetail(code, message)));
     }
 
-    public static AckResponse nack(String errorCode, String errorMessage) {
-        return new AckResponse("NACK", new ErrorDetail(errorCode, errorMessage));
-    }
-
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-
-    public ErrorDetail getError() { return error; }
-    public void setError(ErrorDetail error) { this.error = error; }
+    public Message getMessage() { return message; }
+    public void setMessage(Message message) { this.message = message; }
 
     @Override
     public String toString() {
-        return "AckResponse{status='" + status + "', error=" + error + '}';
+        return "AckResponse{message=" + message + '}';
     }
 
     /**
-     * Error Detail DTO — Beckn Protocol v2.0 format.
+     * The {@code message} wrapper — carries {@code status}, {@code messageId},
+     * and optional {@code error}.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public static class ErrorDetail {
-        @JsonProperty(BecknFields.ERROR_CODE)
-        private String errorCode;
+    public static class Message {
 
-        @JsonProperty(BecknFields.ERROR_MESSAGE)
-        private String errorMessage;
+        @JsonProperty(BecknFields.STATUS)
+        private String status;
 
-        public ErrorDetail() {}
+        @JsonProperty(BecknFields.MESSAGE_ID)
+        private String messageId;
 
-        public ErrorDetail(String errorCode, String errorMessage) {
-            this.errorCode = errorCode;
-            this.errorMessage = errorMessage;
+        @JsonProperty(BecknFields.ERROR)
+        private ErrorDetail error;
+
+        public Message() {}
+
+        public Message(String status, String messageId, ErrorDetail error) {
+            this.status = status;
+            this.messageId = messageId;
+            this.error = error;
         }
 
-        public String getErrorCode() { return errorCode; }
-        public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
 
-        public String getErrorMessage() { return errorMessage; }
-        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+        public String getMessageId() { return messageId; }
+        public void setMessageId(String messageId) { this.messageId = messageId; }
+
+        public ErrorDetail getError() { return error; }
+        public void setError(ErrorDetail error) { this.error = error; }
 
         @Override
         public String toString() {
-            return "ErrorDetail{errorCode='" + errorCode + "', errorMessage='" + errorMessage + "'}";
+            return "Message{status='" + status + "', messageId='" + messageId
+                    + "', error=" + error + '}';
+        }
+    }
+
+    /**
+     * Error detail — Beckn Protocol v2.0 {@code Error} schema.
+     * Fields are {@code code} and {@code message} per the spec.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class ErrorDetail {
+
+        @JsonProperty(BecknFields.CODE)
+        private String code;
+
+        @JsonProperty(BecknFields.MESSAGE)
+        private String message;
+
+        public ErrorDetail() {}
+
+        public ErrorDetail(String code, String message) {
+            this.code = code;
+            this.message = message;
+        }
+
+        public String getCode() { return code; }
+        public void setCode(String code) { this.code = code; }
+
+        public String getMessage() { return message; }
+        public void setMessage(String message) { this.message = message; }
+
+        @Override
+        public String toString() {
+            return "ErrorDetail{code='" + code + "', message='" + message + "'}";
         }
     }
 }

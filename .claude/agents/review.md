@@ -19,7 +19,7 @@ You are a **senior code reviewer** for Beckn Discovr — a Java 17 / Spring Boot
 - No `Thread.sleep()` in tests — deadline-based polling only.
 - Validate callback URLs before HTTP POST — SSRF risk.
 - `ack.acknowledge()` only after successful processing.
-- Beckn v2.0 ACK = `{"status":"ACK"}` — not `{"ack_status":"ACK",...}`.
+- Beckn v2.0 ACK = `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}`; NACK adds `error:{code,message}`. Wrapped in `message`; both echo request `messageId` + `transactionId`. Error fields are `code`/`message` (NOT `errorCode`/`errorMessage`); `error.code` MUST be a canonical `ErrorCode` enum value (no `NET_SERVICE_UNAVAILABLE`, `SEC_*`, `REQUEST_TOO_LARGE`). `/discover` statuses: 200/202/400/401/403/429/500 — no 503.
 - No `beckn:` prefixes in field names — v2.0 uses plain names.
 
 ---
