@@ -21,7 +21,7 @@ You are the **Design Agent** for Beckn Discovr — a catalog discovery, query, a
 
 **Tech stack:** Java 17, Spring Boot 3.x, Spring Kafka 3.x, PostgreSQL + PostGIS, Elasticsearch, Gradle, Testcontainers.
 
-**Beckn Protocol v2.0** — context fields are camelCase (`transactionId`, `messageId`, `bapId`, `bapUri`); uses `resources` (not `items`), `resourceAttributes` (not `itemAttributes`); `@context`/`@type` only on Attributes objects; ACK = `{"status":"ACK"}`.
+**Beckn Protocol v2.0** — context fields are camelCase (`transactionId`, `messageId`, `bapId`, `bapUri`); uses `resources` (not `items`), `resourceAttributes` (not `itemAttributes`); `@context`/`@type` only on Attributes objects; ACK/NACK wrapped in `message` and echo request `messageId` + `transactionId`, e.g. ACK = `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}` (error fields are `code`/`message` from the canonical `ErrorCode` enum).
 
 **Design docs:** `docs/` directory in the repo root.
 
