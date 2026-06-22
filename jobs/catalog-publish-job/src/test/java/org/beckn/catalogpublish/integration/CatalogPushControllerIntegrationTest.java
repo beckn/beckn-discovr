@@ -508,7 +508,8 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                 """;
         byte[] uncompressed = catalogsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         byte[] compressed = gzip(uncompressed);
-        String checksum = "sha256:" + sha256Hex(uncompressed);
+        // Per spec, checksum is the SHA-256 digest of the payload AT url (the compressed bytes).
+        String checksum = "sha256:" + sha256Hex(compressed);
 
         // Stub downloadCatalogFromUrl to return the mock Gzip compressed catalogs
         doReturn(compressed).when(pullCallbackService).downloadCatalogFromUrl(anyString());
@@ -524,11 +525,13 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                     "downloadManifest": {
                       "url": "https://mock-storage.com/catalog.json.gz",
                       "format": "json.gz",
-                      "checksum": "%s"
+                      "sizeBytes": %d,
+                      "checksum": "%s",
+                      "expiresAt": "2099-12-31T23:59:59Z"
                     }
                   }
                 }
-                """.formatted(checksum);
+                """.formatted(compressed.length, checksum);
 
         mockMvc.perform(post(ON_PULL_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -542,6 +545,102 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                     long catCount = jdbcTemplate.queryForObject(
                             "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-download-on-pull");
                     assertThat(catCount).isEqualTo(1);
+                });
+    }
+
+    @Test
+    void onPull_downloadManifestExpired_doesNotDownloadOrPersist() throws Exception {
+        // Spec: the DS MUST NOT download after expiresAt. The expiry guard runs before the
+        // download, so even a valid stubbed payload must never be fetched or persisted.
+        String catalogsJson = """
+                {
+                  "catalogs": [{
+                    "id": "cat-expired-on-pull",
+                    "resources": [{"id": "item-expired-1", "descriptor": {"name": "Expired Item"}}]
+                  }]
+                }
+                """;
+        byte[] compressed = gzip(catalogsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String checksum = "sha256:" + sha256Hex(compressed);
+        doReturn(compressed).when(pullCallbackService).downloadCatalogFromUrl(anyString());
+
+        String callbackPayload = """
+                {
+                  "context": {"networkId": "test-net", "messageId": "msg-expired-on-pull"},
+                  "message": {
+                    "status": "COMPLETED",
+                    "downloadManifest": {
+                      "url": "https://mock-storage.com/catalog.json.gz",
+                      "format": "json.gz",
+                      "sizeBytes": %d,
+                      "checksum": "%s",
+                      "expiresAt": "2000-01-01T00:00:00Z"
+                    }
+                  }
+                }
+                """.formatted(compressed.length, checksum);
+
+        mockMvc.perform(post(ON_PULL_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(callbackPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
+
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    long catCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-expired-on-pull");
+                    assertThat(catCount).isZero();
+                });
+    }
+
+    @Test
+    void onPull_downloadManifestChecksumMismatch_doesNotPersist() throws Exception {
+        // Spec: the DS MUST verify the checksum (digest of the payload AT url) before processing
+        // and discard the content on mismatch. Here the manifest carries the digest of the
+        // *uncompressed* bytes, which must not match the compressed payload-at-url.
+        String catalogsJson = """
+                {
+                  "catalogs": [{
+                    "id": "cat-mismatch-on-pull",
+                    "resources": [{"id": "item-mismatch-1", "descriptor": {"name": "Mismatch Item"}}]
+                  }]
+                }
+                """;
+        byte[] uncompressed = catalogsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] compressed = gzip(uncompressed);
+        String wrongChecksum = "sha256:" + sha256Hex(uncompressed);
+        doReturn(compressed).when(pullCallbackService).downloadCatalogFromUrl(anyString());
+
+        String callbackPayload = """
+                {
+                  "context": {"networkId": "test-net", "messageId": "msg-mismatch-on-pull"},
+                  "message": {
+                    "status": "COMPLETED",
+                    "downloadManifest": {
+                      "url": "https://mock-storage.com/catalog.json.gz",
+                      "format": "json.gz",
+                      "sizeBytes": %d,
+                      "checksum": "%s",
+                      "expiresAt": "2099-12-31T23:59:59Z"
+                    }
+                  }
+                }
+                """.formatted(compressed.length, wrongChecksum);
+
+        mockMvc.perform(post(ON_PULL_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(callbackPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
+
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    long catCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-mismatch-on-pull");
+                    assertThat(catCount).isZero();
                 });
     }
 
