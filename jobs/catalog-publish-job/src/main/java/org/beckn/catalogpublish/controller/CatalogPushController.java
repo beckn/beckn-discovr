@@ -131,7 +131,11 @@ public class CatalogPushController {
                     nackBody(messageId, ErrorCodes.CTX_MISSING_FIELD, ErrorMessages.SCH_MISSING_CONTEXT));
         }
 
-        log.info("event={} sizeBytes={}", LogEvent.ON_PULL_RECEIVED, rawBytes.length);
+        // Echo the ORIGINAL correlation IDs received from the CS (never generated) on the
+        // entry log; the async pipeline carries them via MDC for the remaining lines.
+        log.info("event={} messageId={} transactionId={} sizeBytes={}",
+                LogEvent.ON_PULL_RECEIVED, messageId,
+                contextText(root, BecknFields.TRANSACTION_ID), rawBytes.length);
         pullCallbackService.processPullCallbackAsynchronously(rawBody);
 
         // 200 Ack per beckn.yaml /catalog/on_pull — the callback receiver acknowledges

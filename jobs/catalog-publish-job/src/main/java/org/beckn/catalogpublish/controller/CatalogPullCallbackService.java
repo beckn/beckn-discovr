@@ -5,20 +5,25 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.logging.LogEvent;
+import org.beckn.catalogpublish.logging.MdcField;
+import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -33,6 +38,7 @@ public class CatalogPullCallbackService {
 
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
+    private final CatalogPublishMetrics metrics;
     private final HttpClient httpClient;
 
     /**
@@ -40,10 +46,13 @@ public class CatalogPullCallbackService {
      *
      * @param pushService the service used to enqueue transformed catalogs
      * @param objectMapper the JSON object mapper
+     * @param metrics publish/on_pull metrics recorder
      */
-    public CatalogPullCallbackService(CatalogPushService pushService, ObjectMapper objectMapper) {
+    public CatalogPullCallbackService(CatalogPushService pushService, ObjectMapper objectMapper,
+            CatalogPublishMetrics metrics) {
         this.pushService = pushService;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -62,14 +71,20 @@ public class CatalogPullCallbackService {
             JsonNode becknContext = callbackPayloadRoot.path(BecknFields.CONTEXT);
             JsonNode becknMessage = callbackPayloadRoot.path(BecknFields.MESSAGE);
 
+            // Carry the ORIGINAL correlation IDs from the CS callback context onto every log
+            // line for this callback (LogstashEncoder auto-includes MDC). These are the IDs the
+            // CS sent — never a locally generated/substitute value. Runs on a pooled thread that
+            // inherits no MDC, so we set it here and clear it in finally.
+            populateCallbackMdc(becknContext);
+
             String callbackStatus = becknMessage.path("status").asText("");
             if ("FAILED".equalsIgnoreCase(callbackStatus)) {
                 JsonNode callbackError = becknMessage.path("error");
-                log.warn("event={} status=FAILED transactionId={} errorCode={} errorMessage={}",
+                log.warn("event={} status=FAILED errorCode={} errorMessage={}",
                         LogEvent.ON_PULL_FAILED,
-                        becknContext.path(BecknFields.TRANSACTION_ID).asText(""),
                         callbackError.path("code").asText(""),
                         callbackError.path("message").asText(""));
+                metrics.recordOnPullFailed("status_failed");
                 return;
             }
 
@@ -77,47 +92,16 @@ public class CatalogPullCallbackService {
             JsonNode downloadManifestNode = becknMessage.path("downloadManifest");
 
             if (inlineCatalogsArray.isArray() && !inlineCatalogsArray.isEmpty()) {
-                log.info("event={} mode=INLINE transactionId={} catalogCount={}",
-                        LogEvent.ON_PULL_RECEIVED,
-                        becknContext.path(BecknFields.TRANSACTION_ID).asText(""),
-                        inlineCatalogsArray.size());
+                metrics.recordOnPullReceived("inline");
+                log.info("event={} mode=INLINE catalogCount={}",
+                        LogEvent.ON_PULL_RECEIVED, inlineCatalogsArray.size());
                 transformContextAndEnqueueCatalogs(becknContext, inlineCatalogsArray);
+                metrics.recordOnPullProcessed("inline");
             } else if (!downloadManifestNode.isMissingNode() && !downloadManifestNode.isNull()) {
-                String manifestDownloadUrl = downloadManifestNode.path("url").asText("");
-                String manifestFileFormat = downloadManifestNode.path("format").asText("");
-                String manifestFileChecksum = downloadManifestNode.path("checksum").asText("");
-                log.info("event={} mode=DOWNLOAD transactionId={} url={} format={}",
-                        LogEvent.ON_PULL_RECEIVED,
-                        becknContext.path(BecknFields.TRANSACTION_ID).asText(""),
-                        manifestDownloadUrl, manifestFileFormat);
-                
-                byte[] downloadedCompressedBytes = downloadCatalogFromUrl(manifestDownloadUrl);
-                byte[] decompressedBytes = downloadedCompressedBytes;
-                if ("json.gz".equalsIgnoreCase(manifestFileFormat) || manifestDownloadUrl.endsWith(".gz")) {
-                    decompressedBytes = decompressGzipPayload(downloadedCompressedBytes);
-                }
-
-                if (manifestFileChecksum != null && !manifestFileChecksum.isBlank()) {
-                    verifySha256Checksum(decompressedBytes, manifestFileChecksum);
-                }
-
-                JsonNode downloadedJsonRoot = objectMapper.readTree(decompressedBytes);
-                JsonNode downloadedCatalogsArray = downloadedJsonRoot.path(BecknFields.CATALOGS);
-                if (downloadedCatalogsArray.isArray() && !downloadedCatalogsArray.isEmpty()) {
-                    log.info("event={} mode=DOWNLOAD_SUCCESS transactionId={} catalogCount={}",
-                            LogEvent.ON_PULL_RECEIVED,
-                            becknContext.path(BecknFields.TRANSACTION_ID).asText(""),
-                            downloadedCatalogsArray.size());
-                    transformContextAndEnqueueCatalogs(becknContext, downloadedCatalogsArray);
-                } else {
-                    log.warn("event={} reason=no-catalogs-in-download transactionId={}",
-                            LogEvent.ON_PULL_FAILED,
-                            becknContext.path(BecknFields.TRANSACTION_ID).asText(""));
-                }
+                processDownloadManifest(becknContext, downloadManifestNode);
             } else {
-                log.warn("event={} reason=empty-callback transactionId={}",
-                        LogEvent.ON_PULL_FAILED,
-                        becknContext.path(BecknFields.TRANSACTION_ID).asText(""));
+                log.warn("event={} reason=empty-callback", LogEvent.ON_PULL_FAILED);
+                metrics.recordOnPullFailed("empty_callback");
             }
 
         } catch (Exception e) {
@@ -125,6 +109,107 @@ public class CatalogPullCallbackService {
                     LogEvent.ON_PULL_FAILED,
                     ErrorSanitizer.sanitize(e.getMessage()),
                     e);
+            metrics.recordOnPullFailed("processing_error");
+        } finally {
+            // Pool thread: clear MDC so this callback's correlation IDs never leak into the
+            // next task scheduled on the same thread.
+            MDC.clear();
+        }
+    }
+
+    /**
+     * Processes a COMPLETED on_pull callback delivered via {@code downloadManifest}.
+     *
+     * <p>Spec conformance (CatalogPullCallbackAction.downloadManifest):</p>
+     * <ul>
+     *   <li>{@code checksum} is required; the DS MUST verify it before processing — absent → discard.</li>
+     *   <li>The DS MUST NOT download after {@code expiresAt} — absent/expired → discard.</li>
+     *   <li>{@code checksum} is the SHA-256 digest of the payload <em>at url</em> (the downloaded,
+     *       still-compressed bytes) and is verified BEFORE decompressing/decoding.</li>
+     * </ul>
+     *
+     * @param becknContext the callback context node
+     * @param manifest the downloadManifest node
+     * @throws Exception if download, checksum verification, or decoding fails
+     */
+    private void processDownloadManifest(JsonNode becknContext, JsonNode manifest) throws Exception {
+        metrics.recordOnPullReceived("download");
+        String downloadUrl = manifest.path("url").asText("");
+        String fileFormat = manifest.path("format").asText("");
+        String expectedChecksum = manifest.path("checksum").asText("");
+        String expiresAt = manifest.path("expiresAt").asText("");
+
+        // Spec: checksum is REQUIRED and the DS MUST verify it before processing.
+        if (expectedChecksum.isBlank()) {
+            log.warn("event={} reason=missing-checksum", LogEvent.ON_PULL_FAILED);
+            metrics.recordOnPullFailed("missing_checksum");
+            return;
+        }
+        // Spec: expiresAt is required and the DS MUST NOT download after it.
+        if (expiresAt.isBlank()) {
+            log.warn("event={} reason=missing-expiry", LogEvent.ON_PULL_FAILED);
+            metrics.recordOnPullFailed("missing_expiry");
+            return;
+        }
+        if (isExpired(expiresAt)) {
+            log.warn("event={} reason=manifest-expired expiresAt={}", LogEvent.ON_PULL_FAILED, expiresAt);
+            metrics.recordOnPullFailed("expired");
+            return;
+        }
+
+        log.info("event={} mode=DOWNLOAD url={} format={}", LogEvent.ON_PULL_RECEIVED, downloadUrl, fileFormat);
+
+        // downloadCatalogFromUrl applies the SSRF guard before the network call.
+        byte[] payloadAtUrl = downloadCatalogFromUrl(downloadUrl);
+
+        // Spec: checksum is the digest of the payload AT url; verify BEFORE decompressing.
+        // If verification fails the DS MUST discard the content (verifySha256Checksum throws).
+        verifySha256Checksum(payloadAtUrl, expectedChecksum);
+
+        byte[] catalogJsonBytes = payloadAtUrl;
+        if ("json.gz".equalsIgnoreCase(fileFormat) || downloadUrl.endsWith(".gz")) {
+            catalogJsonBytes = decompressGzipPayload(payloadAtUrl);
+        }
+
+        JsonNode downloadedJsonRoot = objectMapper.readTree(catalogJsonBytes);
+        JsonNode downloadedCatalogsArray = downloadedJsonRoot.path(BecknFields.CATALOGS);
+        if (downloadedCatalogsArray.isArray() && !downloadedCatalogsArray.isEmpty()) {
+            log.info("event={} mode=DOWNLOAD_SUCCESS catalogCount={}",
+                    LogEvent.ON_PULL_RECEIVED, downloadedCatalogsArray.size());
+            transformContextAndEnqueueCatalogs(becknContext, downloadedCatalogsArray);
+            metrics.recordOnPullProcessed("download");
+        } else {
+            log.warn("event={} reason=no-catalogs-in-download", LogEvent.ON_PULL_FAILED);
+            metrics.recordOnPullFailed("no_catalogs");
+        }
+    }
+
+    /**
+     * Populates MDC with the ORIGINAL correlation IDs from the CS callback context. The values
+     * are taken verbatim from {@code context.messageId} / {@code context.transactionId} — never
+     * generated locally — so every log line for this callback is correlatable end-to-end.
+     */
+    private void populateCallbackMdc(JsonNode becknContext) {
+        putIfPresentMdc(MdcField.MESSAGE_ID, becknContext.path(BecknFields.MESSAGE_ID).asText(null));
+        putIfPresentMdc(MdcField.TRANSACTION_ID, becknContext.path(BecknFields.TRANSACTION_ID).asText(null));
+        putIfPresentMdc(MdcField.NETWORK_ID, becknContext.path(MdcField.NETWORK_ID).asText(null));
+    }
+
+    private static void putIfPresentMdc(String key, String value) {
+        if (value != null && !value.isBlank()) {
+            MDC.put(key, value);
+        }
+    }
+
+    /**
+     * Returns {@code true} when the ISO-8601 {@code expiresAt} is in the past. Fails closed
+     * (treats an unparseable timestamp as expired) so a malformed expiry never permits a download.
+     */
+    private boolean isExpired(String expiresAt) {
+        try {
+            return OffsetDateTime.parse(expiresAt).isBefore(OffsetDateTime.now());
+        } catch (java.time.format.DateTimeParseException e) {
+            return true;
         }
     }
 
@@ -159,6 +244,8 @@ public class CatalogPullCallbackService {
      * @throws Exception if HTTP call fails or response code is not 200
      */
     public byte[] downloadCatalogFromUrl(String downloadUrl) throws Exception {
+        // SSRF guard: validate the (untrusted) manifest URL before any network call.
+        validateDownloadUrl(downloadUrl);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(downloadUrl))
                 .timeout(Duration.ofSeconds(30))
@@ -169,6 +256,43 @@ public class CatalogPullCallbackService {
             throw new IOException("Failed to download catalog file from " + downloadUrl + " - HTTP " + response.statusCode());
         }
         return response.body();
+    }
+
+    /**
+     * SSRF guard for the (untrusted) {@code downloadManifest.url}. Allows only http/https with a
+     * resolvable, non-private host. Fails closed: an unresolvable host is rejected rather than fetched.
+     *
+     * @param url the manifest download URL
+     * @throws IllegalArgumentException if the URL is malformed, non-http(s), or resolves to a
+     *         loopback / link-local / site-local (private) address
+     */
+    private void validateDownloadUrl(String url) {
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Malformed download URL: " + url, e);
+        }
+
+        String scheme = uri.getScheme();
+        if (scheme == null || (!scheme.equals("https") && !scheme.equals("http"))) {
+            throw new IllegalArgumentException("Invalid download URL scheme: " + scheme);
+        }
+
+        String host = uri.getHost();
+        if (host == null) {
+            throw new IllegalArgumentException("Invalid download URL: no host");
+        }
+
+        try {
+            InetAddress addr = InetAddress.getByName(host);
+            if (addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress()) {
+                throw new IllegalArgumentException("Download URL points to private/loopback address: " + host);
+            }
+        } catch (java.net.UnknownHostException e) {
+            // Fail closed: an unresolvable host cannot be verified safe.
+            throw new IllegalArgumentException("Download URL host could not be resolved: " + host, e);
+        }
     }
 
     /**

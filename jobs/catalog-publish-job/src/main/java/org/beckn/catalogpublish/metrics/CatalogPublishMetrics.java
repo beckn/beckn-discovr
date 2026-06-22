@@ -39,7 +39,12 @@ public class CatalogPublishMetrics {
     private final Counter persistUpdated;
     private final Counter mergeCount;
 
+    // on_pull callback metrics use bounded tag values (mode/reason), so they are resolved
+    // on demand from the registry (Micrometer caches each name+tag combination).
+    private final MeterRegistry registry;
+
     public CatalogPublishMetrics(MeterRegistry registry) {
+        this.registry = registry;
         successCounters = new EnumMap<>(CatalogOperation.class);
         failureCounters = new EnumMap<>(CatalogOperation.class);
         processingTimers = new EnumMap<>(CatalogOperation.class);
@@ -151,5 +156,24 @@ public class CatalogPublishMetrics {
      */
     public void recordProcessingTime(CatalogOperation op, Runnable work) {
         processingTimers.get(op).record(work);
+    }
+
+    // ── on_pull callback ingestion ──────────────────────────────────────────────
+    // mode ∈ {inline, download}; reason ∈ {status_failed, empty_callback, missing_checksum,
+    // missing_expiry, expired, no_catalogs, processing_error} — all bounded, low-cardinality.
+
+    /** A COMPLETED on_pull callback was received for processing, tagged by delivery mode. */
+    public void recordOnPullReceived(String mode) {
+        registry.counter("discovr.onpull.received", "mode", mode).increment();
+    }
+
+    /** An on_pull callback's catalogs were successfully enqueued to the publish pipeline. */
+    public void recordOnPullProcessed(String mode) {
+        registry.counter("discovr.onpull.processed", "mode", mode).increment();
+    }
+
+    /** An on_pull callback was rejected/discarded before enqueue, tagged by reason. */
+    public void recordOnPullFailed(String reason) {
+        registry.counter("discovr.onpull.failed", "reason", reason).increment();
     }
 }
