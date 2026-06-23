@@ -22,6 +22,7 @@ import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
+import org.beckn.discover.service.validation.IntentQueryValidator;
 import org.beckn.discover.service.authorization.AuthorizationService;
 import org.beckn.discover.common.ErrorMessages;
 import org.slf4j.Logger;
@@ -72,6 +73,7 @@ public class DiscoveryController {
     private final DiscoveryService discoveryService;
     private final ObjectMapper objectMapper;
     private final DiscoveryValidationService validationService;
+    private final IntentQueryValidator intentQueryValidator;
     private final AuthorizationService authorizationService;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final DiscoveryProperties discoveryProperties;
@@ -83,6 +85,7 @@ public class DiscoveryController {
             DiscoveryService discoveryService,
             ObjectMapper objectMapper,
             DiscoveryValidationService validationService,
+            IntentQueryValidator intentQueryValidator,
             AuthorizationService authorizationService,
             KafkaTemplate<String, String> kafkaTemplate,
             DiscoveryProperties discoveryProperties,
@@ -90,6 +93,7 @@ public class DiscoveryController {
         this.discoveryService = discoveryService;
         this.objectMapper = objectMapper;
         this.validationService = validationService;
+        this.intentQueryValidator = intentQueryValidator;
         this.authorizationService = authorizationService;
         this.kafkaTemplate = kafkaTemplate;
         this.discoveryProperties = discoveryProperties;
@@ -290,6 +294,10 @@ public class DiscoveryController {
                     value("requestBody", truncate(rawBody, 2000)));
             throw new IllegalArgumentException(msg);
         }
+        // Engine-dialect validation (PostgreSQL SQL/JSON jsonpath), parse-only. Runs before the
+        // query (GET) and before the Kafka publish (POST) so an invalid filter expression gets a
+        // clean SCH_INVALID_JSONPATH NACK instead of a downstream crash with no callback.
+        intentQueryValidator.validate(requestNode);
         log.info(LogEvent.VALIDATE_PASSED);
     }
 

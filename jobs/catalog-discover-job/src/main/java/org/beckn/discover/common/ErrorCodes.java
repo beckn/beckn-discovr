@@ -21,6 +21,7 @@ public final class ErrorCodes {
     public static final String SCH_INVALID_JSON = "SCH_INVALID_JSON";
     public static final String SCH_SCHEMA_VALIDATION_FAILED = "SCH_SCHEMA_VALIDATION_FAILED";
     public static final String SCH_REQUIRED_FIELD_MISSING = "SCH_REQUIRED_FIELD_MISSING";
+    public static final String SCH_INVALID_JSONPATH = "SCH_INVALID_JSONPATH";
 
     // ── Context Field Errors ────────────────────────────────────────────────
     public static final String CTX_INVALID_FIELD = "CTX_INVALID_FIELD";
