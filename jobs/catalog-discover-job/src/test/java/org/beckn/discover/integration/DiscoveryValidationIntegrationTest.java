@@ -148,28 +148,50 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
      * form and a form carrying a single non-numeric coordinate. {@code (label, geometryJson, expectValid)}.
      */
     static Stream<Arguments> geometriesByType() {
+        String R  = "[[77.5,12.9],[77.7,12.9],[77.7,13.0],[77.5,12.9]]";   // a valid closed ring
+        String R2 = "[[77.6,13.0],[77.7,13.0],[77.7,13.1],[77.6,13.0]]";   // a second valid ring
         return Stream.of(
-            arguments("Point numeric",             "{\"type\":\"Point\",\"coordinates\":[77.6,12.9]}", true),
-            arguments("Point non-numeric",         "{\"type\":\"Point\",\"coordinates\":[\"77.6\",12.9]}", false),
-            arguments("LineString numeric",        "{\"type\":\"LineString\",\"coordinates\":[[77.6,12.9],[77.7,13.0]]}", true),
-            arguments("LineString non-numeric",    "{\"type\":\"LineString\",\"coordinates\":[[77.6,12.9],[\"77.7\",13.0]]}", false),
-            arguments("Polygon numeric",           "{\"type\":\"Polygon\",\"coordinates\":[[[77.5,12.9],[77.7,12.9],[77.7,13.0],[77.5,12.9]]]}", true),
-            arguments("Polygon non-numeric",       "{\"type\":\"Polygon\",\"coordinates\":[[[77.5,12.9],[77.7,12.9],[77.7,\"13.0\"],[77.5,12.9]]]}", false),
-            arguments("MultiPoint numeric",        "{\"type\":\"MultiPoint\",\"coordinates\":[[77.6,12.9],[77.7,13.0]]}", true),
-            arguments("MultiPoint non-numeric",    "{\"type\":\"MultiPoint\",\"coordinates\":[[\"77.6\",12.9],[77.7,13.0]]}", false),
-            arguments("MultiLineString numeric",   "{\"type\":\"MultiLineString\",\"coordinates\":[[[77.6,12.9],[77.7,13.0]]]}", true),
-            arguments("MultiLineString non-numeric","{\"type\":\"MultiLineString\",\"coordinates\":[[[77.6,12.9],[77.7,\"13.0\"]]]}", false),
-            arguments("MultiPolygon numeric",      "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[77.5,12.9],[77.7,12.9],[77.7,13.0],[77.5,12.9]]]]}", true),
-            arguments("MultiPolygon non-numeric",  "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[77.5,12.9],[77.7,12.9],[\"77.7\",13.0],[77.5,12.9]]]]}", false),
-            arguments("GeometryCollection numeric","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[77.6,12.9]},{\"type\":\"Polygon\",\"coordinates\":[[[77.5,12.9],[77.7,12.9],[77.7,13.0],[77.5,12.9]]]}]}", true),
-            arguments("GeometryCollection non-numeric","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[\"77.6\",12.9]}]}", false),
-            // empty coordinates (no numbers at all) — also invalid
-            arguments("Point empty",               "{\"type\":\"Point\",\"coordinates\":[]}", false),
-            arguments("Polygon nested-empty",       "{\"type\":\"Polygon\",\"coordinates\":[[]]}", false),
-            arguments("Polygon empty-position",     "{\"type\":\"Polygon\",\"coordinates\":[[[77.6,12.9],[77.7,12.9],[]]]}", false),
-            // under-length positions (a position must have >= 2 numbers: lon, lat)
-            arguments("Point single-ordinate",      "{\"type\":\"Point\",\"coordinates\":[77.575]}", false),
-            arguments("Polygon single-ordinate-pos","{\"type\":\"Polygon\",\"coordinates\":[[[77.6,12.9],[77.7,13.0],[77.575]]]}", false)
+            // ── POSITIVE — valid coordinates across every geometry type (→ accepted) ──
+            arguments("Point",                       "{\"type\":\"Point\",\"coordinates\":[77.6,12.9]}", true),
+            arguments("Point integers",              "{\"type\":\"Point\",\"coordinates\":[77,12]}", true),
+            arguments("Point negatives",             "{\"type\":\"Point\",\"coordinates\":[-77.6,-12.9]}", true),
+            arguments("Point zero",                  "{\"type\":\"Point\",\"coordinates\":[0,0]}", true),
+            arguments("Point altitude (3 numbers)",  "{\"type\":\"Point\",\"coordinates\":[77.6,12.9,920.5]}", true),
+            arguments("LineString",                  "{\"type\":\"LineString\",\"coordinates\":[[77.6,12.9],[77.7,13.0]]}", true),
+            arguments("LineString 3 points",         "{\"type\":\"LineString\",\"coordinates\":[[77.6,12.9],[77.7,13.0],[77.8,13.1]]}", true),
+            arguments("Polygon",                     "{\"type\":\"Polygon\",\"coordinates\":[" + R + "]}", true),
+            arguments("Polygon with hole",           "{\"type\":\"Polygon\",\"coordinates\":[" + R + "," + R2 + "]}", true),
+            arguments("MultiPoint",                  "{\"type\":\"MultiPoint\",\"coordinates\":[[77.6,12.9],[77.7,13.0]]}", true),
+            arguments("MultiLineString",             "{\"type\":\"MultiLineString\",\"coordinates\":[[[77.6,12.9],[77.7,13.0]],[[78.0,13.5],[78.1,13.6]]]}", true),
+            arguments("MultiPolygon",                "{\"type\":\"MultiPolygon\",\"coordinates\":[[" + R + "]]}", true),
+            arguments("MultiPolygon 2 polygons",     "{\"type\":\"MultiPolygon\",\"coordinates\":[[" + R + "],[" + R2 + "]]}", true),
+            arguments("GeometryCollection",          "{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[77.6,12.9]},{\"type\":\"Polygon\",\"coordinates\":[" + R + "]}]}", true),
+            arguments("GeometryCollection mixed",    "{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"LineString\",\"coordinates\":[[77.6,12.9],[77.7,13.0]]},{\"type\":\"MultiPolygon\",\"coordinates\":[[" + R + "]]}]}", true),
+
+            // ── NEGATIVE — non-numeric coordinate values (→ rejected) ──
+            arguments("Point string lon",            "{\"type\":\"Point\",\"coordinates\":[\"77.6\",12.9]}", false),
+            arguments("Point both strings",          "{\"type\":\"Point\",\"coordinates\":[\"77.6\",\"12.9\"]}", false),
+            arguments("Point null ordinate",         "{\"type\":\"Point\",\"coordinates\":[77.6,null]}", false),
+            arguments("Point boolean",               "{\"type\":\"Point\",\"coordinates\":[true,false]}", false),
+            arguments("Point object ordinate",       "{\"type\":\"Point\",\"coordinates\":[{\"x\":1},12.9]}", false),
+            arguments("LineString string",           "{\"type\":\"LineString\",\"coordinates\":[[77.6,12.9],[\"77.7\",13.0]]}", false),
+            arguments("Polygon deep string",         "{\"type\":\"Polygon\",\"coordinates\":[[[77.5,12.9],[77.7,12.9],[77.7,\"13.0\"],[77.5,12.9]]]}", false),
+            arguments("MultiPoint string",           "{\"type\":\"MultiPoint\",\"coordinates\":[[\"77.6\",12.9],[77.7,13.0]]}", false),
+            arguments("MultiLineString string",      "{\"type\":\"MultiLineString\",\"coordinates\":[[[77.6,12.9],[77.7,\"13.0\"]]]}", false),
+            arguments("MultiPolygon deep string",    "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[77.5,12.9],[77.7,12.9],[\"77.7\",13.0],[77.5,12.9]]]]}", false),
+            arguments("GeometryCollection string member","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[\"77.6\",12.9]}]}", false),
+
+            // ── NEGATIVE — empty arrays at any depth (→ rejected) ──
+            arguments("Point empty",                 "{\"type\":\"Point\",\"coordinates\":[]}", false),
+            arguments("Polygon nested-empty",        "{\"type\":\"Polygon\",\"coordinates\":[[]]}", false),
+            arguments("Polygon empty-position",      "{\"type\":\"Polygon\",\"coordinates\":[[[77.6,12.9],[77.7,12.9],[]]]}", false),
+            arguments("LineString empty-position",   "{\"type\":\"LineString\",\"coordinates\":[[77.6,12.9],[]]}", false),
+            arguments("GeometryCollection empty member","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[]}]}", false),
+
+            // ── NEGATIVE — under-length positions, a position needs >= 2 numbers (→ rejected) ──
+            arguments("Point single-ordinate",       "{\"type\":\"Point\",\"coordinates\":[77.575]}", false),
+            arguments("Polygon single-ordinate-pos", "{\"type\":\"Polygon\",\"coordinates\":[[[77.6,12.9],[77.7,13.0],[77.575]]]}", false),
+            arguments("MultiPoint single-ordinate",  "{\"type\":\"MultiPoint\",\"coordinates\":[[77.6,12.9],[77.7]]}", false)
         );
     }
 
@@ -191,7 +213,7 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
         var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
         assertThat(result.isValid()).as("%s (errors: %s)", label, result.getErrors()).isEqualTo(expectValid);
         if (!expectValid) {
-            assertThat(result.getErrors()).contains("coordinates must be numbers");
+            assertThat(result.getErrors()).anyMatch(m -> m.contains("coordinates must be numbers"));
         }
     }
 
@@ -245,7 +267,7 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
                 """;
         var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
         assertThat(result.isValid()).as("A bad geometry anywhere in the array must reject").isFalse();
-        assertThat(result.getErrors()).contains("coordinates must be numbers");
+        assertThat(result.getErrors()).anyMatch(m -> m.contains("coordinates must be numbers"));
     }
 
     @Test
