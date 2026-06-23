@@ -303,7 +303,7 @@ public class DiscoveryValidationService {
                     // crashes on Elasticsearch (G / G+T). isNumber() is strict (no numeric-string
                     // coercion, unlike a JSON-schema validator), so both engines behave consistently.
                     if (discoveryProperties.getSpatial().isCoordinateTypeCheckEnabled()
-                            && hasNonNumericCoordinate(item.path("geometry"))) {
+                            && hasInvalidCoordinate(item.path("geometry"))) {
                         return new ValidationResult(false,
                             List.of("coordinates must be numbers"),
                             List.of("$.message.intent.spatial[" + i + "].geometry.coordinates"));
@@ -375,24 +375,37 @@ public class DiscoveryValidationService {
     }
 
     /**
-     * True if a geometry has any non-numeric coordinate. Covers all spec geometry types: the
-     * coordinate-bearing ones (Point/LineString/Polygon/Multi*) via {@code coordinates}, plus
-     * {@code GeometryCollection}, which carries member geometries under {@code geometries} (no
-     * {@code coordinates} of its own).
+     * True if a geometry's coordinates are invalid — either a non-numeric value, or no numbers at
+     * all (empty {@code []} / nested-empty {@code [[]]}, which yield zero leaves and otherwise slip
+     * through, then crash Elasticsearch / silently no-op PostgreSQL). Covers all spec geometry
+     * types: the coordinate-bearing ones (Point/LineString/Polygon/Multi*) via {@code coordinates},
+     * plus {@code GeometryCollection}, which carries member geometries under {@code geometries}.
      */
-    private static boolean hasNonNumericCoordinate(JsonNode geometry) {
+    private static boolean hasInvalidCoordinate(JsonNode geometry) {
         if (geometry.isMissingNode() || geometry.isNull()) return false;
         JsonNode coordinates = geometry.path("coordinates");
-        if (!coordinates.isMissingNode() && !coordinates.isNull() && hasNonNumericLeaf(coordinates)) {
-            return true;
+        if (!coordinates.isMissingNode() && !coordinates.isNull()
+                && (hasNonNumericLeaf(coordinates) || !hasNumericLeaf(coordinates))) {
+            return true; // a non-numeric value, OR no numeric value at all (empty coordinates)
         }
         JsonNode geometries = geometry.path("geometries"); // GeometryCollection
         if (geometries.isArray()) {
             for (JsonNode member : geometries) {
-                if (hasNonNumericCoordinate(member)) return true;
+                if (hasInvalidCoordinate(member)) return true;
             }
         }
         return false;
+    }
+
+    /** True if the (arbitrarily-nested) coordinates contain at least one JSON-number leaf. */
+    private static boolean hasNumericLeaf(JsonNode node) {
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                if (hasNumericLeaf(child)) return true;
+            }
+            return false;
+        }
+        return node.isNumber();
     }
 
     /**
