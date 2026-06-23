@@ -48,8 +48,14 @@ import static net.logstash.logback.argument.StructuredArguments.value;
  * never masquerades as "your valid expression is malformed". This mirrors the transient/
  * non-transient split already used by {@code PostgreSQLService.executeJsonPathQuery}.</p>
  *
- * <p>The Postgres probe is parse-only (no table access). It must run on the request thread so the
- * async POST path rejects synchronously, before the Kafka publish.</p>
+ * <p>Scope is the JSONPath filter only — an <i>engine-dialect</i> check that genuinely needs the
+ * engine's parser. Spatial coordinate validity (coordinates must be numbers) is a <i>structural</i>
+ * check that needs no engine, so it lives with the other structural intent rules in
+ * {@code DiscoveryValidationService} (alongside the {@code distanceMeters} and absolute-jsonpath
+ * guards), surfacing as a normal schema-validation failure.</p>
+ *
+ * <p>The Postgres jsonpath probe is parse-only (no table access). It runs on the request thread so
+ * the async POST path rejects synchronously, before the Kafka publish.</p>
  */
 @Service
 public class IntentQueryValidator {

@@ -297,6 +297,7 @@ public class DiscoveryController {
         // Engine-dialect validation (PostgreSQL SQL/JSON jsonpath), parse-only. Runs before the
         // query (GET) and before the Kafka publish (POST) so an invalid filter expression gets a
         // clean SCH_INVALID_JSONPATH NACK instead of a downstream crash with no callback.
+        // (Spatial coordinate types are validated structurally in DiscoveryValidationService.)
         intentQueryValidator.validate(requestNode);
         log.info(LogEvent.VALIDATE_PASSED);
     }
