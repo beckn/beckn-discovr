@@ -266,6 +266,18 @@ public class DiscoveryValidationService {
                     List.of("$.message.intent"));
             }
 
+            // Reject blank textSearch synchronously (mirrors the filters.expression blank guard).
+            // Without this, a blank textSearch passes structural validation and is published to
+            // Kafka; the async ElasticsearchTextSearchEngine then throws IllegalArgumentException
+            // ("Text search query cannot be null or empty"), surfacing as a failed async query
+            // with no callback instead of a clean 400 NACK.
+            JsonNode textSearchNode = intentNode.path("textSearch");
+            if (textSearchNode.isTextual() && textSearchNode.asText().isBlank()) {
+                return new ValidationResult(false,
+                    List.of("textSearch cannot be blank"),
+                    List.of("$.message.intent.textSearch"));
+            }
+
             // Presence checks for required Context V2.0 fields — enforced manually so they
             // are caught reliably regardless of whether the loaded schema provides a local
             // Context definition or relies on an external schema.beckn.io reference.
