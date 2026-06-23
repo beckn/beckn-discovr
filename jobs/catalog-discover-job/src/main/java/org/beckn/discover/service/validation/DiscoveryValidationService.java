@@ -305,7 +305,7 @@ public class DiscoveryValidationService {
                     if (discoveryProperties.getSpatial().isCoordinateTypeCheckEnabled()
                             && hasInvalidCoordinate(item.path("geometry"))) {
                         return new ValidationResult(false,
-                            List.of("coordinates must be numbers"),
+                            List.of("coordinates must be numbers and non empty values"),
                             List.of("$.message.intent.spatial[" + i + "].geometry.coordinates"));
                     }
                 }
