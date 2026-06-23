@@ -162,7 +162,10 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
             arguments("MultiPolygon numeric",      "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[77.5,12.9],[77.7,12.9],[77.7,13.0],[77.5,12.9]]]]}", true),
             arguments("MultiPolygon non-numeric",  "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[77.5,12.9],[77.7,12.9],[\"77.7\",13.0],[77.5,12.9]]]]}", false),
             arguments("GeometryCollection numeric","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[77.6,12.9]},{\"type\":\"Polygon\",\"coordinates\":[[[77.5,12.9],[77.7,12.9],[77.7,13.0],[77.5,12.9]]]}]}", true),
-            arguments("GeometryCollection non-numeric","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[\"77.6\",12.9]}]}", false)
+            arguments("GeometryCollection non-numeric","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[\"77.6\",12.9]}]}", false),
+            // empty coordinates (no numbers at all) — also invalid
+            arguments("Point empty",               "{\"type\":\"Point\",\"coordinates\":[]}", false),
+            arguments("Polygon nested-empty",       "{\"type\":\"Polygon\",\"coordinates\":[[]]}", false)
         );
     }
 
