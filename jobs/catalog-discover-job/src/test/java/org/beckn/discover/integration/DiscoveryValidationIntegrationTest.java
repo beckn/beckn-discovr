@@ -166,7 +166,10 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
             // empty coordinates (no numbers at all) — also invalid
             arguments("Point empty",               "{\"type\":\"Point\",\"coordinates\":[]}", false),
             arguments("Polygon nested-empty",       "{\"type\":\"Polygon\",\"coordinates\":[[]]}", false),
-            arguments("Polygon empty-position",     "{\"type\":\"Polygon\",\"coordinates\":[[[77.6,12.9],[77.7,12.9],[]]]}", false)
+            arguments("Polygon empty-position",     "{\"type\":\"Polygon\",\"coordinates\":[[[77.6,12.9],[77.7,12.9],[]]]}", false),
+            // under-length positions (a position must have >= 2 numbers: lon, lat)
+            arguments("Point single-ordinate",      "{\"type\":\"Point\",\"coordinates\":[77.575]}", false),
+            arguments("Polygon single-ordinate-pos","{\"type\":\"Polygon\",\"coordinates\":[[[77.6,12.9],[77.7,13.0],[77.575]]]}", false)
         );
     }
 

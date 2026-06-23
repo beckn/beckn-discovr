@@ -395,21 +395,36 @@ public class DiscoveryValidationService {
     }
 
     /**
-     * A coordinates node is valid only if it is a JSON number, or a NON-EMPTY array whose every
-     * element is (recursively) valid. So this returns true (invalid) for: a non-numeric leaf, or
-     * an empty array at any depth — whole ({@code []}, {@code [[]]}) or a single empty position
-     * among good ones ({@code [[[77,12],[]]]}). Empty arrays mean a missing ordinate/position/ring
-     * and crash the spatial engines, so they are rejected.
+     * True if a coordinates node is invalid (per RFC 7946). Walks the arbitrarily-nested arrays:
+     * <ul>
+     *   <li>A <b>position</b> — the innermost array (its first element is a number) — must contain
+     *       at least two numbers (lon, lat[, alt]) and every element must be a number. This rejects
+     *       a non-numeric value, a single-ordinate position ({@code [77.575]}), and a mixed
+     *       position ({@code [77.6,"12.9"]}).</li>
+     *   <li>A <b>container</b> (ring / array of positions / …) must be non-empty and every element
+     *       must itself be valid.</li>
+     * </ul>
+     * So any empty array ({@code []}, {@code [[]]}, an empty position among good ones), any
+     * non-number, and any under-length position is rejected — these otherwise crash the spatial
+     * engines or are silently coerced/dropped.
      */
     private static boolean coordinatesInvalid(JsonNode node) {
-        if (node.isArray()) {
-            if (node.isEmpty()) return true; // empty array = missing ordinate/position/ring
-            for (JsonNode child : node) {
-                if (coordinatesInvalid(child)) return true;
+        if (!node.isArray() || node.isEmpty()) {
+            return true; // coordinates must be arrays; an empty array = missing ordinate/position/ring
+        }
+        if (node.get(0).isNumber()) {
+            // a position: at least 2 numbers (lon, lat[, alt]), and every element a number
+            if (node.size() < 2) return true;
+            for (JsonNode v : node) {
+                if (!v.isNumber()) return true;
             }
             return false;
         }
-        return !node.isNumber(); // leaf must be a number (rejects strings, bools, null, objects)
+        // a container: every element must be a valid (nested) coordinates value
+        for (JsonNode child : node) {
+            if (coordinatesInvalid(child)) return true;
+        }
+        return false;
     }
 
     public ValidationResult validateDiscoverRequest(DiscoverRequest request) {
