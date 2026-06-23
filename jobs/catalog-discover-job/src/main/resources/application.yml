@@ -165,6 +165,9 @@ discovery:
   #     they degrade to J / J+G (text term dropped). See the routing matrix above.
   spatial:
     engine: ${DISCOVERY_SPATIAL_ENGINE:postgresql}
+    # Reject spatial geometries whose coordinates are not all numbers (RFC 7946).
+    # Set false to disable the check (e.g. for rollback). Default: true.
+    coordinate-type-check-enabled: ${DISCOVERY_SPATIAL_COORDINATE_CHECK_ENABLED:true}
 
   # ES-text → PSQL-JSONPath chain configuration (cases 6 & 7: JSONPath + text).
   # ES candidate pool = min(limit * overfetch-factor, max-ids).
