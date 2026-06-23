@@ -102,9 +102,10 @@ public class IntentQueryValidator {
         // A transient DB failure thrown by probe() propagates (not cached) → 5xx, never a false 400.
         boolean valid = validityCache.get(processed, this::probe);
         if (!valid) {
+            // Keep the offending expression in the log for debugging, but do NOT reflect it back
+            // in the response detail.
             log.warn(LogEvent.VALIDATE_FAILED + ".jsonpath", value("expression", expr));
-            throw badRequest(ErrorCodes.SCH_INVALID_JSONPATH,
-                    ErrorMessages.SCH_INVALID_JSONPATH + " (expression: " + expr + ")");
+            throw badRequest(ErrorCodes.SCH_INVALID_JSONPATH, ErrorMessages.SCH_INVALID_JSONPATH);
         }
     }
 
