@@ -294,6 +294,16 @@ public class DiscoveryValidationService {
                             List.of("$.message.intent.spatial[" + i + "].distanceMeters: must be >= 0 (minimum: 0)"),
                             List.of("$.message.intent.spatial[" + i + "].distanceMeters"));
                     }
+                    // Coordinates must be numbers (RFC 7946). Shape-agnostic: just check every value
+                    // is a number. The spec schema leaves coordinates unconstrained (items: {}); a
+                    // non-numeric coordinate is silently coerced on PostgreSQL (J+G) and dropped /
+                    // crashes on Elasticsearch (G / G+T). isNumber() is strict (no numeric-string
+                    // coercion, unlike a JSON-schema validator), so both engines behave consistently.
+                    if (hasNonNumericCoordinate(item.path("geometry"))) {
+                        return new ValidationResult(false,
+                            List.of("coordinates must be numbers"),
+                            List.of("$.message.intent.spatial[" + i + "].geometry.coordinates"));
+                    }
                 }
             }
 
@@ -358,6 +368,43 @@ public class DiscoveryValidationService {
         } catch (IllegalArgumentException e) {
             return java.util.Optional.of("$.context." + field + ": invalid uuid format — " + ErrorMessages.CTX_INVALID_FIELD);
         }
+    }
+
+    /**
+     * True if a geometry has any non-numeric coordinate. Covers all spec geometry types: the
+     * coordinate-bearing ones (Point/LineString/Polygon/Multi*) via {@code coordinates}, plus
+     * {@code GeometryCollection}, which carries member geometries under {@code geometries} (no
+     * {@code coordinates} of its own).
+     */
+    private static boolean hasNonNumericCoordinate(JsonNode geometry) {
+        if (geometry.isMissingNode() || geometry.isNull()) return false;
+        JsonNode coordinates = geometry.path("coordinates");
+        if (!coordinates.isMissingNode() && !coordinates.isNull() && hasNonNumericLeaf(coordinates)) {
+            return true;
+        }
+        JsonNode geometries = geometry.path("geometries"); // GeometryCollection
+        if (geometries.isArray()) {
+            for (JsonNode member : geometries) {
+                if (hasNonNumericCoordinate(member)) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * True if the (arbitrarily-nested) coordinates contain a leaf that is not a JSON number.
+     * Shape-agnostic — it just descends arrays to the values, so it works for any nesting depth
+     * (Point {@code [n,n]}, LineString {@code [[n,n]]}, Polygon {@code [[[n,n]]]}, …). Strict:
+     * {@code isNumber()} treats a textual node as non-numeric (no string→number coercion).
+     */
+    private static boolean hasNonNumericLeaf(JsonNode node) {
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                if (hasNonNumericLeaf(child)) return true;
+            }
+            return false;
+        }
+        return !node.isNumber(); // leaf must be a number (rejects strings, bools, null, objects)
     }
 
     public ValidationResult validateDiscoverRequest(DiscoverRequest request) {
