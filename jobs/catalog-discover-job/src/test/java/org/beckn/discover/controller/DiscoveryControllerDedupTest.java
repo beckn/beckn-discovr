@@ -80,6 +80,7 @@ class DiscoveryControllerDedupTest {
                 discoveryService,
                 new ObjectMapper(),
                 validationService,
+                org.mockito.Mockito.mock(org.beckn.discover.service.validation.IntentQueryValidator.class),
                 authorizationService,
                 (KafkaTemplate<String, String>) kafkaTemplate,
                 props,
