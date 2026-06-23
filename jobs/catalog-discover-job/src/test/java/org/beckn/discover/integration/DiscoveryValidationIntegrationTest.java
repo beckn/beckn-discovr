@@ -207,6 +207,129 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
         assertThat(result.getErrors()).contains("coordinates must be numbers");
     }
 
+    @Test
+    void multiConstraintSpatialArray_allNumeric_passesValidation() throws Exception {
+        // spec: spatial is an array of constraints (ANDed). Two valid Polygons must pass.
+        String payload = """
+                {
+                  "context": {
+                    "action": "discover", "version": "2.0.0",
+                    "transactionId": "e3f4a5b6-c7d8-9012-efab-234567890123",
+                    "messageId": "f4a5b6c7-d8e9-0123-fabc-345678901234",
+                    "timestamp": "2025-10-14T10:30:00.000Z"
+                  },
+                  "message": { "intent": { "spatial": [
+                    { "op": "S_INTERSECTS", "targets": "$.catalogs[*].provider.availableAt[*].geo",
+                      "geometry": { "type": "Polygon", "coordinates": [[
+                        [77.575,12.915],[77.625,12.915],[77.625,12.945],[77.575,12.945],[77.575,12.915]]] } },
+                    { "op": "S_INTERSECTS", "targets": "$.catalogs[*].provider.availableAt[*].geo",
+                      "geometry": { "type": "Polygon", "coordinates": [[
+                        [77.630,12.870],[77.700,12.870],[77.700,12.920],[77.630,12.920],[77.630,12.870]]] } }
+                  ] } }
+                }
+                """;
+        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
+        assertThat(result.isValid())
+                .as("Two valid Polygon constraints should pass; errors: %s", result.getErrors()).isTrue();
+        assertThat(result.getErrors()).isEmpty();
+    }
+
+    @Test
+    void multiConstraintSpatialArray_secondGeometryNonNumeric_failsValidation() throws Exception {
+        // first Polygon valid, second has a string coordinate — the array must still be rejected
+        String payload = """
+                {
+                  "context": {
+                    "action": "discover", "version": "2.0.0",
+                    "transactionId": "e3f4a5b6-c7d8-9012-efab-234567890123",
+                    "messageId": "f4a5b6c7-d8e9-0123-fabc-345678901234",
+                    "timestamp": "2025-10-14T10:30:00.000Z"
+                  },
+                  "message": { "intent": { "spatial": [
+                    { "op": "S_INTERSECTS", "targets": "$.catalogs[*].provider.availableAt[*].geo",
+                      "geometry": { "type": "Polygon", "coordinates": [[
+                        [77.575,12.915],[77.625,12.915],[77.625,12.945],[77.575,12.945],[77.575,12.915]]] } },
+                    { "op": "S_INTERSECTS", "targets": "$.catalogs[*].provider.availableAt[*].geo",
+                      "geometry": { "type": "Polygon", "coordinates": [[
+                        [77.630,12.870],[77.700,12.870],[77.700,"12.920"],[77.630,12.920],[77.630,12.870]]] } }
+                  ] } }
+                }
+                """;
+        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
+        assertThat(result.isValid()).as("A bad geometry anywhere in the array must reject").isFalse();
+        assertThat(result.getErrors()).contains("coordinates must be numbers");
+    }
+
+    @Test
+    void geometryCollection_allNumeric_passesValidation() throws Exception {
+        String payload = """
+                {
+                  "context": {
+                    "action": "discover", "version": "2.0.0",
+                    "transactionId": "e3f4a5b6-c7d8-9012-efab-234567890123",
+                    "messageId": "f4a5b6c7-d8e9-0123-fabc-345678901234",
+                    "timestamp": "2025-10-14T10:30:00.000Z"
+                  },
+                  "message": { "intent": { "spatial": [
+                    { "op": "S_INTERSECTS", "targets": "$.catalogs[*].provider.availableAt[*].geo",
+                      "geometry": { "type": "GeometryCollection", "geometries": [
+                        { "type": "Point", "coordinates": [77.6,12.9] },
+                        { "type": "Polygon", "coordinates": [[
+                          [77.575,12.915],[77.625,12.915],[77.625,12.945],[77.575,12.915]]] } ] } }
+                  ] } }
+                }
+                """;
+        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
+        assertThat(result.isValid())
+                .as("Valid GeometryCollection should pass; errors: %s", result.getErrors()).isTrue();
+    }
+
+    @Test
+    void geometryCollection_memberNonNumeric_failsValidation() throws Exception {
+        // a string coordinate inside a GeometryCollection member must be caught
+        String payload = """
+                {
+                  "context": {
+                    "action": "discover", "version": "2.0.0",
+                    "transactionId": "e3f4a5b6-c7d8-9012-efab-234567890123",
+                    "messageId": "f4a5b6c7-d8e9-0123-fabc-345678901234",
+                    "timestamp": "2025-10-14T10:30:00.000Z"
+                  },
+                  "message": { "intent": { "spatial": [
+                    { "op": "S_INTERSECTS", "targets": "$.catalogs[*].provider.availableAt[*].geo",
+                      "geometry": { "type": "GeometryCollection", "geometries": [
+                        { "type": "Point", "coordinates": ["77.6","12.9"] } ] } }
+                  ] } }
+                }
+                """;
+        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
+        assertThat(result.isValid()).as("GeometryCollection member with string coords must reject").isFalse();
+        assertThat(result.getErrors()).contains("coordinates must be numbers");
+    }
+
+    @Test
+    void pointWithAltitude_threeNumericOrdinates_passesValidation() throws Exception {
+        // RFC 7946 positions may carry an optional altitude: [lon, lat, alt] — all numbers, valid
+        String payload = """
+                {
+                  "context": {
+                    "action": "discover", "version": "2.0.0",
+                    "transactionId": "e3f4a5b6-c7d8-9012-efab-234567890123",
+                    "messageId": "f4a5b6c7-d8e9-0123-fabc-345678901234",
+                    "timestamp": "2025-10-14T10:30:00.000Z"
+                  },
+                  "message": { "intent": { "spatial": [
+                    { "op": "S_DWITHIN", "distanceMeters": 1000,
+                      "targets": "$.catalogs[*].provider.availableAt[*].geo",
+                      "geometry": { "type": "Point", "coordinates": [77.6, 12.9, 920.0] } }
+                  ] } }
+                }
+                """;
+        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
+        assertThat(result.isValid())
+                .as("Point with numeric altitude should pass; errors: %s", result.getErrors()).isTrue();
+    }
+
     // ── Context validation — missing required fields ──────────────────────────
 
     @Test
