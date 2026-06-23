@@ -375,18 +375,15 @@ public class DiscoveryValidationService {
     }
 
     /**
-     * True if a geometry's coordinates are invalid — either a non-numeric value, or no numbers at
-     * all (empty {@code []} / nested-empty {@code [[]]}, which yield zero leaves and otherwise slip
-     * through, then crash Elasticsearch / silently no-op PostgreSQL). Covers all spec geometry
-     * types: the coordinate-bearing ones (Point/LineString/Polygon/Multi*) via {@code coordinates},
-     * plus {@code GeometryCollection}, which carries member geometries under {@code geometries}.
+     * True if a geometry's coordinates are invalid. Covers all spec geometry types: the
+     * coordinate-bearing ones (Point/LineString/Polygon/Multi*) via {@code coordinates}, plus
+     * {@code GeometryCollection}, which carries member geometries under {@code geometries}.
      */
     private static boolean hasInvalidCoordinate(JsonNode geometry) {
         if (geometry.isMissingNode() || geometry.isNull()) return false;
         JsonNode coordinates = geometry.path("coordinates");
-        if (!coordinates.isMissingNode() && !coordinates.isNull()
-                && (hasNonNumericLeaf(coordinates) || !hasNumericLeaf(coordinates))) {
-            return true; // a non-numeric value, OR no numeric value at all (empty coordinates)
+        if (!coordinates.isMissingNode() && !coordinates.isNull() && coordinatesInvalid(coordinates)) {
+            return true;
         }
         JsonNode geometries = geometry.path("geometries"); // GeometryCollection
         if (geometries.isArray()) {
@@ -397,27 +394,18 @@ public class DiscoveryValidationService {
         return false;
     }
 
-    /** True if the (arbitrarily-nested) coordinates contain at least one JSON-number leaf. */
-    private static boolean hasNumericLeaf(JsonNode node) {
-        if (node.isArray()) {
-            for (JsonNode child : node) {
-                if (hasNumericLeaf(child)) return true;
-            }
-            return false;
-        }
-        return node.isNumber();
-    }
-
     /**
-     * True if the (arbitrarily-nested) coordinates contain a leaf that is not a JSON number.
-     * Shape-agnostic — it just descends arrays to the values, so it works for any nesting depth
-     * (Point {@code [n,n]}, LineString {@code [[n,n]]}, Polygon {@code [[[n,n]]]}, …). Strict:
-     * {@code isNumber()} treats a textual node as non-numeric (no string→number coercion).
+     * A coordinates node is valid only if it is a JSON number, or a NON-EMPTY array whose every
+     * element is (recursively) valid. So this returns true (invalid) for: a non-numeric leaf, or
+     * an empty array at any depth — whole ({@code []}, {@code [[]]}) or a single empty position
+     * among good ones ({@code [[[77,12],[]]]}). Empty arrays mean a missing ordinate/position/ring
+     * and crash the spatial engines, so they are rejected.
      */
-    private static boolean hasNonNumericLeaf(JsonNode node) {
+    private static boolean coordinatesInvalid(JsonNode node) {
         if (node.isArray()) {
+            if (node.isEmpty()) return true; // empty array = missing ordinate/position/ring
             for (JsonNode child : node) {
-                if (hasNonNumericLeaf(child)) return true;
+                if (coordinatesInvalid(child)) return true;
             }
             return false;
         }
