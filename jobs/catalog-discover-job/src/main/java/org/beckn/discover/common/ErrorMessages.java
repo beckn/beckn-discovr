@@ -23,6 +23,7 @@ public final class ErrorMessages {
     public static final String SCH_SCHEMA_VALIDATION_FAILED =
             "Request validation failed. Check your request body against the Beckn schema";
     public static final String SCH_REQUIRED_FIELD_MISSING = "A required field is missing in the request. Check the API documentation for required fields";
+    public static final String SCH_INVALID_JSONPATH = "The JSONPath filter expression is invalid. Verify the expression syntax and try again";
 
     // ── Context Field Errors (pair with ErrorCodes.CTX_*) ───────────────────
     public static final String CTX_INVALID_FIELD = "A field in the request has an invalid value. Check the field format and allowed values";
