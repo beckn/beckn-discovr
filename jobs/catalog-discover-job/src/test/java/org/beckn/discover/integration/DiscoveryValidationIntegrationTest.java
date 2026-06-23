@@ -165,7 +165,8 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
             arguments("GeometryCollection non-numeric","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[\"77.6\",12.9]}]}", false),
             // empty coordinates (no numbers at all) — also invalid
             arguments("Point empty",               "{\"type\":\"Point\",\"coordinates\":[]}", false),
-            arguments("Polygon nested-empty",       "{\"type\":\"Polygon\",\"coordinates\":[[]]}", false)
+            arguments("Polygon nested-empty",       "{\"type\":\"Polygon\",\"coordinates\":[[]]}", false),
+            arguments("Polygon empty-position",     "{\"type\":\"Polygon\",\"coordinates\":[[[77.6,12.9],[77.7,12.9],[]]]}", false)
         );
     }
 
