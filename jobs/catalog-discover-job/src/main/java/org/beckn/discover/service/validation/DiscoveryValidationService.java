@@ -55,6 +55,7 @@ public class DiscoveryValidationService {
     private final ObjectMapper objectMapper;
     private final SchemaLoaderService schemaLoaderService;
     private final org.yaml.snakeyaml.Yaml yamlParser;
+    private final org.beckn.discover.config.DiscoveryProperties discoveryProperties;
 
     // Validates the full request body (context + message) against the DiscoverAction/v2.0 schema
     private JsonSchema discoverActionSchema;
@@ -62,10 +63,12 @@ public class DiscoveryValidationService {
     public DiscoveryValidationService(
             ObjectMapper objectMapper,
             SchemaLoaderService schemaLoaderService,
-            org.yaml.snakeyaml.Yaml yamlParser) {
+            org.yaml.snakeyaml.Yaml yamlParser,
+            org.beckn.discover.config.DiscoveryProperties discoveryProperties) {
         this.objectMapper = objectMapper;
         this.schemaLoaderService = schemaLoaderService;
         this.yamlParser = yamlParser;
+        this.discoveryProperties = discoveryProperties;
     }
 
     @PostConstruct
@@ -299,7 +302,8 @@ public class DiscoveryValidationService {
                     // non-numeric coordinate is silently coerced on PostgreSQL (J+G) and dropped /
                     // crashes on Elasticsearch (G / G+T). isNumber() is strict (no numeric-string
                     // coercion, unlike a JSON-schema validator), so both engines behave consistently.
-                    if (hasNonNumericCoordinate(item.path("geometry"))) {
+                    if (discoveryProperties.getSpatial().isCoordinateTypeCheckEnabled()
+                            && hasNonNumericCoordinate(item.path("geometry"))) {
                         return new ValidationResult(false,
                             List.of("coordinates must be numbers"),
                             List.of("$.message.intent.spatial[" + i + "].geometry.coordinates"));
