@@ -5,10 +5,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
 
+import java.util.stream.Stream;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * Integration tests for {@link DiscoveryValidationService} using the REAL Beckn spec.
@@ -137,74 +143,49 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
         assertThat(result.getErrors()).isEmpty();
     }
 
-    @Test
-    void spatialGeometryWithStringCoordinates_failsValidation() throws Exception {
-        String payload = """
-                {
-                  "context": {
-                    "action": "discover",
-                    "version": "2.0.0",
-                    "transactionId": "e3f4a5b6-c7d8-9012-efab-234567890123",
-                    "messageId": "f4a5b6c7-d8e9-0123-fabc-345678901234",
-                    "timestamp": "2025-10-14T10:30:00.000Z"
-                  },
-                  "message": {
-                    "intent": {
-                      "spatial": [
-                        {
-                          "op": "S_DWITHIN",
-                          "distanceMeters": 1000,
-                          "geometry": {
-                            "type": "Point",
-                            "coordinates": ["77.5946", "12.9716"]
-                          }
-                        }
-                      ]
-                    }
-                  }
-                }
-                """;
-
-        JsonNode node = objectMapper.readTree(payload);
-        var result = validationService.validateDiscoverRequest(node);
-
-        assertThat(result.isValid())
-                .as("String coordinates must be rejected")
-                .isFalse();
-        assertThat(result.getErrors()).contains("coordinates must be numbers");
+    /**
+     * Every GeoJSON geometry type in the spec's {@code type} enum, each with a valid all-numeric
+     * form and a form carrying a single non-numeric coordinate. {@code (label, geometryJson, expectValid)}.
+     */
+    static Stream<Arguments> geometriesByType() {
+        return Stream.of(
+            arguments("Point numeric",             "{\"type\":\"Point\",\"coordinates\":[77.6,12.9]}", true),
+            arguments("Point non-numeric",         "{\"type\":\"Point\",\"coordinates\":[\"77.6\",12.9]}", false),
+            arguments("LineString numeric",        "{\"type\":\"LineString\",\"coordinates\":[[77.6,12.9],[77.7,13.0]]}", true),
+            arguments("LineString non-numeric",    "{\"type\":\"LineString\",\"coordinates\":[[77.6,12.9],[\"77.7\",13.0]]}", false),
+            arguments("Polygon numeric",           "{\"type\":\"Polygon\",\"coordinates\":[[[77.5,12.9],[77.7,12.9],[77.7,13.0],[77.5,12.9]]]}", true),
+            arguments("Polygon non-numeric",       "{\"type\":\"Polygon\",\"coordinates\":[[[77.5,12.9],[77.7,12.9],[77.7,\"13.0\"],[77.5,12.9]]]}", false),
+            arguments("MultiPoint numeric",        "{\"type\":\"MultiPoint\",\"coordinates\":[[77.6,12.9],[77.7,13.0]]}", true),
+            arguments("MultiPoint non-numeric",    "{\"type\":\"MultiPoint\",\"coordinates\":[[\"77.6\",12.9],[77.7,13.0]]}", false),
+            arguments("MultiLineString numeric",   "{\"type\":\"MultiLineString\",\"coordinates\":[[[77.6,12.9],[77.7,13.0]]]}", true),
+            arguments("MultiLineString non-numeric","{\"type\":\"MultiLineString\",\"coordinates\":[[[77.6,12.9],[77.7,\"13.0\"]]]}", false),
+            arguments("MultiPolygon numeric",      "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[77.5,12.9],[77.7,12.9],[77.7,13.0],[77.5,12.9]]]]}", true),
+            arguments("MultiPolygon non-numeric",  "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[77.5,12.9],[77.7,12.9],[\"77.7\",13.0],[77.5,12.9]]]]}", false),
+            arguments("GeometryCollection numeric","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[77.6,12.9]},{\"type\":\"Polygon\",\"coordinates\":[[[77.5,12.9],[77.7,12.9],[77.7,13.0],[77.5,12.9]]]}]}", true),
+            arguments("GeometryCollection non-numeric","{\"type\":\"GeometryCollection\",\"geometries\":[{\"type\":\"Point\",\"coordinates\":[\"77.6\",12.9]}]}", false)
+        );
     }
 
-    @Test
-    void polygonWithNestedStringCoordinate_failsValidation() throws Exception {
-        // a single non-numeric leaf deep inside a Polygon ring must be caught
-        String payload = """
+    @ParameterizedTest(name = "{0} -> valid={2}")
+    @MethodSource("geometriesByType")
+    void coordinateValidation_acrossAllGeometryTypes(String label, String geometryJson, boolean expectValid) throws Exception {
+        String payload = ("""
                 {
-                  "context": {
-                    "action": "discover",
-                    "version": "2.0.0",
+                  "context": { "action": "discover", "version": "2.0.0",
                     "transactionId": "e3f4a5b6-c7d8-9012-efab-234567890123",
                     "messageId": "f4a5b6c7-d8e9-0123-fabc-345678901234",
-                    "timestamp": "2025-10-14T10:30:00.000Z"
-                  },
-                  "message": {
-                    "intent": {
-                      "spatial": [
-                        {
-                          "op": "S_INTERSECTS",
-                          "geometry": {
-                            "type": "Polygon",
-                            "coordinates": [[[77.5,12.9],[77.7,12.9],[77.7,"13.0"],[77.5,12.9]]]
-                          }
-                        }
-                      ]
-                    }
-                  }
+                    "timestamp": "2025-10-14T10:30:00.000Z" },
+                  "message": { "intent": { "spatial": [
+                    { "op": "S_INTERSECTS", "targets": "$.catalogs[*].provider.availableAt[*].geo", "geometry": %s }
+                  ] } }
                 }
-                """;
+                """).formatted(geometryJson);
 
         var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
-        assertThat(result.isValid()).as("Nested string coordinate must be rejected").isFalse();
-        assertThat(result.getErrors()).contains("coordinates must be numbers");
+        assertThat(result.isValid()).as("%s (errors: %s)", label, result.getErrors()).isEqualTo(expectValid);
+        if (!expectValid) {
+            assertThat(result.getErrors()).contains("coordinates must be numbers");
+        }
     }
 
     @Test
@@ -257,53 +238,6 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
                 """;
         var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
         assertThat(result.isValid()).as("A bad geometry anywhere in the array must reject").isFalse();
-        assertThat(result.getErrors()).contains("coordinates must be numbers");
-    }
-
-    @Test
-    void geometryCollection_allNumeric_passesValidation() throws Exception {
-        String payload = """
-                {
-                  "context": {
-                    "action": "discover", "version": "2.0.0",
-                    "transactionId": "e3f4a5b6-c7d8-9012-efab-234567890123",
-                    "messageId": "f4a5b6c7-d8e9-0123-fabc-345678901234",
-                    "timestamp": "2025-10-14T10:30:00.000Z"
-                  },
-                  "message": { "intent": { "spatial": [
-                    { "op": "S_INTERSECTS", "targets": "$.catalogs[*].provider.availableAt[*].geo",
-                      "geometry": { "type": "GeometryCollection", "geometries": [
-                        { "type": "Point", "coordinates": [77.6,12.9] },
-                        { "type": "Polygon", "coordinates": [[
-                          [77.575,12.915],[77.625,12.915],[77.625,12.945],[77.575,12.915]]] } ] } }
-                  ] } }
-                }
-                """;
-        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
-        assertThat(result.isValid())
-                .as("Valid GeometryCollection should pass; errors: %s", result.getErrors()).isTrue();
-    }
-
-    @Test
-    void geometryCollection_memberNonNumeric_failsValidation() throws Exception {
-        // a string coordinate inside a GeometryCollection member must be caught
-        String payload = """
-                {
-                  "context": {
-                    "action": "discover", "version": "2.0.0",
-                    "transactionId": "e3f4a5b6-c7d8-9012-efab-234567890123",
-                    "messageId": "f4a5b6c7-d8e9-0123-fabc-345678901234",
-                    "timestamp": "2025-10-14T10:30:00.000Z"
-                  },
-                  "message": { "intent": { "spatial": [
-                    { "op": "S_INTERSECTS", "targets": "$.catalogs[*].provider.availableAt[*].geo",
-                      "geometry": { "type": "GeometryCollection", "geometries": [
-                        { "type": "Point", "coordinates": ["77.6","12.9"] } ] } }
-                  ] } }
-                }
-                """;
-        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
-        assertThat(result.isValid()).as("GeometryCollection member with string coords must reject").isFalse();
         assertThat(result.getErrors()).contains("coordinates must be numbers");
     }
 
