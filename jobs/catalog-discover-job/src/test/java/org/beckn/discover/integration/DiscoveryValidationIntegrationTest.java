@@ -597,4 +597,97 @@ class DiscoveryValidationIntegrationTest extends BaseIntegrationTest {
                         result.getErrors())
                 .isFalse();
     }
+
+    // ── Blank textSearch guard (PR #342) ──────────────────────────────────────
+    // A blank/whitespace textSearch passes structural validation but then throws deep in the
+    // async ElasticsearchTextSearchEngine ("query cannot be null or empty"), producing a failed
+    // async query with no callback. The guard rejects it synchronously instead.
+
+    static Stream<Arguments> blankTextSearchValues() {
+        return Stream.of(
+            arguments("empty string", ""),
+            arguments("single space", " "),
+            arguments("multiple spaces", "   ")
+        );
+    }
+
+    @ParameterizedTest(name = "blank textSearch [{0}] -> rejected")
+    @MethodSource("blankTextSearchValues")
+    void blankTextSearch_failsValidationSynchronously(String label, String textSearch) throws Exception {
+        String payload = ("""
+                {
+                  "context": {
+                    "action": "discover",
+                    "version": "2.0.0",
+                    "transactionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                    "messageId": "b64609ca-4b8d-49ea-9db6-3f9c3d489c7d",
+                    "timestamp": "2025-10-14T10:30:00.000Z"
+                  },
+                  "message": { "intent": { "textSearch": "%s" } }
+                }
+                """).formatted(textSearch);
+
+        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
+
+        assertThat(result.isValid())
+                .as("Blank textSearch [%s] must be rejected synchronously; errors: %s", label, result.getErrors())
+                .isFalse();
+        assertThat(result.getErrors())
+                .as("Error should state textSearch cannot be blank")
+                .anyMatch(e -> e.contains("textSearch cannot be blank"));
+    }
+
+    @Test
+    void textSearchWithSurroundingWhitespaceButContent_passesValidation() throws Exception {
+        // "  organic  " is NOT blank — it carries content, so the blank guard must not reject it.
+        String payload = """
+                {
+                  "context": {
+                    "action": "discover",
+                    "version": "2.0.0",
+                    "transactionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                    "messageId": "b64609ca-4b8d-49ea-9db6-3f9c3d489c7d",
+                    "timestamp": "2025-10-14T10:30:00.000Z"
+                  },
+                  "message": { "intent": { "textSearch": "  organic  " } }
+                }
+                """;
+
+        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
+
+        assertThat(result.isValid())
+                .as("Non-blank textSearch with surrounding whitespace should pass; errors: %s", result.getErrors())
+                .isTrue();
+        assertThat(result.getErrors()).isEmpty();
+    }
+
+    @Test
+    void blankTextSearch_evenWithValidFiltersPresent_failsValidation() throws Exception {
+        // The guard is unconditional: a blank textSearch is rejected even when another valid
+        // criterion (filters) already satisfies the "at least one criterion" check.
+        String payload = """
+                {
+                  "context": {
+                    "action": "discover",
+                    "version": "2.0.0",
+                    "transactionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                    "messageId": "b64609ca-4b8d-49ea-9db6-3f9c3d489c7d",
+                    "timestamp": "2025-10-14T10:30:00.000Z"
+                  },
+                  "message": {
+                    "intent": {
+                      "textSearch": "",
+                      "filters": { "type": "jsonpath", "expression": "$.catalogs[*].resources[*]" }
+                    }
+                  }
+                }
+                """;
+
+        var result = validationService.validateDiscoverRequest(objectMapper.readTree(payload));
+
+        assertThat(result.isValid())
+                .as("Blank textSearch must be rejected even with valid filters present; errors: %s", result.getErrors())
+                .isFalse();
+        assertThat(result.getErrors()).anyMatch(e -> e.contains("textSearch cannot be blank"));
+    }
 }
