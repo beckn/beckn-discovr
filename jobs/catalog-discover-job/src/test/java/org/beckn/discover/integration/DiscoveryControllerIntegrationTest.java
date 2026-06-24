@@ -114,6 +114,32 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         }
 
         @Test
+        void postDiscoverWithBlankTextSearchReturnsBadRequest() throws Exception {
+                // PR #342: a blank/whitespace textSearch must be rejected synchronously with a
+                // 400 NACK (before Kafka publish) rather than failing later in the async ES query.
+                String payload = """
+                                {
+                                  "context": {
+                                    "action": "discover",
+                                    "version": "2.0.0",
+                                    "transactionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                                    "messageId": "b64609ca-4b8d-49ea-9db6-3f9c3d489c7d",
+                                    "timestamp": "2025-10-14T10:30:00.000Z"
+                                  },
+                                  "message": { "intent": { "textSearch": "   " } }
+                                }
+                                """;
+
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(payload));
+
+                result.andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
+        }
+
+        @Test
         void postDiscoverWithMalformedJsonReturnsBadRequestInvalidJson() throws Exception {
                 // An unparseable body is a client error: 400 NACK with SCH_INVALID_JSON,
                 // NOT 500 NET_INTERNAL_ERROR. messageId/transactionId are omitted (unparseable).
