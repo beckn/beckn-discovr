@@ -268,9 +268,13 @@ public class DiscoveryProperties {
 
     public static class Spatial {
         private String engine = "postgresql";
+        /** When true, reject spatial geometries whose coordinates are not all numbers. */
+        private boolean coordinateTypeCheckEnabled = true;
 
         public String getEngine() { return engine; }
         public void setEngine(String engine) { this.engine = engine; }
+        public boolean isCoordinateTypeCheckEnabled() { return coordinateTypeCheckEnabled; }
+        public void setCoordinateTypeCheckEnabled(boolean v) { this.coordinateTypeCheckEnabled = v; }
     }
 
     public static class Kafka {
