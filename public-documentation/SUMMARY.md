@@ -16,7 +16,11 @@
 ## Releases
 
 * [Release Notes](releases/README.md)
-  * [v2.0.0](releases/v2.0.0.md)
+  * [1.3.2](releases/1.3.2.md)
+  * [1.3.1](releases/1.3.1.md)
+  * [1.3.0](releases/1.3.0.md)
+  * [1.2.0](releases/1.2.0.md)
+  * [1.0.0](releases/1.0.0.md)
 
 ## Test Reports
 
