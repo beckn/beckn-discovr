@@ -97,11 +97,13 @@ public class CatalogPullCallbackService {
 
             if (inlineCatalogsArray.isArray() && !inlineCatalogsArray.isEmpty()) {
                 metrics.recordOnPullReceived("inline");
-                log.info("event={} mode=INLINE catalogCount={}",
-                        LogEvent.ON_PULL_RECEIVED, inlineCatalogsArray.size());
-                transformContextAndEnqueueCatalogs(becknContext, inlineCatalogsArray);
+                recordPaginationIfPresent("inline", becknMessage);
+                log.info("event={} mode=INLINE catalogsReturned={}",
+                        LogEvent.ON_PULL_MODE_SELECTED, inlineCatalogsArray.size());
+                enqueueAndObserve(becknContext, inlineCatalogsArray, "inline");
                 metrics.recordOnPullProcessed("inline");
             } else if (!downloadManifestNode.isMissingNode() && !downloadManifestNode.isNull()) {
+                recordPaginationIfPresent("download", becknMessage);
                 processDownloadManifest(becknContext, downloadManifestNode);
             } else {
                 log.warn("event={} reason=empty-callback", LogEvent.ON_PULL_FAILED);
@@ -161,7 +163,7 @@ public class CatalogPullCallbackService {
             return;
         }
 
-        log.info("event={} mode=DOWNLOAD url={} format={}", LogEvent.ON_PULL_RECEIVED, downloadUrl, fileFormat);
+        log.info("event={} url={} format={}", LogEvent.ON_PULL_DOWNLOAD_STARTED, downloadUrl, fileFormat);
 
         // downloadCatalogFromUrl applies the SSRF guard before the network call.
         byte[] payloadAtUrl = downloadCatalogFromUrl(downloadUrl);
@@ -169,18 +171,21 @@ public class CatalogPullCallbackService {
         // Spec: checksum is the digest of the payload AT url; verify BEFORE decompressing.
         // If verification fails the DS MUST discard the content (verifySha256Checksum throws).
         verifySha256Checksum(payloadAtUrl, expectedChecksum);
+        log.info("event={} sizeBytes={}", LogEvent.ON_PULL_CHECKSUM_VERIFIED, payloadAtUrl.length);
 
         byte[] catalogJsonBytes = payloadAtUrl;
         if ("json.gz".equalsIgnoreCase(fileFormat) || downloadUrl.endsWith(".gz")) {
             catalogJsonBytes = decompressGzipPayload(payloadAtUrl);
+            log.info("event={} compressedBytes={} decompressedBytes={}",
+                    LogEvent.ON_PULL_DECOMPRESSED, payloadAtUrl.length, catalogJsonBytes.length);
         }
 
         JsonNode downloadedJsonRoot = objectMapper.readTree(catalogJsonBytes);
         JsonNode downloadedCatalogsArray = downloadedJsonRoot.path(BecknFields.CATALOGS);
         if (downloadedCatalogsArray.isArray() && !downloadedCatalogsArray.isEmpty()) {
-            log.info("event={} mode=DOWNLOAD_SUCCESS catalogCount={}",
-                    LogEvent.ON_PULL_RECEIVED, downloadedCatalogsArray.size());
-            transformContextAndEnqueueCatalogs(becknContext, downloadedCatalogsArray);
+            log.info("event={} mode=DOWNLOAD catalogsReturned={}",
+                    LogEvent.ON_PULL_MODE_SELECTED, downloadedCatalogsArray.size());
+            enqueueAndObserve(becknContext, downloadedCatalogsArray, "download");
             metrics.recordOnPullProcessed("download");
         } else {
             log.warn("event={} reason=no-catalogs-in-download", LogEvent.ON_PULL_FAILED);
@@ -238,6 +243,56 @@ public class CatalogPullCallbackService {
 
         String transformedJson = objectMapper.writeValueAsString(newRoot);
         pushService.enqueueForProcessing(transformedJson);
+    }
+
+    /**
+     * Receiver-level observability: emits per-catalog INFO logs (with {@code catalogId} +
+     * {@code networkId} in MDC) and metrics (catalogs returned, resources total, accepted /
+     * rejected / processed), then enqueues the whole array ONCE via
+     * {@link #transformContextAndEnqueueCatalogs}. Iteration is for observation only — the
+     * single-enqueue contract and the catalogs payload are unchanged. "accepted"/"processed"
+     * are receiver-level (accepted-for-ingestion); the persisted count is decided downstream.
+     */
+    private void enqueueAndObserve(JsonNode becknContext, JsonNode catalogArray, String mode) throws IOException {
+        int catalogsReturned = catalogArray.size();
+        metrics.recordOnPullCatalogsReturned(mode, catalogsReturned);
+
+        int resourcesTotal = 0;
+        int accepted = 0;
+        for (JsonNode catalogNode : catalogArray) {
+            String id = catalogNode.isObject() ? catalogNode.path(BecknFields.ID).asText(null) : null;
+            if (id == null || id.isBlank()) {
+                log.warn("event={} reason=missing-id", LogEvent.ON_PULL_CATALOG_REJECTED);
+                metrics.recordOnPullCatalogRejected(mode);
+                continue;
+            }
+            MDC.put(MdcField.CATALOG_ID, id);
+            try {
+                int resourceCount = catalogNode.path(BecknFields.RESOURCES).size();
+                resourcesTotal += resourceCount;
+                accepted++;
+                metrics.recordOnPullCatalogAccepted(mode);
+                log.info("event={} resourceCount={}", LogEvent.ON_PULL_CATALOG_ENQUEUED, resourceCount);
+                metrics.recordOnPullCatalogProcessed(mode);
+            } finally {
+                MDC.remove(MdcField.CATALOG_ID);
+            }
+        }
+        metrics.recordOnPullResourcesTotal(mode, resourcesTotal);
+
+        // Single enqueue of the whole array (unchanged contract).
+        transformContextAndEnqueueCatalogs(becknContext, catalogArray);
+
+        log.info("event={} mode={} catalogsReturned={} accepted={} processed={} resourcesTotal={}",
+                LogEvent.ON_PULL_COMPLETED, mode, catalogsReturned, accepted, accepted, resourcesTotal);
+    }
+
+    /** Records the publisher's {@code pagination.total} (claimed grand total) only when present — never defaults to 0. */
+    private void recordPaginationIfPresent(String mode, JsonNode becknMessage) {
+        JsonNode total = becknMessage.path("pagination").path("total");
+        if (total.isNumber()) {
+            metrics.recordOnPullPaginationTotal(mode, total.asLong());
+        }
     }
 
     /**
