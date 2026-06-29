@@ -62,7 +62,20 @@ public record AppProperties(
                         @Min(1) int processingPoolSize,
                         @Valid Elasticsearch elasticsearch,
                         @Valid TextSearch textSearch,
-                        @Valid Indexing indexing) {
+                        @Valid Indexing indexing,
+                        Boolean pullSsrfCheckEnabled) {
+                /**
+                 * Secure-by-default: when {@code app.catalog.pull-ssrf-check-enabled} is absent
+                 * (binds to {@code null}), the SSRF guard on the on_pull download path stays ENABLED.
+                 * Only an explicit {@code false} disables it (for local/dev). A {@code Boolean}
+                 * component is used deliberately so the absent case defaults to {@code true} rather
+                 * than a primitive {@code boolean}'s insecure {@code false}.
+                 */
+                public Catalog {
+                        if (pullSsrfCheckEnabled == null) {
+                                pullSsrfCheckEnabled = Boolean.TRUE;
+                        }
+                }
         }
 
         /**
