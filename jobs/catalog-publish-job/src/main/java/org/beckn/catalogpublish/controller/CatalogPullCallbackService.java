@@ -214,7 +214,9 @@ public class CatalogPullCallbackService {
     }
 
     /**
-     * Standardizes context headers to catalog/push and enqueues transformed catalogs for persistence and indexing.
+     * Enqueues the callback's catalogs onto the ingestion topic for persistence and indexing.
+     * The original {@code context.action} ({@code catalog/on_pull}) is preserved — the publish
+     * pipeline does not key off {@code action}, so no re-stamping is needed.
      *
      * @param becknContext the original callback context node
      * @param catalogArray the catalog array node to ingest
@@ -222,8 +224,6 @@ public class CatalogPullCallbackService {
      */
     private void transformContextAndEnqueueCatalogs(JsonNode becknContext, JsonNode catalogArray) throws IOException {
         ObjectNode newContext = (ObjectNode) becknContext.deepCopy();
-        // Standardize action to catalog/push so that existing pipeline processes it correctly
-        newContext.put(BecknFields.ACTION, BecknFields.ACTION_CATALOG_PUBLISH);
 
         ObjectNode newRoot = objectMapper.createObjectNode();
         newRoot.set(BecknFields.CONTEXT, newContext);
