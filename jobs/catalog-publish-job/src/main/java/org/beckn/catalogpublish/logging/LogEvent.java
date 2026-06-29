@@ -38,6 +38,13 @@ public final class LogEvent {
     public static final String ON_PULL_REJECTED = "on_pull.rejected";
     public static final String ON_PULL_FAILED   = "on_pull.failed";
     public static final String ON_PULL_SSRF_DISABLED = "on_pull.ssrf.disabled";
+    public static final String ON_PULL_MODE_SELECTED     = "on_pull.mode_selected";
+    public static final String ON_PULL_DOWNLOAD_STARTED  = "on_pull.download.started";
+    public static final String ON_PULL_CHECKSUM_VERIFIED = "on_pull.checksum.verified";
+    public static final String ON_PULL_DECOMPRESSED      = "on_pull.decompressed";
+    public static final String ON_PULL_CATALOG_ENQUEUED  = "on_pull.catalog.enqueued";
+    public static final String ON_PULL_CATALOG_REJECTED  = "on_pull.catalog.rejected";
+    public static final String ON_PULL_COMPLETED         = "on_pull.completed";
 
     // Auth filter
     public static final String AUTH_SKIPPED       = "auth.skipped";

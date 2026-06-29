@@ -176,4 +176,38 @@ public class CatalogPublishMetrics {
     public void recordOnPullFailed(String reason) {
         registry.counter("discovr.onpull.failed", "reason", reason).increment();
     }
+
+    // ── on_pull per-callback distributions + per-catalog counts (receiver-level) ──
+    // Distributions give count+sum+max per mode; counters give per-catalog rates.
+    // Bounded `mode` tag only — catalogId/networkId stay in logs, never as tag values.
+
+    /** Number of catalogs in the on_pull payload (one record per callback), tagged by mode. */
+    public void recordOnPullCatalogsReturned(String mode, int count) {
+        registry.summary("discovr.onpull.catalogs.returned", "mode", mode).record(count);
+    }
+
+    /** Publisher's claimed grand total across pages (recorded only when pagination.total is present). */
+    public void recordOnPullPaginationTotal(String mode, long total) {
+        registry.summary("discovr.onpull.pagination.total", "mode", mode).record(total);
+    }
+
+    /** Total resources across the returned catalogs (one record per callback), tagged by mode. */
+    public void recordOnPullResourcesTotal(String mode, int total) {
+        registry.summary("discovr.onpull.resources.total", "mode", mode).record(total);
+    }
+
+    /** A catalog was accepted for ingestion at the receiver (well-formed, has a non-blank id). */
+    public void recordOnPullCatalogAccepted(String mode) {
+        registry.counter("discovr.onpull.accepted", "mode", mode).increment();
+    }
+
+    /** A catalog was rejected at the receiver (missing/blank id or not an object). */
+    public void recordOnPullCatalogRejected(String mode) {
+        registry.counter("discovr.onpull.rejected", "mode", mode).increment();
+    }
+
+    /** A catalog was successfully handed to the publish pipeline (enqueued). */
+    public void recordOnPullCatalogProcessed(String mode) {
+        registry.counter("discovr.onpull.processed.catalogs", "mode", mode).increment();
+    }
 }
