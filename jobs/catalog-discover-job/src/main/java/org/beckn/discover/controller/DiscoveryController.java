@@ -22,6 +22,7 @@ import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.validation.DiscoveryValidationService;
+import org.beckn.discover.service.validation.IntentQueryValidator;
 import org.beckn.discover.service.authorization.AuthorizationService;
 import org.beckn.discover.common.ErrorMessages;
 import org.slf4j.Logger;
@@ -55,23 +56,24 @@ import static net.logstash.logback.argument.StructuredArguments.value;
  *   <li><b>Business Logic:</b> Propagates valid requests to {@link DiscoveryService}.</li>
  * </ol>
  *
- * <p>The {@code transaction_id} from the request context is stored as a servlet
- * request attribute ({@code "beckn.transactionId"}) early in the pipeline so that
- * {@link org.beckn.discover.exception.GlobalExceptionHandler} can include it in
+ * <p>The {@code messageId} from the request context is stored as a servlet
+ * request attribute ({@code "beckn.messageId"}) early in the pipeline so that
+ * {@link org.beckn.discover.exception.GlobalExceptionHandler} can echo it in
  * NACK responses even when an exception is thrown before the request is parsed
  * into a {@link DiscoverRequest}.</p>
  */
 @RestController
 public class DiscoveryController {
 
-    /** Request attribute key used to propagate the transaction ID to the exception handler. */
-    public static final String TRANSACTION_ID_ATTR = "beckn.transactionId";
+    /** Request attribute key used to propagate the messageId to the exception handler for NACK bodies. */
+    public static final String MESSAGE_ID_ATTR = "beckn.messageId";
 
     private static final Logger log = LoggerFactory.getLogger(DiscoveryController.class);
 
     private final DiscoveryService discoveryService;
     private final ObjectMapper objectMapper;
     private final DiscoveryValidationService validationService;
+    private final IntentQueryValidator intentQueryValidator;
     private final AuthorizationService authorizationService;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final DiscoveryProperties discoveryProperties;
@@ -83,6 +85,7 @@ public class DiscoveryController {
             DiscoveryService discoveryService,
             ObjectMapper objectMapper,
             DiscoveryValidationService validationService,
+            IntentQueryValidator intentQueryValidator,
             AuthorizationService authorizationService,
             KafkaTemplate<String, String> kafkaTemplate,
             DiscoveryProperties discoveryProperties,
@@ -90,6 +93,7 @@ public class DiscoveryController {
         this.discoveryService = discoveryService;
         this.objectMapper = objectMapper;
         this.validationService = validationService;
+        this.intentQueryValidator = intentQueryValidator;
         this.authorizationService = authorizationService;
         this.kafkaTemplate = kafkaTemplate;
         this.discoveryProperties = discoveryProperties;
@@ -142,8 +146,9 @@ public class DiscoveryController {
 
         try {
             JsonNode txnNode = contextNode.path(BecknFields.TRANSACTION_ID);
-            if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
-                httpRequest.setAttribute(TRANSACTION_ID_ATTR, txnNode.asText());
+            JsonNode msgIdNode = contextNode.path(BecknFields.MESSAGE_ID);
+            if (msgIdNode.isTextual() && !msgIdNode.asText().isBlank()) {
+                httpRequest.setAttribute(MESSAGE_ID_ATTR, msgIdNode.asText());
             }
 
             log.info(LogEvent.REQUEST_RECEIVED,
@@ -182,7 +187,13 @@ public class DiscoveryController {
             JsonNode txnNode = contextNode.path(BecknFields.TRANSACTION_ID);
             if (txnNode.isTextual() && !txnNode.asText().isBlank()) {
                 transactionId = txnNode.asText();
-                httpRequest.setAttribute(TRANSACTION_ID_ATTR, transactionId);
+            }
+
+            // Extract messageId early so the exception handler can echo it in NACK bodies
+            // even when auth or validation throw before we reach the dedup check below.
+            String messageId = contextNode.path(BecknFields.MESSAGE_ID).asText(null);
+            if (messageId != null && !messageId.isBlank()) {
+                httpRequest.setAttribute(MESSAGE_ID_ATTR, messageId);
             }
 
             log.info(LogEvent.REQUEST_RECEIVED,
@@ -201,8 +212,6 @@ public class DiscoveryController {
 
             validateSchema(requestNode, rawBody);
 
-            String messageId = contextNode.path(BecknFields.MESSAGE_ID).asText();
-
             // M10: Idempotency check — if same messageId was seen within dedupCacheTtlSeconds,
             // return ACK immediately without re-publishing to Kafka.
             if (messageId != null && !messageId.isBlank()
@@ -210,7 +219,7 @@ public class DiscoveryController {
                 log.info(LogEvent.REQUEST_RECEIVED + ".duplicate-suppressed",
                         value("messageId", messageId),
                         value("transactionId", transactionId));
-                return ResponseEntity.ok(AckResponse.ack());
+                return ResponseEntity.ok(AckResponse.ack(messageId));
             }
 
             String kafkaKey = transactionId != null ? transactionId : messageId;
@@ -268,7 +277,7 @@ public class DiscoveryController {
                         value("error", kafkaEx.getMessage()));
             }
 
-            return ResponseEntity.ok(AckResponse.ack());
+            return ResponseEntity.ok(AckResponse.ack(messageId));
         } finally {
             BecknMdcContext.clear();
         }
@@ -285,6 +294,11 @@ public class DiscoveryController {
                     value("requestBody", truncate(rawBody, 2000)));
             throw new IllegalArgumentException(msg);
         }
+        // Engine-dialect validation (PostgreSQL SQL/JSON jsonpath), parse-only. Runs before the
+        // query (GET) and before the Kafka publish (POST) so an invalid filter expression gets a
+        // clean SCH_INVALID_JSONPATH NACK instead of a downstream crash with no callback.
+        // (Spatial coordinate types are validated structurally in DiscoveryValidationService.)
+        intentQueryValidator.validate(requestNode);
         log.info(LogEvent.VALIDATE_PASSED);
     }
 

@@ -108,6 +108,9 @@ public class EsSearchAssembler {
         if (catalogProviderRaw instanceof Map<?, ?> providerMap) {
             catalog.setProvider(buildCatalogProvider((Map<String, Object>) providerMap));
         }
+        catalog.setBppId(extractString(doc, "catalog_bpp_id"));
+        catalog.setBppUri(extractString(doc, "catalog_bpp_uri"));
+        catalog.setIsActive(extractBoolean(doc, "catalog_is_active"));
         catalog.setResources(new ArrayList<>());
         catalog.setOffers(new ArrayList<>());
         Object validityRaw = doc.get("catalog_validity");
@@ -124,12 +127,51 @@ public class EsSearchAssembler {
         Provider provider = new Provider();
         provider.setId(id);
         Object descRaw = providerMap.get("descriptor");
-        if (descRaw instanceof Map<?, ?> descMap) {
+        if (descRaw instanceof Map<?, ?> descMapRaw) {
+            // Full Descriptor field set (F-20): the provider node is stored verbatim in
+            // _source, so code/thumbnailImage/docs/mediaFile are present here — echo them
+            // all so the ES path matches the PostgreSQL path's lossless descriptor.
+            Map<String, Object> descMap = (Map<String, Object>) descMapRaw;
             Descriptor desc = new Descriptor();
-            desc.setName((String) ((Map<String, Object>) descMap).get("name"));
-            desc.setShortDesc((String) ((Map<String, Object>) descMap).get("shortDesc"));
-            desc.setLongDesc((String) ((Map<String, Object>) descMap).get("longDesc"));
+            desc.setCode((String) descMap.get("code"));
+            desc.setName((String) descMap.get("name"));
+            desc.setShortDesc((String) descMap.get("shortDesc"));
+            desc.setLongDesc((String) descMap.get("longDesc"));
+            desc.setThumbnailImage((String) descMap.get("thumbnailImage"));
+            Object provDocs = descMap.get("docs");
+            if (provDocs instanceof List<?> l && !l.isEmpty())
+                desc.setDocs((List<Map<String, Object>>) l);
+            Object provMedia = descMap.get("mediaFile");
+            if (provMedia instanceof List<?> l && !l.isEmpty())
+                desc.setMediaFile((List<Map<String, Object>>) l);
             provider.setDescriptor(desc);
+        }
+        // Reconstruct provider.availableAt from the stored ES sub-object so spatial /
+        // text search responses echo the full Beckn Provider shape (id, descriptor,
+        // availableAt). Without this the locations are indexed but invisible to callers.
+        Object availableAtRaw = providerMap.get("availableAt");
+        if (availableAtRaw instanceof List<?> list && !list.isEmpty()) {
+            List<Location> locations = new ArrayList<>();
+            for (Object entry : list) {
+                if (entry instanceof Map<?, ?> locMap) {
+                    Location loc = reconstructLocation((Map<String, Object>) locMap);
+                    if (loc != null) locations.add(loc);
+                }
+            }
+            if (!locations.isEmpty()) provider.setAvailableAt(locations);
+        }
+        // providerAttributes is an open Attributes bag — copy every field verbatim so any
+        // L2-extension or custom field (including nested Location objects) round-trips.
+        Object providerAttrsRaw = providerMap.get("providerAttributes");
+        if (providerAttrsRaw instanceof Map<?, ?> attrsMap) {
+            String atContext = (String) attrsMap.get(BecknFields.AT_CONTEXT);
+            String atType    = (String) attrsMap.get(BecknFields.AT_TYPE);
+            Attributes attrs = new Attributes(atContext, atType);
+            ((Map<String, Object>) attrsMap).forEach((k, v) -> {
+                if (!k.equals(BecknFields.AT_CONTEXT) && !k.equals(BecknFields.AT_TYPE))
+                    attrs.setAttribute(k, v);
+            });
+            provider.setProviderAttributes(attrs);
         }
         return provider;
     }
@@ -137,6 +179,7 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Descriptor buildCatalogDescriptor(Map<String, Object> doc) {
         Descriptor d = new Descriptor();
+        d.setCode(extractString(doc,"catalog_descriptor_code"));
         d.setName(extractString(doc,"catalog_name"));
         d.setShortDesc(extractString(doc,"catalog_short_desc"));
         d.setLongDesc(extractString(doc,"catalog_long_desc"));
@@ -308,6 +351,7 @@ public class EsSearchAssembler {
     @SuppressWarnings("unchecked")
     private static Descriptor buildDescriptor(Map<String, Object> doc) {
         Descriptor d = new Descriptor();
+        d.setCode(extractString(doc,"resource_descriptor_code"));
         d.setName(extractString(doc,"resource_name"));
         d.setShortDesc(extractString(doc,"resource_short_desc"));
         d.setLongDesc(extractString(doc,"resource_long_desc"));

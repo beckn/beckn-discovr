@@ -80,6 +80,7 @@ class DiscoveryControllerDedupTest {
                 discoveryService,
                 new ObjectMapper(),
                 validationService,
+                org.mockito.Mockito.mock(org.beckn.discover.service.validation.IntentQueryValidator.class),
                 authorizationService,
                 (KafkaTemplate<String, String>) kafkaTemplate,
                 props,
@@ -94,19 +95,23 @@ class DiscoveryControllerDedupTest {
         String transactionId = UUID.randomUUID().toString();
         String payload = buildPayload(messageId, transactionId);
 
-        // First request — should publish to Kafka
+        // First request — should publish to Kafka. ACK must echo the request's messageId + transactionId.
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
-        // Second request with same messageId — should be deduplicated
+        // Second request with same messageId — should be deduplicated (still echoes correlation ids)
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         // Kafka must have been called exactly once
         verify(kafkaTemplate, times(1)).send(any(org.apache.kafka.clients.producer.ProducerRecord.class));
@@ -123,13 +128,13 @@ class DiscoveryControllerDedupTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload1))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload2))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"));
 
         // Two distinct messageIds — Kafka must receive both
         verify(kafkaTemplate, times(2)).send(any(org.apache.kafka.clients.producer.ProducerRecord.class));

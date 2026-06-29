@@ -237,6 +237,18 @@ public class PersistenceStep {
         int updateCount = built.size() - insertCount;
 
         List<Item> savedResources = itemStore.saveAll(built.stream().map(ResourceWithNode::item).toList());
+        // MERGE re-derives each published item's locations from its (merged) payload. Clear the
+        // published items' existing location rows first so a reduced set of availableAt geometries
+        // doesn't leave stale higher-seq rows behind (#306). FULL already cleared the whole catalog
+        // above. Scoped to the published item ids — resources absent from a partial MERGE are
+        // untouched. Grouped by each item's OWN catalogId, because Phase 3 cross-catalog items
+        // carry a different catalogId than the publishing catalog.
+        if (!isFullReplace && !savedResources.isEmpty()) {
+            savedResources.stream()
+                    .collect(Collectors.groupingBy(Item::getCatalogId,
+                            Collectors.mapping(Item::getId, Collectors.toList())))
+                    .forEach((catId, itemIds) -> locationStore.deleteByItemIdsAndCatalogId(itemIds, catId));
+        }
         List<ItemLocationCollection> allLocations = savedResources.stream()
                 .flatMap(item -> {
                     JsonNode node = payloadNodeById.get(item.getId());

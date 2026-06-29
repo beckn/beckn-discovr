@@ -100,6 +100,7 @@ class DiscoveryControllerTest {
                 discoveryService,
                 objectMapper,
                 validationService,
+                org.mockito.Mockito.mock(org.beckn.discover.service.validation.IntentQueryValidator.class),
                 authorizationService,
                 (KafkaTemplate<String, String>) kafkaTemplate,
                 props,
@@ -119,11 +120,15 @@ class DiscoveryControllerTest {
         doReturn(new AuthIdentity("bpp.seller.io", "bpp-key-001"))
                 .when(authorizationService).authorizeRequest(any(), any());
 
+        String messageId = UUID.randomUUID().toString();
+        String transactionId = UUID.randomUUID().toString();
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
+                        .content(buildPayload(messageId, transactionId)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         @SuppressWarnings("rawtypes")
         var captor = ArgumentCaptor.forClass(ProducerRecord.class);
@@ -149,11 +154,15 @@ class DiscoveryControllerTest {
         doReturn(AuthIdentity.anonymous())
                 .when(authorizationService).authorizeRequest(any(), any());
 
+        String messageId = UUID.randomUUID().toString();
+        String transactionId = UUID.randomUUID().toString();
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
+                        .content(buildPayload(messageId, transactionId)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACK"));
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         @SuppressWarnings("rawtypes")
         var captor = ArgumentCaptor.forClass(ProducerRecord.class);
@@ -176,17 +185,23 @@ class DiscoveryControllerTest {
         // Auth throws ErrorResponseException (401) — no message must reach Kafka
         var pd = ProblemDetail.forStatus(401);
         pd.setDetail("Signature verification failed");
-        pd.setProperty("code", "SEC_SIGNATURE_INVALID");
+        // AuthorizationService surfaces the spec AUT_* code (translated from the SDK's
+        // SEC_* code, which remains on the underlying BecknAuthException cause).
+        pd.setProperty("code", "AUT_SIGNATURE_INVALID");
         doThrow(new ErrorResponseException(HttpStatusCode.valueOf(401), pd,
                 BecknAuthException.signatureVerificationFailed("bad sig", "SEC_SIGNATURE_INVALID")))
                 .when(authorizationService).authorizeRequest(any(), any());
 
+        String messageId = UUID.randomUUID().toString();
+        String transactionId = UUID.randomUUID().toString();
         mockMvc.perform(post(DISCOVER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(buildPayload(UUID.randomUUID().toString(), UUID.randomUUID().toString())))
+                        .content(buildPayload(messageId, transactionId)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.status").value("NACK"))
-                .andExpect(jsonPath("$.error.errorCode").value("SEC_SIGNATURE_INVALID"));
+                .andExpect(jsonPath("$.message.status").value("NACK"))
+                .andExpect(jsonPath("$.message.error.code").value("AUT_SIGNATURE_INVALID"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         verify(kafkaTemplate, never()).send(any(ProducerRecord.class));
     }

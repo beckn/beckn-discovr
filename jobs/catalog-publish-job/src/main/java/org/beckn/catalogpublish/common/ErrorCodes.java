@@ -13,12 +13,20 @@ public final class ErrorCodes {
     public static final String SCH_REQUIRED_FIELD_MISSING = "SCH_REQUIRED_FIELD_MISSING";
 
     // ── Context errors ────────────────────────────────────────────────────────
+    public static final String CTX_MISSING_FIELD = "CTX_MISSING_FIELD";
     public static final String CTX_INVALID_FIELD = "CTX_INVALID_FIELD";
+
+    // ── Authentication / trust errors (canonical AUT_* per beckn.yaml ErrorCode enum) ──
+    // The beckn-auth-java-sdk surfaces legacy SEC_* codes; these are the spec-compliant
+    // values they translate to before reaching a client-facing NACK.
+    public static final String AUT_SIGNATURE_MISSING = "AUT_SIGNATURE_MISSING";
+    public static final String AUT_SIGNATURE_INVALID = "AUT_SIGNATURE_INVALID";
+    public static final String AUT_SUBSCRIBER_NOT_FOUND = "AUT_SUBSCRIBER_NOT_FOUND";
+    public static final String AUT_KEY_NOT_FOUND = "AUT_KEY_NOT_FOUND";
+    public static final String AUT_KEY_EXPIRED_OR_REVOKED = "AUT_KEY_EXPIRED_OR_REVOKED";
+    public static final String AUT_UNAUTHORIZED_ACTION = "AUT_UNAUTHORIZED_ACTION";
 
     // ── Network / infrastructure errors ───────────────────────────────────────
     public static final String NET_INTERNAL_ERROR = "NET_INTERNAL_ERROR";
     public static final String NET_OVERLOADED = "NET_OVERLOADED";
-
-    // ── Request-level errors ──────────────────────────────────────────────────
-    public static final String REQUEST_TOO_LARGE = "REQUEST_TOO_LARGE";
 }

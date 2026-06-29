@@ -180,7 +180,10 @@ public class DiscoverRequest {
      */
     public static class SpatialConstraint {
         @JsonProperty("op")
-        private String operation; // s_dwithin, s_intersects, etc.
+        private String operation; // canonical lowercase: s_dwithin, s_intersects, etc.
+        // The Beckn spec defines the op enum in UPPERCASE (S_DWITHIN, S_WITHIN, …).
+        // setOperation() normalizes to lowercase so internal engines (which compare
+        // against lowercase keys) accept both spec-uppercase and dev-lowercase inputs.
 
         @JsonProperty("targets")
         private Object targets; // String or List<String> for JSONPath pointers
@@ -202,7 +205,12 @@ public class DiscoverRequest {
         }
 
         public void setOperation(String operation) {
-            this.operation = operation;
+            // Normalize to lowercase to bridge the spec/engine convention mismatch:
+            // beckn.yaml defines the enum as UPPERCASE (S_DWITHIN, …) but the
+            // engine builders (EsSpatialQueryBuilder, SpatialQueryBuilder) compare
+            // against lowercase keys. Without this, spec-compliant uppercase
+            // requests silently degrade to a point-intersect query.
+            this.operation = operation == null ? null : operation.toLowerCase();
         }
 
         public Object getTargets() {

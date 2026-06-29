@@ -332,11 +332,13 @@ public class HttpService {
         }
         try {
             var responseNode = objectMapper.readTree(body);
-            var status = responseNode.path(BecknFields.STATUS).asText();
+            // Beckn v2.0 ACK/NACK is wrapped: { "message": { "status": ..., "error": { "code", "message" } } }
+            var message = responseNode.path(BecknFields.MESSAGE);
+            var status = message.path(BecknFields.STATUS).asText();
             if ("NACK".equals(status)) {
-                var error = responseNode.path(BecknFields.ERROR);
-                var errorCode = error.path(BecknFields.ERROR_CODE).asText();
-                var errorMessage = error.path(BecknFields.ERROR_MESSAGE).asText();
+                var error = message.path(BecknFields.ERROR);
+                var errorCode = error.path(BecknFields.CODE).asText();
+                var errorMessage = error.path(BecknFields.MESSAGE).asText();
                 log.warn("{}", value("event", LogEvent.CALLBACK_NACK),
                         value("targetUrl", targetUrl),
                         value("httpStatus", statusCode.value()),

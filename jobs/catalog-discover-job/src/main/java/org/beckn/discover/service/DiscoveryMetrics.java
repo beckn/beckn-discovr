@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -55,6 +57,16 @@ public class DiscoveryMetrics {
     private final Counter failureCounter;
     private final Counter schemaFilterAppliedCounter;
     private final Timer   processingTimer;
+
+    // ── Chain routing meters ─────────────────────────────────────────────────
+    private final Counter chainEmptyResultsCounter;
+    private final Counter chainTruncatedByCapCounter;
+    private final Counter chainUnderreturnCounter;
+    private final Counter chainFallbackNoEsCounter;
+    private final DistributionSummary esResourceIdsCountSummary;
+    private final DistributionSummary psqlAllowlistSizeSummary;
+    private final Map<String, Counter> routeSelectedCounters;
+    private final Map<String, Timer>   routeLatencyTimers;
 
     // ── Overall (non-engine-tagged) result count ─────────────────────────────
 
@@ -103,6 +115,42 @@ public class DiscoveryMetrics {
                 ENGINE_ELASTICSEARCH, DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_ELASTICSEARCH).register(meterRegistry),
                 ENGINE_NLWEB,         DistributionSummary.builder("discovr.discover.results.count").tag("engine", ENGINE_NLWEB).register(meterRegistry)
         );
+
+        // Chain routing meters
+        this.chainEmptyResultsCounter = Counter.builder("discovr.discover.chain.empty_results.total")
+                .description("Number of chain requests that returned 0 results")
+                .register(meterRegistry);
+        this.chainTruncatedByCapCounter = Counter.builder("discovr.discover.chain.truncated_by_cap.total")
+                .description("Number of times the ES candidate list was truncated by max-ids cap")
+                .register(meterRegistry);
+        this.chainUnderreturnCounter = Counter.builder("discovr.discover.chain.underreturn.total")
+                .description("Number of times PSQL returned fewer rows than the request limit after IN-filter")
+                .register(meterRegistry);
+        this.chainFallbackNoEsCounter = Counter.builder("discovr.discover.chain.fallback_no_es.total")
+                .description("Number of JSONPath+text requests that fell back to PSQL-only because ES engine was absent")
+                .register(meterRegistry);
+        this.esResourceIdsCountSummary = DistributionSummary.builder("discovr.discover.chain.es_resource_ids_count")
+                .description("Size of the resource-id list returned by ES step 1 of the chain")
+                .register(meterRegistry);
+        this.psqlAllowlistSizeSummary = DistributionSummary.builder("discovr.discover.chain.psql_allowlist_size")
+                .description("Size of the PSQL allowlist after ES step 1")
+                .register(meterRegistry);
+
+        List<String> routePaths = List.of("A", "B", "C", "D", "chain");
+        this.routeSelectedCounters = new HashMap<>();
+        this.routeLatencyTimers    = new HashMap<>();
+        for (String path : routePaths) {
+            this.routeSelectedCounters.put(path,
+                    Counter.builder("discovr.discover.route_selected.total")
+                            .tag("path", path)
+                            .description("Number of requests routed to each query path")
+                            .register(meterRegistry));
+            this.routeLatencyTimers.put(path,
+                    Timer.builder("discovr.discover.route.latency")
+                            .tag("path", path)
+                            .description("Per-path query latency")
+                            .register(meterRegistry));
+        }
     }
 
     private static Timer buildSearchDurationTimer(String engine, MeterRegistry registry) {
@@ -204,6 +252,74 @@ public class DiscoveryMetrics {
      */
     public void recordResultCount(int count) {
         resultCountTotal.record(count);
+    }
+
+    // ── Chain routing recording ───────────────────────────────────────────────
+
+    /** Increments the chain-empty-results counter. */
+    public void incrementChainEmptyResults() {
+        chainEmptyResultsCounter.increment();
+    }
+
+    /** Increments the chain-truncated-by-cap counter. */
+    public void incrementChainTruncatedByCap() {
+        chainTruncatedByCapCounter.increment();
+    }
+
+    /**
+     * Increments the chain-underreturn counter.
+     * Call when PSQL chain step returns fewer rows than the request limit.
+     */
+    public void incrementChainUnderreturn() {
+        chainUnderreturnCounter.increment();
+    }
+
+    /**
+     * Increments the chain-fallback-no-ES counter.
+     * Call when a JSONPath+text request degrades to PSQL-only because the
+     * Elasticsearch engine bean is absent (e.g. discovery.spatial.engine=postgresql).
+     */
+    public void incrementChainFallbackNoEs() {
+        chainFallbackNoEsCounter.increment();
+    }
+
+    /**
+     * Records the count of resource IDs returned by ES step 1 of the chain.
+     *
+     * @param count number of resource IDs returned by ES (the matching set passed to PSQL)
+     */
+    public void recordEsResourceIdsCount(int count) {
+        esResourceIdsCountSummary.record(count);
+    }
+
+    /**
+     * Records the size of the PSQL allowlist passed to chain step 2.
+     *
+     * @param size number of IDs in the allowlist
+     */
+    public void recordPsqlAllowlistSize(int size) {
+        psqlAllowlistSizeSummary.record(size);
+    }
+
+    /**
+     * Increments the route-selected counter for the given path label.
+     *
+     * @param path one of {@code A}, {@code B}, {@code C}, {@code D}, {@code chain}
+     */
+    public void incrementRouteSelected(String path) {
+        Counter c = routeSelectedCounters.get(path);
+        if (c != null) c.increment();
+    }
+
+    /**
+     * Records latency for the given query path.
+     *
+     * @param path     one of {@code A}, {@code B}, {@code C}, {@code D}, {@code chain}
+     * @param duration elapsed time
+     */
+    public void recordRouteLatency(String path, Duration duration) {
+        Timer t = routeLatencyTimers.get(path);
+        if (t != null) t.record(duration);
     }
 
     // ── Stats retrieval ───────────────────────────────────────────────────────

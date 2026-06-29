@@ -254,23 +254,48 @@ public abstract class BaseIntegrationTest {
         });
     }
 
+    /**
+     * Canonical network for fixture data — matches the {@code networkId} used by every
+     * request fixture and {@link #buildContext}. Discover scopes results by
+     * {@code context.networkId} (#309), so seeded rows must carry the network the test
+     * queries on, otherwise they are (correctly) filtered out.
+     */
+    protected static final String DEFAULT_TEST_NETWORK = "bap.net/ev-charging";
+
     private void insertItemRow(Map<String, Object> row) {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO item (id, catalog_id, context_url, type, offer_ids, payload, created_by, updated_by, updated_at) "
-                            + "VALUES (?, ?, ?, ?, ARRAY[]::TEXT[], ?, ?, ?, ?) "
+                    "INSERT INTO item (id, catalog_id, context_url, type, network_id, offer_ids, payload, created_by, updated_by, updated_at) "
+                            + "VALUES (?, ?, ?, ?, ?, ARRAY[]::TEXT[], ?, ?, ?, ?) "
                             + "ON CONFLICT (id, catalog_id) DO UPDATE SET "
-                            + "payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at");
+                            + "payload = EXCLUDED.payload, network_id = EXCLUDED.network_id, updated_at = EXCLUDED.updated_at");
             ps.setString(1, asString(row, "id"));
             ps.setString(2, asString(row, "catalog_id"));
             ps.setString(3, asString(row, "context_url"));
             ps.setString(4, asString(row, "type"));
-            ps.setObject(5, toJsonb(row.get("payload")));
-            ps.setString(6, asString(row, "created_by"));
-            ps.setString(7, asString(row, "updated_by"));
-            ps.setTimestamp(8, parseTimestamp(asString(row, "updated_at")));
+            ps.setArray(5, connection.createArrayOf("text", resolveNetworkIds(row)));
+            ps.setObject(6, toJsonb(row.get("payload")));
+            ps.setString(7, asString(row, "created_by"));
+            ps.setString(8, asString(row, "updated_by"));
+            ps.setTimestamp(9, parseTimestamp(asString(row, "updated_at")));
             return ps;
         });
+    }
+
+    /**
+     * Resolves a fixture row's {@code network_id} array. Uses the row's value when present
+     * (a JSON array or comma string); otherwise defaults to {@link #DEFAULT_TEST_NETWORK}
+     * so fixtures stay discoverable under network scoping (#309).
+     */
+    private String[] resolveNetworkIds(Map<String, Object> row) {
+        Object raw = row.get("network_id");
+        if (raw instanceof List<?> list && !list.isEmpty()) {
+            return list.stream().map(String::valueOf).toArray(String[]::new);
+        }
+        if (raw instanceof String s && !s.isBlank()) {
+            return new String[]{s.trim()};
+        }
+        return new String[]{DEFAULT_TEST_NETWORK};
     }
 
     private Timestamp parseTimestamp(String raw) {

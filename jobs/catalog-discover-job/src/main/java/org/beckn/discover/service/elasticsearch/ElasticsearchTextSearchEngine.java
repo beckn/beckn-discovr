@@ -63,6 +63,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
     private final Optional<QueryEnricher>   queryEnricher;
     private final List<String>              multiMatchFields;
     private final double                    relativeScoreThreshold;
+    private final double                    tieBreaker;
 
     public ElasticsearchTextSearchEngine(ElasticsearchClient esClient,
                                          EsSearchAssembler assembler,
@@ -81,6 +82,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
         this.minScore               = esConfig.getMinScore();
         this.knnCandidates          = Math.max(props.getTextSearch().getEmbeddingModel().getKnnCandidates(), this.resultLimit);
         this.relativeScoreThreshold = esConfig.getRelativeScoreThreshold();
+        this.tieBreaker             = esConfig.getTieBreaker();
         List<String> fields = esConfig.getMultiMatchFields();
         if (fields == null || fields.isEmpty()) {
             throw new IllegalArgumentException(
@@ -150,6 +152,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                                     .k(resultLimit)
                                     .numCandidates(knnCandidates);
                             schemaFilters.forEach(kb::filter);
+                            EsNetworkFilterBuilder.build(queryRequest).ifPresent(kb::filter);
                             return kb;
                         }),
                         Map.class);
@@ -209,9 +212,10 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                                     .query(text)
                                     .fields(scoringFields)
                                     .type(TextQueryType.BestFields)
-                                    .tieBreaker(0.3))));
+                                    .tieBreaker(tieBreaker))));
                         }
                         keywordSchemaFilters.forEach(b::filter);
+                        EsNetworkFilterBuilder.build(queryRequest).ifPresent(b::filter);
                         return b;
                     }))
                     .minScore(minScore)

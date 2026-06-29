@@ -1,0 +1,26 @@
+{
+  "context": {
+    "action": "discover",
+    "version": "2.0.0",
+    "networkId": "bap.net/ev-charging",
+    "transactionId": "22222222-2222-4222-8222-222222222222",
+    "messageId": "22222222-2222-4222-8222-bbbbbbbbbbbb",
+    "timestamp": "2026-06-13T10:00:00.000Z",
+    "ttl": "PT30S"
+  },
+  "message": {
+    "intent": {
+      "spatial": [
+        {
+          "op": "s_dwithin",
+          "targets": "$.catalogs[*].resources[*].availableAt[*].geo",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [77.5946, 12.9716]
+          },
+          "distanceMeters": 5000
+        }
+      ]
+    }
+  }
+}

@@ -155,9 +155,29 @@ class CatalogDocumentAssemblerTest {
 
         // schema_version has been removed from the ES document model (v2.1 schema redesign)
         assertThat(doc).doesNotContainKey("schema_version");
-        // bpp_id and bpp_uri must not appear in ES documents
+        // Unprefixed bpp_id/bpp_uri are not used — catalog-level BPP fields live
+        // under catalog_bpp_id / catalog_bpp_uri (see assemble_indexesCatalogLevelBppFields).
         assertThat(doc).doesNotContainKey("bpp_id");
         assertThat(doc).doesNotContainKey("bpp_uri");
+    }
+
+    @Test
+    void assemble_indexesCatalogLevelBppFields() throws Exception {
+        // Catalog-level bppId/bppUri must be indexed as catalog_bpp_id / catalog_bpp_uri
+        // so they can be echoed back at the catalog level on discover responses.
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-bpp",
+                  "descriptor": {"name": "BPP Item"},
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {"@type": "ServiceItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "ServiceItem");
+
+        assertThat(doc.get("catalog_bpp_id")).isEqualTo("bpp.example.com");
+        assertThat(doc.get("catalog_bpp_uri")).isEqualTo("https://bpp.example.com");
     }
 
     @Test
@@ -273,6 +293,52 @@ class CatalogDocumentAssemblerTest {
         Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
 
         assertThat(doc.get("resource_descriptor_thumbnail_image")).isEqualTo("https://example.org/thumb.jpg");
+    }
+
+    // ── descriptor.code (F-20) ────────────────────────────────────────────────
+
+    @Test
+    void assemble_itemWithDescriptorCode_populatesResourceDescriptorCode() throws Exception {
+        JsonNode payload = buildPayload("""
+                {
+                  "id": "item-code",
+                  "descriptor": { "name": "Coded Item", "code": "RESOURCE_LIVE" },
+                  "provider": {"id": "prov-1"},
+                  "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.get("resource_descriptor_code")).isEqualTo("RESOURCE_LIVE");
+    }
+
+    @Test
+    void assemble_catalogWithDescriptorCode_populatesCatalogDescriptorCode() throws Exception {
+        JsonNode payload = OM.readTree("""
+                {
+                  "catalogs": [
+                    {
+                      "id": "cat-1",
+                      "descriptor": {"name": "Test Catalog", "code": "CATALOG_ACTIVE"},
+                      "provider": {"id": "prov-catalog", "descriptor": {"name": "Catalog Provider"}},
+                      "resources": [
+                        {
+                          "id": "item-1",
+                          "descriptor": {"name": "Item"},
+                          "provider": {"id": "prov-1"},
+                          "resourceAttributes": {"@type": "GenericItem", "@context": "https://ctx"}
+                        }
+                      ],
+                      "offers": []
+                    }
+                  ]
+                }
+                """);
+
+        Map<String, Object> doc = assembler.assemble(payload, "GenericItem");
+
+        assertThat(doc.get("catalog_descriptor_code")).isEqualTo("CATALOG_ACTIVE");
     }
 
     // ── item_descriptor_docs ──────────────────────────────────────────────────
