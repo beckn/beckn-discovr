@@ -79,10 +79,13 @@ public class CatalogDocumentAssembler {
         doc.put("catalog_id", text(catalog, BecknFields.ID));
         doc.put("catalog_context", text(catalog, BecknFields.JSON_LD_CONTEXT));
         doc.put("catalog_type", text(catalog, BecknFields.JSON_LD_TYPE));
+        putIfPresent(doc, "catalog_bpp_id", text(catalog, BecknFields.BPP_ID));
+        putIfPresent(doc, "catalog_bpp_uri", text(catalog, BecknFields.BPP_URI));
         JsonNode catalogDesc = catalog.path(BecknFields.DESCRIPTOR);
         doc.put("catalog_name", text(catalogDesc, BecknFields.NAME));
         doc.put("catalog_short_desc", text(catalogDesc, BecknFields.SHORT_DESC));
         doc.put("catalog_long_desc", text(catalogDesc, BecknFields.LONG_DESC));
+        doc.put("catalog_descriptor_code", text(catalogDesc, "code"));
         doc.put("catalog_descriptor_thumbnail_image", text(catalogDesc, "thumbnailImage"));
         doc.put("catalog_descriptor_docs", convertToList(catalogDesc.path("docs")));
         doc.put("catalog_descriptor_media_file", convertToList(catalogDesc.path("mediaFile")));
@@ -113,6 +116,7 @@ public class CatalogDocumentAssembler {
         doc.put("resource_provider_id", text(resourceNode.path(BecknFields.PROVIDER), BecknFields.ID));
         doc.put("resource_provider_name",
                 text(resourceNode.path(BecknFields.PROVIDER).path(BecknFields.DESCRIPTOR), BecknFields.NAME));
+        doc.put("resource_descriptor_code", text(desc, "code"));
         doc.put("resource_descriptor_thumbnail_image", text(desc, "thumbnailImage"));
         doc.put("resource_descriptor_docs", convertToList(desc.path("docs")));
         doc.put("resource_descriptor_media_file", convertToList(desc.path("mediaFile")));

@@ -23,18 +23,19 @@ public final class ErrorMessages {
     public static final String SCH_SCHEMA_VALIDATION_FAILED =
             "Request validation failed. Check your request body against the Beckn schema";
     public static final String SCH_REQUIRED_FIELD_MISSING = "A required field is missing in the request. Check the API documentation for required fields";
+    public static final String SCH_INVALID_JSONPATH = "The JSONPath filter expression is invalid. Verify the expression syntax and try again";
 
     // ── Context Field Errors (pair with ErrorCodes.CTX_*) ───────────────────
     public static final String CTX_INVALID_FIELD = "A field in the request has an invalid value. Check the field format and allowed values";
 
     // ── Network / Infrastructure Errors (pair with ErrorCodes.NET_*) ────────
     public static final String NET_INTERNAL_ERROR = "An unexpected server error occurred. Try again later or contact support if the issue persists";
-    public static final String NET_SERVICE_UNAVAILABLE =
+    public static final String NET_DOWNSTREAM_UNAVAILABLE =
             "Service is starting up. Try again in a few seconds";
     public static final String NET_SEARCH_SERVICE_UNAVAILABLE =
             "Search service is temporarily unavailable. Try again later";
 
-    // ── Authorization Errors (pair with SEC_* codes from beckn-auth-java-sdk) ──
+    // ── Authentication Errors (user-facing messages for the AUT_* codes) ──────
     public static final String AUTH_HEADER_MISSING = "Authorization header is missing. Include an Authorization header with your request";
     public static final String AUTH_INVALID_FORMAT = "Authorization header format is invalid. Refer to the API documentation for the correct format";
     public static final String AUTH_FUTURE_CREATED =
@@ -54,12 +55,12 @@ public final class ErrorMessages {
     public static final String REGISTRY_RECORD_NOT_FOUND =
             "Credentials not found. Ensure your account is registered and active";
 
-    // ── SEC_* aliases (1:1 match with ErrorCodes.SEC_*) ──────────────────────
-    public static final String SEC_SIGNATURE_MISSING = AUTH_HEADER_MISSING;
-    public static final String SEC_SIGNATURE_INVALID = AUTH_VERIFICATION_FAILED;
-    public static final String SEC_SUBSCRIBER_NOT_FOUND = AUTH_SUBSCRIBER_NOT_FOUND;
-    public static final String SEC_KEY_NOT_FOUND = REGISTRY_RECORD_NOT_FOUND;
-    public static final String SEC_KEY_EXPIRED_OR_REVOKED = AUTH_PUBLIC_KEY_EXPIRED;
-    public static final String SEC_UNAUTHORIZED_ACTION = "You are not authorized to perform this action. Contact your administrator for access";
+    // ── AUT_* message aliases (1:1 match with ErrorCodes.AUT_*) ──────────────
+    public static final String AUT_SIGNATURE_MISSING = AUTH_HEADER_MISSING;
+    public static final String AUT_SIGNATURE_INVALID = AUTH_VERIFICATION_FAILED;
+    public static final String AUT_SUBSCRIBER_NOT_FOUND = AUTH_SUBSCRIBER_NOT_FOUND;
+    public static final String AUT_KEY_NOT_FOUND = REGISTRY_RECORD_NOT_FOUND;
+    public static final String AUT_KEY_EXPIRED_OR_REVOKED = AUTH_PUBLIC_KEY_EXPIRED;
+    public static final String AUT_UNAUTHORIZED_ACTION = "You are not authorized to perform this action. Contact your administrator for access";
 }
 

@@ -55,6 +55,7 @@ public class DiscoveryValidationService {
     private final ObjectMapper objectMapper;
     private final SchemaLoaderService schemaLoaderService;
     private final org.yaml.snakeyaml.Yaml yamlParser;
+    private final org.beckn.discover.config.DiscoveryProperties discoveryProperties;
 
     // Validates the full request body (context + message) against the DiscoverAction/v2.0 schema
     private JsonSchema discoverActionSchema;
@@ -62,10 +63,12 @@ public class DiscoveryValidationService {
     public DiscoveryValidationService(
             ObjectMapper objectMapper,
             SchemaLoaderService schemaLoaderService,
-            org.yaml.snakeyaml.Yaml yamlParser) {
+            org.yaml.snakeyaml.Yaml yamlParser,
+            org.beckn.discover.config.DiscoveryProperties discoveryProperties) {
         this.objectMapper = objectMapper;
         this.schemaLoaderService = schemaLoaderService;
         this.yamlParser = yamlParser;
+        this.discoveryProperties = discoveryProperties;
     }
 
     @PostConstruct
@@ -236,7 +239,7 @@ public class DiscoveryValidationService {
             if (discoverActionSchema == null) {
                 logger.error(LogEvent.VALIDATE_FAILED, value("reason", LogMessages.REASON_SCHEMA_NOT_INITIALIZED));
                 throw new org.beckn.discover.exception.SchemaNotInitializedException(
-                        ErrorMessages.NET_SERVICE_UNAVAILABLE);
+                        ErrorMessages.NET_DOWNSTREAM_UNAVAILABLE);
             }
 
             // Presence checks — these always run and give clearer error messages than schema failures
@@ -261,6 +264,18 @@ public class DiscoveryValidationService {
                 return new ValidationResult(false,
                     List.of("$.message.intent: at least one search criterion is required (textSearch, filters, or spatial)"),
                     List.of("$.message.intent"));
+            }
+
+            // Reject blank textSearch synchronously (mirrors the filters.expression blank guard).
+            // Without this, a blank textSearch passes structural validation and is published to
+            // Kafka; the async ElasticsearchTextSearchEngine then throws IllegalArgumentException
+            // ("Text search query cannot be null or empty"), surfacing as a failed async query
+            // with no callback instead of a clean 400 NACK.
+            JsonNode textSearchNode = intentNode.path("textSearch");
+            if (textSearchNode.isTextual() && textSearchNode.asText().isBlank()) {
+                return new ValidationResult(false,
+                    List.of("textSearch cannot be blank"),
+                    List.of("$.message.intent.textSearch"));
             }
 
             // Presence checks for required Context V2.0 fields — enforced manually so they
@@ -293,6 +308,17 @@ public class DiscoveryValidationService {
                         return new ValidationResult(false,
                             List.of("$.message.intent.spatial[" + i + "].distanceMeters: must be >= 0 (minimum: 0)"),
                             List.of("$.message.intent.spatial[" + i + "].distanceMeters"));
+                    }
+                    // Coordinates must be numbers (RFC 7946). Shape-agnostic: just check every value
+                    // is a number. The spec schema leaves coordinates unconstrained (items: {}); a
+                    // non-numeric coordinate is silently coerced on PostgreSQL (J+G) and dropped /
+                    // crashes on Elasticsearch (G / G+T). isNumber() is strict (no numeric-string
+                    // coercion, unlike a JSON-schema validator), so both engines behave consistently.
+                    if (discoveryProperties.getSpatial().isCoordinateTypeCheckEnabled()
+                            && hasInvalidCoordinate(item.path("geometry"))) {
+                        return new ValidationResult(false,
+                            List.of("coordinates must be numbers and non empty values"),
+                            List.of("$.message.intent.spatial[" + i + "].geometry.coordinates"));
                     }
                 }
             }
@@ -358,6 +384,59 @@ public class DiscoveryValidationService {
         } catch (IllegalArgumentException e) {
             return java.util.Optional.of("$.context." + field + ": invalid uuid format — " + ErrorMessages.CTX_INVALID_FIELD);
         }
+    }
+
+    /**
+     * True if a geometry's coordinates are invalid. Covers all spec geometry types: the
+     * coordinate-bearing ones (Point/LineString/Polygon/Multi*) via {@code coordinates}, plus
+     * {@code GeometryCollection}, which carries member geometries under {@code geometries}.
+     */
+    private static boolean hasInvalidCoordinate(JsonNode geometry) {
+        if (geometry.isMissingNode() || geometry.isNull()) return false;
+        JsonNode coordinates = geometry.path("coordinates");
+        if (!coordinates.isMissingNode() && !coordinates.isNull() && coordinatesInvalid(coordinates)) {
+            return true;
+        }
+        JsonNode geometries = geometry.path("geometries"); // GeometryCollection
+        if (geometries.isArray()) {
+            for (JsonNode member : geometries) {
+                if (hasInvalidCoordinate(member)) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * True if a coordinates node is invalid (per RFC 7946). Walks the arbitrarily-nested arrays:
+     * <ul>
+     *   <li>A <b>position</b> — the innermost array (its first element is a number) — must contain
+     *       at least two numbers (lon, lat[, alt]) and every element must be a number. This rejects
+     *       a non-numeric value, a single-ordinate position ({@code [77.575]}), and a mixed
+     *       position ({@code [77.6,"12.9"]}).</li>
+     *   <li>A <b>container</b> (ring / array of positions / …) must be non-empty and every element
+     *       must itself be valid.</li>
+     * </ul>
+     * So any empty array ({@code []}, {@code [[]]}, an empty position among good ones), any
+     * non-number, and any under-length position is rejected — these otherwise crash the spatial
+     * engines or are silently coerced/dropped.
+     */
+    private static boolean coordinatesInvalid(JsonNode node) {
+        if (!node.isArray() || node.isEmpty()) {
+            return true; // coordinates must be arrays; an empty array = missing ordinate/position/ring
+        }
+        if (node.get(0).isNumber()) {
+            // a position: at least 2 numbers (lon, lat[, alt]), and every element a number
+            if (node.size() < 2) return true;
+            for (JsonNode v : node) {
+                if (!v.isNumber()) return true;
+            }
+            return false;
+        }
+        // a container: every element must be a valid (nested) coordinates value
+        for (JsonNode child : node) {
+            if (coordinatesInvalid(child)) return true;
+        }
+        return false;
     }
 
     public ValidationResult validateDiscoverRequest(DiscoverRequest request) {

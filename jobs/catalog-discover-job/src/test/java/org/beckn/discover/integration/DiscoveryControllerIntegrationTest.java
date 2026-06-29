@@ -18,6 +18,7 @@ import org.beckn.discover.common.ErrorCodes;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.hamcrest.Matchers.*;
@@ -42,7 +43,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -107,9 +108,70 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, containsString("Schema validation failed")));
+        }
+
+        @Test
+        void postDiscoverWithBlankTextSearchReturnsBadRequest() throws Exception {
+                // PR #342: a blank/whitespace textSearch must be rejected synchronously with a
+                // 400 NACK (before Kafka publish) rather than failing later in the async ES query.
+                String payload = """
+                                {
+                                  "context": {
+                                    "action": "discover",
+                                    "version": "2.0.0",
+                                    "transactionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                                    "messageId": "b64609ca-4b8d-49ea-9db6-3f9c3d489c7d",
+                                    "timestamp": "2025-10-14T10:30:00.000Z"
+                                  },
+                                  "message": { "intent": { "textSearch": "   " } }
+                                }
+                                """;
+
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(payload));
+
+                result.andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
+        }
+
+        @Test
+        void postDiscoverWithMalformedJsonReturnsBadRequestInvalidJson() throws Exception {
+                // An unparseable body is a client error: 400 NACK with SCH_INVALID_JSON,
+                // NOT 500 NET_INTERNAL_ERROR. messageId/transactionId are omitted (unparseable).
+                String malformed = "{\"context\":{\"action\":\"discover\" BROKEN";
+
+                ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(malformed));
+
+                result.andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_INVALID_JSON))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, containsString("not valid JSON")))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.MESSAGE_ID).doesNotExist())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.TRANSACTION_ID).doesNotExist());
+        }
+
+        @Test
+        void getDiscoverWithMalformedJsonReturnsBadRequestInvalidJson() throws Exception {
+                // The GET endpoint reads the same raw-byte body and parses with readTree,
+                // so a malformed body must also surface as 400 SCH_INVALID_JSON, not 500.
+                String malformed = "{\"context\":{\"action\":\"discover\" BROKEN";
+
+                ResultActions result = mockMvc.perform(get(DISCOVER_PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(malformed));
+
+                result.andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_INVALID_JSON))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.MESSAGE_ID).doesNotExist())
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.TRANSACTION_ID).doesNotExist());
         }
 
         @Test
@@ -121,9 +183,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, containsString("Schema validation failed")));
         }
 
         @Test
@@ -136,8 +198,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
         }
 
         @Test
@@ -149,9 +211,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, anyOf(
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, anyOf(
                                                 containsString(BecknFields.TRANSACTION_ID),
                                                 containsString(BecknFields.MESSAGE_ID),
                                                 containsString("invalid uuid"))));
@@ -166,8 +228,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED));
         }
 
         @Test
@@ -180,7 +242,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -193,7 +255,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -207,9 +269,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE, containsString("Schema validation failed")));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE, containsString("Schema validation failed")));
         }
 
         @Test
@@ -222,7 +284,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -234,9 +296,9 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isBadRequest())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
-                                .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value(ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED))
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE,
                                                 containsString("absolute JSONPath")));
         }
 
@@ -250,7 +312,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -263,7 +325,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         @Test
@@ -276,7 +338,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         private String readFixture(String fileName) {
@@ -303,7 +365,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                 .content(payload));
 
                 result.andExpect(status().isOk())
-                                .andExpect(jsonPath("$." + BecknFields.STATUS).value("ACK"));
+                                .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("ACK"));
         }
 
         /**
@@ -328,55 +390,60 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                 private MockMvc mockMvc;
 
                 @Test
-                void postDiscover_WithRegistryAuthEnabled_MissingAuthHeader_Returns400() throws Exception {
+                void postDiscover_WithRegistryAuthEnabled_MissingAuthHeader_Returns401() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
-                        // When registry auth is enabled and Authorization header is missing
-                        // Expected: 400 Bad Request with NACK response
+                        // F-12: a missing Authorization header is an authentication failure.
+                        // Expected: 401 Unauthorized + WWW-Authenticate challenge, NACK body unchanged.
                         ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(payload));
 
-                        result.andExpect(status().isBadRequest())
-                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_MISSING"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
+                        result.andExpect(status().isUnauthorized())
+                                        .andExpect(header().string("WWW-Authenticate", "Signature realm=\"beckn\""))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value("AUT_SIGNATURE_MISSING"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE,
                                                         containsString("Authorization header is missing")));
                 }
 
                 @Test
-                void postDiscover_WithRegistryAuthEnabled_InvalidKeyIdFormat_Returns400() throws Exception {
+                void postDiscover_WithRegistryAuthEnabled_InvalidKeyIdFormat_Returns401() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
                         String invalidHeader = "Signature keyId=\"invalid|format\",algorithm=\"ed25519\",headers=\"(created)\",created=\"123\",expires=\"456\",signature=\"sig\"";
 
+                        // F-12: a malformed/unparseable Authorization header is an authentication failure.
+                        // Expected: 401 Unauthorized + WWW-Authenticate challenge, NACK body unchanged.
                         ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .header("Authorization", invalidHeader)
                                         .content(payload));
 
                         result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
-                                        .andExpect(status().isBadRequest())
-                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
+                                        .andExpect(status().isUnauthorized())
+                                        .andExpect(header().string("WWW-Authenticate", "Signature realm=\"beckn\""))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value("AUT_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE,
                                                         containsString("Invalid keyId format")));
                 }
 
                 @Test
-                void postDiscover_WithRegistryAuthEnabled_InvalidSignatureFormat_Returns400() throws Exception {
+                void postDiscover_WithRegistryAuthEnabled_InvalidSignatureFormat_Returns401() throws Exception {
                         String payload = readFixture("ev_charging_jsonpath_connector_match.json");
 
-                        // When registry auth is enabled and Authorization header has invalid format
-                        // Expected: 400 Bad Request with NACK response
+                        // F-12: a malformed Authorization header (missing 'Signature ' prefix) is an
+                        // authentication failure. Expected: 401 Unauthorized + WWW-Authenticate, NACK body unchanged.
                         ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .header("Authorization", "InvalidFormat")
                                         .content(payload));
 
-                        result.andExpect(status().isBadRequest())
-                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_SIGNATURE_INVALID"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_MESSAGE,
+                        result.andExpect(status().isUnauthorized())
+                                        .andExpect(header().string("WWW-Authenticate", "Signature realm=\"beckn\""))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value("AUT_SIGNATURE_INVALID"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.MESSAGE,
                                                         containsString("Authorization header format is invalid")));
                 }
 
@@ -396,7 +463,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
                                         "Signature keyId=\"%s\",algorithm=\"ed25519\",headers=\"(created)\",created=\"%d\",expires=\"%d\",signature=\"abc123invalid\"",
                                         paramKeyId, now, now + 100);
 
-                        // Expected: 401 Unauthorized with NACK response and SEC_KEY_NOT_FOUND code
+                        // Expected: 401 Unauthorized with NACK response and AUT_KEY_NOT_FOUND code
                         ResultActions result = mockMvc.perform(post(DISCOVER_PATH)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .header("Authorization", header)
@@ -404,8 +471,8 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
 
                         result.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                                         .andExpect(status().isUnauthorized())
-                                        .andExpect(jsonPath("$." + BecknFields.STATUS).value("NACK"))
-                                        .andExpect(jsonPath("$." + BecknFields.ERROR + "." + BecknFields.ERROR_CODE).value("SEC_KEY_NOT_FOUND"));
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.STATUS).value("NACK"))
+                                        .andExpect(jsonPath("$." + BecknFields.MESSAGE + "." + BecknFields.ERROR + "." + BecknFields.CODE).value("AUT_KEY_NOT_FOUND"));
                 }
         }
 }

@@ -12,32 +12,28 @@ import org.beckn.catalogpublish.util.CorrelationContext;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
  * POST /catalog/push — Beckn subscriber callback endpoint.
  *
- * <p>Accepts a catalog payload from a BPP, returns {@code 202 Accepted}
+ * <p>Accepts a catalog payload from a BPP, returns {@code 200 Ack}
  * immediately, and processes the catalog asynchronously through the
- * existing publish pipeline.</p>
+ * existing publish pipeline. A {@code catalog/on_publish} callback follows,
+ * so the synchronous response is a Beckn {@code Ack} (200), not
+ * {@code AckNoCallback} (202).</p>
  */
 @RestController
 public class CatalogPushController {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogPushController.class);
-
-    private static final Map<String, Object> ACK_RESPONSE =
-            Map.of("status", "ACK");
-    private static final Map<String, Object> NACK_MISSING_CONTEXT = Map.of(
-            "status", "NACK",
-            "error", Map.of("errorCode", ErrorCodes.CTX_INVALID_FIELD,
-                    "errorMessage", ErrorMessages.CTX_INVALID_FIELD));
 
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
@@ -59,52 +55,119 @@ public class CatalogPushController {
 
         if (rawBytes.length > maxPayloadSize) {
             log.warn("event={} sizeBytes={} limit={}", LogEvent.PUSH_REJECTED, rawBytes.length, maxPayloadSize);
-            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(
-                    Map.of("status", "NACK",
-                            "error", Map.of("errorCode", ErrorCodes.REQUEST_TOO_LARGE,
-                                    "errorMessage", ErrorMessages.REQUEST_TOO_LARGE)));
+            // An oversized body is a client error → 400 NackBadRequest. 413 is not part of the
+            // Beckn response set (200/400/401/429/500). Payload not parsed — messageId omitted.
+            return ResponseEntity.badRequest().body(
+                    nackBody(null, ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED, ErrorMessages.REQUEST_TOO_LARGE));
         }
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
 
         correlationContext.setTagsFromHttp(request.getHeader("X-Tags"));
 
-        // Validate required context fields — reject with NACK if missing
-        if (!hasRequiredContext(rawBody)) {
-            return ResponseEntity.badRequest().body(NACK_MISSING_CONTEXT);
+        // Parse once; reuse the tree for correlation-id extraction and context validation.
+        JsonNode root = tryParse(rawBody);
+        if (root == null) {
+            // Unparseable JSON — distinct from a missing context. No messageId recoverable.
+            return ResponseEntity.badRequest().body(
+                    nackBody(null, ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON));
+        }
+
+        String messageId = contextText(root, BecknFields.MESSAGE_ID);
+
+        // Validate required context — reject with NACK if missing. The NACK still echoes
+        // the messageId when present so the caller can correlate the failure.
+        if (!hasRequiredContext(root)) {
+            return ResponseEntity.badRequest().body(
+                    nackBody(messageId, ErrorCodes.CTX_MISSING_FIELD, ErrorMessages.SCH_MISSING_CONTEXT));
         }
 
         log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
         pushService.enqueueForProcessing(rawBody);
 
-        return ResponseEntity.accepted().body(ACK_RESPONSE);
+        // 200 Ack: the request is accepted for async processing and a catalog/on_publish
+        // callback follows. Beckn maps 202 to AckNoCallback (which requires an error and
+        // signals that NO callback will follow), so 200 Ack is the correct code here.
+        return ResponseEntity.ok(ackBody(messageId));
     }
 
     /**
-     * Validates that the payload has a valid context object with at least one
-     * mandatory Beckn correlation field (messageId or transactionId).
-     * No enrichment or fallback — callers must send a complete Beckn context.
+     * Builds a spec-compliant ACK body:
+     * {@code {"message":{"status":"ACK","messageId":"<id>"}}}
+     * The messageId is omitted when absent (null/blank), never fabricated.
      */
-    private boolean hasRequiredContext(String rawBody) {
+    static Map<String, Object> ackBody(String messageId) {
+        Map<String, Object> inner = new HashMap<>();
+        inner.put(BecknFields.STATUS, "ACK");
+        putIfPresent(inner, BecknFields.MESSAGE_ID, messageId);
+        Map<String, Object> outer = new HashMap<>();
+        outer.put(BecknFields.MESSAGE, inner);
+        return outer;
+    }
+
+    /**
+     * Builds a spec-compliant NACK body:
+     * {@code {"message":{"status":"NACK","messageId":"<id>","error":{"code":"...","message":"..."}}}}
+     * The messageId is omitted when absent (null/blank), never fabricated.
+     */
+    static Map<String, Object> nackBody(String messageId, String code, String message) {
+        Map<String, Object> error = new HashMap<>();
+        error.put(BecknFields.CODE, code);
+        error.put(BecknFields.MESSAGE, message);
+
+        Map<String, Object> inner = new HashMap<>();
+        inner.put(BecknFields.STATUS, "NACK");
+        putIfPresent(inner, BecknFields.MESSAGE_ID, messageId);
+        inner.put(BecknFields.ERROR, error);
+
+        Map<String, Object> outer = new HashMap<>();
+        outer.put(BecknFields.MESSAGE, inner);
+        return outer;
+    }
+
+    private static void putIfPresent(Map<String, Object> target, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            target.put(key, value);
+        }
+    }
+
+    /** Parses the body to a tree, or returns {@code null} on invalid JSON. */
+    private JsonNode tryParse(String rawBody) {
         try {
-            JsonNode root = objectMapper.readTree(rawBody);
-            JsonNode ctx = root.path(BecknFields.CONTEXT);
-            if (ctx.isMissingNode() || !ctx.isObject()) {
-                log.warn("event={} reason=missing-context", LogEvent.PUSH_REJECTED);
-                return false;
-            }
-            boolean hasMessageId = !ctx.path(BecknFields.MESSAGE_ID).isMissingNode()
-                    && !ctx.path(BecknFields.MESSAGE_ID).asText("").isBlank();
-            boolean hasTransactionId = !ctx.path(BecknFields.TRANSACTION_ID).isMissingNode()
-                    && !ctx.path(BecknFields.TRANSACTION_ID).asText("").isBlank();
-            if (!hasMessageId && !hasTransactionId) {
-                log.warn("event={} reason=missing-correlation-id", LogEvent.PUSH_REJECTED);
-                return false;
-            }
-            return true;
+            return objectMapper.readTree(rawBody);
         } catch (Exception e) {
             log.warn("event={} reason=invalid-json error={}", LogEvent.PUSH_REJECTED, ErrorSanitizer.sanitize(e));
+            return null;
+        }
+    }
+
+    /** Reads {@code context.<field>} as non-blank text from a parsed tree, or {@code null}. */
+    private static String contextText(JsonNode root, String field) {
+        if (root == null) return null;
+        JsonNode ctx = root.path(BecknFields.CONTEXT);
+        if (!ctx.isObject()) return null;
+        JsonNode v = ctx.path(field);
+        return (v.isTextual() && !v.asText().isBlank()) ? v.asText() : null;
+    }
+
+    /**
+     * Valid context object present with at least one mandatory Beckn correlation field
+     * (messageId or transactionId). No enrichment or fallback — callers must send a
+     * complete Beckn context.
+     */
+    private boolean hasRequiredContext(JsonNode root) {
+        if (root == null) {
+            return false; // invalid JSON already logged by tryParse
+        }
+        if (!root.path(BecknFields.CONTEXT).isObject()) {
+            log.warn("event={} reason=missing-context", LogEvent.PUSH_REJECTED);
             return false;
         }
+        if (contextText(root, BecknFields.MESSAGE_ID) == null
+                && contextText(root, BecknFields.TRANSACTION_ID) == null) {
+            log.warn("event={} reason=missing-correlation-id", LogEvent.PUSH_REJECTED);
+            return false;
+        }
+        return true;
     }
 }

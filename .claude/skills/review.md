@@ -19,8 +19,8 @@ Perform a focused code review of recently changed files in the Beckn Discovr pro
 4. Beckn v2.0 checks:
    - Context `@JsonProperty` uses camelCase (`transactionId`, `bapId`, `bapUri`) — not snake_case
    - No `beckn:` prefixes in catalog/item/offer field names
-   - ACK = `{"status":"ACK"}` — not `{"ack_status":"ACK",...}`
-   - NACK has `error.errorCode`/`error.errorMessage` — not `error.code`/`error.paths`
+   - ACK = `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}`; NACK adds `error:{code,message}`. Wrapped in `message`; both echo request `messageId` + `transactionId`
+   - NACK error fields are `code`/`message` (NOT `errorCode`/`errorMessage`); `error.code` MUST be a canonical `ErrorCode` enum value
    - HTTP 409 handled as `AckNoCallback` — not treated as error
 
 5. Output:

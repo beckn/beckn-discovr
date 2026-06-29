@@ -1,0 +1,171 @@
+# Discovr operational status — user-maintained
+#
+# The reliability agents read this file to populate scorecard rows that cannot
+# be measured from a single run (Backup, Restore, DR Strategy, declared gaps).
+#
+# Update the dates whenever you actually run a backup verification or DR drill.
+# The agent flags any entry older than `validity_days` as STALE in the scorecard.
+
+backup:
+  elasticsearch:
+    enabled: <FILL_true_or_false>
+    schedule: "<FILL_cron_or_description>"          # e.g. "daily 03:00 UTC"
+    retention_days: <FILL_NUMBER>
+    snapshot_repository: "<FILL_REPO_NAME>"         # ES snapshot repo (e.g. GCS, S3)
+    location: "<FILL_BUCKET_OR_PATH>"
+    last_verified_at: "<FILL_ISO8601_DATE>"
+    validity_days: 35
+  postgres:
+    enabled: <FILL_true_or_false>
+    schedule: "<FILL_cron_or_description>"
+    retention_days: <FILL_NUMBER>
+    location: "<FILL_BUCKET_OR_PATH>"
+    last_verified_at: "<FILL_ISO8601_DATE>"
+    validity_days: 35
+  velero:
+    enabled: <FILL_true_or_false>
+    schedule: "<FILL_cron_or_description>"
+    retention_days: <FILL_NUMBER>
+    backup_location: "<FILL_BUCKET_OR_PATH>"
+    last_verified_at: "<FILL_ISO8601_DATE>"
+    validity_days: 35
+
+restore:
+  elasticsearch:
+    last_drill_at: "<FILL_ISO8601_DATE>"
+    last_drill_result: "<FILL_PASS_or_FAIL_or_NOT_TESTED>"
+    rto_target_minutes: <FILL_NUMBER>
+    rto_observed_minutes: <FILL_NUMBER_OR_NULL>
+    validity_days: 90
+  postgres:
+    last_drill_at: "<FILL_ISO8601_DATE>"
+    last_drill_result: "<FILL_PASS_or_FAIL_or_NOT_TESTED>"
+    rto_target_minutes: <FILL_NUMBER>
+    rto_observed_minutes: <FILL_NUMBER_OR_NULL>
+    validity_days: 90
+  full_environment:
+    # End-to-end DR drill: restore ES snapshot + PG + k8s resources (via Velero) into a fresh cluster
+    last_drill_at: "<FILL_ISO8601_DATE>"
+    last_drill_result: "<FILL_PASS_or_FAIL_or_NOT_TESTED>"
+    rto_target_minutes: <FILL_NUMBER>
+    rto_observed_minutes: <FILL_NUMBER_OR_NULL>
+    validity_days: 180
+
+dr:
+  strategy: "Rebuild Discovr index from Catalog catalog/push event stream + replay from Kafka if available"
+  rpo_minutes: <FILL_NUMBER>                # acceptable data loss in minutes
+  rto_minutes: <FILL_NUMBER>                # target recovery time
+  documented_runbook: "<FILL_LINK_OR_PATH>" # e.g. "docs/dr/DISCOVR_DR_RUNBOOK.md"
+  last_drill_at: "<FILL_ISO8601_DATE>"
+  last_drill_result: "<FILL_PASS_or_FAIL_or_NOT_TESTED>"
+  validity_days: 180
+
+known_gaps:
+  - "<FILL — e.g. 'No automated catalog deletion, manual cleanup process'>"
+  - "<FILL — e.g. 'Phase 2 chaos run quarterly, not per-deploy'>"
+  - "<FILL — e.g. 'External enrichment API SLA not contractually guaranteed'>"
+
+monitoring:
+  required_metrics:
+    - http.server.duration
+    - kafka_consumer_records_lag_max
+    - process.runtime.jvm.memory.usage
+    - process.runtime.jvm.gc.duration
+    - hikaricp.connections.usage
+    - elasticsearch_indices_indexing_index_total
+    - elasticsearch_indices_search_query_total
+    - elasticsearch_cluster_health_status
+    - elasticsearch_jvm_memory_used_bytes
+    - elasticsearch_thread_pool_rejected_total
+    - kubernetes.pod.cpu.usage
+    - kubernetes.pod.memory.usage
+
+scaling:
+  target_items_indexed: 1000000
+  target_concurrent_discover_rps: <FILL_NUMBER>   # e.g. 200
+  target_concurrent_push_rps: <FILL_NUMBER>       # e.g. 100
+  target_external_api_p99_ms: 200
+
+availability:
+  target_uptime_pct: 99.9
+  measurement_window: "rolling 30 days"
+  endpoints:
+    discover_ack: 99.9
+    on_discover_callback: 99.5
+    push_receive: 99.9
+
+upgrades:
+  # Track the last successful no-downtime upgrade per component.
+  publish_job:
+    last_upgrade_at: "<FILL_ISO8601_DATE>"
+    last_upgrade_result: "<FILL_PASS_or_FAIL_or_NOT_TESTED>"
+    downtime_observed_seconds: <FILL_NUMBER_OR_NULL>
+    validity_days: 90
+  discover_job:
+    last_upgrade_at: "<FILL_ISO8601_DATE>"
+    last_upgrade_result: "<FILL_PASS_or_FAIL_or_NOT_TESTED>"
+    downtime_observed_seconds: <FILL_NUMBER_OR_NULL>
+    validity_days: 90
+  response_dispatcher:
+    last_upgrade_at: "<FILL_ISO8601_DATE>"
+    last_upgrade_result: "<FILL_PASS_or_FAIL_or_NOT_TESTED>"
+    downtime_observed_seconds: <FILL_NUMBER_OR_NULL>
+    validity_days: 90
+  elasticsearch:
+    # Major-version ES upgrade is the highest-risk Discovr upgrade
+    last_upgrade_at: "<FILL_ISO8601_DATE>"
+    last_upgrade_result: "<FILL_PASS_or_FAIL_or_NOT_TESTED>"
+    downtime_observed_seconds: <FILL_NUMBER_OR_NULL>
+    upgrade_method: "<FILL_rolling_or_blue_green>"
+    validity_days: 365
+  postgres:
+    last_upgrade_at: "<FILL_ISO8601_DATE>"
+    last_upgrade_result: "<FILL_PASS_or_FAIL_or_NOT_TESTED>"
+    downtime_observed_seconds: <FILL_NUMBER_OR_NULL>
+    validity_days: 365
+
+alerts:
+  # The scorecard's "Monitoring" row checks that each declared alert is
+  # configured AND has fired at least once successfully in the last validity_days.
+  # The agent does NOT trigger these; it only verifies they exist + last_fired_at.
+  required:
+    - name: "indexing_failures_high"
+      configured: <FILL_true_or_false>
+      last_fired_at: "<FILL_ISO8601_DATE_OR_NULL>"
+      runbook: "<FILL_LINK_OR_PATH>"
+      validity_days: 180
+    - name: "discovr_sync_delay_high"
+      configured: <FILL_true_or_false>
+      last_fired_at: "<FILL_ISO8601_DATE_OR_NULL>"
+      runbook: "<FILL_LINK_OR_PATH>"
+      validity_days: 180
+    - name: "elasticsearch_cluster_yellow_or_red"
+      configured: <FILL_true_or_false>
+      last_fired_at: "<FILL_ISO8601_DATE_OR_NULL>"
+      runbook: "<FILL_LINK_OR_PATH>"
+      validity_days: 180
+    - name: "elasticsearch_jvm_heap_high"
+      configured: <FILL_true_or_false>
+      last_fired_at: "<FILL_ISO8601_DATE_OR_NULL>"
+      runbook: "<FILL_LINK_OR_PATH>"
+      validity_days: 180
+    - name: "kafka_consumer_lag_high"
+      configured: <FILL_true_or_false>
+      last_fired_at: "<FILL_ISO8601_DATE_OR_NULL>"
+      runbook: "<FILL_LINK_OR_PATH>"
+      validity_days: 180
+    - name: "postgres_connection_pool_exhausted"
+      configured: <FILL_true_or_false>
+      last_fired_at: "<FILL_ISO8601_DATE_OR_NULL>"
+      runbook: "<FILL_LINK_OR_PATH>"
+      validity_days: 180
+    - name: "external_enrichment_api_failure_rate_high"
+      configured: <FILL_true_or_false>
+      last_fired_at: "<FILL_ISO8601_DATE_OR_NULL>"
+      runbook: "<FILL_LINK_OR_PATH>"
+      validity_days: 180
+    - name: "on_discover_callback_5xx_rate"
+      configured: <FILL_true_or_false>
+      last_fired_at: "<FILL_ISO8601_DATE_OR_NULL>"
+      runbook: "<FILL_LINK_OR_PATH>"
+      validity_days: 180

@@ -1,0 +1,27 @@
+{
+  "context": {
+    "action": "discover",
+    "version": "2.0.0",
+    "networkId": "bap.net/ev-charging",
+    "transactionId": "55555555-5555-4555-8555-555555555555",
+    "messageId": "55555555-5555-4555-8555-eeeeeeeeeeee",
+    "timestamp": "2026-06-13T10:00:00.000Z",
+    "ttl": "PT30S"
+  },
+  "message": {
+    "intent": {
+      "textSearch": "fast charging station",
+      "spatial": [
+        {
+          "op": "s_dwithin",
+          "targets": "$.catalogs[*].resources[*].availableAt[*].geo",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [77.5946, 12.9716]
+          },
+          "distanceMeters": 5000
+        }
+      ]
+    }
+  }
+}
