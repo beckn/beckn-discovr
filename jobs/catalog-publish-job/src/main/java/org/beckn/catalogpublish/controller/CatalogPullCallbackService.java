@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.beckn.catalogpublish.common.BecknFields;
+import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.logging.MdcField;
 import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
@@ -39,6 +40,7 @@ public class CatalogPullCallbackService {
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
     private final CatalogPublishMetrics metrics;
+    private final AppProperties props;
     private final HttpClient httpClient;
 
     /**
@@ -47,12 +49,14 @@ public class CatalogPullCallbackService {
      * @param pushService the service used to enqueue transformed catalogs
      * @param objectMapper the JSON object mapper
      * @param metrics publish/on_pull metrics recorder
+     * @param props application configuration (gates the on_pull download SSRF guard)
      */
     public CatalogPullCallbackService(CatalogPushService pushService, ObjectMapper objectMapper,
-            CatalogPublishMetrics metrics) {
+            CatalogPublishMetrics metrics, AppProperties props) {
         this.pushService = pushService;
         this.objectMapper = objectMapper;
         this.metrics = metrics;
+        this.props = props;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -267,6 +271,13 @@ public class CatalogPullCallbackService {
      *         loopback / link-local / site-local (private) address
      */
     private void validateDownloadUrl(String url) {
+        // Secure-by-default gate. When app.catalog.pull-ssrf-check-enabled is explicitly false
+        // (local/dev), skip the guard and WARN that it is disabled. Absent/true => enforce as today.
+        if (Boolean.FALSE.equals(props.catalog().pullSsrfCheckEnabled())) {
+            log.warn("event={} reason=ssrf-guard-disabled url={}", LogEvent.ON_PULL_SSRF_DISABLED, url);
+            return;
+        }
+
         URI uri;
         try {
             uri = URI.create(url);

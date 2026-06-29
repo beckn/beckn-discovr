@@ -37,6 +37,7 @@ public final class LogEvent {
     public static final String ON_PULL_RECEIVED = "on_pull.received";
     public static final String ON_PULL_REJECTED = "on_pull.rejected";
     public static final String ON_PULL_FAILED   = "on_pull.failed";
+    public static final String ON_PULL_SSRF_DISABLED = "on_pull.ssrf.disabled";
 
     // Auth filter
     public static final String AUTH_SKIPPED       = "auth.skipped";
