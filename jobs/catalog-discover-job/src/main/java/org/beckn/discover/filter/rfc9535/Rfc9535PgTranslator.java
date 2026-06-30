@@ -8,6 +8,7 @@ import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.beckn.discover.filter.FilterParseException;
 import org.beckn.discover.filter.FilterTranslator;
 import org.beckn.discover.filter.TranslatedFilter;
+import org.beckn.discover.filter.UnsupportedFilterException;
 import org.beckn.discover.filter.rfc9535.gen.JsonPathLexer;
 import org.beckn.discover.filter.rfc9535.gen.JsonPathParser;
 import org.springframework.stereotype.Component;
@@ -59,7 +60,17 @@ public class Rfc9535PgTranslator implements FilterTranslator {
             throw new FilterParseException("Invalid RFC 9535 JSONPath: " + e.getMessage(), e);
         }
 
-        String pg = new PgJsonPathEmitter().visit(tree);
+        // The emitter must only ever raise our typed exceptions; any other failure
+        // (e.g. a malformed token slipping through) is treated as a parse failure
+        // rather than crashing the caller — translate() never throws raw runtime errors.
+        String pg;
+        try {
+            pg = new PgJsonPathEmitter().visit(tree);
+        } catch (FilterParseException | UnsupportedFilterException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new FilterParseException("Failed to translate RFC 9535 JSONPath: " + e.getMessage(), e);
+        }
         // Output always begins with '$' (a node query), so downstream treats it as
         // a selection path and wraps it in exists(...) for the WHERE predicate.
         return new TranslatedFilter(pg, true);

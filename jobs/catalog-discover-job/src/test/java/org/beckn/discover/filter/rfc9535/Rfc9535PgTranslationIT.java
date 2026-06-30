@@ -187,7 +187,7 @@ class Rfc9535PgTranslationIT {
         cases.put("$.catalogs[*].resources[*][?length(@.tags) > 2]", new boolean[]{true, false});         // length() → .size()
         cases.put("$.catalogs[*].resources[*][?@.rating]", new boolean[]{true, true});                    // existence
         cases.put("$.catalogs[*].resources[*][?@.nonexistentField]", new boolean[]{false, false});        // existence (none)
-        cases.put("$..['beckn:category']", new boolean[]{true, true});                                    // descendant + namespaced
+        cases.put("$.catalogs[*].resources[*][?@.resourceAttributes.connectorType != \"CCS2\"]", new boolean[]{true, true}); // != (RFC: absent/cross-type aware)
 
         System.out.println("\n=== execution semantics: RFC 9535 → PG, run against seeded data ===");
         for (Map.Entry<String, boolean[]> e : cases.entrySet()) {
@@ -231,6 +231,12 @@ class Rfc9535PgTranslationIT {
         String[] unsupported = {
                 "$.catalogs[0:10:2]",                                   // slice step
                 "$.catalogs[*].resources[*][?count(@.offers) >= 1]",    // count() nodelist semantics
+                "$..price",                                             // descendant (PG .** ≠ RFC)
+                "$.catalogs[*].resources.*",                            // dot-wildcard (type-agnostic)
+                "$[?@.price < 10]",                                     // filter directly on root
+                "$[0]",                                                 // index directly on root
+                "$.catalogs[*].resources[*][?@.a == @.b]",              // path-vs-path comparison
+                "$.catalogs[*].resources[*][?@.tags[*]]",               // non-singular existence test
         };
         for (String expr : unsupported) {
             assertThrows(UnsupportedFilterException.class, () -> translator.translate(expr),
@@ -248,7 +254,6 @@ class Rfc9535PgTranslationIT {
                 translator.translate(
                         "$.catalogs[*].resources[*][?@.resourceAttributes.connectorType == \"CCS2\"]").expression());
         assertEquals("$.a.b.c", translator.translate("$.a.b.c").expression());
-        assertEquals("$.**.price", translator.translate("$..price").expression());
         assertEquals("$.r ? (@.p > 1 && @.q == \"x\")",
                 translator.translate("$.r[?@.p > 1 && @.q == 'x']").expression());  // single→double quotes
         assertEquals("$.r.\"schema:price\"",

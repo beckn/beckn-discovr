@@ -241,10 +241,8 @@ final class ScenarioLibrary {
         // all resources
         s.add(Scenario.ids("wildcard.allResources", "$.catalogs[*].resources[*]",
                 ds.resourceIds(r -> true)));
-        // all offers anywhere (catalog-level + resource-level)
-        TreeSet<String> allOffers = new TreeSet<>(ds.catalogOfferIds(o -> true));
-        allOffers.addAll(ds.resourceOfferIds(o -> true));
-        s.add(Scenario.ids("descendant.allOffers", "$..offers[*]", allOffers));
+        // Note: descendant ('..') is intentionally NOT covered here — it is rejected
+        // by the translator (PG '.**' cannot match RFC 9535 semantics). See CtsComplianceIT.
     }
 
     // ── Offer queries: catalog level ───────────────────────────────────────---

@@ -11,9 +11,6 @@ $.catalogs.descriptor.name
 $.message.intent.filters.expression
 
 # ── wildcards ──
-$.*
-$.a.*
-$[*]
 $.catalogs[*]
 $.catalogs[*].resources[*]
 $.catalogs[*].resources[*].descriptor
@@ -32,11 +29,7 @@ $.catalogs[1:]
 $.catalogs[:3]
 $.catalogs[0:5].resources[*]
 
-# ── descendant ──
-$..price
-$..resources
-$..resourceAttributes.connectorType
-$..descriptor.name
+# (descendant '..' is intentionally unsupported — see Rfc9535PgTranslationIT.rejectsUnsupported)
 
 # ── bracketed names incl. namespaced keys (RFC requires bracket form) ──
 $['schema:price']

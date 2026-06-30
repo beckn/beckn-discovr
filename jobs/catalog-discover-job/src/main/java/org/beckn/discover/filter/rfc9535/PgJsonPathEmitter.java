@@ -1,5 +1,6 @@
 package org.beckn.discover.filter.rfc9535;
 
+import org.beckn.discover.filter.FilterParseException;
 import org.beckn.discover.filter.UnsupportedFilterException;
 import org.beckn.discover.filter.rfc9535.gen.JsonPathBaseVisitor;
 import org.beckn.discover.filter.rfc9535.gen.JsonPathParser.*;
@@ -44,7 +45,31 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
 
     @Override
     public String visitJsonpath(JsonpathContext ctx) {
+        // Operations applied DIRECTLY to the root document — filter `$[?…]`, index
+        // `$[0]`, slice `$[0:2]`, wildcard `$[*]`/`$.*` — depend on whether the root
+        // is an array or object, which RFC handles type-agnostically but PostgreSQL
+        // does not (lax-mode wrapping, object-vs-array wildcard). Discover paths
+        // always begin with a member access (`$.catalogs…`), so we require that and
+        // reject root-level operations rather than return a wrong result.
+        List<SegmentContext> segs = ctx.segments().segment();
+        if (!segs.isEmpty() && !isMemberAccess(segs.get(0))) {
+            throw new UnsupportedFilterException(
+                    "operations applied directly to the root ($) are not supported; begin with a member access");
+        }
         return "$" + visit(ctx.segments());
+    }
+
+    /** A segment is a member access if it is `.name` or `['name']` (not wildcard/index/slice/filter). */
+    private static boolean isMemberAccess(SegmentContext seg) {
+        ChildSegmentContext child = seg.childSegment();
+        if (child instanceof DotMemberContext) {
+            return true;
+        }
+        if (child instanceof ChildBracketedContext cb) {
+            List<SelectorContext> sels = cb.bracketed().selector();
+            return sels.size() == 1 && sels.get(0) instanceof SelNameContext;
+        }
+        return false;
     }
 
     @Override
@@ -65,7 +90,12 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
 
     @Override
     public String visitDotWildcard(DotWildcardContext ctx) {
-        return ".*";
+        // RFC `*` selects children of arrays AND objects; PG `.*` is object-only and
+        // `[*]` array-only. Discover uses bracket-wildcard `[*]` on known arrays
+        // (resources[*], offers[*]). The dot-wildcard form is type-agnostic and
+        // cannot be faithfully mapped → reject.
+        throw new UnsupportedFilterException(
+                "dot-wildcard ('.*') is not supported; use a bracket wildcard on an array (e.g. resources[*])");
     }
 
     @Override
@@ -73,21 +103,28 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
         return visit(ctx.bracketed());
     }
 
-    // ── Descendant segments ('..' → '.**') ─────────────────────────────────────
+    // ── Descendant segments — rejected (PG cannot match RFC semantics) ──────────
+    // RFC 9535 `..` visits each node once in document order. PostgreSQL `.**`
+    // differs materially: it yields duplicate matches, a different ordering, and
+    // includes intermediate nodes. There is no faithful PG rewrite, so we reject
+    // rather than return wrong results (reject-over-guess).
+
+    private static final String DESCENDANT_UNSUPPORTED =
+            "recursive descent ('..') is not supported: PostgreSQL '.**' does not match RFC 9535 semantics";
 
     @Override
     public String visitDescMember(DescMemberContext ctx) {
-        return ".**." + pgMember(ctx.memberName().getText());
+        throw new UnsupportedFilterException(DESCENDANT_UNSUPPORTED);
     }
 
     @Override
     public String visitDescWildcard(DescWildcardContext ctx) {
-        return ".**";
+        throw new UnsupportedFilterException(DESCENDANT_UNSUPPORTED);
     }
 
     @Override
     public String visitDescBracketed(DescBracketedContext ctx) {
-        return ".**" + visit(ctx.bracketed());
+        throw new UnsupportedFilterException(DESCENDANT_UNSUPPORTED);
     }
 
     // ── Bracketed selection ─────────────────────────────────────────────────--
@@ -99,12 +136,14 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
             // Each labelled selector returns a full PG fragment incl. its own delimiters.
             return visit(selectors.get(0));
         }
-        // Multiple selectors in one step: PG supports only index/slice/wildcard lists.
+        // Multiple selectors in one step: PostgreSQL supports only index/slice
+        // lists. Name, filter, and wildcard selectors cannot be combined with
+        // others in a single subscript (PG raises a syntax error) → reject.
         List<String> parts = new ArrayList<>(selectors.size());
         for (SelectorContext s : selectors) {
-            if (s instanceof SelFilterContext || s instanceof SelNameContext) {
+            if (s instanceof SelFilterContext || s instanceof SelNameContext || s instanceof SelWildcardContext) {
                 throw new UnsupportedFilterException(
-                        "PostgreSQL cannot combine name/filter selectors with others in one step");
+                        "PostgreSQL cannot combine name/filter/wildcard selectors with others in one step");
             }
             parts.add(stripBrackets(visit(s)));
         }
@@ -113,7 +152,7 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
 
     @Override
     public String visitSelName(SelNameContext ctx) {
-        return "." + pgMember(unquote(ctx.nameSelector().STRING().getText()));
+        return "." + pgMember(decodeString(ctx.nameSelector().STRING().getText()));
     }
 
     @Override
@@ -123,7 +162,7 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
 
     @Override
     public String visitSelIndex(SelIndexContext ctx) {
-        return "[" + pgIndex(Integer.parseInt(ctx.indexSelector().INT().getText())) + "]";
+        return "[" + pgIndex(intArg(ctx.indexSelector().INT().getText())) + "]";
     }
 
     @Override
@@ -174,8 +213,10 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
 
     @Override
     public String visitExistExpr(ExistExprContext ctx) {
-        String not = ctx.NOT() != null ? "!" : "";
-        return not + visit(ctx.testExpr());
+        String inner = visit(ctx.testExpr());
+        // PG requires the operand of '!' to be parenthesised (e.g. `!(@.a like_regex …)`
+        // is a syntax error otherwise). Always wrap when negating.
+        return ctx.NOT() != null ? "!(" + inner + ")" : inner;
     }
 
     // ── Comparison ────────────────────────────────────────────────────────────
@@ -185,7 +226,52 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
         String left = visit(ctx.comparable(0));
         String op = ctx.compareOp().getText();   // ==, !=, <=, >=, <, > — all valid in PG
         String right = visit(ctx.comparable(1));
+        boolean leftPath = ctx.comparable(0) instanceof PathComparableContext;
+        boolean rightPath = ctx.comparable(1) instanceof PathComparableContext;
+
+        // Path-vs-path comparison relies on RFC nodelist/deep-equality semantics
+        // (and both-absent equality) that PostgreSQL scalar comparison cannot
+        // reproduce → reject rather than return a wrong answer.
+        if (leftPath && rightPath) {
+            throw new UnsupportedFilterException(
+                    "comparison of two paths is not supported (RFC deep/nodelist equality semantics)");
+        }
+
+        if ("!=".equals(op)) {
+            // RFC 9535 §2.3.5.2.2: A != B is TRUE when the path operand is absent
+            // ("Nothing") OR differs in TYPE OR differs in value. PostgreSQL lax mode
+            // drops absent rows and treats a cross-type comparison as no-match, so a
+            // bare `@.x != v` is wrong on both counts. Reconstruct RFC semantics:
+            //   @.x != 1  →  (!exists(@.x) || @.x.type() != "number" || @.x != 1)
+            String guard = leftPath ? neqGuard(left, litPgType(ctx.comparable(1)))
+                    : rightPath ? neqGuard(right, litPgType(ctx.comparable(0)))
+                    : null;
+            if (guard != null) {
+                return "(" + guard + " || " + left + " != " + right + ")";
+            }
+        }
         return left + " " + op + " " + right;
+    }
+
+    /** RFC `!=` guard for a singular-path operand: true when absent or of a different type. */
+    private static String neqGuard(String path, String literalType) {
+        if (literalType != null) {
+            return "!exists(" + path + ") || " + path + ".type() != \"" + literalType + "\"";
+        }
+        return "!exists(" + path + ")";
+    }
+
+    /** PostgreSQL {@code .type()} string for a literal comparable, or {@code null} if not a literal. */
+    private static String litPgType(ComparableContext c) {
+        if (!(c instanceof LitComparableContext lit)) {
+            return null;
+        }
+        LiteralContext l = lit.literal();
+        if (l instanceof IntLiteralContext || l instanceof NumLiteralContext) return "number";
+        if (l instanceof StrLiteralContext) return "string";
+        if (l instanceof TrueLiteralContext || l instanceof FalseLiteralContext) return "boolean";
+        if (l instanceof NullLiteralContext) return "null";
+        return null;
     }
 
     @Override
@@ -208,9 +294,48 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
     @Override
     public String visitTestExpr(TestExprContext ctx) {
         if (ctx.filterQuery() != null) {
+            // RFC existence test allows a non-singular query (wildcard/slice/descendant):
+            // it is true when the nodelist is non-empty. PG `exists()` over such a path
+            // diverges (object-vs-array wildcard, descendant dups) → reject; a singular
+            // existence test (@.a.b) maps faithfully.
+            if (!isSingularQuery(ctx.filterQuery())) {
+                throw new UnsupportedFilterException(
+                        "non-singular existence test (wildcard/slice/descendant in a filter test) is not supported");
+            }
             return "exists(" + visit(ctx.filterQuery()) + ")";
         }
         return visit(ctx.functionExpr());
+    }
+
+    /** A query is singular if every segment is a plain name or single index (no wildcard/slice/filter/descendant). */
+    private static boolean isSingularQuery(FilterQueryContext fq) {
+        SegmentsContext segs;
+        if (fq.relQuery() != null) {
+            segs = fq.relQuery().segments();
+        } else {
+            segs = fq.jsonpathQuery().segments();
+        }
+        for (SegmentContext seg : segs.segment()) {
+            if (seg.descendantSegment() != null) {
+                return false;
+            }
+            ChildSegmentContext child = seg.childSegment();
+            if (child instanceof DotWildcardContext) {
+                return false;
+            }
+            if (child instanceof ChildBracketedContext cb) {
+                for (SelectorContext sel : cb.bracketed().selector()) {
+                    // Only a single name or index keeps the query singular.
+                    if (!(sel instanceof SelIndexContext) && !(sel instanceof SelNameContext)) {
+                        return false;
+                    }
+                }
+                if (cb.bracketed().selector().size() != 1) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     @Override
@@ -240,9 +365,9 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
             return "." + pgMember(ctx.memberName().getText());
         }
         if (ctx.STRING() != null) {
-            return "." + pgMember(unquote(ctx.STRING().getText()));
+            return "." + pgMember(decodeString(ctx.STRING().getText()));
         }
-        return "[" + pgIndex(Integer.parseInt(ctx.INT().getText())) + "]";
+        return "[" + pgIndex(intArg(ctx.INT().getText())) + "]";
     }
 
     // ── Functions (length/count/match/search/value) ─────────────────────────--
@@ -254,8 +379,12 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
         switch (name) {
             case "length":
                 // RFC length() = element/char count of a single value → PG .size()
-                // (array semantics). String/object length differs; arrays only here.
+                // (array semantics). The argument must be a path (e.g. @.tags); a
+                // literal arg would emit invalid PG like `1.size()` → reject.
                 requireArgCount(name, args, 1);
+                if (args.get(0).filterQuery() == null) {
+                    throw new UnsupportedFilterException("length() requires a path argument");
+                }
                 return visit(args.get(0)) + ".size()";
             case "count":
                 // RFC count() counts NODES in a nodelist — not array length. PG
@@ -271,6 +400,14 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
                 requireArgCount(name, args, 2);
                 String path = visit(args.get(0));
                 String regex = rawStringArg(name, args.get(1));
+                // RFC 9535 regex is I-Regexp (RFC 9485); PG like_regex is POSIX/XQuery.
+                // They agree on common patterns but Unicode property classes (\p{..}/\P{..})
+                // are I-Regexp-specific and PG rejects them → reject rather than emit
+                // an invalid regex.
+                if (regex.contains("\\p{") || regex.contains("\\P{")) {
+                    throw new UnsupportedFilterException(
+                            "regex Unicode property classes (\\p{..}) are not supported on PostgreSQL");
+                }
                 // match() = full match (anchored); search() = substring.
                 String pattern = name.equals("match") ? "^(" + regex + ")$" : regex;
                 return path + " like_regex " + pgString(pattern);
@@ -305,7 +442,7 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
 
     @Override
     public String visitStrLiteral(StrLiteralContext ctx) {
-        return pgString(unquote(ctx.STRING().getText()));
+        return pgString(decodeString(ctx.STRING().getText()));
     }
 
     @Override
@@ -330,7 +467,27 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
         if (BARE_IDENT.matcher(name).matches()) {
             return name;
         }
-        return "\"" + name.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        return "\"" + jsonEncode(name) + "\"";
+    }
+
+    /**
+     * Parses an index/slice bound. RFC 9535 allows the full I-JSON integer range
+     * (±(2^53-1)), but PostgreSQL subscripts are 32-bit. Out-of-int-range bounds
+     * only ever address positions no array can hold (an empty result), so we
+     * reject them rather than emit a value PostgreSQL would error on (reject-over-
+     * guess). Non-integers are likewise rejected.
+     */
+    private static int intArg(String text) {
+        long v;
+        try {
+            v = Long.parseLong(text);
+        } catch (NumberFormatException e) {
+            throw new UnsupportedFilterException("index/slice bound is not an integer: " + text);
+        }
+        if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
+            throw new UnsupportedFilterException("index/slice bound out of supported range: " + text);
+        }
+        return (int) v;
     }
 
     /** RFC index → PG index. Non-negative as-is; -1 → last; -n → last-(n-1). */
@@ -348,12 +505,23 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
         if (ctx.step != null) {
             throw new UnsupportedFilterException("PostgreSQL jsonpath does not support slice step");
         }
-        String start = ctx.start != null ? pgIndex(Integer.parseInt(ctx.start.getText())) : "0";
+        String start = ctx.start != null ? pgIndex(intArg(ctx.start.getText())) : "0";
         String end;
         if (ctx.end != null) {
-            int e = Integer.parseInt(ctx.end.getText());
-            // RFC slice end is exclusive; PG 'to' is inclusive.
-            end = e >= 0 ? String.valueOf(e - 1) : pgIndex(e);
+            int e = intArg(ctx.end.getText());
+            // RFC slice end is EXCLUSIVE; PG 'to' is INCLUSIVE → subtract one.
+            //   positive e  → e-1
+            //   negative e  → len+e exclusive  = last+e inclusive  = "last-(|e|)"
+            //   e == 0      → empty selection; PG cannot express a guaranteed-empty
+            //                 slice via a literal subscript → reject (never guess).
+            if (e > 0) {
+                end = String.valueOf(e - 1);
+            } else if (e < 0) {
+                end = "last-" + (-e);
+            } else {
+                throw new UnsupportedFilterException(
+                        "slice with end 0 (empty selection) is not representable in PostgreSQL jsonpath");
+            }
         } else {
             end = "last";
         }
@@ -367,31 +535,87 @@ final class PgJsonPathEmitter extends JsonPathBaseVisitor<String> {
         throw new UnsupportedFilterException("selector cannot be combined in a multi-selector step");
     }
 
-    /** Strip surrounding quotes and unescape an RFC string literal token. */
-    private static String unquote(String token) {
+    /**
+     * Decodes an RFC 9535 string-literal token (single- or double-quoted) into its
+     * real character value — handling {@code \" \' \\ \/ \b \f \n \r \t} and
+     * {@code \\uXXXX} (incl. surrogate pairs). The naive "drop the backslash"
+     * approach was wrong: it turned {@code "\n"} into the letter {@code n}.
+     */
+    private static String decodeString(String token) {
         String body = token.substring(1, token.length() - 1);
         StringBuilder sb = new StringBuilder(body.length());
         for (int i = 0; i < body.length(); i++) {
             char c = body.charAt(i);
-            if (c == '\\' && i + 1 < body.length()) {
-                sb.append(body.charAt(++i));
-            } else {
+            if (c != '\\') {
                 sb.append(c);
+                continue;
+            }
+            if (++i >= body.length()) {
+                break;
+            }
+            char e = body.charAt(i);
+            switch (e) {
+                case '"':  sb.append('"');  break;
+                case '\'': sb.append('\''); break;
+                case '\\': sb.append('\\'); break;
+                case '/':  sb.append('/');  break;
+                case 'b':  sb.append('\b'); break;
+                case 'f':  sb.append('\f'); break;
+                case 'n':  sb.append('\n'); break;
+                case 'r':  sb.append('\r'); break;
+                case 't':  sb.append('\t'); break;
+                case 'u':
+                    if (i + 5 > body.length()) {
+                        throw new FilterParseException("truncated \\u escape in string literal");
+                    }
+                    try {
+                        sb.append((char) Integer.parseInt(body.substring(i + 1, i + 5), 16));
+                    } catch (NumberFormatException nfe) {
+                        throw new FilterParseException("invalid \\u escape in string literal");
+                    }
+                    i += 4;
+                    break;
+                default:
+                    sb.append(e); // lenient: unknown escape → the literal char
             }
         }
         return sb.toString();
     }
 
-    /** Emit a PG jsonpath double-quoted string with proper escaping. */
+    /** Emit a PG jsonpath double-quoted string literal from a decoded value. */
     private static String pgString(String value) {
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        return "\"" + jsonEncode(value) + "\"";
+    }
+
+    /** JSON-string-encode the body of a PG string/member: escape quotes, backslash, control chars. */
+    private static String jsonEncode(String s) {
+        StringBuilder b = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"':  b.append("\\\""); break;
+                case '\\': b.append("\\\\"); break;
+                case '\b': b.append("\\b");  break;
+                case '\f': b.append("\\f");  break;
+                case '\n': b.append("\\n");  break;
+                case '\r': b.append("\\r");  break;
+                case '\t': b.append("\\t");  break;
+                default:
+                    if (c < 0x20) {
+                        b.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        b.append(c);
+                    }
+            }
+        }
+        return b.toString();
     }
 
     private static String rawStringArg(String fn, FunctionArgContext arg) {
         if (!(arg.literal() instanceof StrLiteralContext)) {
             throw new UnsupportedFilterException(fn + "() requires a string-literal pattern argument");
         }
-        return unquote(((StrLiteralContext) arg.literal()).STRING().getText());
+        return decodeString(((StrLiteralContext) arg.literal()).STRING().getText());
     }
 
     private static void requireArgCount(String fn, List<FunctionArgContext> args, int n) {
