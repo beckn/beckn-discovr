@@ -5,8 +5,10 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.common.ErrorMessages;
+import org.beckn.discover.filter.FilterCompiler;
+import org.beckn.discover.filter.FilterParseException;
+import org.beckn.discover.filter.UnsupportedFilterException;
 import org.beckn.discover.logging.LogEvent;
-import org.beckn.discover.service.postgresql.jsonpath.JsonPathConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.NonTransientDataAccessException;
@@ -63,7 +65,7 @@ public class IntentQueryValidator {
     private static final Logger log = LoggerFactory.getLogger(IntentQueryValidator.class);
 
     private final JdbcClient jdbcClient;
-    private final JsonPathConverter jsonPathConverter;
+    private final FilterCompiler filterCompiler;
 
     /**
      * processed-expression → is it a valid PG jsonpath. Validity is a pure function of the string,
@@ -73,9 +75,9 @@ public class IntentQueryValidator {
             .maximumSize(10_000)
             .build();
 
-    public IntentQueryValidator(JdbcClient jdbcClient, JsonPathConverter jsonPathConverter) {
+    public IntentQueryValidator(JdbcClient jdbcClient, FilterCompiler filterCompiler) {
         this.jdbcClient = jdbcClient;
-        this.jsonPathConverter = jsonPathConverter;
+        this.filterCompiler = filterCompiler;
     }
 
     /**
@@ -90,10 +92,11 @@ public class IntentQueryValidator {
         if (intent.isMissingNode() || intent.isNull()) {
             return;
         }
-        validateJsonPath(intent.path("filters").path("expression"));
+        JsonNode filters = intent.path("filters");
+        validateJsonPath(filters.path("expression"), filters.path("type").asText(null));
     }
 
-    private void validateJsonPath(JsonNode expressionNode) {
+    private void validateJsonPath(JsonNode expressionNode, String filterType) {
         if (!expressionNode.isTextual()) {
             return;
         }
@@ -101,11 +104,22 @@ public class IntentQueryValidator {
         if (expr.isBlank()) {
             return; // blank / absoluteness already guarded by DiscoveryValidationService
         }
-        // Validate exactly what the engine will run: the processed form, then the jsonpath cast.
-        String processed = jsonPathConverter.processFilter(expr);
+        // Compile to exactly what the engine will run. For rfc9535 this parses + translates
+        // (grammar/capability errors surface here as a clean NACK); for legacy jsonpath it is
+        // the existing single→double quote / colon-field processing. Same compiler the consumer
+        // uses, so validation and execution can never disagree on the dialect.
+        String processed;
+        try {
+            processed = filterCompiler.toPgJsonPath(expr, filterType);
+        } catch (FilterParseException | UnsupportedFilterException e) {
+            log.warn(LogEvent.VALIDATE_FAILED + ".jsonpath", value("expression", expr),
+                    value("type", filterType), value("reason", e.getMessage()));
+            throw badRequest(ErrorCodes.SCH_INVALID_JSONPATH, ErrorMessages.SCH_INVALID_JSONPATH);
+        }
 
-        // Probe Postgres only the first time we see this processed string; repeats are free.
-        // A transient DB failure thrown by probe() propagates (not cached) → 5xx, never a false 400.
+        // Final authority: probe Postgres on the translated form (first sighting only; repeats are
+        // free). A transient DB failure thrown by probe() propagates (not cached) → 5xx, never a
+        // false 400.
         boolean valid = validityCache.get(processed, this::probe);
         if (!valid) {
             // Keep the offending expression in the log for debugging, but do NOT reflect it back

@@ -31,7 +31,8 @@ class SpatialQueryBuilderTest {
 
     @BeforeEach
     void setUp() {
-        builder = new SpatialQueryBuilder(new ObjectMapper(), new JsonPathConverter());
+        builder = new SpatialQueryBuilder(new ObjectMapper(), new org.beckn.discover.filter.FilterCompiler(
+                new JsonPathConverter(), new org.beckn.discover.filter.rfc9535.Rfc9535PgTranslator()));
     }
 
     private static List<DiscoverRequest.SpatialConstraint> dwithin() {

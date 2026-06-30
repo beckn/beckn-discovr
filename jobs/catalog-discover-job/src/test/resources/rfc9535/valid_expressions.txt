@@ -1,0 +1,98 @@
+# Curated RFC 9535 JSONPath expressions — all valid and PostgreSQL-expressible.
+# One expression per line. Lines starting with '#' and blank lines are ignored.
+# Used by Rfc9535PgTranslationIT to prove translation produces parseable PG jsonpath.
+
+# ── plain child navigation ──
+$.a
+$.a.b
+$.a.b.c
+$.catalogs
+$.catalogs.descriptor.name
+$.message.intent.filters.expression
+
+# ── wildcards ──
+$.*
+$.a.*
+$[*]
+$.catalogs[*]
+$.catalogs[*].resources[*]
+$.catalogs[*].resources[*].descriptor
+$.catalogs[*].resources[*].resourceAttributes.connectorType
+
+# ── index selectors ──
+$.catalogs[0]
+$.catalogs[1].resources[0]
+$.catalogs[0].resources[2].descriptor.name
+$.catalogs[-1]
+$.catalogs[-1].resources[-1]
+
+# ── slice selectors ──
+$.catalogs[0:2]
+$.catalogs[1:]
+$.catalogs[:3]
+$.catalogs[0:5].resources[*]
+
+# ── descendant ──
+$..price
+$..resources
+$..resourceAttributes.connectorType
+$..descriptor.name
+
+# ── bracketed names incl. namespaced keys (RFC requires bracket form) ──
+$['schema:price']
+$.catalogs[*].resources[*]['schema:price']
+$.catalogs[*].resources[*]['beckn:category']
+$["resourceAttributes"]["connectorType"]
+$.catalogs[*].resources[*]['schema:availability']
+
+# ── filter: equality on strings ──
+$.catalogs[*].resources[*][?@.resourceAttributes.connectorType == "CCS2"]
+$.catalogs[*].resources[*][?@.resourceAttributes.connectorType == "CHAdeMO"]
+$.catalogs[*].resources[*][?@.resourceAttributes.connectorType != "Type2"]
+$.catalogs[*].resources[*][?@.descriptor.name == "Fast Charger"]
+$.resources[?@.id == "r1"]
+
+# ── filter: numeric comparisons ──
+$.catalogs[*].resources[*][?@.resourceAttributes.power > 30]
+$.catalogs[*].resources[*][?@.resourceAttributes.power >= 50]
+$.catalogs[*].resources[*][?@.resourceAttributes.power < 20]
+$.catalogs[*].resources[*][?@.resourceAttributes.power <= 22]
+$.catalogs[*].resources[*][?@.rating.value >= 4.0]
+$.catalogs[*].resources[*][?@.rating.value == 4.5]
+$.catalogs[*].resources[*][?@.price < 100]
+
+# ── filter: boolean / null ──
+$.catalogs[*].resources[*][?@.available == true]
+$.catalogs[*].resources[*][?@.discontinued == false]
+$.catalogs[*].resources[*][?@.deletedAt == null]
+
+# ── filter: logical AND / OR / NOT ──
+$.catalogs[*].resources[*][?@.resourceAttributes.power > 30 && @.resourceAttributes.connectorType == "CCS2"]
+$.catalogs[*].resources[*][?@.resourceAttributes.connectorType == "CCS2" || @.resourceAttributes.connectorType == "CHAdeMO"]
+$.catalogs[*].resources[*][?@.rating.value >= 4.0 && @.resourceAttributes.power >= 50]
+$.catalogs[*].resources[*][?!(@.resourceAttributes.connectorType == "Type2")]
+$.catalogs[*].resources[*][?(@.rating.value >= 4.0 || @.price < 10) && @.available == true]
+$.catalogs[*].resources[*][?@.a == 1 && @.b == 2 && @.c == 3]
+
+# ── filter: existence tests ──
+$.catalogs[*].resources[*][?@.rating]
+$.catalogs[*].resources[*][?@.resourceAttributes.connectorType]
+$.catalogs[*].resources[*][?@.rating && @.price]
+$.catalogs[*].resources[*][?!@.discontinued]
+
+# ── filter: namespaced key in predicate ──
+$.catalogs[*].resources[*][?@['schema:price'] < 50]
+$.catalogs[*].resources[*][?@['beckn:category'] == "EV"]
+
+# ── filter: functions match / search / length / count ──
+$.catalogs[*].resources[*][?match(@.resourceAttributes.connectorType, "CCS.*")]
+$.catalogs[*].resources[*][?search(@.descriptor.name, "Charger")]
+$.catalogs[*].resources[*][?length(@.tags) > 2]
+
+# ── absolute path inside filter ──
+$.catalogs[*].resources[*][?@.networkId == "n1"]
+
+# ── deep combinations ──
+$.catalogs[*].resources[*][?@.rating.value >= 4.0].descriptor
+$.catalogs[*][?@.id == "c1"].resources[*]
+$.catalogs[*].resources[?@.resourceAttributes.power > 10][?@.available == true]

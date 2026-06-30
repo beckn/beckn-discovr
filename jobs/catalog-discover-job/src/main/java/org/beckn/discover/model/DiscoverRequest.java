@@ -74,6 +74,19 @@ public class DiscoverRequest {
         return null;
     }
 
+    /**
+     * Dialect of the filter expression ({@code message.intent.filters.type}):
+     * {@code "jsonpath"} (legacy PostgreSQL SQL/JSON path) or {@code "rfc9535"}
+     * (standards-compliant). Returns {@code null} when no filter is present —
+     * callers treat null as the legacy default.
+     */
+    public String getFilterType() {
+        if (message != null && message.getIntent() != null && message.getIntent().getFilters() != null) {
+            return message.getIntent().getFilters().getType();
+        }
+        return null;
+    }
+
     public void setFilters(String filters) {
         if (this.message == null)
             this.message = new Message();

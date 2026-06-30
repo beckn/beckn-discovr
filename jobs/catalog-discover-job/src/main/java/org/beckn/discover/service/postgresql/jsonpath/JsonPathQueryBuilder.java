@@ -1,5 +1,6 @@
 package org.beckn.discover.service.postgresql.jsonpath;
 
+import org.beckn.discover.filter.FilterCompiler;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper.QuerySpec;
 import org.slf4j.Logger;
@@ -21,10 +22,10 @@ public class JsonPathQueryBuilder {
 
     private static final Logger log = LoggerFactory.getLogger(JsonPathQueryBuilder.class);
 
-    private final JsonPathConverter jsonPathConverter;
+    private final FilterCompiler filterCompiler;
 
-    public JsonPathQueryBuilder(JsonPathConverter jsonPathConverter) {
-        this.jsonPathConverter = jsonPathConverter;
+    public JsonPathQueryBuilder(FilterCompiler filterCompiler) {
+        this.filterCompiler = filterCompiler;
     }
 
     /**
@@ -32,13 +33,18 @@ public class JsonPathQueryBuilder {
      * When filter is a selection path (starts with $), always adds filter-result column so
      * response can show only matched offers/items regardless of expression format.
      */
-    /** Network-agnostic overload (no {@code networkId} scoping) — for tests / non-network callers. */
+    /** Legacy-dialect overloads (no {@code filterType}) — for tests / non-network callers. */
     public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit) {
-        return build(filters, rawSchemaContextUrls, limit, null);
+        return build(filters, rawSchemaContextUrls, limit, null, FilterCompiler.TYPE_JSONPATH);
     }
 
     public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit, String networkId) {
-        String processedFilter = jsonPathConverter.processFilter(filters);
+        return build(filters, rawSchemaContextUrls, limit, networkId, FilterCompiler.TYPE_JSONPATH);
+    }
+
+    public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit,
+                           String networkId, String filterType) {
+        String processedFilter = filterCompiler.toPgJsonPath(filters, filterType);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
         String postgresFilter = toPostgresFilter(processedFilter);
 
@@ -62,15 +68,22 @@ public class JsonPathQueryBuilder {
      *
      * @param idAllowlist non-null, non-empty collection of resource IDs from ES step 1
      */
-    /** Network-agnostic overload (no {@code networkId} scoping) — for tests / non-network callers. */
+    /** Legacy-dialect overloads (no {@code filterType}) — for tests / non-network callers. */
     public QuerySpec buildWithAllowlist(String filters, List<String> rawSchemaContextUrls,
                                         int limit, Collection<String> idAllowlist) {
-        return buildWithAllowlist(filters, rawSchemaContextUrls, limit, idAllowlist, null);
+        return buildWithAllowlist(filters, rawSchemaContextUrls, limit, idAllowlist, null, FilterCompiler.TYPE_JSONPATH);
     }
 
     public QuerySpec buildWithAllowlist(String filters, List<String> rawSchemaContextUrls,
                                         int limit, Collection<String> idAllowlist, String networkId) {
-        String processedFilter = jsonPathConverter.processFilter(filters);
+        return buildWithAllowlist(filters, rawSchemaContextUrls, limit, idAllowlist, networkId,
+                FilterCompiler.TYPE_JSONPATH);
+    }
+
+    public QuerySpec buildWithAllowlist(String filters, List<String> rawSchemaContextUrls,
+                                        int limit, Collection<String> idAllowlist, String networkId,
+                                        String filterType) {
+        String processedFilter = filterCompiler.toPgJsonPath(filters, filterType);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
         String postgresFilter = toPostgresFilter(processedFilter);
 

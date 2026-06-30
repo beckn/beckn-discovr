@@ -7,7 +7,7 @@ import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper.QuerySpec;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper.QueryTemplate;
-import org.beckn.discover.service.postgresql.jsonpath.JsonPathConverter;
+import org.beckn.discover.filter.FilterCompiler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -76,11 +76,11 @@ public class SpatialQueryBuilder {
     );
 
     private final ObjectMapper objectMapper;
-    private final JsonPathConverter jsonPathConverter;
+    private final FilterCompiler filterCompiler;
 
-    public SpatialQueryBuilder(ObjectMapper objectMapper, JsonPathConverter jsonPathConverter) {
+    public SpatialQueryBuilder(ObjectMapper objectMapper, FilterCompiler filterCompiler) {
         this.objectMapper = objectMapper;
-        this.jsonPathConverter = jsonPathConverter;
+        this.filterCompiler = filterCompiler;
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -146,13 +146,14 @@ public class SpatialQueryBuilder {
      * @return a ready-to-execute spec, or {@link Optional#empty()} when no
      *         valid spatial conditions could be built (caller must fall back)
      */
-    /** Network-agnostic overload (no {@code networkId} scoping) — for tests / non-network callers. */
+    /** Legacy-dialect overloads (no {@code filterType}) — for tests / non-network callers. */
     public Optional<QuerySpec> buildCombined(
             List<DiscoverRequest.SpatialConstraint> constraints,
             String filterExpression,
             List<String> rawSchemaContextUrls,
             int limit) {
-        return buildCombined(constraints, filterExpression, rawSchemaContextUrls, limit, null);
+        return buildCombined(constraints, filterExpression, rawSchemaContextUrls, limit, null,
+                FilterCompiler.TYPE_JSONPATH);
     }
 
     public Optional<QuerySpec> buildCombined(
@@ -161,6 +162,17 @@ public class SpatialQueryBuilder {
             List<String> rawSchemaContextUrls,
             int limit,
             String networkId) {
+        return buildCombined(constraints, filterExpression, rawSchemaContextUrls, limit, networkId,
+                FilterCompiler.TYPE_JSONPATH);
+    }
+
+    public Optional<QuerySpec> buildCombined(
+            List<DiscoverRequest.SpatialConstraint> constraints,
+            String filterExpression,
+            List<String> rawSchemaContextUrls,
+            int limit,
+            String networkId,
+            String filterType) {
 
         if (constraints == null || constraints.isEmpty()) {
             log.debug("event={} reason=no-constraints", LogEvent.SPATIAL_COMBINED_SKIP);
@@ -170,7 +182,7 @@ public class SpatialQueryBuilder {
         // JSONPath condition drives the GIN index; spatial EXISTS drives GiST.
         // combinedBaseTemplate picks the SELECT (matching_offers projection for selection
         // paths) and applies the exists()-wrapped @@ predicate from a single processed filter.
-        QueryTemplate template = combinedBaseTemplate(filterExpression);
+        QueryTemplate template = combinedBaseTemplate(filterExpression, filterType);
 
         int added = appendSpatialConditions(template, constraints);
         if (added == 0) {
@@ -195,14 +207,15 @@ public class SpatialQueryBuilder {
      * @param idAllowlist non-null, non-empty collection of resource IDs from ES step 1
      * @return {@link Optional#empty()} when no valid spatial conditions could be built
      */
-    /** Network-agnostic overload (no {@code networkId} scoping) — for tests / non-network callers. */
+    /** Legacy-dialect overloads (no {@code filterType}) — for tests / non-network callers. */
     public Optional<QuerySpec> buildCombinedWithAllowlist(
             List<DiscoverRequest.SpatialConstraint> constraints,
             String filterExpression,
             List<String> rawSchemaContextUrls,
             int limit,
             Collection<String> idAllowlist) {
-        return buildCombinedWithAllowlist(constraints, filterExpression, rawSchemaContextUrls, limit, idAllowlist, null);
+        return buildCombinedWithAllowlist(constraints, filterExpression, rawSchemaContextUrls, limit, idAllowlist,
+                null, FilterCompiler.TYPE_JSONPATH);
     }
 
     public Optional<QuerySpec> buildCombinedWithAllowlist(
@@ -212,13 +225,25 @@ public class SpatialQueryBuilder {
             int limit,
             Collection<String> idAllowlist,
             String networkId) {
+        return buildCombinedWithAllowlist(constraints, filterExpression, rawSchemaContextUrls, limit, idAllowlist,
+                networkId, FilterCompiler.TYPE_JSONPATH);
+    }
+
+    public Optional<QuerySpec> buildCombinedWithAllowlist(
+            List<DiscoverRequest.SpatialConstraint> constraints,
+            String filterExpression,
+            List<String> rawSchemaContextUrls,
+            int limit,
+            Collection<String> idAllowlist,
+            String networkId,
+            String filterType) {
 
         if (constraints == null || constraints.isEmpty()) {
             log.debug("event={} reason=no-constraints", LogEvent.SPATIAL_COMBINED_SKIP);
             return Optional.empty();
         }
 
-        QueryTemplate template = combinedBaseTemplate(filterExpression);
+        QueryTemplate template = combinedBaseTemplate(filterExpression, filterType);
 
         int added = appendSpatialConditions(template, constraints);
         if (added == 0) {
@@ -239,8 +264,8 @@ public class SpatialQueryBuilder {
 
     /**
      * Builds the base template for a combined (JSONPath + spatial) query AND applies the
-     * JSONPath {@code @@} predicate. The raw filter is processed <b>once</b> here
-     * ({@link JsonPathConverter#processFilter} is deterministic) and reused for both the
+     * JSONPath {@code @@} predicate. The raw filter is compiled <b>once</b> here
+     * (via {@link FilterCompiler}, deterministic) and reused for both the
      * SELECT projection and the WHERE predicate, so the two can never desync.
      *
      * <p>When the filter is a selection path (starts with {@code $}) the template projects
@@ -253,9 +278,8 @@ public class SpatialQueryBuilder {
      * (Finding 2). Non-selection filters use {@link QueryBuilderHelper#BASE_SELECT}; a
      * blank filter yields a bare {@code BASE_SELECT} with no JSONPath predicate.</p>
      */
-    private QueryTemplate combinedBaseTemplate(String filterExpression) {
-        String processed = (filterExpression != null && !filterExpression.isBlank())
-                ? jsonPathConverter.processFilter(filterExpression) : "";
+    private QueryTemplate combinedBaseTemplate(String filterExpression, String filterType) {
+        String processed = filterCompiler.toPgJsonPath(filterExpression, filterType);
         String trimmed = processed.trim();
         boolean selectionPath = trimmed.startsWith("$");
         QueryTemplate template = selectionPath

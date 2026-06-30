@@ -30,7 +30,25 @@ class JsonPathQueryBuilderTest {
 
     @BeforeEach
     void setUp() {
-        builder = new JsonPathQueryBuilder(new JsonPathConverter());
+        builder = new JsonPathQueryBuilder(new org.beckn.discover.filter.FilterCompiler(
+                new JsonPathConverter(), new org.beckn.discover.filter.rfc9535.Rfc9535PgTranslator()));
+    }
+
+    @Test
+    @DisplayName("filterType=rfc9535 → builder binds the TRANSLATED PG jsonpath, not the raw RFC form")
+    void rfc9535Dialect_isTranslatedThroughBuilder() {
+        // Live wiring: PostgreSQLService passes request.filterType() here. An rfc9535
+        // expression must reach PG as the translated SQL/JSON path (filter selector
+        // [?...] → standalone ? (...)), proving the consumer path routes the dialect.
+        QuerySpec spec = builder.build(
+                "$.catalogs[*].resources[*][?@.resourceAttributes.connectorType == \"CCS2\"]",
+                List.of(), 100, null, "rfc9535");
+
+        // The bound jsonpath predicate is the PG form, wrapped in exists(...).
+        assertThat(spec.parameters())
+                .contains("exists($.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"CCS2\"))");
+        // It must NOT carry the raw RFC 9535 filter-selector syntax.
+        assertThat(spec.parameters().stream().anyMatch(p -> String.valueOf(p).contains("[?@"))).isFalse();
     }
 
     @Test

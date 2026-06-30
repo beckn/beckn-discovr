@@ -49,7 +49,8 @@ class IntentQueryValidatorTest {
         JsonPathConverter converter = mock(JsonPathConverter.class);
         when(converter.processFilter(anyString())).thenAnswer(i -> i.getArgument(0));
 
-        validator = new IntentQueryValidator(jdbcClient, converter);
+        validator = new IntentQueryValidator(jdbcClient, new org.beckn.discover.filter.FilterCompiler(
+                converter, new org.beckn.discover.filter.rfc9535.Rfc9535PgTranslator()));
     }
 
     private com.fasterxml.jackson.databind.JsonNode req(String expr) throws Exception {

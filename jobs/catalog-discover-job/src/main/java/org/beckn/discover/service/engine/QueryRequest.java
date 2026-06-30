@@ -38,7 +38,14 @@ public record QueryRequest(
          * results to catalogs published to this network (#309). May be {@code null}/blank,
          * in which case no network filter is applied (results are network-agnostic).
          */
-        String networkId
+        String networkId,
+        /**
+         * Filter dialect (from {@code message.intent.filters.type}): {@code "jsonpath"}
+         * (legacy PostgreSQL SQL/JSON path) or {@code "rfc9535"} (standards-compliant,
+         * translated to PG). Null/blank is normalised to {@code "jsonpath"} so existing
+         * callers stay on the legacy path.
+         */
+        String filterType
 ) {
 
     /**
@@ -54,6 +61,7 @@ public record QueryRequest(
         schemaTypes          = schemaTypes          != null ? List.copyOf(schemaTypes)          : List.of();
         schemaContextUrls    = schemaContextUrls    != null ? List.copyOf(schemaContextUrls)    : List.of();
         rawSchemaContextUrls = rawSchemaContextUrls != null ? List.copyOf(rawSchemaContextUrls) : List.of();
+        filterType           = (filterType == null || filterType.isBlank()) ? "jsonpath" : filterType;
     }
 
     /** Backward-compatible 7-arg constructor (rawSchemaContextUrls + networkId default to empty/null). */
@@ -61,7 +69,7 @@ public record QueryRequest(
                         List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
                         List<String> schemaTypes, List<String> schemaContextUrls) {
         this(transactionId, messageId, filters, spatial, textSearch,
-                schemaTypes, schemaContextUrls, List.of(), null);
+                schemaTypes, schemaContextUrls, List.of(), null, "jsonpath");
     }
 
     /** Backward-compatible 8-arg constructor (networkId defaults to null — no network scoping). */
@@ -70,7 +78,16 @@ public record QueryRequest(
                         List<String> schemaTypes, List<String> schemaContextUrls,
                         List<String> rawSchemaContextUrls) {
         this(transactionId, messageId, filters, spatial, textSearch,
-                schemaTypes, schemaContextUrls, rawSchemaContextUrls, null);
+                schemaTypes, schemaContextUrls, rawSchemaContextUrls, null, "jsonpath");
+    }
+
+    /** Backward-compatible 9-arg constructor (filterType defaults to legacy "jsonpath"). */
+    public QueryRequest(String transactionId, String messageId, String filters,
+                        List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
+                        List<String> schemaTypes, List<String> schemaContextUrls,
+                        List<String> rawSchemaContextUrls, String networkId) {
+        this(transactionId, messageId, filters, spatial, textSearch,
+                schemaTypes, schemaContextUrls, rawSchemaContextUrls, networkId, "jsonpath");
     }
 
     // ── Factory ─────────────────────────────────────────────────────────────
@@ -100,7 +117,8 @@ public record QueryRequest(
                 parts.types(),
                 parts.urls(),
                 schemaContextUrls,
-                request.getContext().getNetworkId()
+                request.getContext().getNetworkId(),
+                request.getFilterType()
         );
     }
 

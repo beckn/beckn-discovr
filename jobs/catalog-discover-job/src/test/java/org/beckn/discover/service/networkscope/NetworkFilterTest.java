@@ -21,7 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class NetworkFilterTest {
 
-    private final JsonPathQueryBuilder jsonPath = new JsonPathQueryBuilder(new JsonPathConverter());
+    private final JsonPathQueryBuilder jsonPath = new JsonPathQueryBuilder(
+            new org.beckn.discover.filter.FilterCompiler(
+                    new JsonPathConverter(), new org.beckn.discover.filter.rfc9535.Rfc9535PgTranslator()));
 
     // ── PostgreSQL: QueryTemplate.networkFilter ──────────────────────────────
 
