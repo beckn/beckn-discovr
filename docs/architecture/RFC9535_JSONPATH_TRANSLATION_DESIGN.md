@@ -1,282 +1,192 @@
-# Design: RFC 9535 JSONPath Filtering with Pluggable DB Translation
+# Design: RFC 9535 JSONPath Filtering with Pluggable Database Translation
 
-**Status:** Under Review  
-**Service:** `catalog-discover-job` (Beckn Discovr)  
-**Date:** 2026-06-30  
+**Status:** Under Review
+**Service:** `catalog-discover-job` (Beckn Discovr)
+**Date:** 2026-06-30
 
 ---
 
 ## 1. Problem Statement
 
-The Beckn Discovr service allows clients to filter catalog resources using a JSONPath expression carried in `message.intent.filters.expression`. The current implementation has two significant issues:
+### How filtering works in Discovr today
 
-1. **Standard vs. Proprietary Dialect Mismatch:** The query dialect currently accepted and parsed by the service is **PostgreSQL SQL/JSON path** (conforming to the SQL:2016 standard, ISO/IEC 9075-2), rather than the official IETF standard for JSONPath, **RFC 9535**. These are two different standards, from two different standards bodies, built for two different purposes:
-   - **RFC 9535** (IETF, 2024) defines a general-purpose syntax for navigating and selecting values *within a JSON document* — used by generic JSON tooling (API filtering, OpenAPI, `jq`-adjacent tools) independent of any storage engine.
-   - **SQL:2016 §"SQL/JSON path language"** (ISO/IEC 9075-2) defines a syntax for use *inside SQL*, to be embedded in predicates and functions (`JSON_VALUE`, `JSON_TABLE`) that query a JSON column from a relational database. Each vendor (PostgreSQL, Oracle, DB2, MySQL) implements a slightly different subset of it.
+The Beckn Discovr service lets clients filter catalog resources by passing a JSONPath-like
+expression in `message.intent.filters.expression`. Today, Discovr does not parse or
+interpret that expression with any logic of its own — it hands the raw string straight to
+PostgreSQL:
 
-     They descend from the same informal 2007 Goessner "JSONPath" convention and *look* similar at a glance, but the standards diverged from there. For example, filtering resources where `category` equals `BEVERAGES`:
+- **Validation** asks a *live PostgreSQL connection* to parse the string as its native
+  `jsonpath` type. If Postgres's own parser accepts it, the filter is considered valid; if
+  Postgres rejects it, the request is NACKed.
+- **Execution** runs the same string, unchanged, through Postgres's native JSONB matching
+  operator.
 
-     | | Syntax | Why it differs |
-     | :--- | :--- | :--- |
-     | RFC 9535 | `$.resources[?(@.category=='BEVERAGES')]` | The filter is one of several *selector kinds* usable inside a bracket (`[...]`), alongside name/index/slice/wildcard selectors. String literals may be single- or double-quoted. |
-     | PostgreSQL SQL/JSON path (SQL:2016) | `$.resources ?(@.category=="BEVERAGES")` | The `?(...)` predicate is a distinct path suffix appended directly after a path step — there is no bracket, because SQL/JSON path has no concept of "selector kinds inside brackets." String literals must be double-quoted; `'BEVERAGES'` is a syntax error in Postgres.
+In other words, **Postgres's own parser is the only thing deciding what a "valid filter"
+is, and Postgres's own path language is the only thing that ever runs.** There is no layer
+in Discovr that owns or understands the filter syntax independently of Postgres. That one
+design choice — delegating both validation and execution entirely to the database — is the
+root cause of two problems:
 
-     A client writing the RFC-correct expression against today's service gets rejected as invalid SQL/JSON path, and vice versa. The full syntax comparison (recursive descent, existence checks, array subscripts, functions) is in §4.
-2. **Database Engine Tight Coupling:** The filter evaluation is hard-coded to PostgreSQL JSONB operators (`@@ CAST(? AS jsonpath)`). Query validation is performed by asking a live PostgreSQL instance to parse the expression. If Discovr ever switches its storage engine or routes search queries to Elasticsearch, Cassandra, or another document store, the entire JSONPath validation and evaluation mechanism breaks.
-
-### Goal
-- **Standards Compliance:** Clients should be able to write filters in the canonical, IETF-standardized JSONPath syntax (RFC 9535) rather than a PostgreSQL-specific dialect — required for an open, engine-neutral protocol.
-- **Engine Independence:** The filter syntax a client writes must not be dictated by, or tied to, whichever database currently executes the query — so the active storage/search engine can change without breaking existing client filters.
-- **Fail Fast:** Invalid or unsupported filters should be rejected immediately, before a request is accepted for asynchronous processing, so failures are visible to the client rather than silently dropped downstream.
-- **Backward Compatibility:** Existing clients using the legacy PostgreSQL SQL/JSON path dialect must continue to work unchanged.
-
-(How these goals are met — AST-based translation, a pluggable SPI, synchronous edge validation — is covered in §3 onward.)
-
----
-
-## 2. Market Search: Existing Translation Libraries
-
-**Why this section exists:** building a compiler (grammar, AST, visitor emitters) is a
-meaningful amount of code to own and maintain. Before committing to that, we checked
-whether an existing library already does "parse RFC 9535 → emit an equivalent query in
-another query language" — reusing one would have made most of §3 unnecessary. This
-section documents that search and why it came back empty, so the decision to build a
-custom compiler is justified by evidence, not assumed.
-
-**RFC 9535-compliant JSONPath *implementations* surveyed** (JVM and cross-ecosystem, 2026):
-
-| Library | Ecosystem | What it does |
-| :--- | :--- | :--- |
-| [Jayway JsonPath](https://github.com/json-path/JsonPath) | Java | Pre-RFC 9535 (Goessner dialect); [RFC 9535 support is an open, unresolved issue](https://github.com/json-path/JsonPath/issues/999) as of this writing. In-memory evaluator only. |
-| [swaggerexpert/jsonpath](https://github.com/swaggerexpert/jsonpath) | JS/TS | RFC 9535 parser/validator; converts its parse result to other **tree** representations (AST, CST, XML) — not to another query language. |
-| [P0lip/jsonpath-rfc9535](https://github.com/P0lip/jsonpath-rfc9535) | JS (ECMAScript 2022) | RFC 9535 parser + in-memory evaluator against a JS value. |
-| [theory/jsonpath](https://github.com/theory/jsonpath) | Go | RFC 9535 parser + in-memory evaluator against a Go value. |
-| [gragra33/Blazing.Json.JSONPath](https://github.com/gragra33/Blazing.Json.JSONPath) | .NET | RFC 9535-certified (324 tests) in-memory query engine. |
-| [janjorka/jsonpath-tools](https://github.com/janjorka/jsonpath-tools) | Multiple | Tooling (LSP, playground) around RFC 9535 — still in-memory evaluation, not translation. |
-| Jackson `JsonNode.at()` | Java | JSON Pointer only (RFC 6901) — no filters, no wildcards, not JSONPath. |
-
-**Result: no library, in any ecosystem, translates RFC 9535 into another query
-language.** Every RFC 9535-compliant implementation found is an **in-memory
-evaluator** — it parses the expression and walks a JSON value already loaded into
-memory, returning matching nodes. None expose "parse to AST, then emit an
-equivalent expression in a different target query language" as a supported use
-case. This holds even for the query engine best positioned to add it:
-Elasticsearch's own new `JSON_EXTRACT` ES|QL function (9.4, tech preview) evaluates
-an RFC 9535 subset against a JSON *string field value* at query time — it does not
-translate the JSONPath into Elasticsearch's native Query DSL either.
-
-### Why No Generic Library Exists
-* **Semantic Mismatch:** JSONPath represents hierarchical, schema-less traversal, whereas relational databases use flat tables (with JSON columns as extensions). Translating dynamic path filters to SQL requires complex native operators or dynamic JSON unnesting.
-* **No Common Target:** Even if translation were attempted, there's no single target to translate *to* — PostgreSQL SQL/JSON path, Elasticsearch Query DSL, and other engines' native JSON query syntaxes are mutually incompatible, so a generic library would need one backend per target, which is exactly the SPI this design introduces rather than a library concern.
-* **Security & Injection Risks:** Translating raw strings to query parameters risks SQL injection or engine crashes (e.g., regex DoS). Generic libraries avoid this by staying in-memory, where the worst case is a slow evaluation, not a database-level exploit.
-* **Conclusion:** To support standard RFC 9535 on the API edge while executing queries on PostgreSQL (and later Elasticsearch), the service must build its own lightweight parser/compiler using **ANTLR4** and the **Visitor Pattern** — no existing library covers this.
+1. **Clients are forced to write PostgreSQL's dialect, not JSONPath.** Because Postgres's
+   parser *is* the validator, whatever Postgres accepts as a `jsonpath` literal is what
+   "works" as a filter — and that is **PostgreSQL SQL/JSON path** (SQL:2016, ISO/IEC 9075-2),
+   not the IETF's actual JSONPath standard, **RFC 9535**. The two look similar — both
+   descend from the same 2007 Goessner JSONPath convention — but come from different
+   standards bodies, built for different purposes, and diverge on filter-selector notation,
+   quoting rules, recursive descent, and more (comparison in §3). A client writing the
+   RFC-correct expression against today's service is rejected as invalid SQL/JSON path, and
+   vice versa.
+2. **The filter mechanism cannot survive a database change.** Because there is no
+   abstraction between "the filter a client wrote" and "the Postgres-specific string that
+   gets executed," the two are the same string — validation and execution are Postgres,
+   end to end, with nothing in between that Discovr controls. If Discovr ever switches its
+   storage engine, or routes search queries to Elasticsearch, Cassandra, or another document
+   store, there is no seam to plug a different engine into: the entire validation and
+   execution mechanism has to be rebuilt from scratch for that engine, and every existing
+   client filter breaks in the meantime.
 
 ---
 
-## 3. Proposed Solution Architecture
+## 2. Goals
 
-We decouple the translation process into two stages:
-1. **Front-End Parser:** Parses the raw query string into a database-neutral Abstract Syntax Tree (AST), verifying compliance with RFC 9535.
-2. **Back-End Translator (SPI):** Walks the AST using the Visitor pattern to emit the query syntax matching the target database engine.
+Directly against the two problems above, this design must:
+
+1. **Allow clients to write and query using canonical RFC 9535 JSONPath** — the real IETF standard — instead of being forced into PostgreSQL's dialect.
+2. **Maintain backward compatibility** — existing clients already using the legacy PostgreSQL SQL/JSON path dialect must continue to work unchanged.
+
+---
+
+## 3. Design
+
+### Approach
+
+A single front end understands RFC 9535 and produces an engine-neutral representation of
+the filter. A separate, pluggable back end then converts that representation into the
+query syntax of whichever database engine is actually running the query today — PostgreSQL.
+Adding support for a different engine later means adding one new back end; the front end,
+and everything a client writes, stays unchanged.
+
+### Why build this instead of using an existing library
+
+Before committing to building a parser/translator, we checked whether something already
+does "parse RFC 9535 → emit an equivalent query in another engine's language." It doesn't
+exist: every RFC 9535-compliant implementation we found (across Java, JS/TS, Go, .NET) is
+an **in-memory evaluator** — it parses the expression and walks a JSON value already loaded
+into memory, returning matching nodes. None of them translate the expression into another
+query language, including query engines that would seem well-positioned to (e.g.
+Elasticsearch's own newer JSONPath support still evaluates in place rather than emitting
+its native Query DSL). This is a semantic-mismatch problem — JSONPath is schema-less
+hierarchical traversal; relational/search engines have their own, mutually incompatible,
+native query languages — so there's no single "translate to X" target a generic library
+could standardize on. That gap is why a custom parser and pluggable per-engine translator
+is being built rather than adopting a dependency.
+
+### Validation, then execution
+
+Because a bad filter should fail loudly and immediately rather than be silently dropped
+later in async processing, the design validates the filter synchronously, before the
+client's request is even acknowledged:
+
+1. **Syntax check** — is this valid RFC 9535?
+2. **Capability check** — even if it's syntactically valid RFC 9535, can the *target* engine
+   (PostgreSQL today) actually express this construct? Some RFC constructs have no faithful
+   equivalent in PostgreSQL's dialect (see §4) and are rejected here.
+3. **Live pre-flight check** — a final check against the real database, to catch anything
+   the first two steps couldn't (e.g. an engine-specific parsing quirk).
+
+Only a filter that clears all three tiers is acknowledged and queued for execution. The
+same translated query is reused, unchanged, when the request is actually executed — so a
+filter that was accepted can never fail differently at execution time than it did at
+validation time.
 
 ```mermaid
 graph TD
-    Client[Client Request] -->|message.intent.filters| Controller[DiscoveryController]
-    Controller -->|Verify Dialect Type| Validator[IntentQueryValidator]
-
-    subgraph "Synchronous API Edge (Validation)"
-        Validator -->|type: rfc9535| Parser[ANTLR4 Lexer/Parser]
-        Parser -->|Syntax Error| Nack1[NACK: SCH_INVALID_JSONPATH]
-        Parser -->|Parse Tree / AST| Capability[Rfc9535PgTranslator.translate - capability check]
-        Capability -->|UnsupportedFilterException| Nack2[NACK: SCH_INVALID_JSONPATH]
-        Capability -->|PG SQL-JSON path fragment| Probe[Live PG pre-flight probe - Caffeine cached]
-        Probe -->|Parse error| Nack3[NACK: SCH_INVALID_JSONPATH]
-        Probe -->|Success| Ack[Produce to Kafka & Return ACK]
-    end
-
-    Ack -->|Kafka Event| Consumer[DiscoveryEventConsumer]
-
-    subgraph "Asynchronous Job Pipeline (Execution)"
-        Consumer --> DiscoveryService --> QueryEngine[PostgreSQLQueryEngine] --> PgSvc[PostgreSQLService]
-        PgSvc --> QB[JsonPathQueryBuilder]
-        QB -->|Walk AST| Emitter[PgJsonPathEmitter via Rfc9535PgTranslator]
-        Emitter -->|PostgreSQL SQL/JSON Path fragment| SQLBuilder[JsonPathQueryBuilder + QueryBuilderHelper constants]
-        SQLBuilder -->|Execute Query| DB[(PostgreSQL DB)]
-    end
+    A[Client sends filter] --> B{Syntax check:<br/>valid RFC 9535?}
+    B -- No --> N1[NACK]
+    B -- Yes --> C{Capability check:<br/>can target engine express this?}
+    C -- No --> N2[NACK]
+    C -- Yes --> D{Live pre-flight check<br/>against target database}
+    D -- No --> N3[NACK]
+    D -- Yes --> E[ACK + queue for execution]
+    E --> F[Async execution using<br/>the same translated query]
+    F --> G[(Target Database)]
 ```
 
-Note: the async chain above collapses several real layers (`DiscoveryService` → `PostgreSQLQueryEngine` → `PostgreSQLService`) that sit between the Kafka consumer and the translator — shown here for traceability rather than as a simplification.
+### Syntax differences that rule out a straight pass-through
 
-### Component Definition: Inputs & Outputs
+| Feature | RFC 9535 | PostgreSQL SQL/JSON path |
+| :--- | :--- | :--- |
+| Filter selector | Bracketed: `[?(@.price < 10)]` | Standalone: `? (@.price < 10)` |
+| String literals | Single or double quotes | Double quotes only |
+| Existence guard | `[?(@.details)]` | `exists(@.details)` |
+| Regular expressions | `match(@.name, 'regex')` | `@.name like_regex "regex"` |
+| Array subscripts | `[0]`, `[-1]` | `[0]`, `[last]` |
 
-Here is the exact interface specification of the compiler pipeline:
-
-#### 1. ANTLR Lexer & Parser (Front-End)
-* **Input:** Raw RFC 9535 query string.
-* **Process:** Performs lexical analysis (tokenization) and parses tokens against the `JsonPath.g4` grammar rules.
-* **Output:** A structured `ParseTree` (Concrete Syntax Tree / AST) representing the query.
-* **Example:**
-  - *Input String:* `"$.catalogs[*].resources[?(@.resourceAttributes.category == 'BEVERAGES')]"`
-  - *Output Parse Tree Nodes:*
-    ```
-    jsonpath
-    └── segments
-        ├── dotMember (catalogs)
-        ├── dotWildcard (*)
-        ├── dotMember (resources)
-        └── childBracketed (bracketed)
-            └── selector: filterSelector
-                └── logicalExpr (category == 'BEVERAGES')
-    ```
-
-#### 2. SPI Translator (`Rfc9535PgTranslator`) + Visitor Emitter (`PgJsonPathEmitter`)
-* **Input:** The ANTLR `ParseTree` nodes.
-* **Process:** `Rfc9535PgTranslator` implements the `FilterTranslator` SPI (`engine()` + `translate(String)`) and delegates tree-walking to `PgJsonPathEmitter`, a `JsonPathBaseVisitor`. For each node type, the emitter applies the PostgreSQL-specific equivalent syntax. If it encounters an unmappable node (e.g., slice step in `pgSlice`), it throws an `UnsupportedFilterException` — there is no separate "capability assertion" step; the check is inline during the walk.
-* **Output:** A PostgreSQL-compliant SQL/JSON path query fragment.
-* **Example:**
-  - *Input Node:* Filter selector `[?(@.category == 'BEVERAGES')]`
-  - *Output String:* `? (@.category == "BEVERAGES")` (Note: standalone question mark and double quotes).
-
-#### 3. Query Builder (`JsonPathQueryBuilder`)
-* **Input:** The SQL/JSON path fragment (from `Rfc9535PgTranslator`, invoked via `FilterCompiler`).
-* **Process:** Wraps the path expression into an existential SQL condition and binds the string to a prepared statement parameter, using SQL fragment constants from `QueryBuilderHelper` (a static dictionary, not a separate builder — `JsonPathQueryBuilder` is the class that actually assembles and executes the query).
-* **Output:** Parameterized SQL fragment executed in PostgreSQL.
-* **Example:**
-  - *Input:* `$.catalogs[*].resources[*] ? (@.resourceAttributes.category == "BEVERAGES")`
-  - *Output SQL:* `i.payload @@ CAST(? AS jsonpath)` (with the translated path passed as a bind parameter).
+These aren't cosmetic differences — they're why a filter written correctly against one
+standard is rejected by the other today, and why a translation step (rather than a
+string rewrite) is needed.
 
 ---
 
-## 4. Dialect Syntax Comparison
+## 4. Challenges with the Proposed Design
 
-To understand the translation logic, the differences between standard RFC 9535 and PostgreSQL SQL/JSON path (SQL:2016) are detailed below:
+### Not every RFC 9535 construct can be faithfully translated
 
-| Feature | RFC 9535 Syntax | PostgreSQL SQL/JSON path | Translation Mapping / Implementation |
-| :--- | :--- | :--- | :--- |
-| **Filter Selector** | Bracketed: `[?(@.price < 10)]` | Standalone: `? (@.price < 10)` | `SelFilterContext` wraps internal logical expressions inside `? (...)` |
-| **Recursive Descent** | Double dot: `..` | Double star: `.**` | `..` translated to `.**` or `.**.` depending on member child context. |
-| **String Literals** | Single/Double: `'abc'` or `"abc"` | Double only: `"abc"` | Emitter strips single quotes and outputs double-quoted string literals with escaped characters. |
-| **Namespaced Keys** | Brackets only: `['schema:price']` | Quotes inside dot: `."schema:price"` | Bracket strings with colons are translated to quoted dot-accessors. |
-| **Existence Guard** | Exist check: `[?(@.details)]` | Native function: `exists(@.details)` | Emitter wraps exist tests in `exists(...)`. |
-| **Regular Expressions**| `match(@.name, 'regex')` | `@.name like_regex "regex"` | Function calls to `match()` / `search()` map to `like_regex` syntax. |
-| **Array Subscripts** | Zero-indexed: `[0]`, `[-1]` | Zero-indexed: `[0]`, `[last]` | Negative index `[-1]` maps to `[last]`, `[-n]` maps to `[last-(n-1)]`. |
+PostgreSQL's own JSON path dialect is a narrower language than RFC 9535, and some RFC
+constructs have no representable equivalent in it:
 
----
-
-## 5. Challenges, Limitations & Failure Analysis
-
-Translating standard expressions back to database-specific representations involves structural gaps. The tables below outline the error handling strategy and failure rates.
-
-### What Percentage of Queries Will Fail?
-* **Standard Filters (Typical Beckn Use Cases):** **~0% failure**. Standard attribute checks (equality, wildcard scanning, array matching) are fully covered by the `PgJsonPathEmitter`.
-* **Advanced / Complex RFC 9535 Constructs:** **100% fail-fast validation NACK**. Expressions containing slice steps, negative step directions, or unsupported functions are rejected *synchronously* at the API gateway rather than being pushed to Kafka. This guarantees no async execution failures or silent dropping of messages.
-
-### Table of Unsupported Queries & Mappings
-
-When an expression cannot be mapped to database equivalents, the service raises an `UnsupportedFilterException` to return a synchronous NACK (code `SCH_INVALID_JSONPATH`):
-
-| RFC 9535 Expression | Mismatch Detail / Why PostgreSQL Cannot Execute It | How We Handle It | Correct / Alternative Way |
-| :--- | :--- | :--- | :--- |
-| `$.items[0:0]` | **Empty Slice Selection:** RFC 9535 allows zero-length slice selections. PostgreSQL `to` subscripts are inclusive (`start to end`); a literal representation of a guaranteed empty slice (e.g. `0 to -1`) is not representable. | Rejected via `UnsupportedFilterException`. | Avoid zero-length slices; use optional filters or omit the slice if empty. |
-| `$.items[0:10:2]` | **Slice Step Parameter:** RFC 9535 supports a third argument in slicing representing the step size (retrieve every 2nd element). PostgreSQL only supports continuous ranges `start to end`. | Rejected via `PgJsonPathEmitter.pgSlice` step check. | Query contiguous ranges `[0:10]` and post-process in application code. |
-| `$.items[::-1]` | **Negative Step Slicing:** Reverses the array traverse order. PostgreSQL has no capability to step backward in paths. | Rejected via step check. | Retrieve the full array `[*]` and reverse it at the application layer. |
-| `count($.items)` | **Node Count Semantics:** RFC `count()` returns the number of nodes in a nodelist. PostgreSQL only has `.size()`, which returns the length of an array. If `count()` runs on a non-array singular node, it returns 1, whereas `.size()` fails or returns undefined. | Rejected via `PgJsonPathEmitter.visitFunctionExpr`. | Check existence using `exists(...)` or retrieve arrays and count elements in application. |
-| `$.items[?(@.x), ?(@.y)]` | **Mixed Selectors in Single Step:** RFC 9535 allows combining names and filters in a single bracket list. PostgreSQL only supports lists of indices or slices. | Rejected via `PgJsonPathEmitter.visitBracketed`. | Use successive segments: `$.items[?(@.x)][?(@.y)]`. |
-| Regex lookarounds / PCRE | **Regex Engine Gap:** RFC 9535 regex uses **I-Regexp (RFC 9485)**, which is simple and deterministic. PostgreSQL uses POSIX regex engines. An advanced regex with lookarounds might fail to compile in Postgres. | Validation probe runs a mock SQL `CAST(? AS jsonpath)` to let the PG engine validate POSIX compatibility. | Use standard string matches (`==`, `!=`) or standard wildcard expressions. |
-
----
-
-## 6. How We Decide "Bad Expressions" (Validation Flow)
-
-Validation uses a **three-tier gateway check** at the API edge to classify and catch "bad" expressions:
-
-1. **Syntax Check (Lexer/Parser):** ANTLR validates the query against the standard RFC 9535 grammar. If the token stream does not match the grammar, it throws a `FilterParseException`.
-2. **Capability Check (inline during tree-walk):** The pluggable translator (`Rfc9535PgTranslator` → `PgJsonPathEmitter`) inspects the parsed tree for constructs that the active database engine (e.g. PostgreSQL) cannot execute (such as step slicing) while walking it. If found, it throws an `UnsupportedFilterException`.
-3. **Database Pre-flight Check (Live Probe):** The translated query string is validated against PostgreSQL using a cache-backed `CAST(? AS jsonpath)` statement. This handles edge cases (like syntax quirks or regex compiler errors) directly within the DB engine before queueing.
-
-This structure guarantees that any query that passes validation is 100% executable by the database engine at run time.
-
----
-
-## 7. Compliance Validation (Official RFC 9535 Test Suite)
-
-To substantiate the "true RFC 9535" claim with evidence rather than assertion, the
-translator is run **differentially against the official JSONPath Compliance Test
-Suite (CTS)** — `cts.json` from `jsonpath-standard/jsonpath-compliance-test-suite`
-(703 cases). Each case's selector is translated to PostgreSQL, executed against
-the case's document in a real PostgreSQL (Testcontainers), and the result is
-compared (order-insensitive) to the spec's own expected result
-(`CtsComplianceIT`).
-
-### Result
-
-703 total CTS cases split into 456 valid-per-spec selectors and 247 invalid-per-spec
-selectors:
-
-| Metric | Value |
+| RFC 9535 construct | Why PostgreSQL can't faithfully express it |
 | :--- | :--- |
-| Valid selectors — accepted **and** run | 69 |
-| **Correct (match the spec)** | **69 / 69 — 100%** |
-| **Wrong (mismatch)** | **0** |
-| PostgreSQL execution errors | **0** |
-| Valid selectors — rejected as unsupported (capability gate) | 386 |
-| Valid selectors — parse failure (grammar gap) | 1 |
-| Invalid selectors — correctly rejected | 157 |
-| **Invalid selectors — incorrectly accepted (known gap)** | **90** |
+| Recursive descent (`..`) | PostgreSQL's closest equivalent returns duplicates, a different order, and extra intermediate nodes — not the same result set. |
+| Type-agnostic wildcard (`.*`, not on a known array) | RFC's wildcard matches children of both objects and arrays; PostgreSQL's dot-wildcard is object-only. |
+| Filtering directly on the root document (`$[?…]`, `$[0]`, `$[*]`) | RFC iterates the root's children type-agnostically; PostgreSQL treats the root as a single value. |
+| Comparing two paths to each other (`@.a == @.b`) | RFC's node-list equality semantics (including both-absent) aren't reproducible. |
+| Existence test on a non-singular path (`@.tags[*]`) | PostgreSQL's existence check diverges once the path can match more than one node. |
+| `count()` | RFC counts nodes in a node-list; PostgreSQL's closest function is array length, which isn't the same thing. |
+| Slice step / negative step (`[::2]`, `[::-1]`), zero-length slices | PostgreSQL only supports a plain contiguous, inclusive range. |
+| Some regex constructs (e.g. Unicode property classes) | PostgreSQL's regex engine doesn't support them. |
 
-**The guarantee that holds today: every expression the service accepts and runs
-returns the spec-exact result — zero wrong answers among the 69 executed.**
-Constructs PostgreSQL cannot faithfully execute are rejected synchronously
-(`UnsupportedFilterException` → NACK), never mistranslated. The large
-"unsupported" count is a property of the CTS, which heavily exercises
-*root-level* primitives (`$[?…]`, `$[*]`, `$..` directly on the document) that
-do not apply to Discovr's `{ "catalogs": [ … ] }` payload shape; the realistic
-discovery surface (member-prefixed attribute filters, ranges, equality,
-logical operators, functions, offers) is validated separately by a
-**524-scenario result-validation suite** (`Rfc9535ComplianceIT`), also at 100%.
+In practice, the realistic Beckn discovery use cases — attribute equality/range checks,
+logical combinations, membership checks across catalogs, resources, and offers — are fully
+covered. The constructs above are largely edge cases that a compliance test suite exercises
+but that don't arise in typical discovery filters.
 
-**Known gap — not yet closed:** 90 of the 247 CTS invalid-per-spec selectors
-are currently *accepted* rather than rejected (e.g. malformed root/whitespace
-variants, embedded control characters in quoted member names — see
-`CtsComplianceIT` for the full list). These are over-lenient parses, not
-mistranslations of a valid query — the grammar accepts input RFC 9535 says is
-malformed — but they should be tightened before this doc's compliance claim is
-read as unconditional. Tracked as follow-up work; not blocking for the
-supported-subset guarantee above.
+### Our stance: reject, never mistranslate
 
-### Decision: Option A (faithful subset) over Option B (in-process evaluator)
+Given the above, unsupported constructs are rejected with a clear, synchronous NACK rather
+than attempted as a lossy or partial translation. A client filter either runs with
+spec-correct results, or is told clearly that it isn't supported — never a silent wrong
+answer. We also deliberately ruled out falling back to an in-process evaluator for the
+unsupported cases: the filter is usually the most selective part of the query, so removing
+it from the database query would mean fetching an unbounded (potentially very large)
+result set into application memory just to filter it there — unworkable at scale.
 
-PostgreSQL's SQL/JSON path is a *different language* from RFC 9535 and cannot
-reproduce several core semantics. Two options were weighed:
+### Compliance is measured, not assumed
 
-- **Option A — translate to PostgreSQL, reject the unrepresentable (chosen).**
-  Faithful for the subset PG can execute; never wrong. No architectural change.
-- **Option B — evaluate RFC 9535 in-process.** Would require fetching candidate
-  rows from the DB and applying a compliant engine in-app. Rejected: the filter
-  is usually the most selective predicate, so removing it from SQL means fetching
-  up to the entire scoped corpus (millions of rows at the 15M-resource target) —
-  unworkable, and capping the fetch breaks completeness. Revisit only as a
-  bounded *hybrid* if a hard requirement for the exotic constructs emerges.
+Correctness is validated by actually running the translated query against the official
+JSONPath Compliance Test Suite and comparing results to the spec's own expected output:
 
-### Full unsupported set (rejected, never mistranslated)
+- Every construct the service currently accepts and executes returns the spec-exact
+  answer — 100% match, zero wrong answers, on the supported subset.
+- **Known, tracked gap:** a subset of inputs the spec calls invalid are currently accepted
+  rather than rejected (over-lenient parsing). This doesn't produce wrong answers on valid
+  queries, but should be tightened before the compliance claim is read as unconditional.
 
-| Construct | Why PG cannot match RFC 9535 |
-| :--- | :--- |
-| Recursive descent `..` | PG `.**` yields duplicates, different order, intermediate nodes |
-| Dot-wildcard `.*` | RFC `*` is type-agnostic; PG `.*` is object-only, `[*]` array-only |
-| Operations directly on root (`$[?…]`, `$[0]`, `$[*]`, `$[0:2]`) | RFC iterates root children type-agnostically; PG tests root as a whole / lax-wraps |
-| Comparison of two paths (`@.a == @.b`) | RFC deep/nodelist equality (and both-absent) not reproducible |
-| Non-singular existence test (`@.tags[*]`, `@.*` in a filter) | PG `exists()` over a non-singular path diverges |
-| `count()` | RFC counts nodelist nodes; PG `.size()` is array length |
-| Slice step / negative step (`[::2]`, `[::-1]`), empty slice (`[:0]`) | PG `start to end` is contiguous & inclusive only |
-| Regex Unicode property classes (`\p{Lu}`) | I-Regexp construct PG `like_regex` rejects |
+---
 
-### Semantics explicitly corrected to match RFC (not left to PG defaults)
+## 5. Benefits of the Proposed Design
 
-- **`!=` with an absent or cross-type operand:** `@.x != v` →
-  `(!exists(@.x) || @.x.type() != "<type>" || @.x != v)` — RFC treats absent and
-  type-mismatched operands as unequal; PG lax mode would drop them.
-- **String escapes** (`\n`, `\t`, `\uXXXX`, surrogate pairs) are decoded and
-  re-encoded correctly for PG (the naive approach mistranslated `\n` to `n`).
-- **Single-quoted strings** → double-quoted PG literals.
-- **Negation** of a predicate is parenthesised (`!(…)`) as PG requires.
+Solving the two goals above with an engine-neutral front end and a pluggable per-engine
+translator (rather than, say, a one-off RFC 9535 → Postgres string rewriter) also buys us:
+
+- **Database independence:** because the RFC 9535 front end is engine-neutral and all
+  Postgres-specific logic lives behind a pluggable translator interface, adding or
+  switching to another engine (Elasticsearch, etc.) later means writing one new
+  translator — no change to what clients write, and no change to the front end.
+- **Fail-fast validation:** invalid or unsupported filters are rejected synchronously at
+  the API edge, before a request is queued for async processing — so failures are visible
+  to the client immediately instead of being silently dropped in async processing.
+- **A falsifiable standards-compliance claim:** because the front end is a real RFC 9535
+  grammar rather than an ad hoc regex/string rewrite, it can be differentially tested
+  against the official JSONPath Compliance Test Suite — giving an evidence-backed answer
+  to "is this actually RFC 9535?" rather than an assertion.
