@@ -16,7 +16,7 @@ The Beckn Discovr service allows clients to filter catalog resources using a JSO
 ### Goal
 - **Standards Compliance:** Accept canonical **RFC 9535** as the input filter syntax.
 - **Pluggable Database Translation:** Parse the standard input into a database-neutral representation (Abstract Syntax Tree / AST) and translate it to the target database's query language (PostgreSQL SQL/JSON path, Elasticsearch Query DSL, etc.) via a pluggable SPI.
-- **Synchronous Edge Validation:** Validate queries at the gateway on the API thread (returning a NACK before Kafka queueing) to prevent async failures.
+- **Synchronous Edge Validation:** Validate queries at the gateway on the API thread (returning a NACK before Kafka queueing) to prevent async failures. This *reduces* the live-PostgreSQL coupling described in Problem 2 above (grammar and capability checks are now DB-independent) but does not fully eliminate it — a cached PG pre-flight probe remains the final validation tier (see §6, Tier 3).
 - **Backward Compatibility:** Maintain the legacy `jsonpath` dialect (PostgreSQL SQL/JSON path) for existing clients.
 
 ---
@@ -48,24 +48,29 @@ We decouple the translation process into two stages:
 graph TD
     Client[Client Request] -->|message.intent.filters| Controller[DiscoveryController]
     Controller -->|Verify Dialect Type| Validator[IntentQueryValidator]
-    
+
     subgraph Synchronous API Edge (Validation)
         Validator -->|type: rfc9535| Parser[ANTLR4 Lexer/Parser]
         Parser -->|Syntax Error| Nack1[NACK: SCH_INVALID_JSONPATH]
-        Parser -->|Parse Tree / AST| SPIAssert[FilterTranslator.assertSupported]
-        SPIAssert -->|Unsupported Op| Nack2[NACK: Unsupported Filter]
-        SPIAssert -->|Success| Ack[Produce to Kafka & Return ACK]
+        Parser -->|Parse Tree / AST| Capability[Rfc9535PgTranslator.translate - capability check]
+        Capability -->|UnsupportedFilterException| Nack2[NACK: SCH_INVALID_JSONPATH]
+        Capability -->|PG SQL-JSON path fragment| Probe[Live PG pre-flight probe - Caffeine cached]
+        Probe -->|Parse error| Nack3[NACK: SCH_INVALID_JSONPATH]
+        Probe -->|Success| Ack[Produce to Kafka & Return ACK]
     end
 
     Ack -->|Kafka Event| Consumer[DiscoveryEventConsumer]
 
     subgraph Asynchronous Job Pipeline (Execution)
-        Consumer -->|Process Filter| Translator[PostgresFilterTranslator]
-        Translator -->|Walk AST| Emitter[PgJsonPathEmitter]
-        Emitter -->|PostgreSQL SQL/JSON Path| SQLBuilder[QueryBuilderHelper]
+        Consumer --> DiscoveryService --> QueryEngine[PostgreSQLQueryEngine] --> PgSvc[PostgreSQLService]
+        PgSvc --> QB[JsonPathQueryBuilder]
+        QB -->|Walk AST| Emitter[PgJsonPathEmitter via Rfc9535PgTranslator]
+        Emitter -->|PostgreSQL SQL/JSON Path fragment| SQLBuilder[JsonPathQueryBuilder + QueryBuilderHelper constants]
         SQLBuilder -->|Execute Query| DB[(PostgreSQL DB)]
     end
 ```
+
+Note: the async chain above collapses several real layers (`DiscoveryService` → `PostgreSQLQueryEngine` → `PostgreSQLService`) that sit between the Kafka consumer and the translator — shown here for traceability rather than as a simplification.
 
 ### Component Definition: Inputs & Outputs
 
@@ -89,17 +94,17 @@ Here is the exact interface specification of the compiler pipeline:
                 └── logicalExpr (category == 'BEVERAGES')
     ```
 
-#### 2. Visitor Emitter (`PgJsonPathEmitter`)
+#### 2. SPI Translator (`Rfc9535PgTranslator`) + Visitor Emitter (`PgJsonPathEmitter`)
 * **Input:** The ANTLR `ParseTree` nodes.
-* **Process:** Traverses the tree node-by-node. For each node type, it applies the PostgreSQL-specific equivalent syntax. If it encounters an unmappable node (e.g., slice step), it throws an `UnsupportedFilterException`.
+* **Process:** `Rfc9535PgTranslator` implements the `FilterTranslator` SPI (`engine()` + `translate(String)`) and delegates tree-walking to `PgJsonPathEmitter`, a `JsonPathBaseVisitor`. For each node type, the emitter applies the PostgreSQL-specific equivalent syntax. If it encounters an unmappable node (e.g., slice step in `pgSlice`), it throws an `UnsupportedFilterException` — there is no separate "capability assertion" step; the check is inline during the walk.
 * **Output:** A PostgreSQL-compliant SQL/JSON path query fragment.
 * **Example:**
   - *Input Node:* Filter selector `[?(@.category == 'BEVERAGES')]`
   - *Output String:* `? (@.category == "BEVERAGES")` (Note: standalone question mark and double quotes).
 
 #### 3. Query Builder (`JsonPathQueryBuilder`)
-* **Input:** The SQL/JSON path fragment.
-* **Process:** Wraps the path expression into an existential SQL condition and binds the string to a prepared statement parameter.
+* **Input:** The SQL/JSON path fragment (from `Rfc9535PgTranslator`, invoked via `FilterCompiler`).
+* **Process:** Wraps the path expression into an existential SQL condition and binds the string to a prepared statement parameter, using SQL fragment constants from `QueryBuilderHelper` (a static dictionary, not a separate builder — `JsonPathQueryBuilder` is the class that actually assembles and executes the query).
 * **Output:** Parameterized SQL fragment executed in PostgreSQL.
 * **Example:**
   - *Input:* `$.catalogs[*].resources[*] ? (@.resourceAttributes.category == "BEVERAGES")`
@@ -151,7 +156,7 @@ When an expression cannot be mapped to database equivalents, the service raises 
 Validation uses a **three-tier gateway check** at the API edge to classify and catch "bad" expressions:
 
 1. **Syntax Check (Lexer/Parser):** ANTLR validates the query against the standard RFC 9535 grammar. If the token stream does not match the grammar, it throws a `FilterParseException`.
-2. **Capability Check (Translator assert):** The pluggable translator inspects the parsed tree for constructs that the active database engine (e.g. PostgreSQL) cannot execute (such as step slicing). If found, it throws an `UnsupportedFilterException`.
+2. **Capability Check (inline during tree-walk):** The pluggable translator (`Rfc9535PgTranslator` → `PgJsonPathEmitter`) inspects the parsed tree for constructs that the active database engine (e.g. PostgreSQL) cannot execute (such as step slicing) while walking it. If found, it throws an `UnsupportedFilterException`.
 3. **Database Pre-flight Check (Live Probe):** The translated query string is validated against PostgreSQL using a cache-backed `CAST(? AS jsonpath)` statement. This handles edge cases (like syntax quirks or regex compiler errors) directly within the DB engine before queueing.
 
 This structure guarantees that any query that passes validation is 100% executable by the database engine at run time.
@@ -170,25 +175,39 @@ compared (order-insensitive) to the spec's own expected result
 
 ### Result
 
+703 total CTS cases split into 456 valid-per-spec selectors and 247 invalid-per-spec
+selectors:
+
 | Metric | Value |
 | :--- | :--- |
-| Cases we accept **and** run | 69 |
+| Valid selectors — accepted **and** run | 69 |
 | **Correct (match the spec)** | **69 / 69 — 100%** |
 | **Wrong (mismatch)** | **0** |
 | PostgreSQL execution errors | **0** |
-| Rejected as unsupported (capability gate) | 386 |
-| Invalid selectors correctly rejected | 157 |
+| Valid selectors — rejected as unsupported (capability gate) | 386 |
+| Valid selectors — parse failure (grammar gap) | 1 |
+| Invalid selectors — correctly rejected | 157 |
+| **Invalid selectors — incorrectly accepted (known gap)** | **90** |
 
-**The guarantee that matters: every expression the service accepts and runs
-returns the spec-exact result — zero wrong answers.** Constructs PostgreSQL
-cannot faithfully execute are rejected synchronously (`UnsupportedFilterException`
-→ NACK), never mistranslated. The large "unsupported" count is a property of the
-CTS, which heavily exercises *root-level* primitives (`$[?…]`, `$[*]`, `$..`
-directly on the document) that do not apply to Discovr's `{ "catalogs": [ … ] }`
-payload shape; the realistic discovery surface (member-prefixed attribute
-filters, ranges, equality, logical operators, functions, offers) is validated
-separately by a **525-scenario result-validation suite** (`Rfc9535ComplianceIT`),
-also at 100%.
+**The guarantee that holds today: every expression the service accepts and runs
+returns the spec-exact result — zero wrong answers among the 69 executed.**
+Constructs PostgreSQL cannot faithfully execute are rejected synchronously
+(`UnsupportedFilterException` → NACK), never mistranslated. The large
+"unsupported" count is a property of the CTS, which heavily exercises
+*root-level* primitives (`$[?…]`, `$[*]`, `$..` directly on the document) that
+do not apply to Discovr's `{ "catalogs": [ … ] }` payload shape; the realistic
+discovery surface (member-prefixed attribute filters, ranges, equality,
+logical operators, functions, offers) is validated separately by a
+**524-scenario result-validation suite** (`Rfc9535ComplianceIT`), also at 100%.
+
+**Known gap — not yet closed:** 90 of the 247 CTS invalid-per-spec selectors
+are currently *accepted* rather than rejected (e.g. malformed root/whitespace
+variants, embedded control characters in quoted member names — see
+`CtsComplianceIT` for the full list). These are over-lenient parses, not
+mistranslations of a valid query — the grammar accepts input RFC 9535 says is
+malformed — but they should be tightened before this doc's compliance claim is
+read as unconditional. Tracked as follow-up work; not blocking for the
+supported-subset guarantee above.
 
 ### Decision: Option A (faithful subset) over Option B (in-process evaluator)
 
