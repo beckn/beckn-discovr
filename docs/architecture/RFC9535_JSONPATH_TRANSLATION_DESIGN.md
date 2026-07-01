@@ -44,15 +44,12 @@ itself. This causes two problems:
 
 ### High-level flow
 
-[Diagram: RFC 9535 JSONPath filtering flow](https://excalidraw.com/#json=urpJOfgdN98nFtec7Ug72,KMLFRdaPmUDcadGPioGU4Q)
+![RFC 9535 JSONPath filtering flow](assets/rfc9535-jsonpath-flow.png)
 
 The client's raw filter (RFC 9535) flows left to right through a **Validator**, then a
 **Translator**, then an **Executor**, which runs the translated query against the
 **Database**. A filter the Validator can't parse, or the Translator can't convert, is
-rejected with a NACK instead of moving forward.
-
-The filter moves through three stages: a **Validator** checks it, a **Translator** converts
-it, and an **Executor** runs it against the database. Each is explained below.
+rejected with a NACK instead of moving forward. Each stage is explained below.
 
 ### Validator
 
