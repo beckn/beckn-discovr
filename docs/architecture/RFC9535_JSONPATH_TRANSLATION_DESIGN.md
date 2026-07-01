@@ -83,9 +83,9 @@ rejected with a NACK instead of moving forward. Each stage is explained below.
   database it needs to run on.
 - **What it produces:** an equivalent query string, written in that database's own query
   language.
-- **Example:**
-  - Input: `$.resources[?(@.category == 'BEVERAGES')]`
-  - Output (today's target database): `$.resources ?(@.category == "BEVERAGES")`
+- **Example:** a real Discovr filter, matching resources from a specific manufacturer.
+  - Input (RFC 9535): `$.catalogs[*].resources[?(@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == 'Hindustan Unilever Limited')]`
+  - Output (today's target database): `$.catalogs[*].resources[*] ? (@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == "Hindustan Unilever Limited")`
 - **How it decides what to emit:** the Translator isn't one block of logic that handles
   every database. It's a thin dispatcher in front of one sub-translator per database, one
   for each database it currently supports. The dispatcher looks at which database the
@@ -102,10 +102,10 @@ rejected with a NACK instead of moving forward. Each stage is explained below.
 
   | Feature | RFC 9535 | Today's target database |
   | :--- | :--- | :--- |
-  | Filter selector | `[?(@.price < 10)]` | `? (@.price < 10)` |
-  | String quotes | single or double | double only |
-  | Existence check | `[?(@.details)]` | `exists(@.details)` |
-  | Regex | `match(@.name, 'regex')` | `@.name like_regex "regex"` |
+  | Filter selector | `resources[?(@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == 'Hindustan Unilever Limited')]` | `resources[*] ? (@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == "Hindustan Unilever Limited")` |
+  | String quotes | single or double, e.g. `'Hindustan Unilever Limited'` | double only, e.g. `"Hindustan Unilever Limited"` |
+  | Existence check | `[?(@.resourceAttributes.rating)]` | `exists(@.resourceAttributes.rating)` |
+  | Regex | `match(@.resourceAttributes.name, 'Unilever.*')` | `@.resourceAttributes.name like_regex "Unilever.*"` |
   | Array index | `[0]`, `[-1]` | `[0]`, `[last]` |
 
 - **What it can't translate:** some valid RFC 9535 filters have no equivalent at all on the
