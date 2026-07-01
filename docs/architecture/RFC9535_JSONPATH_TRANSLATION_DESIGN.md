@@ -42,76 +42,78 @@ Discovr has no independent understanding of the filter itself. This causes two p
 
 ### High-level flow
 
-At a high level, a filter goes through three steps:
-
-```
-Client sends filter (RFC 9535)  →  Validate  →  Translate to the current database's query language  →  Execute
+```mermaid
+graph LR
+    A[Client sends filter<br/>RFC 9535] --> B[Validate]
+    B --> C[Translate to the current<br/>database's query language]
+    C --> D[Execute]
 ```
 
 Each step is explained below.
 
-### How validation works
+### Validation
 
-A bad filter should fail fast and clearly, not get silently dropped later. So it's checked
-in three steps before the request is even acknowledged:
+Validation has two jobs: confirm the filter is well-formed RFC 9535, and confirm the
+current database can actually run it. It happens in three steps, all before the request is
+acknowledged:
 
 1. **Is it valid RFC 9535?** A syntax check against the RFC 9535 grammar.
-2. **Can Postgres actually run this?** Some valid RFC 9535 filters have no way to run on
-   Postgres (see §4). These are caught and rejected here. Catching this requires actually
-   attempting the translation step (below), so translation and this check happen together.
+2. **Can Postgres actually run it?** Some valid RFC 9535 filters still have no way to run
+   on Postgres (see §4). Checking this means attempting the translation itself, so this
+   step and the Translator (below) are the same piece of work.
 3. **Does Postgres actually accept the translated query?** One last live check against the
    real database, to catch anything the first two steps missed.
 
-If all three steps pass, the request is acknowledged (ACK) and queued for execution. If any
-step fails, it's rejected (NACK). At execution time, the same translated query from step 2
-is reused, so a filter that passed validation can't behave differently later.
+If all three pass, the request is acknowledged (ACK) and queued. If any fails, it's
+rejected (NACK).
 
-```mermaid
-graph TD
-    A[Client sends filter] --> B{Valid RFC 9535?}
-    B -- No --> N1[NACK]
-    B -- Yes --> C{Can Postgres run it?}
-    C -- No --> N2[NACK]
-    C -- Yes --> D{Postgres accepts it live?}
-    D -- No --> N3[NACK]
-    D -- Yes --> E[ACK + queue for execution]
-    E --> F[Execute the same translated query]
-    F --> G[(Database)]
-```
+The syntax check (step 1) is done with **ANTLR4**, a widely used parser generator: given a
+formal grammar for RFC 9535, it generates a parser for that grammar automatically, instead
+of one being hand-written from scratch. Hand-writing a parser for a grammar this size is
+slow to build and easy to get subtly wrong; ANTLR4 is a standard, well-tested tool for
+exactly this problem. On its own, this only checks *format*: is the string valid RFC 9535
+syntax. It says nothing about whether Postgres can run it, which is why steps 2 and 3
+exist.
 
-### How translation works
+### Translator
 
-Once a filter is confirmed valid, it needs to become a real database query. This happens in
-two parts:
+**Input:** a filter already confirmed to be valid RFC 9535 syntax (from validation step 1).
+**Output:** an equivalent query string in the current database's own query language.
 
-1. **Read the filter.** Break the RFC 9535 string down into its parts: the field being
-   checked, the comparison, the value, and so on.
-2. **Rewrite each part for the target database.** Each part is converted into the matching
-   syntax for whatever database is running today (Postgres). A few examples:
-
-   | Feature | RFC 9535 | Postgres |
-   | :--- | :--- | :--- |
-   | Filter selector | `[?(@.price < 10)]` | `? (@.price < 10)` |
-   | String quotes | single or double | double only |
-   | Existence check | `[?(@.details)]` | `exists(@.details)` |
-   | Regex | `match(@.name, 'regex')` | `@.name like_regex "regex"` |
-   | Array index | `[0]`, `[-1]` | `[0]`, `[last]` |
-
-   Small differences, but enough that a filter valid in one is invalid in the other. That's
-   why this rewrite step exists instead of a simple find-and-replace.
-
-Splitting "read the filter" from "rewrite it for a target database" is what makes the
-design swappable: adding a new database later only means writing a new rewrite step. The
-read step, and what clients write, never changes.
-
-### Why not just use a library
+Example:
+- Input: `$.resources[?(@.category == 'BEVERAGES')]`
+- Output (Postgres dialect): `$.resources ?(@.category == "BEVERAGES")`
 
 A search for an existing library that already does "read RFC 9535, output a query in
-another language" turned up nothing. Every RFC 9535 library found just evaluates the
-expression in memory against JSON already loaded; it doesn't translate to a different query
-language. That tracks: every database has its own, incompatible query language, so there's
-no single target for a generic library to aim at. Hence building this from scratch instead
-of reusing something.
+another language" turned up nothing. Every RFC 9535 library found only evaluates the filter
+in memory against JSON already loaded; it doesn't emit another query language. So the
+translator is hand-built, walking the same structure ANTLR4 produces during validation
+using the **visitor pattern**, a standard way of walking a tree-shaped structure and doing
+something at each piece. For each piece of the filter, it emits whatever Postgres needs. A
+few examples:
+
+| Feature | RFC 9535 | Postgres |
+| :--- | :--- | :--- |
+| Filter selector | `[?(@.price < 10)]` | `? (@.price < 10)` |
+| String quotes | single or double | double only |
+| Existence check | `[?(@.details)]` | `exists(@.details)` |
+| Regex | `match(@.name, 'regex')` | `@.name like_regex "regex"` |
+| Array index | `[0]`, `[-1]` | `[0]`, `[last]` |
+
+**Not everything can be translated.** Some valid RFC 9535 filters have no Postgres
+equivalent at all (e.g. recursive descent, `count()`, negative slice steps). Rather than
+guess at a partial translation, these are rejected. See §4 for the full list.
+
+### Execution
+
+**Input:** the translated query string from the Translator, exactly as it was validated
+(never re-translated).
+
+**How it runs:** the translated string is passed to the database as a **bind parameter**,
+never pasted directly into the SQL text. This is what prevents SQL injection: the database
+always treats it as a value to match against, never as code to run. Execution simply reuses
+this parameterized query, so a filter can't behave differently at execution time than it
+did during validation.
 
 ---
 
