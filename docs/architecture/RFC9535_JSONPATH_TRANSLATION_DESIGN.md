@@ -10,31 +10,66 @@
 
 The Beckn Discovr service allows clients to filter catalog resources using a JSONPath expression carried in `message.intent.filters.expression`. The current implementation has two significant issues:
 
-1. **Standard vs. Proprietary Dialect Mismatch:** The query dialect currently accepted and parsed by the service is **PostgreSQL SQL/JSON path** (conforming to the SQL:2016 standard, ISO/IEC 9075-2), rather than the official IETF standard for JSONPath, **RFC 9535**. Although they look similar, they diverge on crucial syntax features (such as filter selector notation, recursive descent operators, quotation rules, and native functions). Clients are forced to write PostgreSQL-specific syntax, which violates open protocol design.
+1. **Standard vs. Proprietary Dialect Mismatch:** The query dialect currently accepted and parsed by the service is **PostgreSQL SQL/JSON path** (conforming to the SQL:2016 standard, ISO/IEC 9075-2), rather than the official IETF standard for JSONPath, **RFC 9535**. These are two different standards, from two different standards bodies, built for two different purposes:
+   - **RFC 9535** (IETF, 2024) defines a general-purpose syntax for navigating and selecting values *within a JSON document* — used by generic JSON tooling (API filtering, OpenAPI, `jq`-adjacent tools) independent of any storage engine.
+   - **SQL:2016 §"SQL/JSON path language"** (ISO/IEC 9075-2) defines a syntax for use *inside SQL*, to be embedded in predicates and functions (`JSON_VALUE`, `JSON_TABLE`) that query a JSON column from a relational database. Each vendor (PostgreSQL, Oracle, DB2, MySQL) implements a slightly different subset of it.
+
+     They descend from the same informal 2007 Goessner "JSONPath" convention and *look* similar at a glance, but the standards diverged from there. For example, filtering resources where `category` equals `BEVERAGES`:
+
+     | | Syntax | Why it differs |
+     | :--- | :--- | :--- |
+     | RFC 9535 | `$.resources[?(@.category=='BEVERAGES')]` | The filter is one of several *selector kinds* usable inside a bracket (`[...]`), alongside name/index/slice/wildcard selectors. String literals may be single- or double-quoted. |
+     | PostgreSQL SQL/JSON path (SQL:2016) | `$.resources ?(@.category=="BEVERAGES")` | The `?(...)` predicate is a distinct path suffix appended directly after a path step — there is no bracket, because SQL/JSON path has no concept of "selector kinds inside brackets." String literals must be double-quoted; `'BEVERAGES'` is a syntax error in Postgres.
+
+     A client writing the RFC-correct expression against today's service gets rejected as invalid SQL/JSON path, and vice versa. The full syntax comparison (recursive descent, existence checks, array subscripts, functions) is in §4.
 2. **Database Engine Tight Coupling:** The filter evaluation is hard-coded to PostgreSQL JSONB operators (`@@ CAST(? AS jsonpath)`). Query validation is performed by asking a live PostgreSQL instance to parse the expression. If Discovr ever switches its storage engine or routes search queries to Elasticsearch, Cassandra, or another document store, the entire JSONPath validation and evaluation mechanism breaks.
 
 ### Goal
-- **Standards Compliance:** Accept canonical **RFC 9535** as the input filter syntax.
-- **Pluggable Database Translation:** Parse the standard input into a database-neutral representation (Abstract Syntax Tree / AST) and translate it to the target database's query language (PostgreSQL SQL/JSON path, Elasticsearch Query DSL, etc.) via a pluggable SPI.
-- **Synchronous Edge Validation:** Validate queries at the gateway on the API thread (returning a NACK before Kafka queueing) to prevent async failures. This *reduces* the live-PostgreSQL coupling described in Problem 2 above (grammar and capability checks are now DB-independent) but does not fully eliminate it — a cached PG pre-flight probe remains the final validation tier (see §6, Tier 3).
-- **Backward Compatibility:** Maintain the legacy `jsonpath` dialect (PostgreSQL SQL/JSON path) for existing clients.
+- **Standards Compliance:** Clients should be able to write filters in the canonical, IETF-standardized JSONPath syntax (RFC 9535) rather than a PostgreSQL-specific dialect — required for an open, engine-neutral protocol.
+- **Engine Independence:** The filter syntax a client writes must not be dictated by, or tied to, whichever database currently executes the query — so the active storage/search engine can change without breaking existing client filters.
+- **Fail Fast:** Invalid or unsupported filters should be rejected immediately, before a request is accepted for asynchronous processing, so failures are visible to the client rather than silently dropped downstream.
+- **Backward Compatibility:** Existing clients using the legacy PostgreSQL SQL/JSON path dialect must continue to work unchanged.
+
+(How these goals are met — AST-based translation, a pluggable SPI, synchronous edge validation — is covered in §3 onward.)
 
 ---
 
 ## 2. Market Search: Existing Translation Libraries
 
-Before designing a custom compiler, a thorough survey of the JVM ecosystem was conducted to find libraries capable of translating RFC 9535 JSONPath into database queries:
+**Why this section exists:** building a compiler (grammar, AST, visitor emitters) is a
+meaningful amount of code to own and maintain. Before committing to that, we checked
+whether an existing library already does "parse RFC 9535 → emit an equivalent query in
+another query language" — reusing one would have made most of §3 unnecessary. This
+section documents that search and why it came back empty, so the decision to build a
+custom compiler is justified by evidence, not assumed.
 
-| Library / Engine | RFC 9535 Compliance | AST Exposure | Database Translation | Suitability |
-| :--- | :--- | :--- | :--- | :--- |
-| **Jayway JsonPath** | No (pre-RFC 9535; Goessner dialect) | No (Encapsulated internal parser) | None | **Unsuitable:** It is an in-memory evaluator, not a query translator, and does not expose an AST. |
-| **Jackson `JsonNode.at()`** | No (JSON Pointer only) | N/A | None | **Unsuitable:** Limited to basic node navigation; no filters or wildcard support. |
-| **Native DB Drivers** | N/A | N/A | Proprietary only | **Unsuitable:** Does not accept RFC 9535; only processes database-specific syntax. |
+**RFC 9535-compliant JSONPath *implementations* surveyed** (JVM and cross-ecosystem, 2026):
 
-### Why No Generic Library Exists:
+| Library | Ecosystem | What it does |
+| :--- | :--- | :--- |
+| [Jayway JsonPath](https://github.com/json-path/JsonPath) | Java | Pre-RFC 9535 (Goessner dialect); [RFC 9535 support is an open, unresolved issue](https://github.com/json-path/JsonPath/issues/999) as of this writing. In-memory evaluator only. |
+| [swaggerexpert/jsonpath](https://github.com/swaggerexpert/jsonpath) | JS/TS | RFC 9535 parser/validator; converts its parse result to other **tree** representations (AST, CST, XML) — not to another query language. |
+| [P0lip/jsonpath-rfc9535](https://github.com/P0lip/jsonpath-rfc9535) | JS (ECMAScript 2022) | RFC 9535 parser + in-memory evaluator against a JS value. |
+| [theory/jsonpath](https://github.com/theory/jsonpath) | Go | RFC 9535 parser + in-memory evaluator against a Go value. |
+| [gragra33/Blazing.Json.JSONPath](https://github.com/gragra33/Blazing.Json.JSONPath) | .NET | RFC 9535-certified (324 tests) in-memory query engine. |
+| [janjorka/jsonpath-tools](https://github.com/janjorka/jsonpath-tools) | Multiple | Tooling (LSP, playground) around RFC 9535 — still in-memory evaluation, not translation. |
+| Jackson `JsonNode.at()` | Java | JSON Pointer only (RFC 6901) — no filters, no wildcards, not JSONPath. |
+
+**Result: no library, in any ecosystem, translates RFC 9535 into another query
+language.** Every RFC 9535-compliant implementation found is an **in-memory
+evaluator** — it parses the expression and walks a JSON value already loaded into
+memory, returning matching nodes. None expose "parse to AST, then emit an
+equivalent expression in a different target query language" as a supported use
+case. This holds even for the query engine best positioned to add it:
+Elasticsearch's own new `JSON_EXTRACT` ES|QL function (9.4, tech preview) evaluates
+an RFC 9535 subset against a JSON *string field value* at query time — it does not
+translate the JSONPath into Elasticsearch's native Query DSL either.
+
+### Why No Generic Library Exists
 * **Semantic Mismatch:** JSONPath represents hierarchical, schema-less traversal, whereas relational databases use flat tables (with JSON columns as extensions). Translating dynamic path filters to SQL requires complex native operators or dynamic JSON unnesting.
-* **Security & Injection Risks:** Translating raw strings to query parameters risks SQL injection or engine crashes (e.g., regex DOS). Libraries avoid generic translation to prevent exposing these security vectors.
-* **Conclusion:** To support standard RFC 9535 on the API edge while executing queries on PostgreSQL (and later Elasticsearch), the service must build its own lightweight parser/compiler using **ANTLR4** and the **Visitor Pattern**.
+* **No Common Target:** Even if translation were attempted, there's no single target to translate *to* — PostgreSQL SQL/JSON path, Elasticsearch Query DSL, and other engines' native JSON query syntaxes are mutually incompatible, so a generic library would need one backend per target, which is exactly the SPI this design introduces rather than a library concern.
+* **Security & Injection Risks:** Translating raw strings to query parameters risks SQL injection or engine crashes (e.g., regex DoS). Generic libraries avoid this by staying in-memory, where the worst case is a slow evaluation, not a database-level exploit.
+* **Conclusion:** To support standard RFC 9535 on the API edge while executing queries on PostgreSQL (and later Elasticsearch), the service must build its own lightweight parser/compiler using **ANTLR4** and the **Visitor Pattern** — no existing library covers this.
 
 ---
 
