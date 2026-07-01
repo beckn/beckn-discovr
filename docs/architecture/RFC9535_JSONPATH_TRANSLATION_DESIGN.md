@@ -61,6 +61,11 @@ rejected with a NACK instead of moving forward. Each stage is explained below.
     itself, so this check and the Translator are the same piece of work.
   - Does the database actually accept the translated query? One last live check against the
     real database, to catch anything the first two checks missed.
+- **Why the Validator does this instead of just the Translator and Executor:** discover
+  requests are ACKed immediately and processed later, asynchronously. Once that async
+  processing starts, there's no way back to send a NACK. So the Validator has to run the
+  Translator's and Executor's checks early, as a dry run, to decide ACK or NACK before that
+  window closes. It's the same work, just done up front instead of later.
 - **What it produces:** if all three checks pass, the request is acknowledged (ACK) and
   queued. If any check fails, the request is rejected (NACK).
 - **What it's built with, and why:** the first check uses **ANTLR4**, a widely used parser
@@ -81,10 +86,12 @@ rejected with a NACK instead of moving forward. Each stage is explained below.
 - **Example:**
   - Input: `$.resources[?(@.category == 'BEVERAGES')]`
   - Output (today's target database): `$.resources ?(@.category == "BEVERAGES")`
-- **How it decides what to emit:** the translator is written to be pluggable per database.
-  It knows which database it's currently targeting, and emits that database's syntax for
-  each piece of the filter. Supporting a second database later means adding a second
-  translation path, not rewriting this one.
+- **How it decides what to emit:** the Translator isn't one block of logic that handles
+  every database. It's a thin dispatcher in front of one sub-translator per database, one
+  for each database it currently supports. The dispatcher looks at which database the
+  request needs to run on and hands the filter to that database's sub-translator, which
+  emits that database's syntax. Supporting a new database later means plugging in one new
+  sub-translator, not rewriting the existing ones.
 - **What it's built with, and why:** a search for an existing library that already does
   "read RFC 9535, output a query in another language" turned up nothing. Every RFC 9535
   library found only evaluates the filter in memory against JSON already loaded; it doesn't
