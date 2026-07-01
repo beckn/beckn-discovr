@@ -108,6 +108,13 @@ rejected with a NACK instead of moving forward. Each stage is explained below.
   | Regex | `match(@.resourceAttributes.name, 'Unilever.*')` | `@.resourceAttributes.name like_regex "Unilever.*"` |
   | Array index | `[0]`, `[-1]` | `[0]`, `[last]` |
 
+- **How it decides what's translatable:** the walk has one step per RFC 9535 construct, path
+  segment, comparison, function call, and so on. Each step only emits output if the target
+  database's dialect has a direct equivalent for that exact construct. If it doesn't, that
+  step rejects the filter on the spot, instead of emitting a guess or a workaround. This is
+  why the list in §4 is exact and known upfront: it's precisely the set of constructs whose
+  step has no matching output for the current database, not a fuzzy or evolving judgment
+  call.
 - **What it can't translate:** some valid RFC 9535 filters have no equivalent at all on the
   current database (e.g. recursive descent, `count()`, negative slice steps; see §4 for the
   full list).
@@ -135,16 +142,16 @@ rejected with a NACK instead of moving forward. Each stage is explained below.
 
 ### Some RFC 9535 features just don't map to the current database
 
-| RFC 9535 feature | Why the current database can't do it |
-| :--- | :--- |
-| Recursive descent (`..`) | The closest match gives duplicates in a different order, which is the wrong result. |
-| Wildcard on unknown type (`.*`) | RFC's wildcard works on objects and arrays; the database's only works on objects. |
-| Filtering the root itself (`$[?…]`, `$[0]`) | The database treats the root as one value, not a list to iterate. |
-| Comparing two paths (`@.a == @.b`) | RFC's equality rules here aren't reproducible on this database. |
-| Existence check on multiple matches (`@.tags[*]`) | The existence check behaves differently once more than one match is possible. |
-| `count()` | RFC counts nodes matched. The closest function counts array length, which isn't the same thing. |
-| Slice with a step, or negative step (`[::2]`, `[::-1]`) | Only a plain, continuous range is supported. |
-| A few regex features (e.g. Unicode classes) | The regex engine doesn't support them. |
+| RFC 9535 feature | Example | Why the current database can't do it |
+| :--- | :--- | :--- |
+| Recursive descent (`..`) | `$..name` | The closest operator visits nodes in a different order, returns duplicates, and also matches container nodes RFC wouldn't. A filter written expecting RFC's single, ordered set of matches would silently get a different, larger, differently-ordered set instead. |
+| Wildcard on unknown type (`.*`) | `$.resources.*` | RFC's `*` selects children of both objects and arrays with one operator. The current database has two separate operators, one for objects and one for arrays, so a wildcard on a value whose shape isn't known ahead of time has no single matching operator to translate to. |
+| Filtering the root itself (`$[?…]`, `$[0]`) | `$[?@.active]` | The current database's root-level behavior depends on whether the document is treated as an array or an object, and handles that split differently than RFC's type-agnostic root. Discover also requires every path to start with a member access (e.g. `$.catalogs...`), so root-level filters are rejected structurally, not evaluated and found wrong. |
+| Comparing two paths (`@.a == @.b`) | `$.resources[?(@.price == @.discountedPrice)]` | RFC compares two paths using nodelist rules (for example, two absent values count as equal). The current database's comparison only works between a path and a fixed value, with its own rules for absent or mismatched values, so it can't reproduce RFC's result when both sides are paths. |
+| Existence check on multiple matches (`@.tags[*]`) | `$.resources[?(@.tags[*])]` | RFC's existence check passes whenever the match is non-empty, even for a wildcard or multi-match path. The current database's existence check only maps cleanly onto a single, plain value (like `@.a.b`); stretching it to a multi-match path hits the same object/array and duplication gaps as recursive descent and wildcards. |
+| `count()` | `$.resources[?(count(@.tags[*]) == 3)]` | RFC's `count()` counts how many nodes a query matched. The closest function on the current database counts array length instead, which is a different number whenever the queried value isn't already a plain array, so there's no faithful equivalent. |
+| Slice with a step, or negative step (`[::2]`, `[::-1]`) | `$.resources[0:10:2]` | The current database's slice syntax only understands a plain, continuous range (start to end); it has no concept of a step or stride, so a stepped or reversed slice has nothing to translate to. |
+| A few regex features (e.g. Unicode classes) | `match(@.resourceAttributes.name, '\p{L}+')` | RFC's regex flavor supports Unicode property classes like `\p{L}`. The current database's regex engine uses a different flavor that doesn't understand that syntax, so the filter is rejected at translation time instead of being passed through to fail at query time. |
 
 These are mostly edge cases. Normal Beckn filters (equality, ranges, AND/OR, checking
 fields across catalogs, resources, and offers) all work fine.
