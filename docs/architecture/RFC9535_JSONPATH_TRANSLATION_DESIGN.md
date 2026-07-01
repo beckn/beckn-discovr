@@ -49,7 +49,7 @@ graph TD
     Client[Client Request] -->|message.intent.filters| Controller[DiscoveryController]
     Controller -->|Verify Dialect Type| Validator[IntentQueryValidator]
 
-    subgraph Synchronous API Edge (Validation)
+    subgraph "Synchronous API Edge (Validation)"
         Validator -->|type: rfc9535| Parser[ANTLR4 Lexer/Parser]
         Parser -->|Syntax Error| Nack1[NACK: SCH_INVALID_JSONPATH]
         Parser -->|Parse Tree / AST| Capability[Rfc9535PgTranslator.translate - capability check]
@@ -61,7 +61,7 @@ graph TD
 
     Ack -->|Kafka Event| Consumer[DiscoveryEventConsumer]
 
-    subgraph Asynchronous Job Pipeline (Execution)
+    subgraph "Asynchronous Job Pipeline (Execution)"
         Consumer --> DiscoveryService --> QueryEngine[PostgreSQLQueryEngine] --> PgSvc[PostgreSQLService]
         PgSvc --> QB[JsonPathQueryBuilder]
         QB -->|Walk AST| Emitter[PgJsonPathEmitter via Rfc9535PgTranslator]
