@@ -47,6 +47,7 @@ public final class LogEvent {
     public static final String ON_PULL_COMPLETED         = "on_pull.completed";
     // on_pull download-manifest failure reasons (distinct from the generic processing error)
     public static final String ON_PULL_DOWNLOAD_HTTP_ERROR = "on_pull.download.http_error";
+    public static final String ON_PULL_DOWNLOAD_RETRY      = "on_pull.download.retry";
     public static final String ON_PULL_SSRF_REJECT          = "on_pull.ssrf.reject";
     public static final String ON_PULL_CHECKSUM_MISMATCH    = "on_pull.checksum.mismatch";
     public static final String ON_PULL_DECOMPRESS_ERROR     = "on_pull.decompress.error";

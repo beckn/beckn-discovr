@@ -99,6 +99,23 @@ public class CatalogPullCallbackService {
         }
     }
 
+    /**
+     * Marks a TRANSIENT download failure (HTTP 5xx / network / timeout) that is worth retrying.
+     * Extends {@link IOException} so that, once retries are exhausted, the outer
+     * {@code catch (IOException)} in {@link #processDownloadManifest} classifies it as
+     * {@code download_http_error}. Permanent failures (4xx, SSRF, checksum, {@link SizeExceededException})
+     * are deliberately NOT this type, so they propagate immediately without retry.
+     */
+    private static final class RetryableDownloadException extends IOException {
+        RetryableDownloadException(String message) {
+            super(message);
+        }
+
+        RetryableDownloadException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
     private final CatalogPublishMetrics metrics;
@@ -458,19 +475,60 @@ public class CatalogPullCallbackService {
      * @throws Exception if HTTP call fails or response code is not 200
      */
     public byte[] downloadCatalogFromUrl(String downloadUrl) throws Exception {
-        // SSRF guard: validate the (untrusted) manifest URL before any network call.
+        // SSRF guard: validate the (untrusted) manifest URL ONCE before any network call (permanent
+        // failure — never retried).
         validateDownloadUrl(downloadUrl);
+
+        int maxAttempts = props.catalog().pullDownloadMaxAttempts();
+        long backoffMs = props.catalog().pullDownloadRetryBackoffMs();
+        RetryableDownloadException lastTransient = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return attemptDownload(downloadUrl);
+            } catch (RetryableDownloadException transientErr) {
+                // Transient (HTTP 5xx / network / timeout): the CS is fire-and-forget after our 200 Ack,
+                // so a blip would otherwise permanently lose the pull result. Retry a bounded number of
+                // times. 4xx, SSRF, checksum, and size-cap failures are NOT RetryableDownloadException,
+                // so they propagate immediately without retry.
+                lastTransient = transientErr;
+                if (attempt < maxAttempts) {
+                    log.warn("event={} url={} attempt={} maxAttempts={} reason={}",
+                            LogEvent.ON_PULL_DOWNLOAD_RETRY, ErrorSanitizer.sanitize(downloadUrl),
+                            attempt, maxAttempts, ErrorSanitizer.sanitize(transientErr.getMessage()));
+                    metrics.recordOnPullDownloadRetry();
+                    try {
+                        Thread.sleep(backoffMs * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw ie;
+                    }
+                }
+            }
+        }
+        // Retries exhausted — rethrow the last transient error. It is an IOException, so the caller's
+        // catch(IOException) classifies it as download_http_error and records the terminal failure.
+        throw lastTransient;
+    }
+
+    /** A single download attempt. Throws {@link RetryableDownloadException} for transient failures. */
+    private byte[] attemptDownload(String downloadUrl) throws Exception {
         long maxDownloadBytes = props.catalog().pullMaxDownloadBytes();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(downloadUrl))
                 .timeout(Duration.ofSeconds(30))
                 .GET()
                 .build();
-        // Stream the body (ofInputStream) and read into a growable buffer with a HARD cap — abort as
-        // soon as bytes read exceed maxDownloadBytes, WITHOUT buffering the whole body first. Do NOT
-        // trust Content-Length alone (a lying header could still stream an unbounded body).
-        HttpResponse<java.io.InputStream> response = httpClient.send(request,
-                HttpResponse.BodyHandlers.ofInputStream());
+        HttpResponse<java.io.InputStream> response;
+        try {
+            // Stream the body (ofInputStream) and read into a growable buffer with a HARD cap — abort as
+            // soon as bytes read exceed maxDownloadBytes, WITHOUT buffering the whole body first. Do NOT
+            // trust Content-Length alone (a lying header could still stream an unbounded body).
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        } catch (IOException networkErr) {
+            // Connection reset / timeout / DNS blip → transient, retry.
+            throw new RetryableDownloadException(
+                    "download IO error from " + downloadUrl + ": " + networkErr.getMessage(), networkErr);
+        }
         if (response.statusCode() != 200) {
             // Drain+close so the connection can be returned to the pool; the body is irrelevant here.
             try (java.io.InputStream body = response.body()) {
@@ -478,6 +536,12 @@ public class CatalogPullCallbackService {
             } catch (IOException ignored) {
                 // best-effort drain; the non-200 error below is what matters
             }
+            if (response.statusCode() >= 500) {
+                // 5xx → transient (subscriber/object-store issue), retry.
+                throw new RetryableDownloadException(
+                        "Failed to download catalog file from " + downloadUrl + " - HTTP " + response.statusCode());
+            }
+            // 4xx → permanent (bad/expired URL), do NOT retry.
             throw new IOException("Failed to download catalog file from " + downloadUrl + " - HTTP " + response.statusCode());
         }
         try (java.io.InputStream body = response.body();

@@ -70,7 +70,9 @@ class CatalogPullCallbackServiceSizeCapTest {
                 1, 4, null, null, null,
                 /* pullSsrfCheckEnabled */ false, // loopback download must be allowed in-test
                 /* pullMaxDownloadBytes */ 10_000_000L,
-                /* pullMaxDecompressedBytes */ 1_024L);
+                /* pullMaxDecompressedBytes */ 1_024L,
+                /* pullDownloadMaxAttempts */ null,
+                /* pullDownloadRetryBackoffMs */ null);
 
         CatalogPushService push = Mockito.mock(CatalogPushService.class);
         CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);

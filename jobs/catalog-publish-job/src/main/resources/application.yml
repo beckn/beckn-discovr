@@ -36,6 +36,10 @@ app:
     # gunzipped output exceeds max-decompressed-bytes. Absent => secure defaults (50 MiB / 200 MiB).
     pull-max-download-bytes: ${APP_CATALOG_PULL_MAX_DOWNLOAD_BYTES:52428800}
     pull-max-decompressed-bytes: ${APP_CATALOG_PULL_MAX_DECOMPRESSED_BYTES:209715200}
+    # Bounded retry for TRANSIENT on_pull download failures (GCS 5xx / network / timeout) — the CS
+    # is fire-and-forget after our 200 Ack, so a transient blip would otherwise lose the pull result.
+    pull-download-max-attempts: ${APP_CATALOG_PULL_DOWNLOAD_MAX_ATTEMPTS:3}
+    pull-download-retry-backoff-ms: ${APP_CATALOG_PULL_DOWNLOAD_RETRY_BACKOFF_MS:1000}
     schema-url: ${BECKN_PROTOCOL_API_SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml}
     parallel-catalog-threshold: 3
     # Thread pool size for parallel catalog processing within a single message.

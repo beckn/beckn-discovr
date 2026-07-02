@@ -191,6 +191,11 @@ public class CatalogPublishMetrics {
         registry.counter("discovr.onpull.failed", "reason", reason).increment();
     }
 
+    /** A transient on_pull download failure (5xx / network) was retried. */
+    public void recordOnPullDownloadRetry() {
+        registry.counter("discovr.onpull.download.retry").increment();
+    }
+
     // ── on_pull per-callback distributions + per-catalog counts (receiver-level) ──
     // Distributions give count+sum+max per mode; counters give per-catalog rates.
     // Bounded `mode` tag only — catalogId/networkId stay in logs, never as tag values.
