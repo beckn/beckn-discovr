@@ -4,6 +4,7 @@ import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.orchestration.CatalogPublishOrchestrator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -85,11 +86,14 @@ public class AsyncConfig {
      * hand-off, and is restored afterwards so ids never leak onto the next task on that thread.</p>
      */
     @Bean("onPullExecutor")
-    public Executor onPullExecutor() {
+    public Executor onPullExecutor(
+            @Value("${app.catalog.pull-executor-core-pool-size:4}") int corePoolSize,
+            @Value("${app.catalog.pull-executor-max-pool-size:8}") int maxPoolSize,
+            @Value("${app.catalog.pull-executor-queue-capacity:100}") int queueCapacity) {
         ThreadPoolTaskExecutor exec = new ThreadPoolTaskExecutor();
-        exec.setCorePoolSize(4);
-        exec.setMaxPoolSize(8);
-        exec.setQueueCapacity(100);
+        exec.setCorePoolSize(corePoolSize);
+        exec.setMaxPoolSize(maxPoolSize);
+        exec.setQueueCapacity(queueCapacity);
         exec.setThreadNamePrefix("onpull-");
         // CallerRunsPolicy: never lose a pull result. on_pull is low-volume so the request-thread
         // fallback is rare; the goal is isolation from the publish pool, not from the request thread.
