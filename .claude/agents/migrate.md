@@ -1,7 +1,7 @@
 ---
 name: migrate
 description: Use this agent to apply Beckn Protocol schema migrations across Beckn Discovr source files and test fixtures. Handles field renames, removals, format changes, and assertion updates. Triggers on "migrate", "apply protocol changes", "update field names", "schema migration".
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Edit
@@ -47,8 +47,8 @@ You are a **migration specialist** for Beckn Protocol schema changes in Beckn Di
 | `/discover` | `discover` / `on_discover` |
 | `/catalog/publish` | `catalog/publish` / `catalog/on_publish` |
 | `/catalog/subscription` | `catalog/subscription` / `catalog/on_subscription` |
-| `/catalog/pull` | `catalog/pull` / `on_catalog_pull` |
-| `/catalog/master/search` | `catalog/master_search` / `on_catalog_master_search` |
+| `/discover` | `discover` / `on_discover` |
+| `/catalog/push` | `catalog/push` (fire-and-forget; no callback action) |
 
 ## Migration Checklist
 
