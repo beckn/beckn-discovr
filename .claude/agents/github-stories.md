@@ -66,60 +66,51 @@ gh api --method POST repos/beckn/beckn-discovr/issues/<story_number>/sub_issues 
 
 Verify with `gh api repos/beckn/beckn-discovr/issues/<story_number>/sub_issues --jq '.[].number'`. Keep the `## Tasks` checklist in the Story body too, as a human-readable mirror.
 
-## Descriptions — clear, readable, self-contained
+## Descriptions — clear, non-overlapping, industry-standard
 
-Every Story and Task body must be **understandable on its own** (no external context needed) and must follow this exact section order. Never create an issue with an empty or one-line body. Bodies use **real newlines** (`--body "$(cat <<'EOF' … EOF)"`), never `\n` in a single-line string.
+Each section answers a **different** question. Do **not** repeat the same content across sections (e.g. "goal", "problem", and "what is expected" are not three separate paragraphs saying the same thing), and do **not** restate the Story's context inside every Task — link to it instead. Follow the exact order below. No empty or one-line bodies. Use **real newlines** (`--body "$(cat <<'EOF' … EOF)"`), never `\n` in a single-line string.
 
-**Story body:**
+**Story body** (feature / user-story level):
 
 ```markdown
-## Introduction
-[Background/context — the area this touches and why it is coming up now.]
+## Context
+[Where we are today and the problem/pain this addresses — background + why it matters now. One tight paragraph.]
 
-## Goal
-[The single outcome this Story delivers, in 1–2 sentences.]
+## Objective
+[The outcome this Story delivers and the value it creates. Prefer the user-story form:
+As a <role>, I want <capability>, so that <benefit>.]
 
-## Problem statement
-[What problem are we solving? What is broken, missing, or needed today — and the impact of not doing it.]
-
-## What is expected
-[What "done" looks like from a delivery standpoint — the capability this Story produces.]
+## Scope
 - In scope: …
 - Out of scope: …
+
+## Acceptance criteria
+- [ ] [Observable, testable outcomes that define "done" — this is the single source of truth for what is expected]
 
 ## Sub-issues (Tasks)
 - [ ] #NN — <task title>
 
-## Acceptance criteria
-- [Observable, testable outcomes that mean this Story is done]
-
-## Notes / references
-- Design/requirement docs, related issues, links
+## References
+- [Design/requirement docs, dependencies, related issues]
 ```
 
-**Task body:**
+**Task body** (implementation unit — keep it lean; never re-describe the whole Story):
 
 ```markdown
-## Introduction
-[Brief context — where this task sits within its parent Story.]
+## Context
+[1–2 lines: which part of the parent Story this implements. Link, don't repeat.]
 
-## Goal
-[What this specific task achieves, in one sentence.]
+## What to do
+[The concrete change / unit of work.]
 
-## Problem statement
-[The concrete gap or problem this task addresses.]
-
-## What is expected
-[The deliverable(s) / definition of done for this task.]
+## Acceptance criteria
+- [ ] [Specific, testable outcomes — the definition of done for this task]
 
 ## Parent Story
 - #<story_number>
 
-## Acceptance criteria
-- [Specific, testable outcomes]
-
-## Implementation notes
-- Files/components likely touched, gotchas
+## Technical notes
+- [Files/components likely touched, approach, gotchas — optional]
 ```
 
 ## Workflow
