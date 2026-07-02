@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1200" height="1200" fill="#ffffff"/>
+<text x="600.0" y="50" font-size="30" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Fan-Out Discovery — How It Works</text>
+<defs>
+<marker id="ah8b5cf6" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#8b5cf6"/></marker>
+<marker id="ahd97706" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#d97706"/></marker>
+<marker id="ah0e9488" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#0e9488"/></marker>
+<marker id="ah2563eb" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#2563eb"/></marker>
+<marker id="ah15803d" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#15803d"/></marker>
+<marker id="ahf59e0b" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#f59e0b"/></marker>
+</defs>
+<rect x="40" y="330" width="190" height="250" rx="12" ry="12" fill="#a5d8ff" stroke="#2563eb" stroke-width="2"/>
+<text x="135.0" y="448.8" font-size="22" text-anchor="middle" fill="#1e1e1e">Consumer</text>
+<text x="135.0" y="476.3" font-size="22" text-anchor="middle" fill="#1e1e1e">(CN / BAP)</text>
+<rect x="480" y="350" width="260" height="230" rx="12" ry="12" fill="#d0bfff" stroke="#8b5cf6" stroke-width="2"/>
+<text x="610.0" y="424.3" font-size="19" text-anchor="middle" fill="#1e1e1e">Discovery Service (DS)</text>
+<text x="610.0" y="448.1" font-size="19" text-anchor="middle" fill="#1e1e1e"></text>
+<text x="610.0" y="471.8" font-size="19" text-anchor="middle" fill="#1e1e1e">• query index</text>
+<text x="610.0" y="495.6" font-size="19" text-anchor="middle" fill="#1e1e1e">• rank providers</text>
+<text x="610.0" y="519.3" font-size="19" text-anchor="middle" fill="#1e1e1e">• fan-out + stream</text>
+<rect x="490" y="640" width="240" height="100" rx="12" ry="12" fill="#c3fae8" stroke="#0e9488" stroke-width="2"/>
+<text x="610.0" y="684.7" font-size="19" text-anchor="middle" fill="#1e1e1e">Static Index</text>
+<text x="610.0" y="708.4" font-size="19" text-anchor="middle" fill="#1e1e1e">(ES / PostGIS)</text>
+<rect x="950" y="250" width="210" height="95" rx="12" ry="12" fill="#ffd8a8" stroke="#d97706" stroke-width="2"/>
+<text x="1055.0" y="304.3" font-size="20" text-anchor="middle" fill="#1e1e1e">Provider PN-1</text>
+<rect x="950" y="385" width="210" height="95" rx="12" ry="12" fill="#ffd8a8" stroke="#d97706" stroke-width="2"/>
+<text x="1055.0" y="439.3" font-size="20" text-anchor="middle" fill="#1e1e1e">Provider PN-2</text>
+<rect x="950" y="520" width="210" height="95" rx="12" ry="12" fill="#ffc9c9" stroke="#dc2626" stroke-width="2"/>
+<text x="1055.0" y="561.9" font-size="20" text-anchor="middle" fill="#1e1e1e">Provider PN-3</text>
+<text x="1055.0" y="586.9" font-size="20" text-anchor="middle" fill="#1e1e1e">(timeout)</text>
+<rect x="300" y="790" width="620" height="70" rx="12" ry="12" fill="#fff3bf" stroke="#f59e0b" stroke-width="2" opacity="0.6"/>
+<text x="610.0" y="830.4" font-size="16" text-anchor="middle" fill="#1e1e1e">INITIATED = static results   |   PARTIAL = live enrichment per PN   |   COMPLETE = done</text>
+<line x1="230" y1="372" x2="480" y2="372" stroke="#2563eb" stroke-width="2" marker-end="url(#ah2563eb)"/>
+<rect x="255" y="347" width="200" height="23" fill="#ffffff" opacity="0.85"/>
+<text x="355" y="364" font-size="17" text-anchor="middle" fill="#2563eb">1  /discover (fanOut)</text>
+<line x1="480" y1="412" x2="230" y2="412" stroke="#15803d" stroke-width="2" marker-end="url(#ah15803d)"/>
+<rect x="326" y="387" width="57" height="23" fill="#ffffff" opacity="0.85"/>
+<text x="355" y="404" font-size="17" text-anchor="middle" fill="#15803d">2  ACK</text>
+<line x1="480" y1="452" x2="230" y2="452" stroke="#8b5cf6" stroke-width="2" marker-end="url(#ah8b5cf6)"/>
+<rect x="298" y="427" width="114" height="23" fill="#ffffff" opacity="0.85"/>
+<text x="355" y="444" font-size="17" text-anchor="middle" fill="#8b5cf6">3  INITIATED</text>
+<line x1="480" y1="500" x2="230" y2="500" stroke="#f59e0b" stroke-width="2" marker-end="url(#ahf59e0b)"/>
+<rect x="265" y="475" width="181" height="23" fill="#ffffff" opacity="0.85"/>
+<text x="355" y="492" font-size="17" text-anchor="middle" fill="#f59e0b">6  PARTIAL (stream)</text>
+<line x1="480" y1="548" x2="230" y2="548" stroke="#15803d" stroke-width="2" marker-end="url(#ah15803d)"/>
+<rect x="303" y="523" width="105" height="23" fill="#ffffff" opacity="0.85"/>
+<text x="355" y="540" font-size="17" text-anchor="middle" fill="#15803d">7  COMPLETE</text>
+<line x1="610" y1="580" x2="610" y2="640" stroke="#0e9488" stroke-width="2" marker-end="url(#ah0e9488)"/>
+<rect x="556" y="586" width="108" height="22" fill="#ffffff" opacity="0.85"/>
+<text x="610" y="602" font-size="16" text-anchor="middle" fill="#0e9488">query + rank</text>
+<line x1="740" y1="410" x2="950" y2="300" stroke="#d97706" stroke-width="2" marker-end="url(#ahd97706)"/>
+<rect x="755" y="331" width="179" height="22" fill="#ffffff" opacity="0.85"/>
+<text x="845" y="347" font-size="16" text-anchor="middle" fill="#d97706">4  fan-out /discover</text>
+<line x1="740" y1="450" x2="950" y2="432" stroke="#d97706" stroke-width="2" marker-end="url(#ahd97706)"/>
+<line x1="740" y1="500" x2="950" y2="568" stroke="#d97706" stroke-width="2" marker-end="url(#ahd97706)"/>
+<line x1="950" y1="320" x2="740" y2="470" stroke="#15803d" stroke-width="2" stroke-dasharray="8,6" marker-end="url(#ah15803d)"/>
+<rect x="751" y="371" width="188" height="22" fill="#ffffff" opacity="0.85"/>
+<text x="845" y="387" font-size="16" text-anchor="middle" fill="#15803d">5  on_discover (live)</text>
+</svg>
