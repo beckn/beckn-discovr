@@ -1,49 +1,42 @@
 ---
-description: Quick reference for turning a requirement into GitHub Stories + tasks across Beckn org Project boards (51 Catalg, 52 Discovr, 58 Pipeline). Prefer the github-epics agent for the full approval-gated workflow.
+description: Quick reference for turning a requirement into a GitHub Story + its sub-issue Tasks in the beckn-discovr repo, wired to the milestone, Discovr board (Project 52), and Fabric Engineering pipeline (Project 58). Prefer the github-stories agent for the full approval-gated workflow.
 ---
 
 ## When to use
 
-- You have bullets or a rough scope and need **Stories + tasks** on Beckn org project boards.
-- You want consistent Markdown bodies and **no GitHub writes until the user approves**.
+- You have bullets or a rough scope and need **one Story + its sub-issue Tasks** in **beckn-discovr**.
+- You want clear issue bodies, correct issue types/labels/milestone, and **no GitHub writes until the user approves**.
 
 ## Prefer the agent
 
-Invoke the **`github-epics`** agent for: gather sprints → proposal → **wait for approval** → `gh` execution.
+Invoke the **`github-stories`** agent for the full flow: gather milestone/sprints/assignee → plan → **wait for approval** → `gh` execution.
 
-## Three boards — every issue goes on TWO
+## Rules
 
-| Board | # | Repos | Sprint type |
-|-------|---|-------|-------------|
-| Beckn Catalg | 51 | beckn-catalg | Single-select |
-| Beckn Discovr | 52 | beckn-discovr | Single-select |
-| Fabric Pipeline Engineering | 58 | All repos | Iteration |
+- **Repo:** create issues in **`beckn/beckn-discovr` only** (Catalg work → the Catalg repo's own agent).
+- **Hierarchy:** **Story → Tasks** only (no epics). Tasks are attached as **native sub-issues** of the Story.
+- **Every issue** goes to **Project 52** (Discovr board, Sprint + Status=Ready) **and Project 58** (Fabric pipeline, iteration + Status=Todo), and is set to the **milestone**.
+- **Issue types:** set native org issue type — `Story` on the Story, `Task` on Tasks (discover via `gh api orgs/beckn/issue-types`).
+- **Labels:** `story` / `task` + domain (`discovr`, `api`, `discover`, `publish`, `dispatcher`, …).
 
-**Pattern**: Issue lives in home repo → added to home board (51/52) with home sprint → ALSO added to Project 58 with pipeline sprint.
+## Ask upfront (Phase A)
 
-## Terminology
-
-- **Story** = user-facing theme/deliverable. Label: `story`.
-- **Task** = concrete unit of work under a Story. Label: `task`.
-
-## Agent workflow
-
-1. **Phase A**: Ask user for Release, Catalg sprint, Discovr sprint, Pipeline sprint, Assignee, Repos
-2. **Phase B**: Produce plan with board assignment table (CREATE vs UPDATE per issue per board) — wait for approval
-3. **Phase C**: Execute — create issues, add to both boards, set sprints, cross-link
+Milestone · Discovr sprint (Proj 52) · Fabric pipeline sprint (Proj 58 iteration) · Assignee(s). Then stop for approval after showing the plan (Phase B).
 
 ## Body shape
 
-- **Story**: `## Summary`, `## Tracking` (`- [ ] #NN ...`), `## Tasks` (`- #NN ...`), `## Outcomes`.
-- **Task**: `## Summary`, `## Acceptance criteria`, `## Story` → `- #<story>`.
+- **Story**: `## Summary`, `## Scope`, `## Sub-issues (Tasks)` (`- [ ] #NN …`), `## Acceptance criteria`, `## Notes / references`.
+- **Task**: `## Summary`, `## Parent Story` (`- #<story>`), `## Acceptance criteria`, `## Implementation notes`.
 
 ## gh patterns
 
-- **Real newlines**: `gh issue create -R <repo> -t "Title" --body "$(cat <<'EOF' ... EOF)"`
-- **Field IDs**: `gh project field-list <project#> --owner beckn --format json`
-- **Add + set fields**: `gh project item-add <project#> --owner beckn --url <issue-url> --format json -q '.id'` then `gh project item-edit` with `--project-id` and field-specific option (one field per call).
-- **"Already in project"**: skip `item-add`, still run `item-edit` for Sprint.
+- **Real newlines**: `gh issue create -R beckn/beckn-discovr -t "Title" --type "Story" --label story --milestone "<title>" --body "$(cat <<'EOF' ... EOF)"`
+- **Issue types**: `gh api orgs/beckn/issue-types --jq '.[].name'` (set via `--type` or GraphQL `updateIssue`)
+- **Sub-issue link**: `tid=$(gh api repos/beckn/beckn-discovr/issues/<task#> --jq .id); gh api --method POST repos/beckn/beckn-discovr/issues/<story#>/sub_issues -F sub_issue_id=$tid`
+- **Field IDs**: `gh project field-list <#> --owner beckn --format json` (never hardcode)
+- **Add + set fields**: `gh project item-add <#> --owner beckn --url <issue-url>` then `gh project item-edit` (one field per call)
+- **"Already in project"**: skip `item-add`, still `item-edit` for Sprint
 
 ## Auth
 
-If project commands fail: `gh auth refresh -s read:project,project`
+If project/issue-type commands fail: `gh auth refresh -h github.com -s read:project,project`

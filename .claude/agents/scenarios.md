@@ -5,7 +5,7 @@ description: >
   edge cases, error cases, and integration scenarios. Output is structured for the verify agent
   and test-runner to execute. Triggers on "generate scenarios", "test scenarios for", "what should
   we test", "acceptance scenarios".
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Glob

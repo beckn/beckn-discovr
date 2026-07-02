@@ -1,7 +1,7 @@
 ---
 name: requirements
 description: Use this agent when the user has a raw requirement in any format and wants it translated into a structured requirement document before design begins. The agent asks clarifying questions with options, then saves the structured requirement to docs/requirements/. Always invoke this agent BEFORE the design agent for new features. Triggers on "write a requirement for", "translate this requirement", "format this requirement", "I have a requirement", "capture this requirement".
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Glob
