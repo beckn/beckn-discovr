@@ -27,7 +27,7 @@ Components:
 - `jobs/response-dispatcher/` — consumes response topic, signs and POSTs `on_discover` to BAP callback URLs
 
 Design docs:
-- `docs/CATALG_AND_DISCOVR_SYSTEM_DESIGN_v3.md`
+- `docs/DISCOVER_SERVER_OVERVIEW.md and docs/architecture/`
 
 ---
 
