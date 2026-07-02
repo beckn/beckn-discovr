@@ -6,6 +6,18 @@
 
 ---
 
+## Summary
+
+Clients send filters in standard JSONPath (RFC 9535) instead of the current database's
+private dialect. A **Validator** parses the filter and checks it against a per-database
+**capability table**, then ACKs or NACKs instantly, with no database call. Translation to
+the database's own query language happens later, asynchronously, behind one swappable
+**sub-translator** per database. Unsupported or hostile filters are rejected up front;
+correctness is proven against the official JSONPath compliance suite. Existing filters
+keep working unchanged: the dialect is declared per request, and legacy is the default.
+
+---
+
 ## 1. Problem Statement
 
 ### How filtering works today
@@ -22,8 +34,8 @@ thing that ever runs the filter. Discovr has no independent understanding of the
 itself. This causes two problems:
 
 1. **Clients must write the database's dialect, not real JSONPath.** Today's database has
-   its own path language (SQL:2016), which looks like RFC 9535 but isn't. RFC 9535 is the
-   actual JSONPath standard. A filter written correctly in RFC 9535 gets rejected today, and
+   its own path language (it comes from the SQL standard, not the JSONPath standard),
+   which looks like RFC 9535 but isn't. RFC 9535 is the actual JSONPath standard. A filter written correctly in RFC 9535 gets rejected today, and
    vice versa (see §3 for examples).
 2. **The system is locked into one database.** Validation and execution both run on the
    exact same database-specific string. Switching to a different database, or adding a
@@ -35,14 +47,11 @@ itself. This causes two problems:
 ## 2. Goals
 
 1. **Let clients use real RFC 9535 JSONPath**, not any one database's dialect.
-2. **Keep backward compatibility.** Filters already written in the current database's
-   dialect must keep working. The request itself declares which dialect it's using, in
-   `message.intent.filters.type`: `rfc9535` for the standard path described in this
-   design, and the existing legacy value for filters written the old way. A request that
-   doesn't send `type` at all is treated as legacy, so existing clients keep working
-   without changing a single byte of their requests. Legacy filters skip everything below
-   and run exactly as they do today. RFC 9535 is opt-in, nobody is forced to migrate on
-   any timeline, and there's never any guessing about which dialect a filter is in.
+2. **Keep backward compatibility.** The request declares its dialect in
+   `message.intent.filters.type`: `rfc9535` for the standard path in this design, the
+   existing legacy value (or no `type` at all) for filters written the old way. Legacy
+   filters skip everything below and run exactly as they do today, so existing clients
+   change nothing. RFC 9535 is opt-in; nobody is forced to migrate.
 
 ---
 
@@ -89,31 +98,19 @@ the last possible moment, which is what makes the database swappable.
     that database supports. The unsupported-features list in §4 is exactly the reject
     side of this table for the current database.
 - **What it deliberately does not do: talk to the database.** Deciding ACK or NACK is a
-  parse plus a table lookup, nothing more. No query is sent anywhere. This matters for
-  two reasons:
-  - The request thread never waits on a database round-trip during validation, so a flood
-    of never-seen-before filter strings can't tie up database connections before requests
-    are even accepted.
-  - Requests can still be correctly accepted or rejected while the database is briefly
-    unavailable, which fits how the service already works: accept now, process later.
+  parse plus a table lookup, nothing more. So a flood of never-seen-before filter strings
+  can't tie up database connections, and validation keeps working even while the database
+  is briefly unavailable.
 - **Why the Validator decides everything up front:** discover requests are ACKed
   immediately and processed later, asynchronously. Once that async processing starts,
   there's no way back to send a NACK. So everything that could reject a request has to be
   decided before the ACK, and a table lookup makes that decision instant.
 - **What it produces:** if both checks pass, the request is acknowledged (ACK) and
   queued, carrying the client's original filter string untouched. If either check fails,
-  the request is rejected (NACK) with a reason that tells the client which check failed:
-  the filter isn't valid RFC 9535, or it's valid but uses a feature the current database
-  doesn't support.
+  the request is rejected (NACK) with a reason saying which check failed.
 - **What it's built with, and why:** the syntax check uses **ANTLR4**, a widely used
-  parser generator. Given a formal grammar for RFC 9535, it generates a parser
-  automatically, instead of one being hand-written from scratch. Hand-writing a parser
-  for a grammar this size is slow to build and easy to get subtly wrong; ANTLR4 is a
-  standard, well-tested tool for exactly this problem.
-- **What the syntax check alone doesn't tell you:** only that the string is
-  well-formed RFC 9535. Whether the current database can run it is a separate question,
-  and that's what the capability table answers.
-
+  parser generator: given the formal RFC 9535 grammar, it generates the parser
+  automatically. Hand-writing one this size is slow and easy to get subtly wrong.
 ### Translator
 
 - **When it runs:** asynchronously, after the ACK, when the queued request is picked up
@@ -123,26 +120,21 @@ the last possible moment, which is what makes the database swappable.
   on. The filter is parsed again from the queued request using the same grammar; parsing
   is cheap and always produces the same tree, so the Translator works on exactly what
   the Validator approved.
-- **What it produces:** that database's own **native query form**. For today's database,
-  that's a query string in its path language. For a different kind of database it can be
-  something else entirely; a search engine, for example, takes a structured query object,
-  not a path string. The contract is "whatever that database natively runs", never
-  "a string", because not every database has a string path language to target.
+- **What it produces:** that database's own **native query form**: a path-language query
+  string for today's database, a structured query object for, say, a search engine. The
+  contract is "whatever that database natively runs", never "a string", because not every
+  database has a string path language to target.
 - **Example:** a real Discovr filter, matching resources from a specific manufacturer.
   - Input (RFC 9535): `$.catalogs[*].resources[?(@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == 'Hindustan Unilever Limited')]`
   - Output (today's target database): `$.catalogs[*].resources[*] ? (@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == "Hindustan Unilever Limited")`
-- **How it decides what to emit:** the Translator isn't one block of logic that handles
-  every database. It's a thin dispatcher in front of one sub-translator per database, one
-  for each database it currently supports. The dispatcher looks at which database the
-  request needs to run on and hands the tree to that database's sub-translator, which
-  emits that database's native query form. Supporting a new database later means plugging
-  in one new sub-translator and one new capability table, not rewriting the existing ones.
-- **What it's built with, and why:** a search for an existing library that already does
-  "read RFC 9535, output a query for another engine" turned up nothing. Every RFC 9535
-  library found only evaluates the filter in memory against JSON already loaded; it
-  doesn't emit another query language. So the sub-translator is hand-built, walking the
-  parsed filter tree using the **visitor pattern**, a standard way of walking a
-  tree-shaped structure and doing something at each piece.
+- **How it decides what to emit:** a small router hands the tree to the right
+  sub-translator, one per database, which emits that database's native query form.
+  Supporting a new database means plugging in one new sub-translator and one new
+  capability table, not rewriting the existing ones.
+- **What it's built with, and why:** no existing library does "read RFC 9535, output a
+  query for another engine"; every library found only evaluates filters in memory. So the
+  sub-translator is hand-built, walking the parsed filter tree and emitting output piece
+  by piece.
 - **A few examples of how the syntax differs:**
 
   | Feature | RFC 9535 | Today's target database |
@@ -153,31 +145,21 @@ the last possible moment, which is what makes the database swappable.
   | Regex | `match(@.resourceAttributes.name, 'Unilever.*')` | `@.resourceAttributes.name like_regex "Unilever.*"` |
   | Array index | `[0]`, `[-1]` | `[0]`, `[last]` |
 
-- **How the capability table and the sub-translator stay in step:** they describe the
-  same boundary from two sides. The table says "this feature is supported here"; the
-  sub-translator has to actually produce correct output for that feature. Their
-  agreement isn't taken on faith: the official JSONPath Compliance Test Suite is run
-  offline against every feature the table approves (see §4), so a mismatch between the
-  two shows up as a failing test before release, not as a broken query in production.
-- **What it can't translate:** nothing it's actually given. Filters that use unsupported
-  features (recursive descent, `count()`, negative slice steps; full list in §4) were
-  already rejected by the Validator's capability table, before the ACK. The Translator
-  still refuses rather than guesses if it's ever handed something unexpected, but in
-  normal operation that path never runs.
+- **What it can't translate:** nothing it's actually given; filters with unsupported
+  features (full list in §4) were already rejected before the ACK. If it's ever handed
+  something unexpected anyway, it refuses rather than guesses.
 
 ### Executor
 
 - **What it takes:** the translated query from the Translator.
 - **What it does:** sends the query to the database and runs it, returning the matching
   resources.
-- **How it connects:** for today's database, the translated query string is passed as a
-  **bind parameter**, never pasted directly into the query text. The database always
-  treats it as a value to match against, never as something to execute. This is what
-  keeps the filter safe to run even though it's fully client-supplied.
-- **Why checking and running can't drift apart:** the same grammar produces the tree and
-  the same capability table defines what's allowed, at validation time and at execution
-  time. The same filter always produces the same tree, the same verdict, and the same
-  translated query. There's no second opinion at run time to disagree with the first.
+- **How it connects:** the translated query is passed as a **bind parameter**, never
+  pasted into the query text, so the database treats it as a value, never as something to
+  execute. That keeps a fully client-supplied filter safe to run.
+- **Why checking and running can't drift apart:** the same grammar and the same
+  capability table drive both. The same filter always produces the same tree, the same
+  verdict, and the same translated query.
 
 ---
 
@@ -215,22 +197,30 @@ pulling a huge, unfiltered result set into memory first, which isn't practical a
 
 ### No live database check before the ACK
 
-An earlier version of this design had the Validator send a translated dry-run query to
-the live database as a final safety net before ACKing. That check was removed
-deliberately, and the trade-off is worth stating plainly:
+An earlier version had the Validator send a dry-run query to the live database before
+ACKing. It was removed deliberately: the dry run cost a database round-trip on the
+request thread for every unseen filter string (and clients control how many arrive),
+while the only thing it protected against, a bug in the capability table or a
+sub-translator, is caught offline by the compliance suite below. The trade: such a bug
+would now surface as a logged defect in async processing instead of a NACK.
 
-- **What's given up:** if the capability table or a sub-translator ever has a bug, a
-  filter could be ACKed and then fail during async processing, where it's logged as a
-  defect instead of being NACKed to the client.
-- **Why that's acceptable:** that bug class is caught offline instead, by the compliance
-  suite below, which exercises every feature the capability table approves, end to end.
-  A per-request dry run in production is a weaker version of the same guarantee at a much
-  higher price.
-- **What's gained:** the dry run was a database round-trip on the request thread for
-  every previously unseen filter string, and clients control how many unique strings
-  arrive. Removing it takes the database entirely off the request path: validation stays
-  fast under load, can't exhaust database connections, and keeps working when the
-  database has a brief outage.
+### A filter can be hostile, not just invalid
+
+The filter string is client-controlled input that reaches a parser and, later, a
+database, so a filter can be deliberately crafted to hurt the system while staying just
+inside the rules. Guardrails, cheapest first, each turn an attack into a clean NACK or a
+harmless timeout:
+
+| Guardrail | What it stops |
+| :--- | :--- |
+| Length cap on the raw expression, before parsing | Bounds everything below it: a filter can't be deeply nested or carry a huge regex without also being long |
+| Nesting depth limit in the parser | Thousands of nested parentheses (`$[?((((...))))]`) crashing the request instead of getting a clean NACK |
+| Regex pattern size cap at translation time | A crafted `match()` pattern that makes the database's regex engine work effectively forever |
+| Hard time limit on every query, enforced by the database | The backstop for anything the other checks can't see: the worst a hostile filter achieves is one timed-out query, never a stuck connection |
+| Rate limiting at the network edge | Floods of unique filter strings. Validation is already cheap (a parse and a table lookup); gateway limits cap even that |
+
+Each guardrail ships with a test that sends the hostile input and asserts the clean NACK,
+so "handled" is demonstrated, not assumed.
 
 ### Tested against the official spec, not just claimed
 
@@ -246,17 +236,13 @@ compared to the expected output:
 
 ## 5. Benefits of the Proposed Design
 
-- **No lock-in to any one database.** The client-facing side doesn't know which database
-  is behind it, queued requests carry the client's original filter rather than any
-  translated form, and all database-specific logic sits behind one swappable
-  sub-translator plus its capability table. Supporting another database later means
-  writing one new translation path, not a rewrite.
-- **Bad filters fail fast, and cheaply.** Clients get a clear NACK immediately, decided
-  by a parse and a table lookup, instead of the request silently failing later in async
-  processing.
-- **The database is never touched before a request is accepted.** Validation cost per
-  request is fixed and small, no matter how many new filter strings arrive, and
-  validation keeps working through brief database outages.
+- **No lock-in to any one database.** Queued requests carry the client's original filter,
+  and all database-specific logic sits behind one swappable sub-translator plus its
+  capability table. Another database later is one new translation path, not a rewrite.
+- **Bad filters fail fast, and cheaply.** Clients get a clear NACK immediately, instead
+  of the request silently failing later in async processing.
+- **The database is never touched before a request is accepted.** Validation cost is
+  fixed and small, and keeps working through brief database outages.
 - **RFC 9535 compliance can be proven, not just claimed.** Because it uses a real grammar
   instead of ad hoc string matching, it can be run against the official compliance test
   suite and the results shown.
