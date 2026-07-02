@@ -35,3 +35,10 @@ key.json
 
 # Graphify (generated knowledge graph output)
 graphify-out/
+
+# ─── Docs: generated / exported artifacts (regenerable — keep .md + diagram assets) ─
+docs/**/*.pdf
+docs/**/*.docx
+docs/**/*.ini
+docs/**/.DS_Store
+**/__pycache__/
