@@ -45,6 +45,11 @@ public final class LogEvent {
     public static final String ON_PULL_CATALOG_ENQUEUED  = "on_pull.catalog.enqueued";
     public static final String ON_PULL_CATALOG_REJECTED  = "on_pull.catalog.rejected";
     public static final String ON_PULL_COMPLETED         = "on_pull.completed";
+    // on_pull download-manifest failure reasons (distinct from the generic processing error)
+    public static final String ON_PULL_DOWNLOAD_HTTP_ERROR = "on_pull.download.http_error";
+    public static final String ON_PULL_SSRF_REJECT          = "on_pull.ssrf.reject";
+    public static final String ON_PULL_CHECKSUM_MISMATCH    = "on_pull.checksum.mismatch";
+    public static final String ON_PULL_DECOMPRESS_ERROR     = "on_pull.decompress.error";
 
     // Auth filter
     public static final String AUTH_SKIPPED       = "auth.skipped";

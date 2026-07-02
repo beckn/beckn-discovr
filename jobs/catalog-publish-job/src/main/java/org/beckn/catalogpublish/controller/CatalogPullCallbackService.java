@@ -37,6 +37,43 @@ public class CatalogPullCallbackService {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogPullCallbackService.class);
 
+    /**
+     * Marker thrown from {@link #processDownloadManifest} after a specific download/verify/decompress
+     * failure has ALREADY been logged and counted with its own bounded reason tag. The outer catch in
+     * {@link #processPullCallbackAsynchronously} recognizes it and does NOT re-record
+     * {@code processing_error}, avoiding double counting. Behavior is unchanged: the callback is still
+     * discarded (FAILED-equivalent outcome), exactly as before when the underlying exception bubbled up.
+     */
+    private static final class AlreadyRecordedFailure extends RuntimeException {
+        AlreadyRecordedFailure(Throwable cause) {
+            super(cause);
+        }
+    }
+
+    /**
+     * SHA-256 checksum mismatch. Subtypes {@link IOException} so {@code verifySha256Checksum}'s
+     * throws-contract and the "discard on failure" behavior are unchanged; it merely carries the
+     * expected/actual hashes so the caller can log them under a distinct bounded reason.
+     */
+    private static final class ChecksumMismatchException extends IOException {
+        private final String expected;
+        private final String actual;
+
+        ChecksumMismatchException(String expected, String actual) {
+            super("SHA-256 checksum verification failed. Expected: " + expected + ", Actual: " + actual);
+            this.expected = expected;
+            this.actual = actual;
+        }
+
+        String expected() {
+            return expected;
+        }
+
+        String actual() {
+            return actual;
+        }
+    }
+
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
     private final CatalogPublishMetrics metrics;
@@ -110,6 +147,10 @@ public class CatalogPullCallbackService {
                 metrics.recordOnPullFailed("empty_callback");
             }
 
+        } catch (AlreadyRecordedFailure e) {
+            // Specific download/verify/decompress failure already logged + counted with its own
+            // bounded reason in processDownloadManifest. Do NOT re-record processing_error
+            // (no double counting). Callback is still discarded — behavior unchanged.
         } catch (Exception e) {
             log.error("event={} error={}",
                     LogEvent.ON_PULL_FAILED,
@@ -165,17 +206,51 @@ public class CatalogPullCallbackService {
 
         log.info("event={} url={} format={}", LogEvent.ON_PULL_DOWNLOAD_STARTED, downloadUrl, fileFormat);
 
-        // downloadCatalogFromUrl applies the SSRF guard before the network call.
-        byte[] payloadAtUrl = downloadCatalogFromUrl(downloadUrl);
+        // downloadCatalogFromUrl applies the SSRF guard (IllegalArgumentException) before the
+        // network call, then throws IOException on a non-200 response. Split these into distinct
+        // bounded reasons here, log + count, and rethrow the marker so the outer catch does NOT
+        // also record processing_error. Behavior unchanged: the callback is still discarded.
+        byte[] payloadAtUrl;
+        try {
+            payloadAtUrl = downloadCatalogFromUrl(downloadUrl);
+        } catch (IllegalArgumentException ssrf) {
+            // SSRF guard rejected the (untrusted) manifest URL before any network call.
+            log.warn("event={} reason={} url={}",
+                    LogEvent.ON_PULL_SSRF_REJECT, ssrfReason(ssrf.getMessage()), downloadUrl);
+            metrics.recordOnPullFailed("ssrf_reject");
+            throw new AlreadyRecordedFailure(ssrf);
+        } catch (IOException http) {
+            // Non-200 HTTP response (or a transport IO failure) from the download.
+            log.warn("event={} httpStatus={} url={} error={}",
+                    LogEvent.ON_PULL_DOWNLOAD_HTTP_ERROR, extractHttpStatus(http.getMessage()),
+                    downloadUrl, ErrorSanitizer.sanitize(http.getMessage()));
+            metrics.recordOnPullFailed("download_http_error");
+            throw new AlreadyRecordedFailure(http);
+        }
 
         // Spec: checksum is the digest of the payload AT url; verify BEFORE decompressing.
         // If verification fails the DS MUST discard the content (verifySha256Checksum throws).
-        verifySha256Checksum(payloadAtUrl, expectedChecksum);
+        try {
+            verifySha256Checksum(payloadAtUrl, expectedChecksum);
+        } catch (ChecksumMismatchException mismatch) {
+            log.warn("event={} expected={} actual={}",
+                    LogEvent.ON_PULL_CHECKSUM_MISMATCH, mismatch.expected(), mismatch.actual());
+            metrics.recordOnPullFailed("checksum_mismatch");
+            throw new AlreadyRecordedFailure(mismatch);
+        }
         log.info("event={} sizeBytes={}", LogEvent.ON_PULL_CHECKSUM_VERIFIED, payloadAtUrl.length);
 
         byte[] catalogJsonBytes = payloadAtUrl;
         if ("json.gz".equalsIgnoreCase(fileFormat) || downloadUrl.endsWith(".gz")) {
-            catalogJsonBytes = decompressGzipPayload(payloadAtUrl);
+            try {
+                catalogJsonBytes = decompressGzipPayload(payloadAtUrl);
+            } catch (IOException gz) {
+                log.warn("event={} compressedBytes={} error={}",
+                        LogEvent.ON_PULL_DECOMPRESS_ERROR, payloadAtUrl.length,
+                        ErrorSanitizer.sanitize(gz.getMessage()));
+                metrics.recordOnPullFailed("decompress_error");
+                throw new AlreadyRecordedFailure(gz);
+            }
             log.info("event={} compressedBytes={} decompressedBytes={}",
                     LogEvent.ON_PULL_DECOMPRESSED, payloadAtUrl.length, catalogJsonBytes.length);
         }
@@ -220,6 +295,46 @@ public class CatalogPullCallbackService {
         } catch (java.time.format.DateTimeParseException e) {
             return true;
         }
+    }
+
+    /**
+     * Classifies an SSRF-guard rejection into a bounded reason tag/label for logging. Derived from
+     * the {@link #validateDownloadUrl} messages — no unbounded/user-controlled value leaks in.
+     */
+    private static String ssrfReason(String message) {
+        if (message == null) {
+            return "unknown";
+        }
+        if (message.contains("scheme")) {
+            return "scheme";
+        }
+        if (message.contains("no host")) {
+            return "host";
+        }
+        if (message.contains("private/loopback")) {
+            return "private";
+        }
+        if (message.contains("could not be resolved")) {
+            return "unresolvable";
+        }
+        if (message.contains("Malformed")) {
+            return "malformed";
+        }
+        return "unknown";
+    }
+
+    /**
+     * Extracts the HTTP status from a {@link #downloadCatalogFromUrl} non-200 message
+     * ("... - HTTP {code}"), or {@code "unknown"} for a transport-level IO failure with no status.
+     */
+    private static String extractHttpStatus(String message) {
+        if (message != null) {
+            int idx = message.lastIndexOf("HTTP ");
+            if (idx >= 0) {
+                return message.substring(idx + "HTTP ".length()).trim();
+            }
+        }
+        return "unknown";
     }
 
     /**
@@ -385,7 +500,7 @@ public class CatalogPullCallbackService {
      *
      * @param decompressedData the bytes to checksum
      * @param expectedChecksumHash the expected hash checksum (optionally prefixed with "sha256:")
-     * @throws IOException if verification fails
+     * @throws ChecksumMismatchException (an {@link IOException}) if the digest does not match
      */
     private void verifySha256Checksum(byte[] decompressedData, String expectedChecksumHash) throws IOException {
         String expectedHash = expectedChecksumHash;
@@ -397,7 +512,7 @@ public class CatalogPullCallbackService {
             byte[] digest = md.digest(decompressedData);
             String actualHash = java.util.HexFormat.of().formatHex(digest);
             if (!actualHash.equalsIgnoreCase(expectedHash)) {
-                throw new IOException("SHA-256 checksum verification failed. Expected: " + expectedHash + ", Actual: " + actualHash);
+                throw new ChecksumMismatchException(expectedHash, actualHash);
             }
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 not available", e);
