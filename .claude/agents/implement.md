@@ -37,7 +37,7 @@ Read first. Read every file you will touch or depend on. Find how similar things
 - Text blocks for multiline SQL/JSON.
 
 ### 3. Beckn Protocol v2.0
-- **Schema reference**: https://github.com/beckn/protocol-specifications-v2/blob/draft/api/v2.0.0/beckn.yaml — read this for the authoritative field definitions of Catalog, Resource, Offer, Provider, Descriptor, Location, TimePeriod, Attributes, Context.
+- **Schema reference**: https://github.com/beckn/protocol-specifications-v2/blob/main/api/v2.0.0/beckn.yaml — read this for the authoritative field definitions of Catalog, Resource, Offer, Provider, Descriptor, Location, TimePeriod, Attributes, Context.
 - **NO `@context`/`@type` on core objects** (Resource, Offer, Descriptor, Location, TimePeriod, Catalog, Provider). Only on `resourceAttributes`, `offerAttributes`, `providerAttributes` (Attributes schema — `@context` + `@type` required there).
 - Context fields: `action`, `bapId`, `bapUri`, `bppId`, `bppUri`, `messageId`, `networkId` (String), `timestamp`, `transactionId`, `version` (const `"2.0.0"`).
 - Resource fields: `id`, `descriptor`, `resourceAttributes`, `provider`, `availableAt`. **No `items` — use `resources`.** **No `itemAttributes` — use `resourceAttributes`.**
@@ -77,7 +77,7 @@ Read first. Read every file you will touch or depend on. Find how similar things
 - Validate callback URLs before any HTTP POST.
 
 ## Workflow
-1. **Read the Beckn schema first** — fetch and read `https://raw.githubusercontent.com/beckn/protocol-specifications-v2/draft/api/v2.0.0/beckn.yaml` to understand the exact field definitions, required fields, and constraints for every object you will implement. Do NOT rely on memory or assumptions — the schema is the source of truth.
+1. **Read the Beckn schema first** — fetch and read `https://raw.githubusercontent.com/beckn/protocol-specifications-v2/main/api/v2.0.0/beckn.yaml` to understand the exact field definitions, required fields, and constraints for every object you will implement. Do NOT rely on memory or assumptions — the schema is the source of truth.
 2. **Discover + push are both in `beckn.yaml`** — Discovr implements `/discover` (+ `on_discover`) and consumes `/catalog/push`; there is no subscription/pull/master API in Discovr, so no separate ext schema is needed.
 3. Read all existing source files you will touch or depend on.
 4. Implement in dependency order: models → exceptions → config → repositories → services → consumers → Spring beans → Flyway migrations.
