@@ -65,11 +65,17 @@ public record AppProperties(
                         @Valid Indexing indexing,
                         Boolean pullSsrfCheckEnabled,
                         Long pullMaxDownloadBytes,
-                        Long pullMaxDecompressedBytes) {
+                        Long pullMaxDecompressedBytes,
+                        Integer pullDownloadMaxAttempts,
+                        Long pullDownloadRetryBackoffMs) {
                 /** Default hard cap for the compressed bytes downloaded on the on_pull path: 50 MiB. */
                 public static final long DEFAULT_MAX_DOWNLOAD_BYTES = 52_428_800L;
                 /** Default hard cap for the decompressed (gunzipped) bytes on the on_pull path: 200 MiB. */
                 public static final long DEFAULT_MAX_DECOMPRESSED_BYTES = 209_715_200L;
+                /** Default total attempts (1 initial + 2 retries) for a transient on_pull download failure. */
+                public static final int DEFAULT_DOWNLOAD_MAX_ATTEMPTS = 3;
+                /** Default base backoff between on_pull download retries (multiplied by attempt number). */
+                public static final long DEFAULT_DOWNLOAD_RETRY_BACKOFF_MS = 1_000L;
 
                 /**
                  * Secure-by-default: when {@code app.catalog.pull-ssrf-check-enabled} is absent
@@ -93,6 +99,12 @@ public record AppProperties(
                         }
                         if (pullMaxDecompressedBytes == null) {
                                 pullMaxDecompressedBytes = DEFAULT_MAX_DECOMPRESSED_BYTES;
+                        }
+                        if (pullDownloadMaxAttempts == null || pullDownloadMaxAttempts < 1) {
+                                pullDownloadMaxAttempts = DEFAULT_DOWNLOAD_MAX_ATTEMPTS;
+                        }
+                        if (pullDownloadRetryBackoffMs == null || pullDownloadRetryBackoffMs < 0) {
+                                pullDownloadRetryBackoffMs = DEFAULT_DOWNLOAD_RETRY_BACKOFF_MS;
                         }
                 }
         }
