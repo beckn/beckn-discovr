@@ -23,10 +23,10 @@ Invoke the **`github-stories`** agent for the full flow: gather milestone/sprint
 
 Milestone · Discovr sprint (Proj 52) · Fabric pipeline sprint (Proj 58 iteration) · Assignee(s). Then stop for approval after showing the plan (Phase B).
 
-## Body shape (every issue — clear, readable, self-contained)
+## Body shape (each section answers a DIFFERENT question — no overlap; tasks stay lean)
 
-- **Story**: `## Introduction`, `## Goal`, `## Problem statement`, `## What is expected` (in/out scope), `## Sub-issues (Tasks)` (`- [ ] #NN …`), `## Acceptance criteria`, `## Notes / references`.
-- **Task**: `## Introduction`, `## Goal`, `## Problem statement`, `## What is expected`, `## Parent Story` (`- #<story>`), `## Acceptance criteria`, `## Implementation notes`.
+- **Story**: `## Context` (background + problem), `## Objective` (outcome + value — "As a… I want… so that…"), `## Scope` (in/out), `## Acceptance criteria` (definition of done = "what is expected"), `## Sub-issues (Tasks)` (`- [ ] #NN …`), `## References`.
+- **Task**: `## Context` (1–2 lines, link don't repeat the Story), `## What to do`, `## Acceptance criteria`, `## Parent Story` (`- #<story>`), `## Technical notes`.
 
 ## gh patterns
 
