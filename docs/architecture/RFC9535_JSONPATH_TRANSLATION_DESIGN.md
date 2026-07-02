@@ -38,9 +38,11 @@ itself. This causes two problems:
 2. **Keep backward compatibility.** Filters already written in the current database's
    dialect must keep working. The request itself declares which dialect it's using, in
    `message.intent.filters.type`: `rfc9535` for the standard path described in this
-   design, and the existing legacy value for filters written the old way. Legacy filters
-   skip everything below and run exactly as they do today, so nothing changes for
-   existing clients, and there's never any guessing about which dialect a filter is in.
+   design, and the existing legacy value for filters written the old way. A request that
+   doesn't send `type` at all is treated as legacy, so existing clients keep working
+   without changing a single byte of their requests. Legacy filters skip everything below
+   and run exactly as they do today. RFC 9535 is opt-in, nobody is forced to migrate on
+   any timeline, and there's never any guessing about which dialect a filter is in.
 
 ---
 
