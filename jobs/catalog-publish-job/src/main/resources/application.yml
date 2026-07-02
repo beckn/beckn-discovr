@@ -40,6 +40,11 @@ app:
     # is fire-and-forget after our 200 Ack, so a transient blip would otherwise lose the pull result.
     pull-download-max-attempts: ${APP_CATALOG_PULL_DOWNLOAD_MAX_ATTEMPTS:3}
     pull-download-retry-backoff-ms: ${APP_CATALOG_PULL_DOWNLOAD_RETRY_BACKOFF_MS:1000}
+    # Dedicated executor for on_pull download/ingest — isolated from the publish pool so blocking
+    # downloads never starve the catalog-publish pipeline. Sized for I/O (not CPU).
+    pull-executor-core-pool-size: ${APP_CATALOG_PULL_EXECUTOR_CORE_POOL_SIZE:4}
+    pull-executor-max-pool-size: ${APP_CATALOG_PULL_EXECUTOR_MAX_POOL_SIZE:8}
+    pull-executor-queue-capacity: ${APP_CATALOG_PULL_EXECUTOR_QUEUE_CAPACITY:100}
     schema-url: ${BECKN_PROTOCOL_API_SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml}
     parallel-catalog-threshold: 3
     # Thread pool size for parallel catalog processing within a single message.
