@@ -46,6 +46,11 @@ standards. Beckn Discovr operates within this network and provides catalog
 discovery — enabling Buyer Apps to search for items or services published by
 providers on the network.
 
+Catalog data is published to the network by providers through a separate
+publishing process and indexed before it becomes searchable. The Discover
+server itself does not publish, own, or manage this data — it only searches
+data that has already been made available.
+
 ## 3. Service Overview
 
 The Discover server is the search component of Beckn Discovr. It allows
