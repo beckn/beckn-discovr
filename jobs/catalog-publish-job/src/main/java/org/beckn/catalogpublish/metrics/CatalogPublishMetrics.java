@@ -39,6 +39,9 @@ public class CatalogPublishMetrics {
     private final Counter persistUpdated;
     private final Counter mergeCount;
 
+    // Enqueue-to-Kafka (push/on_pull ingestion topic) send failures
+    private final Counter enqueueFailure;
+
     // on_pull callback metrics use bounded tag values (mode/reason), so they are resolved
     // on demand from the registry (Micrometer caches each name+tag combination).
     private final MeterRegistry registry;
@@ -102,6 +105,10 @@ public class CatalogPublishMetrics {
         persistUpdated = Counter.builder("discovr.publish.persist.updated")
                 .description("Existing resources updated during persist")
                 .register(registry);
+
+        enqueueFailure = Counter.builder("discovr.publish.enqueue.failure")
+                .description("Failures publishing a push/on_pull payload to the ingestion Kafka topic")
+                .register(registry);
     }
 
     public void recordMessageSuccess(CatalogOperation op) {
@@ -150,6 +157,11 @@ public class CatalogPublishMetrics {
         persistUpdated.increment(count);
     }
 
+    /** A push/on_pull payload failed to publish to the ingestion Kafka topic. */
+    public void recordEnqueueFailure() {
+        enqueueFailure.increment();
+    }
+
     /**
      * Records how long it takes to process a single Kafka message end-to-end.
      * The {@code op} tag allows filtering by operation type in dashboards.
@@ -160,7 +172,9 @@ public class CatalogPublishMetrics {
 
     // ── on_pull callback ingestion ──────────────────────────────────────────────
     // mode ∈ {inline, download}; reason ∈ {status_failed, empty_callback, missing_checksum,
-    // missing_expiry, expired, no_catalogs, processing_error} — all bounded, low-cardinality.
+    // missing_expiry, expired, no_catalogs, processing_error, download_http_error, ssrf_reject,
+    // checksum_mismatch, decompress_error, oversize, invalid_json, missing_context}
+    // — all bounded, low-cardinality.
 
     /** A COMPLETED on_pull callback was received for processing, tagged by delivery mode. */
     public void recordOnPullReceived(String mode) {
