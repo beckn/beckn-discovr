@@ -6,7 +6,7 @@ description: >
   offer-only, cross-BPP resolution, discover (sync/async), spatial search, Elasticsearch,
   response dispatcher, DB checks — and reports a PASS/FAIL table.
   Triggers on "verify", "run verification", "check all scenarios", "integration test".
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read

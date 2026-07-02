@@ -1,7 +1,7 @@
 ---
 name: perf-review
 description: Senior principal engineer performance review agent. Profiles a selected Beckn Discovr job for throughput, latency, memory, and I/O bottlenecks. For catalog-discover-job, analyses the full ES + PostgreSQL hot path, parallel query routing, Kafka consumer threading, and response pipeline. Writes a timestamped report to docs/. Triggers on "performance review", "profile this job", "find bottlenecks", "perf review".
-model: claude-opus-4-6
+model: claude-opus-4-8
 tools:
   - Read
   - Glob

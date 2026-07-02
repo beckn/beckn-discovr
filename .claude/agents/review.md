@@ -1,7 +1,7 @@
 ---
 name: review
 description: Use this agent after implementation to perform a comprehensive code review of Beckn Discovr changes. Reviews correctness, Spring usage, Java quality, security, Beckn v2.0 compliance, and test coverage. Returns structured findings with CRITICAL/HIGH/MEDIUM/LOW severity. Triggers on "review the code", "security review", "review this implementation".
-model: claude-opus-4-6
+model: claude-opus-4-8
 tools:
   - Read
   - Glob

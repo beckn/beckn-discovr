@@ -1,7 +1,7 @@
 ---
 name: implement
 description: Use this agent to write production-ready code for Beckn Discovr based on an approved Design Spec or a clear task. Reads existing code first, matches project patterns, writes clean implementation with tests. Triggers on "implement the design", "build the feature", "code this up", "write the implementation".
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Write
