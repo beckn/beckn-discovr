@@ -173,7 +173,7 @@ public class CatalogPublishMetrics {
     // ── on_pull callback ingestion ──────────────────────────────────────────────
     // mode ∈ {inline, download}; reason ∈ {status_failed, empty_callback, missing_checksum,
     // missing_expiry, expired, no_catalogs, processing_error, download_http_error, ssrf_reject,
-    // checksum_mismatch, decompress_error, oversize, invalid_json, missing_context}
+    // checksum_mismatch, decompress_error, size_exceeded, oversize, invalid_json, missing_context}
     // — all bounded, low-cardinality.
 
     /** A COMPLETED on_pull callback was received for processing, tagged by delivery mode. */

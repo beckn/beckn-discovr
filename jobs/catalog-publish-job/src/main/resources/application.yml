@@ -31,6 +31,11 @@ app:
     # SSRF guard on the on_pull download path. Secure-by-default (true). Set to false ONLY for
     # local/dev to allow downloads from localhost/private hosts (e.g. fake-gcs).
     pull-ssrf-check-enabled: true
+    # Hard caps on the on_pull download path (gzip-bomb / OOM guard). The download is streamed and
+    # aborted the instant it exceeds max-download-bytes; decompression is aborted the instant the
+    # gunzipped output exceeds max-decompressed-bytes. Absent => secure defaults (50 MiB / 200 MiB).
+    pull-max-download-bytes: ${APP_CATALOG_PULL_MAX_DOWNLOAD_BYTES:52428800}
+    pull-max-decompressed-bytes: ${APP_CATALOG_PULL_MAX_DECOMPRESSED_BYTES:209715200}
     schema-url: ${BECKN_PROTOCOL_API_SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml}
     parallel-catalog-threshold: 3
     # Thread pool size for parallel catalog processing within a single message.
