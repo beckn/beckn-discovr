@@ -74,6 +74,31 @@ public class CatalogPullCallbackService {
         }
     }
 
+    /**
+     * Download or decompressed output exceeded the configured hard cap (gzip-bomb / OOM guard).
+     * Subtypes {@link IOException} so the streaming download/decompress throws-contracts and the
+     * "discard on failure" behavior are unchanged; it carries the observed byte count and the limit
+     * so the caller can log them and record the distinct {@code size_exceeded} reason.
+     */
+    private static final class SizeExceededException extends IOException {
+        private final long bytes;
+        private final long limit;
+
+        SizeExceededException(String what, long bytes, long limit) {
+            super(what + " exceeded cap: " + bytes + " > " + limit + " bytes");
+            this.bytes = bytes;
+            this.limit = limit;
+        }
+
+        long bytes() {
+            return bytes;
+        }
+
+        long limit() {
+            return limit;
+        }
+    }
+
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
     private final CatalogPublishMetrics metrics;
@@ -105,7 +130,7 @@ public class CatalogPullCallbackService {
      *
      * @param rawCallbackPayload the raw JSON request body received at the on_pull endpoint
      */
-    @Async("catalogProcessingExecutor")
+    @Async("onPullExecutor")
     public void processPullCallbackAsynchronously(String rawCallbackPayload) {
         try {
             JsonNode callbackPayloadRoot = objectMapper.readTree(rawCallbackPayload);
@@ -219,6 +244,13 @@ public class CatalogPullCallbackService {
                     LogEvent.ON_PULL_SSRF_REJECT, ssrfReason(ssrf.getMessage()), downloadUrl);
             metrics.recordOnPullFailed("ssrf_reject");
             throw new AlreadyRecordedFailure(ssrf);
+        } catch (SizeExceededException size) {
+            // Download exceeded the hard cap (gzip-bomb / OOM guard). Distinct reason — must be caught
+            // before the generic IOException below since SizeExceededException subtypes IOException.
+            log.warn("event={} phase=download bytes={} limit={} url={}",
+                    LogEvent.ON_PULL_SIZE_EXCEEDED, size.bytes(), size.limit(), downloadUrl);
+            metrics.recordOnPullFailed("size_exceeded");
+            throw new AlreadyRecordedFailure(size);
         } catch (IOException http) {
             // Non-200 HTTP response (or a transport IO failure) from the download.
             log.warn("event={} httpStatus={} url={} error={}",
@@ -244,6 +276,14 @@ public class CatalogPullCallbackService {
         if ("json.gz".equalsIgnoreCase(fileFormat) || downloadUrl.endsWith(".gz")) {
             try {
                 catalogJsonBytes = decompressGzipPayload(payloadAtUrl);
+            } catch (SizeExceededException size) {
+                // Decompressed output exceeded the hard cap (gzip-bomb / OOM guard). Distinct reason —
+                // caught before the generic IOException below since it subtypes IOException.
+                log.warn("event={} phase=decompress bytes={} limit={} compressedBytes={} url={}",
+                        LogEvent.ON_PULL_SIZE_EXCEEDED, size.bytes(), size.limit(),
+                        payloadAtUrl.length, downloadUrl);
+                metrics.recordOnPullFailed("size_exceeded");
+                throw new AlreadyRecordedFailure(size);
             } catch (IOException gz) {
                 log.warn("event={} compressedBytes={} error={}",
                         LogEvent.ON_PULL_DECOMPRESS_ERROR, payloadAtUrl.length,
@@ -420,16 +460,40 @@ public class CatalogPullCallbackService {
     public byte[] downloadCatalogFromUrl(String downloadUrl) throws Exception {
         // SSRF guard: validate the (untrusted) manifest URL before any network call.
         validateDownloadUrl(downloadUrl);
+        long maxDownloadBytes = props.catalog().pullMaxDownloadBytes();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(downloadUrl))
                 .timeout(Duration.ofSeconds(30))
                 .GET()
                 .build();
-        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        // Stream the body (ofInputStream) and read into a growable buffer with a HARD cap — abort as
+        // soon as bytes read exceed maxDownloadBytes, WITHOUT buffering the whole body first. Do NOT
+        // trust Content-Length alone (a lying header could still stream an unbounded body).
+        HttpResponse<java.io.InputStream> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofInputStream());
         if (response.statusCode() != 200) {
+            // Drain+close so the connection can be returned to the pool; the body is irrelevant here.
+            try (java.io.InputStream body = response.body()) {
+                body.readAllBytes();
+            } catch (IOException ignored) {
+                // best-effort drain; the non-200 error below is what matters
+            }
             throw new IOException("Failed to download catalog file from " + downloadUrl + " - HTTP " + response.statusCode());
         }
-        return response.body();
+        try (java.io.InputStream body = response.body();
+             java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream()) {
+            byte[] chunk = new byte[8192];
+            long total = 0;
+            int read;
+            while ((read = body.read(chunk)) > 0) {
+                total += read;
+                if (total > maxDownloadBytes) {
+                    throw new SizeExceededException("download", total, maxDownloadBytes);
+                }
+                buffer.write(chunk, 0, read);
+            }
+            return buffer.toByteArray();
+        }
     }
 
     /**
@@ -484,11 +548,19 @@ public class CatalogPullCallbackService {
      * @throws IOException if decompression fails
      */
     private byte[] decompressGzipPayload(byte[] compressedGzipData) throws IOException {
+        long maxDecompressedBytes = props.catalog().pullMaxDecompressedBytes();
         try (GZIPInputStream gis = new GZIPInputStream(new ByteArrayInputStream(compressedGzipData));
              java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream()) {
             byte[] buffer = new byte[4096];
+            long total = 0;
             int len;
+            // Track total decompressed output and abort as soon as it exceeds the cap, so a
+            // gzip-bomb (tiny compressed input expanding to gigabytes) can never OOM the DS.
             while ((len = gis.read(buffer)) > 0) {
+                total += len;
+                if (total > maxDecompressedBytes) {
+                    throw new SizeExceededException("decompressed", total, maxDecompressedBytes);
+                }
                 baos.write(buffer, 0, len);
             }
             return baos.toByteArray();

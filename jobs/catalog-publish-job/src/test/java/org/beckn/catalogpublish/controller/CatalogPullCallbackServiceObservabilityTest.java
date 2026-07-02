@@ -25,7 +25,7 @@ class CatalogPullCallbackServiceObservabilityTest {
                 new AppProperties(null, null, new AppProperties.Catalog(
                         10_000_000L, false,
                         "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml",
-                        1, 4, null, null, null, true)));
+                        1, 4, null, null, null, true, null, null)));
     }
 
     @Test

@@ -63,17 +63,36 @@ public record AppProperties(
                         @Valid Elasticsearch elasticsearch,
                         @Valid TextSearch textSearch,
                         @Valid Indexing indexing,
-                        Boolean pullSsrfCheckEnabled) {
+                        Boolean pullSsrfCheckEnabled,
+                        Long pullMaxDownloadBytes,
+                        Long pullMaxDecompressedBytes) {
+                /** Default hard cap for the compressed bytes downloaded on the on_pull path: 50 MiB. */
+                public static final long DEFAULT_MAX_DOWNLOAD_BYTES = 52_428_800L;
+                /** Default hard cap for the decompressed (gunzipped) bytes on the on_pull path: 200 MiB. */
+                public static final long DEFAULT_MAX_DECOMPRESSED_BYTES = 209_715_200L;
+
                 /**
                  * Secure-by-default: when {@code app.catalog.pull-ssrf-check-enabled} is absent
                  * (binds to {@code null}), the SSRF guard on the on_pull download path stays ENABLED.
                  * Only an explicit {@code false} disables it (for local/dev). A {@code Boolean}
                  * component is used deliberately so the absent case defaults to {@code true} rather
                  * than a primitive {@code boolean}'s insecure {@code false}.
+                 *
+                 * <p>{@code maxDownloadBytes} / {@code maxDecompressedBytes} follow the same
+                 * secure-default pattern: a {@code Long} so an absent (null) value defaults to the
+                 * bounded constant above rather than an unbounded download/decompress. They cap the
+                 * on_pull download path to defend against gzip-bomb / OOM (env-bindable via
+                 * {@code APP_CATALOG_PULL_MAX_DOWNLOAD_BYTES} / {@code APP_CATALOG_PULL_MAX_DECOMPRESSED_BYTES}).</p>
                  */
                 public Catalog {
                         if (pullSsrfCheckEnabled == null) {
                                 pullSsrfCheckEnabled = Boolean.TRUE;
+                        }
+                        if (pullMaxDownloadBytes == null) {
+                                pullMaxDownloadBytes = DEFAULT_MAX_DOWNLOAD_BYTES;
+                        }
+                        if (pullMaxDecompressedBytes == null) {
+                                pullMaxDecompressedBytes = DEFAULT_MAX_DECOMPRESSED_BYTES;
                         }
                 }
         }
