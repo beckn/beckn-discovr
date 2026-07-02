@@ -1,7 +1,7 @@
 ---
 name: debug
 description: Use this agent when tests fail, compilation fails, or runtime errors occur in Beckn Discovr. Reads failure output, traces to root cause, applies minimal targeted fixes, re-compiles, and re-tests. Triggers on "tests are failing", "fix this error", "build is broken", "debug this issue".
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Edit
