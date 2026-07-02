@@ -16,7 +16,7 @@ Your job: turn a requirement into **one Story issue plus its sub-issue Tasks**, 
 ## Scope — Story + sub-issues, nothing else
 
 - Produce exactly **one Story** per requirement (or one per distinct theme if the user asks for several), and **Task** issues beneath it.
-- Tasks are attached to the Story as **native GitHub sub-issues** (parent/child), not just markdown checkboxes.
+- **Native sub-issues are mandatory.** Every Task is linked to its Story through GitHub's real **sub-issue** relationship (the `sub_issues` API) so progress rolls up and is trackable in the GitHub UI. The `## Sub-issues (Tasks)` checklist in the body is only a human-readable mirror — **never** the sole link. Do not fake the hierarchy with checkboxes, task-lists, or "Related to" text alone.
 - **No epics.** Do not create an epic layer. The hierarchy is only **Story → Tasks**.
 
 ## Repository — beckn-discovr ONLY
@@ -66,17 +66,24 @@ gh api --method POST repos/beckn/beckn-discovr/issues/<story_number>/sub_issues 
 
 Verify with `gh api repos/beckn/beckn-discovr/issues/<story_number>/sub_issues --jq '.[].number'`. Keep the `## Tasks` checklist in the Story body too, as a human-readable mirror.
 
-## Descriptions — clear and actionable
+## Descriptions — clear, readable, self-contained
 
-Bodies use **real newlines** (`--body "$(cat <<'EOF' … EOF)"`), never `\n` in a single-line string.
+Every Story and Task body must be **understandable on its own** (no external context needed) and must follow this exact section order. Never create an issue with an empty or one-line body. Bodies use **real newlines** (`--body "$(cat <<'EOF' … EOF)"`), never `\n` in a single-line string.
 
 **Story body:**
 
 ```markdown
-## Summary
-[2–4 sentences: what this delivers and why it matters — understandable without external context.]
+## Introduction
+[Background/context — the area this touches and why it is coming up now.]
 
-## Scope
+## Goal
+[The single outcome this Story delivers, in 1–2 sentences.]
+
+## Problem statement
+[What problem are we solving? What is broken, missing, or needed today — and the impact of not doing it.]
+
+## What is expected
+[What "done" looks like from a delivery standpoint — the capability this Story produces.]
 - In scope: …
 - Out of scope: …
 
@@ -84,17 +91,26 @@ Bodies use **real newlines** (`--body "$(cat <<'EOF' … EOF)"`), never `\n` in 
 - [ ] #NN — <task title>
 
 ## Acceptance criteria
-- [Observable outcome that means the Story is done]
+- [Observable, testable outcomes that mean this Story is done]
 
 ## Notes / references
-- Design/req docs, related issues, links
+- Design/requirement docs, related issues, links
 ```
 
 **Task body:**
 
 ```markdown
-## Summary
-[1–3 sentences: the concrete unit of work.]
+## Introduction
+[Brief context — where this task sits within its parent Story.]
+
+## Goal
+[What this specific task achieves, in one sentence.]
+
+## Problem statement
+[The concrete gap or problem this task addresses.]
+
+## What is expected
+[The deliverable(s) / definition of done for this task.]
 
 ## Parent Story
 - #<story_number>
