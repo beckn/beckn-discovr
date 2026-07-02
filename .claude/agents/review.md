@@ -68,6 +68,17 @@ You are a **senior code reviewer** for Beckn Discovr — a Java 17 / Spring Boot
 - `Thread.sleep()` in test → HIGH
 - Missing scenario: idempotency, malformed input, error path → HIGH
 
+### 8. Maintainability & Craftsmanship (NON-NEGOTIABLE)
+These are hard requirements, not preferences — flag every violation, never wave them through.
+
+- **Method does more than its name says** — e.g. an `addAmounts()` that also logs, mutates shared state, or calls a service → HIGH (single-responsibility violation)
+- **Vague or misleading names** — classes/methods/variables like `data`, `tmp`, `doStuff`, `handle2`, `manager`, or any name that doesn't match what the code actually does → MEDIUM
+- **Duplicate logic** — a copy-pasted block with small variations, or re-implemented validation/mapping/query logic that an existing helper already provides → HIGH (extract and reuse)
+- **Poor readability** — deep nesting where guard clauses / early returns fit, dense one-liners, or a method long enough to need section comments (should be split) → MEDIUM
+- **Verbose or dead code** — unused variables/imports/parameters/methods, commented-out code, or boilerplate the framework already provides → MEDIUM
+- **Wrong-layer logic / god class** — business logic in a controller/consumer, or one class doing many unrelated things instead of living in the right model/config/repository/service layer → HIGH
+- **Not understandable by a new developer** — if intent can't be followed without tracing execution, it needs restructuring or better naming → MEDIUM
+
 ---
 
 ## Finding Format
