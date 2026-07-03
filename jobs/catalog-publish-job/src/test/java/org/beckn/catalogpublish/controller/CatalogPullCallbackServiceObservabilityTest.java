@@ -22,11 +22,12 @@ class CatalogPullCallbackServiceObservabilityTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     private CatalogPullCallbackService newService(CatalogPushService push, CatalogPublishMetrics metrics) {
-        return new CatalogPullCallbackService(push, mapper, metrics,
-                new AppProperties(null, null, new AppProperties.Catalog(
-                        10_000_000L, false,
-                        "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml",
-                        1, 4, null, null, null, true, null, null, null, null)));
+        AppProperties props = new AppProperties(null, null, new AppProperties.Catalog(
+                10_000_000L, false,
+                "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml",
+                1, 4, null, null, null, true, null, null, null, null, null));
+        return new CatalogPullCallbackService(push, mapper, metrics, props,
+                new SecureCatalogDownloader(metrics, props));
     }
 
     @Test

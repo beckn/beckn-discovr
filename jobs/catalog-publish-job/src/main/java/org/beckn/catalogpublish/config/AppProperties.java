@@ -67,7 +67,8 @@ public record AppProperties(
                         Long pullMaxDownloadBytes,
                         Long pullMaxDecompressedBytes,
                         Integer pullDownloadMaxAttempts,
-                        Long pullDownloadRetryBackoffMs) {
+                        Long pullDownloadRetryBackoffMs,
+                        Integer pullDnsCacheTtlSeconds) {
                 /** Default hard cap for the compressed bytes downloaded on the on_pull path: 50 MiB. */
                 public static final long DEFAULT_MAX_DOWNLOAD_BYTES = 52_428_800L;
                 /** Default hard cap for the decompressed (gunzipped) bytes on the on_pull path: 200 MiB. */
@@ -76,6 +77,12 @@ public record AppProperties(
                 public static final int DEFAULT_DOWNLOAD_MAX_ATTEMPTS = 3;
                 /** Default base backoff between on_pull download retries (multiplied by attempt number). */
                 public static final long DEFAULT_DOWNLOAD_RETRY_BACKOFF_MS = 1_000L;
+                /**
+                 * Default positive DNS cache TTL (seconds) applied at startup by DnsCacheHardeningConfig.
+                 * Caching the SSRF-validated positive resolution for this window closes the DNS-rebinding
+                 * TOCTOU: HttpClient's fetch-time re-resolution reuses the same validated IPs.
+                 */
+                public static final int DEFAULT_DNS_CACHE_TTL_SECONDS = 10;
 
                 /**
                  * Secure-by-default: when {@code app.catalog.pull-ssrf-check-enabled} is absent
@@ -105,6 +112,9 @@ public record AppProperties(
                         }
                         if (pullDownloadRetryBackoffMs == null || pullDownloadRetryBackoffMs < 0) {
                                 pullDownloadRetryBackoffMs = DEFAULT_DOWNLOAD_RETRY_BACKOFF_MS;
+                        }
+                        if (pullDnsCacheTtlSeconds == null || pullDnsCacheTtlSeconds < 0) {
+                                pullDnsCacheTtlSeconds = DEFAULT_DNS_CACHE_TTL_SECONDS;
                         }
                 }
         }

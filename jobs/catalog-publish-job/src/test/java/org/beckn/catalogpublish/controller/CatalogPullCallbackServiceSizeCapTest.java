@@ -72,12 +72,14 @@ class CatalogPullCallbackServiceSizeCapTest {
                 /* pullMaxDownloadBytes */ 10_000_000L,
                 /* pullMaxDecompressedBytes */ 1_024L,
                 /* pullDownloadMaxAttempts */ null,
-                /* pullDownloadRetryBackoffMs */ null);
+                /* pullDownloadRetryBackoffMs */ null,
+                /* pullDnsCacheTtlSeconds */ null);
 
         CatalogPushService push = Mockito.mock(CatalogPushService.class);
         CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
+        AppProperties props = new AppProperties(null, null, catalog);
         CatalogPullCallbackService service = new CatalogPullCallbackService(
-                push, mapper, metrics, new AppProperties(null, null, catalog));
+                push, mapper, metrics, props, new SecureCatalogDownloader(metrics, props));
 
         String url = "http://" + server.getAddress().getHostString()
                 + ":" + server.getAddress().getPort() + "/catalog.json.gz";
