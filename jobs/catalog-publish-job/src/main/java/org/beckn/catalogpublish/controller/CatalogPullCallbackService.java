@@ -295,7 +295,7 @@ public class CatalogPullCallbackService {
     private void populateCallbackMdc(JsonNode becknContext) {
         putIfPresentMdc(MdcField.MESSAGE_ID, becknContext.path(BecknFields.MESSAGE_ID).asText(null));
         putIfPresentMdc(MdcField.TRANSACTION_ID, becknContext.path(BecknFields.TRANSACTION_ID).asText(null));
-        putIfPresentMdc(MdcField.NETWORK_ID, becknContext.path(MdcField.NETWORK_ID).asText(null));
+        putIfPresentMdc(MdcField.NETWORK_ID, becknContext.path(BecknFields.NETWORK_ID).asText(null));
     }
 
     private static void putIfPresentMdc(String key, String value) {
