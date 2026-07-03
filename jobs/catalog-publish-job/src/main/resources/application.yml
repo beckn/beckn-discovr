@@ -27,9 +27,9 @@ app:
 
   catalog:
     # End-to-end size budget (keep this ordering):
-    #   Catalg inline-threshold (prod 900KB) <= Discovr max-payload-size <= Kafka message.max.bytes
-    # The Catalg CS inlines catalogs up to ~900KB and only switches to a downloadManifest above that,
-    # so max-payload-size MUST stay >= the 900KB inline threshold or valid inline callbacks are rejected.
+    #   Catalg inline-threshold (prod 1MB) <= Discovr max-payload-size (5MB) <= Kafka message.max.bytes (5MB)
+    # The Catalg CS inlines catalogs up to ~1MB and only switches to a downloadManifest above that,
+    # so max-payload-size MUST stay >= the 1MB inline threshold or valid inline callbacks are rejected.
     # With the on_pull per-catalog enqueue (PR #393 C2), each ingestion Kafka record carries exactly ONE
     # catalog, so a single record stays well under Kafka's max — the whole array is never one giant record.
     max-payload-size: 5242880
