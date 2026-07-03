@@ -18,13 +18,8 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.security.MessageDigest;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -35,20 +30,15 @@ import java.util.zip.GZIPInputStream;
  * Service responsible for processing incoming Beckn catalog {@code on_pull} callbacks asynchronously.
  * Supports processing inline catalogs and downloading, decompressing, and verifying catalog assets
  * referenced in a {@code downloadManifest}.
+ *
+ * <p>The secure download itself (SSRF guard + bounded {@link org.springframework.retry.annotation.Retryable}
+ * retry + size cap + no-redirect HttpClient) lives in {@link SecureCatalogDownloader}, injected as a
+ * separate bean so Spring's retry proxy actually intercepts the call (a self-invocation would not).</p>
  */
-// TODO(review): extract the secure-downloader (SSRF guard + bounded retry + size caps + gzip-bomb
-// guard) into its own component so this class comes under the 500-line rule. Deferred — larger refactor.
 @Service
 public class CatalogPullCallbackService {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogPullCallbackService.class);
-
-    /**
-     * Tiny hard cap (64 KiB) on how much of a non-200 response body we read-and-discard when draining
-     * the stream so the connection can be pooled. The error body is irrelevant; capping it prevents a
-     * malicious retried 5xx with an unbounded body from forcing repeated unbounded buffering (OOM).
-     */
-    private static final long ERROR_DRAIN_CAP_BYTES = 64L * 1024L;
 
     /**
      * Marker thrown from {@link #processDownloadManifest} after a specific download/verify/decompress
@@ -87,53 +77,11 @@ public class CatalogPullCallbackService {
         }
     }
 
-    /**
-     * Download or decompressed output exceeded the configured hard cap (gzip-bomb / OOM guard).
-     * Subtypes {@link IOException} so the streaming download/decompress throws-contracts and the
-     * "discard on failure" behavior are unchanged; it carries the observed byte count and the limit
-     * so the caller can log them and record the distinct {@code size_exceeded} reason.
-     */
-    private static final class SizeExceededException extends IOException {
-        private final long bytes;
-        private final long limit;
-
-        SizeExceededException(String what, long bytes, long limit) {
-            super(what + " exceeded cap: " + bytes + " > " + limit + " bytes");
-            this.bytes = bytes;
-            this.limit = limit;
-        }
-
-        long bytes() {
-            return bytes;
-        }
-
-        long limit() {
-            return limit;
-        }
-    }
-
-    /**
-     * Marks a TRANSIENT download failure (HTTP 5xx / network / timeout) that is worth retrying.
-     * Extends {@link IOException} so that, once retries are exhausted, the outer
-     * {@code catch (IOException)} in {@link #processDownloadManifest} classifies it as
-     * {@code download_http_error}. Permanent failures (4xx, SSRF, checksum, {@link SizeExceededException})
-     * are deliberately NOT this type, so they propagate immediately without retry.
-     */
-    private static final class RetryableDownloadException extends IOException {
-        RetryableDownloadException(String message) {
-            super(message);
-        }
-
-        RetryableDownloadException(String message, Throwable cause) {
-            super(message, cause);
-        }
-    }
-
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
     private final CatalogPublishMetrics metrics;
     private final AppProperties props;
-    private final HttpClient httpClient;
+    private final SecureCatalogDownloader downloader;
 
     /**
      * Constructs the callback processing service.
@@ -141,17 +89,17 @@ public class CatalogPullCallbackService {
      * @param pushService the service used to enqueue transformed catalogs
      * @param objectMapper the JSON object mapper
      * @param metrics publish/on_pull metrics recorder
-     * @param props application configuration (gates the on_pull download SSRF guard)
+     * @param props application configuration (gates the on_pull decompress cap)
+     * @param downloader the secure downloader bean (SSRF guard + bounded @Retryable retry + size cap);
+     *        a SEPARATE bean so Spring's retry proxy intercepts the download call
      */
     public CatalogPullCallbackService(CatalogPushService pushService, ObjectMapper objectMapper,
-            CatalogPublishMetrics metrics, AppProperties props) {
+            CatalogPublishMetrics metrics, AppProperties props, SecureCatalogDownloader downloader) {
         this.pushService = pushService;
         this.objectMapper = objectMapper;
         this.metrics = metrics;
         this.props = props;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
+        this.downloader = downloader;
     }
 
     /**
@@ -261,20 +209,21 @@ public class CatalogPullCallbackService {
 
         log.info("event={} url={} format={}", LogEvent.ON_PULL_DOWNLOAD_STARTED, redactUrl(downloadUrl), fileFormat);
 
-        // downloadCatalogFromUrl applies the SSRF guard (IllegalArgumentException) before the
-        // network call, then throws IOException on a non-200 response. Split these into distinct
-        // bounded reasons here, log + count, and rethrow the marker so the outer catch does NOT
-        // also record processing_error. Behavior unchanged: the callback is still discarded.
+        // downloader.download applies the SSRF guard (IllegalArgumentException) before the network
+        // call, then throws IOException on a non-200 response. It is a SEPARATE bean so Spring's
+        // @Retryable proxy actually intercepts + retries transient failures. Split the failure types
+        // into distinct bounded reasons here, log + count, and rethrow the marker so the outer catch
+        // does NOT also record processing_error. Behavior unchanged: the callback is still discarded.
         byte[] payloadAtUrl;
         try {
-            payloadAtUrl = downloadCatalogFromUrl(downloadUrl);
+            payloadAtUrl = downloader.download(downloadUrl);
         } catch (IllegalArgumentException ssrf) {
             // SSRF guard rejected the (untrusted) manifest URL before any network call.
             log.warn("event={} reason={} url={}",
                     LogEvent.ON_PULL_SSRF_REJECT, ssrfReason(ssrf.getMessage()), redactUrl(downloadUrl));
             metrics.recordOnPullFailed("ssrf_reject");
             throw new AlreadyRecordedFailure(ssrf);
-        } catch (SizeExceededException size) {
+        } catch (SecureCatalogDownloader.SizeExceededException size) {
             // Download exceeded the hard cap (gzip-bomb / OOM guard). Distinct reason — must be caught
             // before the generic IOException below since SizeExceededException subtypes IOException.
             log.warn("event={} phase=download bytes={} limit={} url={}",
@@ -306,7 +255,7 @@ public class CatalogPullCallbackService {
         if ("json.gz".equalsIgnoreCase(fileFormat) || downloadUrl.endsWith(".gz")) {
             try {
                 catalogJsonBytes = decompressGzipPayload(payloadAtUrl);
-            } catch (SizeExceededException size) {
+            } catch (SecureCatalogDownloader.SizeExceededException size) {
                 // Decompressed output exceeded the hard cap (gzip-bomb / OOM guard). Distinct reason —
                 // caught before the generic IOException below since it subtypes IOException.
                 log.warn("event={} phase=decompress bytes={} limit={} compressedBytes={} url={}",
@@ -535,164 +484,18 @@ public class CatalogPullCallbackService {
     }
 
     /**
-     * Downloads catalog bytes from a URL.
+     * Downloads catalog bytes from a URL via the {@link SecureCatalogDownloader} bean (SSRF guard +
+     * bounded {@code @Retryable} retry + hard size cap). Kept as a thin delegate so callers/tests have
+     * a single entry point; the retry/SSRF logic itself lives in the separate bean so Spring's retry
+     * proxy actually intercepts it.
      *
      * @param downloadUrl the HTTP URL to download from
      * @return the raw downloaded bytes
-     * @throws Exception if HTTP call fails or response code is not 200
+     * @throws Exception if the SSRF guard rejects the URL, the size cap is exceeded, or (after retries
+     *         are exhausted) the HTTP call fails
      */
     public byte[] downloadCatalogFromUrl(String downloadUrl) throws Exception {
-        // TODO(review): convert this hand-rolled retry loop to Spring @Retryable (job convention). Deferred
-        // — retry only RetryableDownloadException, keep the bounded attempts/backoff-per-attempt semantics.
-        // SSRF guard: validate the (untrusted) manifest URL ONCE before any network call (permanent
-        // failure — never retried).
-        validateDownloadUrl(downloadUrl);
-
-        int maxAttempts = props.catalog().pullDownloadMaxAttempts();
-        long backoffMs = props.catalog().pullDownloadRetryBackoffMs();
-        RetryableDownloadException lastTransient = null;
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                return attemptDownload(downloadUrl);
-            } catch (RetryableDownloadException transientErr) {
-                // Transient (HTTP 5xx / network / timeout): the CS is fire-and-forget after our 200 Ack,
-                // so a blip would otherwise permanently lose the pull result. Retry a bounded number of
-                // times. 4xx, SSRF, checksum, and size-cap failures are NOT RetryableDownloadException,
-                // so they propagate immediately without retry.
-                lastTransient = transientErr;
-                if (attempt < maxAttempts) {
-                    log.warn("event={} url={} attempt={} maxAttempts={} reason={}",
-                            LogEvent.ON_PULL_DOWNLOAD_RETRY, redactUrl(downloadUrl),
-                            attempt, maxAttempts, ErrorSanitizer.sanitize(transientErr.getMessage()));
-                    metrics.recordOnPullDownloadRetry();
-                    try {
-                        Thread.sleep(backoffMs * attempt);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw ie;
-                    }
-                }
-            }
-        }
-        // Retries exhausted — rethrow the last transient error. It is an IOException, so the caller's
-        // catch(IOException) classifies it as download_http_error and records the terminal failure.
-        throw lastTransient;
-    }
-
-    /** A single download attempt. Throws {@link RetryableDownloadException} for transient failures. */
-    private byte[] attemptDownload(String downloadUrl) throws Exception {
-        long maxDownloadBytes = props.catalog().pullMaxDownloadBytes();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(downloadUrl))
-                .timeout(Duration.ofSeconds(30))
-                .GET()
-                .build();
-        HttpResponse<java.io.InputStream> response;
-        try {
-            // Stream the body (ofInputStream) and read into a growable buffer with a HARD cap — abort as
-            // soon as bytes read exceed maxDownloadBytes, WITHOUT buffering the whole body first. Do NOT
-            // trust Content-Length alone (a lying header could still stream an unbounded body).
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-        } catch (IOException networkErr) {
-            // Connection reset / timeout / DNS blip → transient, retry. Redact the (possibly signed) URL —
-            // this message is later logged via ErrorSanitizer, which does not strip signed-URL signatures.
-            throw new RetryableDownloadException(
-                    "download IO error from " + redactUrl(downloadUrl) + ": " + networkErr.getMessage(), networkErr);
-        } catch (InterruptedException ie) {
-            // HttpClient.send() is interruptible: restore the flag and propagate so shutdown/cancellation
-            // is not silently swallowed as a generic processing_error. Mirrors the Thread.sleep catch.
-            Thread.currentThread().interrupt();
-            throw ie;
-        }
-        if (response.statusCode() != 200) {
-            // Read+discard into a small fixed buffer up to a tiny cap, then close, so the connection can
-            // be returned to the pool WITHOUT unbounded buffering. A malicious 503 with an unbounded body
-            // is retried up to pullDownloadMaxAttempts, so an uncapped readAllBytes() would let it force
-            // repeated unbounded buffering. The body is irrelevant on the error path.
-            try (java.io.InputStream body = response.body()) {
-                byte[] discard = new byte[8192];
-                long drained = 0;
-                while (drained < ERROR_DRAIN_CAP_BYTES && body.read(discard) > 0) {
-                    drained += discard.length;
-                }
-            } catch (IOException ignored) {
-                // best-effort drain; the non-200 error below is what matters
-            }
-            if (response.statusCode() >= 500) {
-                // 5xx → transient (subscriber/object-store issue), retry. Redact the (possibly signed) URL
-                // in the message — it is later logged via ErrorSanitizer, which does not strip signatures.
-                throw new RetryableDownloadException(
-                        "Failed to download catalog file from " + redactUrl(downloadUrl) + " - HTTP " + response.statusCode());
-            }
-            // 4xx → permanent (bad/expired URL), do NOT retry. Redact the URL for the same reason.
-            throw new IOException("Failed to download catalog file from " + redactUrl(downloadUrl) + " - HTTP " + response.statusCode());
-        }
-        try (java.io.InputStream body = response.body();
-             java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream()) {
-            byte[] chunk = new byte[8192];
-            long total = 0;
-            int read;
-            while ((read = body.read(chunk)) > 0) {
-                total += read;
-                if (total > maxDownloadBytes) {
-                    throw new SizeExceededException("download", total, maxDownloadBytes);
-                }
-                buffer.write(chunk, 0, read);
-            }
-            return buffer.toByteArray();
-        }
-    }
-
-    /**
-     * SSRF guard for the (untrusted) {@code downloadManifest.url}. Allows only http/https with a
-     * resolvable, non-private host. Fails closed: an unresolvable host is rejected rather than fetched.
-     *
-     * @param url the manifest download URL
-     * @throws IllegalArgumentException if the URL is malformed, non-http(s), or resolves to a
-     *         loopback / link-local / site-local (private) address
-     */
-    private void validateDownloadUrl(String url) {
-        // Secure-by-default gate. When app.catalog.pull-ssrf-check-enabled is explicitly false
-        // (local/dev), skip the guard and WARN that it is disabled. Absent/true => enforce as today.
-        if (Boolean.FALSE.equals(props.catalog().pullSsrfCheckEnabled())) {
-            log.warn("event={} reason=ssrf-guard-disabled url={}", LogEvent.ON_PULL_SSRF_DISABLED, redactUrl(url));
-            return;
-        }
-
-        URI uri;
-        try {
-            uri = URI.create(url);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Malformed download URL: " + url, e);
-        }
-
-        String scheme = uri.getScheme();
-        if (scheme == null || (!scheme.equals("https") && !scheme.equals("http"))) {
-            throw new IllegalArgumentException("Invalid download URL scheme: " + scheme);
-        }
-
-        String host = uri.getHost();
-        if (host == null) {
-            throw new IllegalArgumentException("Invalid download URL: no host");
-        }
-
-        try {
-            // SECURITY: residual DNS-rebinding TOCTOU — we resolve the host HERE to check for private
-            // IPs, but HttpClient re-resolves the host at fetch time, so a hostile DNS server could
-            // return a public IP now and a private/loopback IP at fetch (rebinding window). The full fix
-            // (resolve-once + connect-to-the-validated-IP, or a shared hardened resolver reused with the
-            // response-dispatcher's HttpService) is a larger refactor and is intentionally NOT done here.
-            // The main SSRF-via-redirect bypass IS closed: this HttpClient is built with the default
-            // redirect policy (NEVER follow redirects), so a validated URL cannot be bounced to an
-            // internal target after validation.
-            InetAddress addr = InetAddress.getByName(host);
-            if (addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress()) {
-                throw new IllegalArgumentException("Download URL points to private/loopback address: " + host);
-            }
-        } catch (java.net.UnknownHostException e) {
-            // Fail closed: an unresolvable host cannot be verified safe.
-            throw new IllegalArgumentException("Download URL host could not be resolved: " + host, e);
-        }
+        return downloader.download(downloadUrl);
     }
 
     /**
@@ -714,7 +517,7 @@ public class CatalogPullCallbackService {
             while ((len = gis.read(buffer)) > 0) {
                 total += len;
                 if (total > maxDecompressedBytes) {
-                    throw new SizeExceededException("decompressed", total, maxDecompressedBytes);
+                    throw new SecureCatalogDownloader.SizeExceededException("decompressed", total, maxDecompressedBytes);
                 }
                 baos.write(buffer, 0, len);
             }

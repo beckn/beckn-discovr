@@ -35,8 +35,9 @@ class CatalogPullCallbackServiceSsrfToggleTest {
     private CatalogPullCallbackService newService(boolean ssrfCheckEnabled) {
         CatalogPushService pushService = Mockito.mock(CatalogPushService.class);
         CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
+        AppProperties props = appProps(ssrfCheckEnabled);
         return new CatalogPullCallbackService(pushService, new ObjectMapper(), metrics,
-                appProps(ssrfCheckEnabled));
+                props, new SecureCatalogDownloader(metrics, props));
     }
 
     @Test
@@ -71,9 +72,10 @@ class CatalogPullCallbackServiceSsrfToggleTest {
 
         CatalogPushService pushService = Mockito.mock(CatalogPushService.class);
         CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
+        AppProperties props = new AppProperties(null, null, catalog);
         CatalogPullCallbackService service = new CatalogPullCallbackService(
                 pushService, new ObjectMapper(), metrics,
-                new AppProperties(null, null, catalog));
+                props, new SecureCatalogDownloader(metrics, props));
 
         assertThatThrownBy(() -> service.downloadCatalogFromUrl(LOOPBACK_URL))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -88,6 +90,6 @@ class CatalogPullCallbackServiceSsrfToggleTest {
         return new AppProperties.Catalog(
                 10_000_000L, false,
                 "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml",
-                1, 4, null, null, null, ssrfCheckEnabled, null, null, null, null);
+                1, 4, null, null, null, ssrfCheckEnabled, null, null, null, null, null);
     }
 }

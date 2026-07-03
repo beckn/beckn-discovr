@@ -1,13 +1,13 @@
 package org.beckn.catalogpublish.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.retry.annotation.EnableRetry;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -21,10 +21,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * Verifies the bounded retry on the on_pull download for TRANSIENT failures (HTTP 5xx / network),
- * so a fire-and-forget pull result isn't lost on a blip — while PERMANENT failures (4xx) are not
- * retried. Exercises the public {@code downloadCatalogFromUrl} against a loopback {@link HttpServer}
- * (SSRF disabled, small backoff). No Docker required.
+ * Verifies the bounded {@link org.springframework.retry.annotation.Retryable} retry on the on_pull
+ * download for TRANSIENT failures (HTTP 5xx / network), so a fire-and-forget pull result isn't lost on
+ * a blip — while PERMANENT failures (4xx) are not retried. Because {@code @Retryable} works only via
+ * the Spring proxy, the downloader is driven through a minimal {@link EnableRetry} Spring context
+ * against a loopback {@link HttpServer} (SSRF disabled, small backoff). No Docker required.
  */
 class CatalogPullDownloadRetryTest {
 
@@ -33,9 +34,13 @@ class CatalogPullDownloadRetryTest {
     private HttpServer server;
     private final AtomicInteger calls = new AtomicInteger();
 
+    private AnnotationConfigApplicationContext ctx;
+    private CatalogPublishMetrics metrics;
+
     @AfterEach
     void stop() {
         if (server != null) server.stop(0);
+        if (ctx != null) ctx.close();
     }
 
     /** Serves `failStatus` for the first `failTimes` requests, then 200 with BODY. */
@@ -58,9 +63,12 @@ class CatalogPullDownloadRetryTest {
                 + ":" + server.getAddress().getPort() + "/catalog.json.gz";
     }
 
-    private static CatalogPublishMetrics metrics;
-
-    private CatalogPullCallbackService service(int maxAttempts) {
+    /**
+     * Builds a proxied {@link SecureCatalogDownloader} inside an {@code @EnableRetry} context so the
+     * {@code @Retryable}/{@code @Recover} annotations are honored (max {@code maxAttempts} attempts,
+     * tiny 5ms backoff). SSRF disabled so a loopback download is allowed in-test.
+     */
+    private SecureCatalogDownloader downloader(int maxAttempts) {
         metrics = Mockito.mock(CatalogPublishMetrics.class);
         var catalog = new AppProperties.Catalog(
                 10_000_000L, false,
@@ -70,18 +78,29 @@ class CatalogPullDownloadRetryTest {
                 /* pullMaxDownloadBytes */ 10_000_000L,
                 /* pullMaxDecompressedBytes */ 10_000_000L,
                 /* pullDownloadMaxAttempts */ maxAttempts,
-                /* pullDownloadRetryBackoffMs */ 5L);
-        return new CatalogPullCallbackService(
-                Mockito.mock(CatalogPushService.class), new ObjectMapper(), metrics,
-                new AppProperties(null, null, catalog));
+                /* pullDownloadRetryBackoffMs */ 5L,
+                /* pullDnsCacheTtlSeconds */ null);
+        AppProperties props = new AppProperties(null, null, catalog);
+
+        ctx = new AnnotationConfigApplicationContext();
+        ctx.registerBean(CatalogPublishMetrics.class, () -> metrics);
+        ctx.registerBean(AppProperties.class, () -> props);
+        ctx.registerBean(SecureCatalogDownloader.class);
+        ctx.register(RetryConfig.class);
+        ctx.refresh();
+        return ctx.getBean(SecureCatalogDownloader.class);
+    }
+
+    @EnableRetry
+    static class RetryConfig {
     }
 
     @Test
     void transient5xxThenSuccess_retriesAndReturnsBody() throws Exception {
         String url = startServer(2, 503);   // 503, 503, then 200
-        var svc = service(3);
+        var dl = downloader(3);
 
-        byte[] result = svc.downloadCatalogFromUrl(url);
+        byte[] result = dl.download(url);
 
         assertThat(result).isEqualTo(BODY);
         assertThat(calls.get()).isEqualTo(3);          // 2 failures + 1 success
@@ -91,9 +110,9 @@ class CatalogPullDownloadRetryTest {
     @Test
     void clientError4xx_notRetried() throws Exception {
         String url = startServer(99, 404);  // always 404
-        var svc = service(3);
+        var dl = downloader(3);
 
-        assertThatThrownBy(() -> svc.downloadCatalogFromUrl(url))
+        assertThatThrownBy(() -> dl.download(url))
                 .isInstanceOf(java.io.IOException.class)
                 .hasMessageContaining("404");
         assertThat(calls.get()).isEqualTo(1);          // 4xx is permanent → no retry
@@ -103,9 +122,9 @@ class CatalogPullDownloadRetryTest {
     @Test
     void persistent5xx_exhaustsRetriesThenThrows() throws Exception {
         String url = startServer(99, 503);  // always 503
-        var svc = service(3);
+        var dl = downloader(3);
 
-        assertThatThrownBy(() -> svc.downloadCatalogFromUrl(url))
+        assertThatThrownBy(() -> dl.download(url))
                 .isInstanceOf(java.io.IOException.class)
                 .hasMessageContaining("503");
         assertThat(calls.get()).isEqualTo(3);          // maxAttempts total
