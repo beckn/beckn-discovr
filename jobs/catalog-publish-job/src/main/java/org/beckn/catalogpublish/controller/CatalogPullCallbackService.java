@@ -209,14 +209,15 @@ public class CatalogPullCallbackService {
 
         log.info("event={} url={} format={}", LogEvent.ON_PULL_DOWNLOAD_STARTED, redactUrl(downloadUrl), fileFormat);
 
-        // downloader.download applies the SSRF guard (IllegalArgumentException) before the network
-        // call, then throws IOException on a non-200 response. It is a SEPARATE bean so Spring's
-        // @Retryable proxy actually intercepts + retries transient failures. Split the failure types
-        // into distinct bounded reasons here, log + count, and rethrow the marker so the outer catch
-        // does NOT also record processing_error. Behavior unchanged: the callback is still discarded.
+        // downloadCatalogFromUrl delegates to the SEPARATE SecureCatalogDownloader bean (so Spring's
+        // @Retryable proxy actually intercepts + retries transient failures) and is the single
+        // stubbable download seam for tests. It applies the SSRF guard (IllegalArgumentException)
+        // before the network call, then throws IOException on a non-200 response. Split the failure
+        // types into distinct bounded reasons here, log + count, and rethrow the marker so the outer
+        // catch does NOT also record processing_error. Behavior unchanged: the callback is discarded.
         byte[] payloadAtUrl;
         try {
-            payloadAtUrl = downloader.download(downloadUrl);
+            payloadAtUrl = downloadCatalogFromUrl(downloadUrl);
         } catch (IllegalArgumentException ssrf) {
             // SSRF guard rejected the (untrusted) manifest URL before any network call.
             log.warn("event={} reason={} url={}",
