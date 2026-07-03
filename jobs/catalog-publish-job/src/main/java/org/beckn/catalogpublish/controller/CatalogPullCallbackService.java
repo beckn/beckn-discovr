@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.config.AppProperties;
@@ -24,7 +25,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -32,10 +36,19 @@ import java.util.zip.GZIPInputStream;
  * Supports processing inline catalogs and downloading, decompressing, and verifying catalog assets
  * referenced in a {@code downloadManifest}.
  */
+// TODO(review): extract the secure-downloader (SSRF guard + bounded retry + size caps + gzip-bomb
+// guard) into its own component so this class comes under the 500-line rule. Deferred — larger refactor.
 @Service
 public class CatalogPullCallbackService {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogPullCallbackService.class);
+
+    /**
+     * Tiny hard cap (64 KiB) on how much of a non-200 response body we read-and-discard when draining
+     * the stream so the connection can be pooled. The error body is irrelevant; capping it prevents a
+     * malicious retried 5xx with an unbounded body from forcing repeated unbounded buffering (OOM).
+     */
+    private static final long ERROR_DRAIN_CAP_BYTES = 64L * 1024L;
 
     /**
      * Marker thrown from {@link #processDownloadManifest} after a specific download/verify/decompress
@@ -246,7 +259,7 @@ public class CatalogPullCallbackService {
             return;
         }
 
-        log.info("event={} url={} format={}", LogEvent.ON_PULL_DOWNLOAD_STARTED, downloadUrl, fileFormat);
+        log.info("event={} url={} format={}", LogEvent.ON_PULL_DOWNLOAD_STARTED, redactUrl(downloadUrl), fileFormat);
 
         // downloadCatalogFromUrl applies the SSRF guard (IllegalArgumentException) before the
         // network call, then throws IOException on a non-200 response. Split these into distinct
@@ -258,21 +271,21 @@ public class CatalogPullCallbackService {
         } catch (IllegalArgumentException ssrf) {
             // SSRF guard rejected the (untrusted) manifest URL before any network call.
             log.warn("event={} reason={} url={}",
-                    LogEvent.ON_PULL_SSRF_REJECT, ssrfReason(ssrf.getMessage()), downloadUrl);
+                    LogEvent.ON_PULL_SSRF_REJECT, ssrfReason(ssrf.getMessage()), redactUrl(downloadUrl));
             metrics.recordOnPullFailed("ssrf_reject");
             throw new AlreadyRecordedFailure(ssrf);
         } catch (SizeExceededException size) {
             // Download exceeded the hard cap (gzip-bomb / OOM guard). Distinct reason — must be caught
             // before the generic IOException below since SizeExceededException subtypes IOException.
             log.warn("event={} phase=download bytes={} limit={} url={}",
-                    LogEvent.ON_PULL_SIZE_EXCEEDED, size.bytes(), size.limit(), downloadUrl);
+                    LogEvent.ON_PULL_SIZE_EXCEEDED, size.bytes(), size.limit(), redactUrl(downloadUrl));
             metrics.recordOnPullFailed("size_exceeded");
             throw new AlreadyRecordedFailure(size);
         } catch (IOException http) {
             // Non-200 HTTP response (or a transport IO failure) from the download.
             log.warn("event={} httpStatus={} url={} error={}",
                     LogEvent.ON_PULL_DOWNLOAD_HTTP_ERROR, extractHttpStatus(http.getMessage()),
-                    downloadUrl, ErrorSanitizer.sanitize(http.getMessage()));
+                    redactUrl(downloadUrl), ErrorSanitizer.sanitize(http.getMessage()));
             metrics.recordOnPullFailed("download_http_error");
             throw new AlreadyRecordedFailure(http);
         }
@@ -298,7 +311,7 @@ public class CatalogPullCallbackService {
                 // caught before the generic IOException below since it subtypes IOException.
                 log.warn("event={} phase=decompress bytes={} limit={} compressedBytes={} url={}",
                         LogEvent.ON_PULL_SIZE_EXCEEDED, size.bytes(), size.limit(),
-                        payloadAtUrl.length, downloadUrl);
+                        payloadAtUrl.length, redactUrl(downloadUrl));
                 metrics.recordOnPullFailed("size_exceeded");
                 throw new AlreadyRecordedFailure(size);
             } catch (IOException gz) {
@@ -343,14 +356,53 @@ public class CatalogPullCallbackService {
     }
 
     /**
-     * Returns {@code true} when the ISO-8601 {@code expiresAt} is in the past. Fails closed
-     * (treats an unparseable timestamp as expired) so a malformed expiry never permits a download.
+     * Returns {@code true} when the ISO-8601 {@code expiresAt} is in the past.
+     *
+     * <p>Lenient parse: an offset-bearing timestamp is parsed with {@link OffsetDateTime}; an
+     * offset-less ISO-8601 timestamp (e.g. {@code "2099-12-31T23:59:59"}) — which
+     * {@code OffsetDateTime.parse} rejects — falls back to {@link LocalDateTime} assumed to be UTC, so
+     * a CS that emits offset-less timestamps is not treated as always-expired. Only a value that BOTH
+     * parses fail on is treated as expired (fail-closed) so a genuinely malformed expiry never permits
+     * a download.</p>
      */
     private boolean isExpired(String expiresAt) {
+        OffsetDateTime expiry;
         try {
-            return OffsetDateTime.parse(expiresAt).isBefore(OffsetDateTime.now());
-        } catch (java.time.format.DateTimeParseException e) {
-            return true;
+            expiry = OffsetDateTime.parse(expiresAt);
+        } catch (DateTimeParseException withOffsetFailed) {
+            try {
+                // Offset-less ISO-8601 → assume UTC.
+                expiry = LocalDateTime.parse(expiresAt).atOffset(ZoneOffset.UTC);
+            } catch (DateTimeParseException bothFailed) {
+                // Genuinely unparseable → fail closed (treat as expired).
+                return true;
+            }
+        }
+        return expiry.isBefore(OffsetDateTime.now());
+    }
+
+    /**
+     * Redacts a download URL for logging: returns {@code scheme://host/path} only, stripping the query
+     * string. GCS V4 signed URLs carry {@code X-Goog-Signature} (a bearer capability) in the query, so
+     * logging the raw URL would leak a credential. Best-effort — on any parse failure returns a fixed
+     * placeholder rather than risking leaking the raw (possibly signed) URL. Does NOT change the URL
+     * actually fetched.
+     */
+    private static String redactUrl(String url) {
+        if (url == null) {
+            return "(none)";
+        }
+        try {
+            URI uri = URI.create(url);
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            String path = uri.getPath();
+            if (scheme == null || host == null) {
+                return "(redacted)";
+            }
+            return scheme + "://" + host + (path == null ? "" : path);
+        } catch (RuntimeException e) {
+            return "(redacted)";
         }
     }
 
@@ -395,22 +447,32 @@ public class CatalogPullCallbackService {
     }
 
     /**
-     * Enqueues the callback's catalogs onto the ingestion topic for persistence and indexing.
-     * The original {@code context.action} ({@code catalog/on_pull}) is preserved — the publish
-     * pipeline does not key off {@code action}, so no re-stamping is needed.
+     * Enqueues a SINGLE catalog onto the ingestion topic for persistence and indexing, wrapping the
+     * ORIGINAL callback context (deep-copied, {@code context.action} = {@code catalog/on_pull}
+     * preserved) around a one-catalog {@code catalogs[]} array. The publish pipeline does not key off
+     * {@code action}, so no re-stamping is needed.
+     *
+     * <p>C2: each catalog becomes its OWN Kafka record. A large downloadManifest result can hold many
+     * catalogs; enqueuing the whole array as one record guarantees {@code RecordTooLargeException} on
+     * the ingestion topic and loses the entire (already downloaded/checksummed/decompressed) pull
+     * result. Per-catalog records keep each message small. The ingestion topic is keyed by
+     * {@code context.subscriberId} (see {@link CatalogPushService#enqueueForProcessing}), so all of a
+     * subscriber's per-catalog records still route to the same partition and stay ordered.</p>
      *
      * @param becknContext the original callback context node
-     * @param catalogArray the catalog array node to ingest
+     * @param catalogNode the single catalog node to ingest
      * @throws IOException if JSON serialization fails
      */
-    private void transformContextAndEnqueueCatalogs(JsonNode becknContext, JsonNode catalogArray) throws IOException {
+    private void enqueueSingleCatalog(JsonNode becknContext, JsonNode catalogNode) throws IOException {
         ObjectNode newContext = (ObjectNode) becknContext.deepCopy();
 
         ObjectNode newRoot = objectMapper.createObjectNode();
         newRoot.set(BecknFields.CONTEXT, newContext);
-        
+
         ObjectNode newMessage = objectMapper.createObjectNode();
-        newMessage.set(BecknFields.CATALOGS, catalogArray);
+        ArrayNode singleCatalogArray = objectMapper.createArrayNode();
+        singleCatalogArray.add(catalogNode.deepCopy());
+        newMessage.set(BecknFields.CATALOGS, singleCatalogArray);
         newRoot.set(BecknFields.MESSAGE, newMessage);
 
         String transformedJson = objectMapper.writeValueAsString(newRoot);
@@ -418,12 +480,15 @@ public class CatalogPullCallbackService {
     }
 
     /**
-     * Receiver-level observability: emits per-catalog INFO logs (with {@code catalogId} +
-     * {@code networkId} in MDC) and metrics (catalogs returned, resources total, accepted /
-     * rejected / processed), then enqueues the whole array ONCE via
-     * {@link #transformContextAndEnqueueCatalogs}. Iteration is for observation only — the
-     * single-enqueue contract and the catalogs payload are unchanged. "accepted"/"processed"
-     * are receiver-level (accepted-for-ingestion); the persisted count is decided downstream.
+     * Receiver-level observability + per-catalog enqueue: emits per-catalog INFO logs (with
+     * {@code catalogId} + {@code networkId} in MDC) and metrics (catalogs returned, resources total,
+     * accepted / rejected / processed), and enqueues EACH catalog as its OWN Kafka record via
+     * {@link #enqueueSingleCatalog} (C2 — never one giant record → no {@code RecordTooLargeException}).
+     *
+     * <p>{@code accepted} is recorded once a catalog has a non-blank id (accepted-for-ingestion);
+     * {@code processed} is recorded ONLY AFTER its per-catalog enqueue succeeds, so a per-catalog
+     * enqueue failure is visible as accepted-but-not-processed. The persisted count is decided
+     * downstream.</p>
      */
     private void enqueueAndObserve(JsonNode becknContext, JsonNode catalogArray, String mode) throws IOException {
         int catalogsReturned = catalogArray.size();
@@ -431,6 +496,7 @@ public class CatalogPullCallbackService {
 
         int resourcesTotal = 0;
         int accepted = 0;
+        int processed = 0;
         for (JsonNode catalogNode : catalogArray) {
             String id = catalogNode.isObject() ? catalogNode.path(BecknFields.ID).asText(null) : null;
             if (id == null || id.isBlank()) {
@@ -444,19 +510,20 @@ public class CatalogPullCallbackService {
                 resourcesTotal += resourceCount;
                 accepted++;
                 metrics.recordOnPullCatalogAccepted(mode);
-                log.info("event={} resourceCount={}", LogEvent.ON_PULL_CATALOG_ENQUEUED, resourceCount);
+                // C2: enqueue THIS catalog as its own Kafka record. Only count it processed once the
+                // per-catalog enqueue succeeds, so a per-catalog enqueue failure stays visible.
+                enqueueSingleCatalog(becknContext, catalogNode);
+                processed++;
                 metrics.recordOnPullCatalogProcessed(mode);
+                log.info("event={} resourceCount={}", LogEvent.ON_PULL_CATALOG_ENQUEUED, resourceCount);
             } finally {
                 MDC.remove(MdcField.CATALOG_ID);
             }
         }
         metrics.recordOnPullResourcesTotal(mode, resourcesTotal);
 
-        // Single enqueue of the whole array (unchanged contract).
-        transformContextAndEnqueueCatalogs(becknContext, catalogArray);
-
         log.info("event={} mode={} catalogsReturned={} accepted={} processed={} resourcesTotal={}",
-                LogEvent.ON_PULL_COMPLETED, mode, catalogsReturned, accepted, accepted, resourcesTotal);
+                LogEvent.ON_PULL_COMPLETED, mode, catalogsReturned, accepted, processed, resourcesTotal);
     }
 
     /** Records the publisher's {@code pagination.total} (claimed grand total) only when present — never defaults to 0. */
@@ -475,6 +542,8 @@ public class CatalogPullCallbackService {
      * @throws Exception if HTTP call fails or response code is not 200
      */
     public byte[] downloadCatalogFromUrl(String downloadUrl) throws Exception {
+        // TODO(review): convert this hand-rolled retry loop to Spring @Retryable (job convention). Deferred
+        // — retry only RetryableDownloadException, keep the bounded attempts/backoff-per-attempt semantics.
         // SSRF guard: validate the (untrusted) manifest URL ONCE before any network call (permanent
         // failure — never retried).
         validateDownloadUrl(downloadUrl);
@@ -493,7 +562,7 @@ public class CatalogPullCallbackService {
                 lastTransient = transientErr;
                 if (attempt < maxAttempts) {
                     log.warn("event={} url={} attempt={} maxAttempts={} reason={}",
-                            LogEvent.ON_PULL_DOWNLOAD_RETRY, ErrorSanitizer.sanitize(downloadUrl),
+                            LogEvent.ON_PULL_DOWNLOAD_RETRY, redactUrl(downloadUrl),
                             attempt, maxAttempts, ErrorSanitizer.sanitize(transientErr.getMessage()));
                     metrics.recordOnPullDownloadRetry();
                     try {
@@ -525,24 +594,38 @@ public class CatalogPullCallbackService {
             // trust Content-Length alone (a lying header could still stream an unbounded body).
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
         } catch (IOException networkErr) {
-            // Connection reset / timeout / DNS blip → transient, retry.
+            // Connection reset / timeout / DNS blip → transient, retry. Redact the (possibly signed) URL —
+            // this message is later logged via ErrorSanitizer, which does not strip signed-URL signatures.
             throw new RetryableDownloadException(
-                    "download IO error from " + downloadUrl + ": " + networkErr.getMessage(), networkErr);
+                    "download IO error from " + redactUrl(downloadUrl) + ": " + networkErr.getMessage(), networkErr);
+        } catch (InterruptedException ie) {
+            // HttpClient.send() is interruptible: restore the flag and propagate so shutdown/cancellation
+            // is not silently swallowed as a generic processing_error. Mirrors the Thread.sleep catch.
+            Thread.currentThread().interrupt();
+            throw ie;
         }
         if (response.statusCode() != 200) {
-            // Drain+close so the connection can be returned to the pool; the body is irrelevant here.
+            // Read+discard into a small fixed buffer up to a tiny cap, then close, so the connection can
+            // be returned to the pool WITHOUT unbounded buffering. A malicious 503 with an unbounded body
+            // is retried up to pullDownloadMaxAttempts, so an uncapped readAllBytes() would let it force
+            // repeated unbounded buffering. The body is irrelevant on the error path.
             try (java.io.InputStream body = response.body()) {
-                body.readAllBytes();
+                byte[] discard = new byte[8192];
+                long drained = 0;
+                while (drained < ERROR_DRAIN_CAP_BYTES && body.read(discard) > 0) {
+                    drained += discard.length;
+                }
             } catch (IOException ignored) {
                 // best-effort drain; the non-200 error below is what matters
             }
             if (response.statusCode() >= 500) {
-                // 5xx → transient (subscriber/object-store issue), retry.
+                // 5xx → transient (subscriber/object-store issue), retry. Redact the (possibly signed) URL
+                // in the message — it is later logged via ErrorSanitizer, which does not strip signatures.
                 throw new RetryableDownloadException(
-                        "Failed to download catalog file from " + downloadUrl + " - HTTP " + response.statusCode());
+                        "Failed to download catalog file from " + redactUrl(downloadUrl) + " - HTTP " + response.statusCode());
             }
-            // 4xx → permanent (bad/expired URL), do NOT retry.
-            throw new IOException("Failed to download catalog file from " + downloadUrl + " - HTTP " + response.statusCode());
+            // 4xx → permanent (bad/expired URL), do NOT retry. Redact the URL for the same reason.
+            throw new IOException("Failed to download catalog file from " + redactUrl(downloadUrl) + " - HTTP " + response.statusCode());
         }
         try (java.io.InputStream body = response.body();
              java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream()) {
@@ -572,7 +655,7 @@ public class CatalogPullCallbackService {
         // Secure-by-default gate. When app.catalog.pull-ssrf-check-enabled is explicitly false
         // (local/dev), skip the guard and WARN that it is disabled. Absent/true => enforce as today.
         if (Boolean.FALSE.equals(props.catalog().pullSsrfCheckEnabled())) {
-            log.warn("event={} reason=ssrf-guard-disabled url={}", LogEvent.ON_PULL_SSRF_DISABLED, url);
+            log.warn("event={} reason=ssrf-guard-disabled url={}", LogEvent.ON_PULL_SSRF_DISABLED, redactUrl(url));
             return;
         }
 
@@ -594,6 +677,14 @@ public class CatalogPullCallbackService {
         }
 
         try {
+            // SECURITY: residual DNS-rebinding TOCTOU — we resolve the host HERE to check for private
+            // IPs, but HttpClient re-resolves the host at fetch time, so a hostile DNS server could
+            // return a public IP now and a private/loopback IP at fetch (rebinding window). The full fix
+            // (resolve-once + connect-to-the-validated-IP, or a shared hardened resolver reused with the
+            // response-dispatcher's HttpService) is a larger refactor and is intentionally NOT done here.
+            // The main SSRF-via-redirect bypass IS closed: this HttpClient is built with the default
+            // redirect policy (NEVER follow redirects), so a validated URL cannot be bounced to an
+            // internal target after validation.
             InetAddress addr = InetAddress.getByName(host);
             if (addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress()) {
                 throw new IllegalArgumentException("Download URL points to private/loopback address: " + host);

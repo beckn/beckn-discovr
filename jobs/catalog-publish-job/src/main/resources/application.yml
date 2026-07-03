@@ -26,6 +26,12 @@ app:
       failed: discovr.publish.dlt.requests
 
   catalog:
+    # End-to-end size budget (keep this ordering):
+    #   Catalg inline-threshold (prod 900KB) <= Discovr max-payload-size <= Kafka message.max.bytes
+    # The Catalg CS inlines catalogs up to ~900KB and only switches to a downloadManifest above that,
+    # so max-payload-size MUST stay >= the 900KB inline threshold or valid inline callbacks are rejected.
+    # With the on_pull per-catalog enqueue (PR #393 C2), each ingestion Kafka record carries exactly ONE
+    # catalog, so a single record stays well under Kafka's max — the whole array is never one giant record.
     max-payload-size: 5242880
     validation-enabled: true
     # SSRF guard on the on_pull download path. Secure-by-default (true). Set to false ONLY for

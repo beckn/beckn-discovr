@@ -13,8 +13,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 /**
- * Receiver-level observability tests: per-callback/per-catalog metrics and the single-enqueue
- * contract. Drives the public async entrypoint directly (no Spring proxy → runs inline).
+ * Receiver-level observability tests: per-callback/per-catalog metrics and the per-catalog enqueue
+ * contract (PR #393 C2 — each catalog is its own Kafka record, never one giant array record). Drives
+ * the public async entrypoint directly (no Spring proxy → runs inline).
  */
 class CatalogPullCallbackServiceObservabilityTest {
 
@@ -60,10 +61,54 @@ class CatalogPullCallbackServiceObservabilityTest {
         verify(metrics).recordOnPullResourcesTotal("inline", 3); // only the accepted catalog's resources
         verify(metrics).recordOnPullProcessed("inline");
 
-        // Single enqueue of the whole array (contract unchanged) — payload still carries both catalogs.
+        // C2: per-catalog enqueue. Only the ONE valid catalog (CAT-1) is enqueued (the missing-id
+        // catalog is rejected before enqueue), so exactly one record is produced and it carries CAT-1.
         ArgumentCaptor<String> sent = ArgumentCaptor.forClass(String.class);
         verify(push, times(1)).enqueueForProcessing(sent.capture());
         assertThat(sent.getValue()).contains("CAT-1").contains("\"catalogs\"");
+    }
+
+    @Test
+    void multipleCatalogs_enqueuedPerCatalog_eachRecordCarriesExactlyOneCatalog() {
+        CatalogPushService push = Mockito.mock(CatalogPushService.class);
+        CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
+        CatalogPullCallbackService service = newService(push, metrics);
+
+        // 3 valid catalogs → 3 separate Kafka records (never one giant array record).
+        String payload = """
+                {
+                  "context": {"messageId":"m1","transactionId":"t1","networkId":"net-1","action":"catalog/on_pull"},
+                  "message": {
+                    "status": "COMPLETED",
+                    "catalogs": [
+                      {"id":"CAT-1","resources":[{"id":"r1"}]},
+                      {"id":"CAT-2","resources":[{"id":"r2"},{"id":"r3"}]},
+                      {"id":"CAT-3","resources":[]}
+                    ]
+                  }
+                }
+                """;
+
+        service.processPullCallbackAsynchronously(payload);
+
+        verify(metrics).recordOnPullCatalogsReturned("inline", 3);
+        verify(metrics, times(3)).recordOnPullCatalogAccepted("inline");
+        verify(metrics, times(3)).recordOnPullCatalogProcessed("inline");
+        verify(metrics, Mockito.never()).recordOnPullCatalogRejected(Mockito.anyString());
+
+        // C2: one enqueue PER catalog, each record carrying exactly one catalog id and the original context.
+        ArgumentCaptor<String> sent = ArgumentCaptor.forClass(String.class);
+        verify(push, times(3)).enqueueForProcessing(sent.capture());
+        java.util.List<String> records = sent.getAllValues();
+        assertThat(records).hasSize(3);
+        assertThat(records).anySatisfy(r -> assertThat(r).contains("CAT-1"));
+        assertThat(records).anySatisfy(r -> assertThat(r).contains("CAT-2"));
+        assertThat(records).anySatisfy(r -> assertThat(r).contains("CAT-3"));
+        // Each record is one catalog only: a record mentioning CAT-1 must not also carry CAT-2/CAT-3.
+        String cat1Record = records.stream().filter(r -> r.contains("CAT-1")).findFirst().orElseThrow();
+        assertThat(cat1Record).doesNotContain("CAT-2").doesNotContain("CAT-3");
+        // Original context (action preserved) carried on each record.
+        assertThat(cat1Record).contains("catalog/on_pull");
     }
 
     @Test
