@@ -146,9 +146,26 @@ public class DiscoveryService {
      * query path, applies the pipeline, and assembles the response.
      */
     public DiscoverResponse processDiscoveryRequest(DiscoverRequest request) {
+        return processDiscoveryRequest(request, null, null);
+    }
+
+    /**
+     * Synchronous entry point carrying the {@code ?active}/{@code ?validity} value-match flags.
+     * Each is a nullable {@link Boolean}: a non-null value is the caller's per-request override;
+     * {@code null} means "not supplied", in which case the {@code discovery.filter.activeCatalog}
+     * / {@code discovery.filter.validCatalogs} config default is applied. The resolved values are
+     * passed to the query engines, which filter in-query (before LIMIT), independently of network
+     * scoping. Value-match: {@code true} → only active / currently-valid; {@code false} → only
+     * inactive / not-currently-valid.
+     */
+    public DiscoverResponse processDiscoveryRequest(DiscoverRequest request, Boolean active, Boolean validity) {
         validateRequest(request);
         setupMDC(request.getContext());
         metrics.incrementTotalRequests();
+
+        // Resolve each dimension: explicit query param wins; otherwise fall back to config default.
+        Boolean effectiveActive   = active   != null ? active   : properties.getFilter().isActiveCatalog();
+        Boolean effectiveValidity = validity != null ? validity : properties.getFilter().isValidCatalogs();
 
         Instant start = Instant.now();
         LatencyTracker tracker = properties.isLatencyTrackingEnabled() ? new LatencyTracker() : null;
@@ -156,7 +173,7 @@ public class DiscoveryService {
         try {
             log.info(LogEvent.QUERY_STARTED);
 
-            QueryRequest qr = QueryRequest.from(request);
+            QueryRequest qr = QueryRequest.from(request, effectiveActive, effectiveValidity);
 
             // Track schema filter metric when ES path will apply schema push-down
             if (qr.hasSchemaFilters() && textSearchEngine.appliesSchemaFilter()) {
