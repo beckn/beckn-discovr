@@ -80,6 +80,12 @@ public class NLWebTextSearchEngine implements TextSearchEngine {
         log.info(LogEvent.NLWEB_SEARCH_STARTED,
                 value("transactionId", txId),
                 value("query", text));
+        // The active/validity value-match filters are applied in-query by the PostgreSQL and
+        // Elasticsearch engines only. NLWeb delegates to an external service with no such field
+        // support, so the flags are intentionally NOT applied on this path.
+        if (queryRequest.hasActiveMatch() || queryRequest.hasValidMatch()) {
+            log.warn("event=nlweb.active-filter-not-applied transactionId={} reason=nlweb-engine-has-no-active-validity-support", txId);
+        }
         Instant start = Instant.now();
 
         try {

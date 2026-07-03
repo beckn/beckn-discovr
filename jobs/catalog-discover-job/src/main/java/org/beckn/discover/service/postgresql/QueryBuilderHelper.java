@@ -2,10 +2,14 @@ package org.beckn.discover.service.postgresql;
 
 import org.beckn.discover.util.DiscoveryServiceUtil;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Central SQL dictionary and query builder for the {@code postgresql} package.
@@ -57,6 +61,55 @@ public final class QueryBuilderHelper {
      * network. Binds one {@code String} parameter (the network id). See #309.
      */
     public static final String NETWORK_MATCH = "? = ANY(i.network_id)";
+
+    // ============================
+    // SQL constants — active / validity value-match filters (catalog-level)
+    // ============================
+    //
+    // Catalog-level isActive/validity are NOT dedicated columns; they live nested in the item
+    // payload at $.catalogs[0]. These predicates are value-match (?active / ?validity) and
+    // null-safe per the Beckn spec:
+    //   • isActive absent → counts as active (schema default true). active=true matches
+    //     value-true OR absent; active=false matches ONLY an explicit false.
+    //   • validity absent / open-ended-inside / bare time-of-day / unparseable → counts as valid.
+    //     validity=true matches those; validity=false matches ONLY a provably out-of-window date.
+    //   • startDate inclusive, endDate inclusive.
+    // Values are matched via ::timestamptz against a bound "now" parameter — never concatenated.
+    // A regex guard inside CASE prevents a cast error on a non-date-shaped value (CASE is one of the
+    // few Postgres constructs that guarantees non-selected branches are not evaluated).
+
+    /**
+     * Catalog-level {@code isActive} value-match: {@code COALESCE(stored, true) = ?}. Binds one
+     * {@code Boolean} (the requested value). {@code true} → active-or-absent; {@code false} →
+     * explicit false only (absent coalesces to true and is therefore excluded).
+     */
+    public static final String ACTIVE_MATCH =
+            "COALESCE((i.payload #>> '{catalogs,0,isActive}')::boolean, true) = ?";
+
+    /** Validity lower bound (valid direction): {@code startDate} absent/non-date OR {@code startDate <= now}. Binds one {@code timestamptz}. */
+    public static final String VALIDITY_START_MATCH =
+            "(CASE WHEN i.payload #>> '{catalogs,0,validity,startDate}' IS NULL THEN TRUE "
+          + "WHEN i.payload #>> '{catalogs,0,validity,startDate}' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
+          + "THEN (i.payload #>> '{catalogs,0,validity,startDate}')::timestamptz <= ? ELSE TRUE END)";
+
+    /** Validity upper bound (valid direction): {@code endDate} absent/non-date OR {@code endDate >= now}. Binds one {@code timestamptz}. */
+    public static final String VALIDITY_END_MATCH =
+            "(CASE WHEN i.payload #>> '{catalogs,0,validity,endDate}' IS NULL THEN TRUE "
+          + "WHEN i.payload #>> '{catalogs,0,validity,endDate}' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
+          + "THEN (i.payload #>> '{catalogs,0,validity,endDate}')::timestamptz >= ? ELSE TRUE END)";
+
+    /**
+     * Validity "not currently valid" predicate (invalid direction, {@code validity=false}):
+     * a catalog is out-of-window only when it has a parseable {@code startDate} in the future
+     * ({@code > now}) OR a parseable {@code endDate} in the past ({@code < now}). Absent,
+     * open-ended-inside, bare time-of-day, and unparseable values evaluate to FALSE and are
+     * therefore excluded (they count as valid). Binds two {@code timestamptz} params (now, now).
+     */
+    public static final String VALIDITY_INVALID_MATCH =
+            "((CASE WHEN i.payload #>> '{catalogs,0,validity,startDate}' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
+          + "THEN (i.payload #>> '{catalogs,0,validity,startDate}')::timestamptz > ? ELSE FALSE END) "
+          + "OR (CASE WHEN i.payload #>> '{catalogs,0,validity,endDate}' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
+          + "THEN (i.payload #>> '{catalogs,0,validity,endDate}')::timestamptz < ? ELSE FALSE END))";
 
     /** JSONPath exists — match everything (no filter provided). */
     public static final String JSONPATH_EXISTS_ALL = "exists($)";
@@ -200,6 +253,51 @@ public final class QueryBuilderHelper {
                 return this;
             }
             return condition(NETWORK_MATCH, networkId);
+        }
+
+        /**
+         * Adds the catalog-level {@code isActive} value-match condition (the {@code ?active}
+         * filter). No-op when {@code activeMatch} is {@code null} (dimension not filtered).
+         * Independent of {@link #networkFilter} and {@link #validityFilter} — plain AND-ed
+         * WHERE conditions, none gates the other.
+         *
+         * @param activeMatch {@code null} ⇒ no-op; {@code TRUE} ⇒ active-or-absent;
+         *                    {@code FALSE} ⇒ explicitly inactive only
+         */
+        public QueryTemplate activeFilter(Boolean activeMatch) {
+            if (activeMatch == null) {
+                return this;
+            }
+            return condition(ACTIVE_MATCH, activeMatch);
+        }
+
+        /**
+         * Adds the catalog-level {@code validity} value-match condition (the {@code ?validity}
+         * filter), evaluated against {@code $.catalogs[0].validity} of the item payload. No-op
+         * when {@code validMatch} is {@code null} (dimension not filtered).
+         *
+         * <p>{@code TRUE} (currently valid) adds the two inclusive-bound conditions
+         * ({@link #VALIDITY_START_MATCH}, {@link #VALIDITY_END_MATCH}); absent/open-ended/
+         * bare-time/unparseable values pass. {@code FALSE} (not currently valid) adds
+         * {@link #VALIDITY_INVALID_MATCH}; only a provably out-of-window date matches. The
+         * {@code now} instant is bound as a {@code timestamptz} {@code ?} — never concatenated.</p>
+         *
+         * @param validMatch {@code null} ⇒ no-op; {@code TRUE} ⇒ within window; {@code FALSE} ⇒ outside window
+         * @param now        the reference instant validity windows are evaluated against
+         */
+        public QueryTemplate validityFilter(Boolean validMatch, Instant now) {
+            if (validMatch == null) {
+                return this;
+            }
+            Objects.requireNonNull(now, "now must not be null when validMatch is set");
+            OffsetDateTime ts = now.atOffset(ZoneOffset.UTC);
+            if (validMatch) {
+                condition(VALIDITY_START_MATCH, ts);
+                condition(VALIDITY_END_MATCH, ts);
+            } else {
+                condition(VALIDITY_INVALID_MATCH, ts, ts);
+            }
+            return this;
         }
 
         /**

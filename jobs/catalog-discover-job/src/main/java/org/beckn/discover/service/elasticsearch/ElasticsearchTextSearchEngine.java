@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -64,18 +65,21 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
     private final List<String>              multiMatchFields;
     private final double                    relativeScoreThreshold;
     private final double                    tieBreaker;
+    private final Clock                     clock;
 
     public ElasticsearchTextSearchEngine(ElasticsearchClient esClient,
                                          EsSearchAssembler assembler,
                                          ObjectMapper objectMapper,
                                          DiscoveryProperties props,
                                          Optional<EmbeddingClient> embeddingClient,
-                                         Optional<QueryEnricher> queryEnricher) {
+                                         Optional<QueryEnricher> queryEnricher,
+                                         Clock clock) {
         this.esClient        = esClient;
         this.assembler       = assembler;
         this.objectMapper    = objectMapper;
         this.embeddingClient = embeddingClient;
         this.queryEnricher   = queryEnricher;
+        this.clock           = clock;
         DiscoveryProperties.Elasticsearch esConfig = props.getElasticsearch();
         this.aliasName              = esConfig.getAliasName();
         this.resultLimit            = esConfig.getResultLimit();
@@ -153,6 +157,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                                     .numCandidates(knnCandidates);
                             schemaFilters.forEach(kb::filter);
                             EsNetworkFilterBuilder.build(queryRequest).ifPresent(kb::filter);
+                            EsActiveValidityFilterBuilder.build(queryRequest, clock.instant()).ifPresent(kb::filter);
                             return kb;
                         }),
                         Map.class);
@@ -216,6 +221,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         }
                         keywordSchemaFilters.forEach(b::filter);
                         EsNetworkFilterBuilder.build(queryRequest).ifPresent(b::filter);
+                        EsActiveValidityFilterBuilder.build(queryRequest, clock.instant()).ifPresent(b::filter);
                         return b;
                     }))
                     .minScore(minScore)

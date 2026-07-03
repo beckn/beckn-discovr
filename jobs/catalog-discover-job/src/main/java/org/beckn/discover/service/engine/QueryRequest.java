@@ -38,7 +38,23 @@ public record QueryRequest(
          * results to catalogs published to this network (#309). May be {@code null}/blank,
          * in which case no network filter is applied (results are network-agnostic).
          */
-        String networkId
+        String networkId,
+        /**
+         * Catalog-level {@code isActive} value-match filter. Resolved from the {@code ?active=}
+         * HTTP query param (or the {@code discovery.filter.activeCatalog} config default) — NOT
+         * the Beckn body. {@code null} ⇒ dimension not filtered; {@code TRUE} ⇒ only active
+         * catalogs (active-or-absent per spec default); {@code FALSE} ⇒ only explicitly inactive
+         * catalogs. Independent of {@link #networkId} and of {@link #validMatch}.
+         */
+        Boolean activeMatch,
+        /**
+         * Catalog-level {@code validity} value-match filter. Resolved from the {@code ?validity=}
+         * HTTP query param (or the {@code discovery.filter.validCatalogs} config default).
+         * {@code null} ⇒ dimension not filtered; {@code TRUE} ⇒ only catalogs currently within
+         * their validity window (absent/open-ended/bare-time counts as valid); {@code FALSE} ⇒
+         * only catalogs provably outside a parseable window. Independent of the other filters.
+         */
+        Boolean validMatch
 ) {
 
     /**
@@ -56,21 +72,30 @@ public record QueryRequest(
         rawSchemaContextUrls = rawSchemaContextUrls != null ? List.copyOf(rawSchemaContextUrls) : List.of();
     }
 
-    /** Backward-compatible 7-arg constructor (rawSchemaContextUrls + networkId default to empty/null). */
+    /** Backward-compatible 7-arg constructor (rawSchemaContextUrls/networkId/active/valid default to empty/null). */
     public QueryRequest(String transactionId, String messageId, String filters,
                         List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
                         List<String> schemaTypes, List<String> schemaContextUrls) {
         this(transactionId, messageId, filters, spatial, textSearch,
-                schemaTypes, schemaContextUrls, List.of(), null);
+                schemaTypes, schemaContextUrls, List.of(), null, null, null);
     }
 
-    /** Backward-compatible 8-arg constructor (networkId defaults to null — no network scoping). */
+    /** Backward-compatible 8-arg constructor (networkId/active/valid default to null). */
     public QueryRequest(String transactionId, String messageId, String filters,
                         List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
                         List<String> schemaTypes, List<String> schemaContextUrls,
                         List<String> rawSchemaContextUrls) {
         this(transactionId, messageId, filters, spatial, textSearch,
-                schemaTypes, schemaContextUrls, rawSchemaContextUrls, null);
+                schemaTypes, schemaContextUrls, rawSchemaContextUrls, null, null, null);
+    }
+
+    /** Backward-compatible 9-arg constructor (active/valid match default to null — no active/validity filtering). */
+    public QueryRequest(String transactionId, String messageId, String filters,
+                        List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
+                        List<String> schemaTypes, List<String> schemaContextUrls,
+                        List<String> rawSchemaContextUrls, String networkId) {
+        this(transactionId, messageId, filters, spatial, textSearch,
+                schemaTypes, schemaContextUrls, rawSchemaContextUrls, networkId, null, null);
     }
 
     // ── Factory ─────────────────────────────────────────────────────────────
@@ -82,6 +107,19 @@ public record QueryRequest(
      * @throws NullPointerException if {@code request} or its {@code context} is null
      */
     public static QueryRequest from(DiscoverRequest request) {
+        return from(request, null, null);
+    }
+
+    /**
+     * Builds a {@code QueryRequest} carrying the resolved {@code active}/{@code validity}
+     * value-match flags. Both originate from HTTP query params (falling back to config
+     * defaults) — not the Beckn body — so they are threaded in separately here rather than
+     * read from {@code request}. A {@code null} means the corresponding dimension is not
+     * filtered.
+     *
+     * @throws NullPointerException if {@code request} or its {@code context} is null
+     */
+    public static QueryRequest from(DiscoverRequest request, Boolean activeMatch, Boolean validMatch) {
         Objects.requireNonNull(request, "DiscoverRequest must not be null");
         Objects.requireNonNull(request.getContext(), "DiscoverRequest.context must not be null");
 
@@ -100,13 +138,32 @@ public record QueryRequest(
                 parts.types(),
                 parts.urls(),
                 schemaContextUrls,
-                request.getContext().getNetworkId()
+                request.getContext().getNetworkId(),
+                activeMatch,
+                validMatch
         );
     }
 
     /** {@code true} when a network id is present to scope results by (#309). */
     public boolean hasNetworkFilter() {
         return networkId != null && !networkId.isBlank();
+    }
+
+    /**
+     * {@code true} when the {@code active} value-match dimension should be filtered
+     * ({@code activeMatch} is non-null). Independent of {@link #hasValidMatch()} and
+     * {@link #hasNetworkFilter()} — the predicates compose but never gate each other.
+     */
+    public boolean hasActiveMatch() {
+        return activeMatch != null;
+    }
+
+    /**
+     * {@code true} when the {@code validity} value-match dimension should be filtered
+     * ({@code validMatch} is non-null).
+     */
+    public boolean hasValidMatch() {
+        return validMatch != null;
     }
 
     private static List<String> resolveSchemaContext(DiscoverRequest request) {

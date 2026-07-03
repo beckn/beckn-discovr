@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 
@@ -37,7 +38,13 @@ public class JsonPathQueryBuilder {
         return build(filters, rawSchemaContextUrls, limit, null);
     }
 
+    /** Network-scoped overload without active/validity filtering (delegates with both matches null). */
     public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit, String networkId) {
+        return build(filters, rawSchemaContextUrls, limit, networkId, null, null, null);
+    }
+
+    public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit,
+                           String networkId, Boolean activeMatch, Boolean validMatch, Instant now) {
         String processedFilter = jsonPathConverter.processFilter(filters);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
         String postgresFilter = toPostgresFilter(processedFilter);
@@ -49,8 +56,11 @@ public class JsonPathQueryBuilder {
                 .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
                 .schemaFiltersPaired(rawSchemaContextUrls)
                 .networkFilter(networkId)
+                .activeFilter(activeMatch)
+                .validityFilter(validMatch, now)
                 .build(limit);
-        log.debug("Built JSONPath query with {} parameters, limit {}", query.parameters().size(), limit);
+        log.debug("Built JSONPath query with {} parameters, limit {}, activeMatch {}, validMatch {}",
+                query.parameters().size(), limit, activeMatch, validMatch);
         return query;
     }
 
@@ -68,8 +78,15 @@ public class JsonPathQueryBuilder {
         return buildWithAllowlist(filters, rawSchemaContextUrls, limit, idAllowlist, null);
     }
 
+    /** Network-scoped allowlist overload without active/validity filtering (delegates with both matches null). */
     public QuerySpec buildWithAllowlist(String filters, List<String> rawSchemaContextUrls,
                                         int limit, Collection<String> idAllowlist, String networkId) {
+        return buildWithAllowlist(filters, rawSchemaContextUrls, limit, idAllowlist, networkId, null, null, null);
+    }
+
+    public QuerySpec buildWithAllowlist(String filters, List<String> rawSchemaContextUrls,
+                                        int limit, Collection<String> idAllowlist, String networkId,
+                                        Boolean activeMatch, Boolean validMatch, Instant now) {
         String processedFilter = jsonPathConverter.processFilter(filters);
         boolean hasSelectionPath = isSelectionPath(processedFilter);
         String postgresFilter = toPostgresFilter(processedFilter);
@@ -81,10 +98,12 @@ public class JsonPathQueryBuilder {
                 .condition(QueryBuilderHelper.JSONPATH_MATCH, postgresFilter)
                 .schemaFiltersPaired(rawSchemaContextUrls)
                 .networkFilter(networkId)
+                .activeFilter(activeMatch)
+                .validityFilter(validMatch, now)
                 .idAllowlist(idAllowlist)
                 .build(limit);
-        log.debug("Built chain JSONPath query with allowlist size={} params={} limit={}",
-                idAllowlist.size(), query.parameters().size(), limit);
+        log.debug("Built chain JSONPath query with allowlist size={} params={} limit={} activeMatch={} validMatch={}",
+                idAllowlist.size(), query.parameters().size(), limit, activeMatch, validMatch);
         return query;
     }
 

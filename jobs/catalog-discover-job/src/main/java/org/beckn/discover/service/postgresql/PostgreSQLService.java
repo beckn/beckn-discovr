@@ -14,6 +14,7 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -65,16 +66,24 @@ public class PostgreSQLService {
     private final JsonPathQueryBuilder   jsonPathQueryBuilder;
     private final SpatialQueryBuilder    spatialQueryBuilder;
     private final DiscoveryProperties    discoveryProperties;
+    private final Clock                  clock;
 
     public PostgreSQLService(
             JdbcClient           jdbcClient,
             JsonPathQueryBuilder jsonPathQueryBuilder,
             SpatialQueryBuilder  spatialQueryBuilder,
-            DiscoveryProperties  discoveryProperties) {
+            DiscoveryProperties  discoveryProperties,
+            Clock                clock) {
         this.jdbcClient           = jdbcClient;
         this.jsonPathQueryBuilder = jsonPathQueryBuilder;
         this.spatialQueryBuilder  = spatialQueryBuilder;
         this.discoveryProperties  = discoveryProperties;
+        this.clock                = clock;
+    }
+
+    /** Reference instant for validity-window evaluation (only used when {@code activeOnly} is set). */
+    private Instant now() {
+        return clock.instant();
     }
 
     // ── Path B: JSONPath filter ──────────────────────────────────────────────
@@ -103,7 +112,10 @@ public class PostgreSQLService {
                 request.filters(),
                 request.rawSchemaContextUrls(),
                 resultLimit(),
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                now());
         return executeQuery(query, "jsonpath", request.transactionId(), "PostgreSQL JSONPath query failed");
     }
 
@@ -125,7 +137,10 @@ public class PostgreSQLService {
                 request.spatial(),
                 request.rawSchemaContextUrls(),
                 resultLimit(),
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                now());
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-conditions", LogEvent.SPATIAL_QUERY_SKIP);
             return new ArrayList<>();
@@ -156,7 +171,10 @@ public class PostgreSQLService {
                 request.rawSchemaContextUrls(),
                 resultLimit(),
                 idAllowlist,
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                now());
         return executeQuery(query, "jsonpath-chain", request.transactionId(), "PostgreSQL chain JSONPath query failed");
     }
 
@@ -188,7 +206,10 @@ public class PostgreSQLService {
                 request.rawSchemaContextUrls(),
                 resultLimit(),
                 idAllowlist,
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                now());
 
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP + ".chain");
@@ -220,7 +241,10 @@ public class PostgreSQLService {
                 request.filters(),
                 request.rawSchemaContextUrls(),
                 resultLimit(),
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                now());
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP);
             return Optional.empty();
