@@ -84,6 +84,10 @@ class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
     private static final String FUTURE_WINDOW  = "\"validity\":{\"startDate\":\"2999-01-01T00:00:00Z\"},";
     private static final String OPEN_START     = "\"validity\":{\"startDate\":\"2020-01-01T00:00:00Z\"},";
     private static final String OPEN_END       = "\"validity\":{\"endDate\":\"2999-12-31T23:59:59Z\"},";
+    // Edge cases — time-of-day only (no date/zone) and an unparseable date. Both count as VALID
+    // (not evaluable to an instant ⇒ never dropped by validity=true, never selected by validity=false).
+    private static final String BARE_TIME      = "\"validity\":{\"startTime\":\"09:00:00\",\"endTime\":\"17:00:00\"},";
+    private static final String MALFORMED      = "\"validity\":{\"startDate\":\"not-a-date\"},";
 
     private QueryRequest jsonPathQuery(String tag, boolean activeOnly, String network) {
         DiscoverRequest req = new DiscoverRequest();
@@ -267,5 +271,67 @@ class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
         assertThat(catalogs).extracting(Catalog::getId)
                 .containsExactlyInAnyOrder("cat-active-valid", "cat-inactive", "cat-expired",
                         "cat-future", "cat-nofields", "cat-open-start", "cat-open-end", "cat-active-true");
+    }
+
+    // ── Edge cases: bare time-of-day, unparseable date, inactive+expired ─────────
+
+    /**
+     * Seeds an "edge" tag set:
+     *   e-baretime         — active (absent), validity is time-of-day only → counts VALID
+     *   e-malformed        — active (absent), validity date unparseable     → counts VALID
+     *   e-inactive-expired — explicitly inactive AND validity window expired → inactive + out-of-window
+     */
+    private void seedEdge() {
+        String net = DEFAULT_TEST_NETWORK;
+        seed("edge", "e-bt",  "e-baretime",         net, "",                    BARE_TIME);
+        seed("edge", "e-mf",  "e-malformed",        net, "",                    MALFORMED);
+        seed("edge", "e-ie",  "e-inactive-expired", net, "\"isActive\":false,", EXPIRED_WINDOW);
+    }
+
+    @Test
+    @DisplayName("validity=true keeps bare-time & unparseable-date catalogs (not evaluable ⇒ valid); drops the expired one")
+    void validity_true_keepsNonEvaluable() throws Exception {
+        seedEdge();
+        List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("edge", DEFAULT_TEST_NETWORK, null, Boolean.TRUE));
+        assertThat(catalogs).extracting(Catalog::getId)
+                .containsExactlyInAnyOrder("e-baretime", "e-malformed");
+    }
+
+    @Test
+    @DisplayName("validity=false selects ONLY the provably-expired catalog; bare-time & unparseable are NOT out-of-window")
+    void validity_false_excludesNonEvaluable() throws Exception {
+        seedEdge();
+        List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("edge", DEFAULT_TEST_NETWORK, null, Boolean.FALSE));
+        assertThat(catalogs).extracting(Catalog::getId).containsExactly("e-inactive-expired");
+    }
+
+    @Test
+    @DisplayName("active=false selects ONLY the explicitly-inactive catalog (bare-time & unparseable are active-by-absence)")
+    void active_false_edge() throws Exception {
+        seedEdge();
+        List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("edge", DEFAULT_TEST_NETWORK, Boolean.FALSE, null));
+        assertThat(catalogs).extracting(Catalog::getId).containsExactly("e-inactive-expired");
+    }
+
+    @Test
+    @DisplayName("active=true + validity=true (the default) keeps only the valid, active-by-absence catalogs")
+    void active_true_validity_true_edge() throws Exception {
+        seedEdge();
+        List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("edge", DEFAULT_TEST_NETWORK, Boolean.TRUE, Boolean.TRUE));
+        assertThat(catalogs).extracting(Catalog::getId)
+                .containsExactlyInAnyOrder("e-baretime", "e-malformed");
+    }
+
+    @Test
+    @DisplayName("active=false + validity=false selects the catalog that is BOTH inactive AND out-of-window")
+    void active_false_validity_false_edge() throws Exception {
+        seedEdge();
+        List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("edge", DEFAULT_TEST_NETWORK, Boolean.FALSE, Boolean.FALSE));
+        assertThat(catalogs).extracting(Catalog::getId).containsExactly("e-inactive-expired");
     }
 }
