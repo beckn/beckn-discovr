@@ -22,12 +22,42 @@ class CatalogPullCallbackServiceObservabilityTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     private CatalogPullCallbackService newService(CatalogPushService push, CatalogPublishMetrics metrics) {
+        return newServiceWithCap(push, metrics, 10_000_000L);
+    }
+
+    private CatalogPullCallbackService newServiceWithCap(
+            CatalogPushService push, CatalogPublishMetrics metrics, long maxPayloadSize) {
         AppProperties props = new AppProperties(null, null, new AppProperties.Catalog(
-                10_000_000L, false,
+                maxPayloadSize, false,
                 "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml",
                 1, 4, null, null, null, true, null, null, null, null, null, null, null));
         return new CatalogPullCallbackService(push, mapper, metrics, props,
                 new SecureCatalogDownloader(metrics, props));
+    }
+
+    @Test
+    void oversizeCatalog_rejectedBeforeEnqueue_noRuntimeThrow() {
+        CatalogPushService push = Mockito.mock(CatalogPushService.class);
+        CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
+        // Tiny cap (200 bytes) so the single catalog's serialized record exceeds it → clean rejection,
+        // never a RecordTooLargeException at enqueue.
+        CatalogPullCallbackService service = newServiceWithCap(push, metrics, 200L);
+
+        String payload = """
+                {
+                  "context": {"messageId":"m1","transactionId":"t1","networkId":"net-1"},
+                  "message": {"status":"COMPLETED","catalogs":[
+                    {"id":"BIG","resources":[{"id":"r1","descriptor":{"name":"a-reasonably-long-descriptor-name-to-exceed-the-tiny-cap"}}]}
+                  ]}
+                }
+                """;
+
+        service.processPullCallbackAsynchronously(payload);
+
+        verify(metrics, times(1)).recordOnPullCatalogRejected("inline");
+        verify(metrics, Mockito.never()).recordOnPullCatalogAccepted(Mockito.anyString());
+        verify(metrics, Mockito.never()).recordOnPullCatalogProcessed(Mockito.anyString());
+        Mockito.verify(push, Mockito.never()).enqueueForProcessing(Mockito.anyString());
     }
 
     @Test
