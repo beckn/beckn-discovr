@@ -101,9 +101,10 @@ public class SecureCatalogDownloader {
         this.metrics = metrics;
         this.props = props;
         // Build with the DEFAULT redirect policy (NEVER follow redirects): a validated URL cannot be
-        // bounced to an internal target after validation. Same 10s connect timeout as before.
+        // bounced to an internal target after validation. Connect timeout is configurable
+        // (app.catalog.pull-connect-timeout-ms, default 10s).
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(Duration.ofMillis(props.catalog().pullConnectTimeoutMs()))
                 .build();
     }
 
@@ -166,7 +167,7 @@ public class SecureCatalogDownloader {
         long maxDownloadBytes = props.catalog().pullMaxDownloadBytes();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(downloadUrl))
-                .timeout(Duration.ofSeconds(30))
+                .timeout(Duration.ofMillis(props.catalog().pullReadTimeoutMs()))
                 .GET()
                 .build();
         HttpResponse<java.io.InputStream> response;

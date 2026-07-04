@@ -68,7 +68,9 @@ public record AppProperties(
                         Long pullMaxDecompressedBytes,
                         Integer pullDownloadMaxAttempts,
                         Long pullDownloadRetryBackoffMs,
-                        Integer pullDnsCacheTtlSeconds) {
+                        Integer pullDnsCacheTtlSeconds,
+                        Integer pullConnectTimeoutMs,
+                        Integer pullReadTimeoutMs) {
                 /** Default hard cap for the compressed bytes downloaded on the on_pull path: 50 MiB. */
                 public static final long DEFAULT_MAX_DOWNLOAD_BYTES = 52_428_800L;
                 /** Default hard cap for the decompressed (gunzipped) bytes on the on_pull path: 200 MiB. */
@@ -83,6 +85,10 @@ public record AppProperties(
                  * TOCTOU: HttpClient's fetch-time re-resolution reuses the same validated IPs.
                  */
                 public static final int DEFAULT_DNS_CACHE_TTL_SECONDS = 10;
+                /** Default TCP connect timeout for the on_pull download HttpClient: 10s. */
+                public static final int DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
+                /** Default per-request read timeout for the on_pull download: 30s. */
+                public static final int DEFAULT_READ_TIMEOUT_MS = 30_000;
 
                 /**
                  * Secure-by-default: when {@code app.catalog.pull-ssrf-check-enabled} is absent
@@ -115,6 +121,12 @@ public record AppProperties(
                         }
                         if (pullDnsCacheTtlSeconds == null || pullDnsCacheTtlSeconds < 0) {
                                 pullDnsCacheTtlSeconds = DEFAULT_DNS_CACHE_TTL_SECONDS;
+                        }
+                        if (pullConnectTimeoutMs == null || pullConnectTimeoutMs < 1) {
+                                pullConnectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS;
+                        }
+                        if (pullReadTimeoutMs == null || pullReadTimeoutMs < 1) {
+                                pullReadTimeoutMs = DEFAULT_READ_TIMEOUT_MS;
                         }
                 }
         }

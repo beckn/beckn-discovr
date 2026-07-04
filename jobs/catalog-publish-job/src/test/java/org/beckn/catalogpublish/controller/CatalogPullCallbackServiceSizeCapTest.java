@@ -73,7 +73,9 @@ class CatalogPullCallbackServiceSizeCapTest {
                 /* pullMaxDecompressedBytes */ 1_024L,
                 /* pullDownloadMaxAttempts */ null,
                 /* pullDownloadRetryBackoffMs */ null,
-                /* pullDnsCacheTtlSeconds */ null);
+                /* pullDnsCacheTtlSeconds */ null,
+                /* pullConnectTimeoutMs */ null,
+                /* pullReadTimeoutMs */ null);
 
         CatalogPushService push = Mockito.mock(CatalogPushService.class);
         CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
