@@ -32,6 +32,9 @@ app:
     # so max-payload-size MUST stay >= the 1MB inline threshold or valid inline callbacks are rejected.
     # With the on_pull per-catalog enqueue (PR #393 C2), each ingestion Kafka record carries exactly ONE
     # catalog, so a single record stays well under Kafka's max — the whole array is never one giant record.
+    # This value ALSO drives the Kafka producer max.request.size (KafkaProducerConfig) and the per-catalog
+    # on_pull size guard, so both use one config (not the 1 MiB Kafka client default). Keep <= broker
+    # message.max.bytes. A single on_pull catalog exceeding this is cleanly rejected (never a send throw).
     max-payload-size: 5242880
     validation-enabled: true
     # SSRF guard on the on_pull download path. Secure-by-default (true). Set to false ONLY for

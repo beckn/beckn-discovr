@@ -413,7 +413,8 @@ public class CatalogPullCallbackService {
      * @param catalogNode the single catalog node to ingest
      * @throws IOException if JSON serialization fails
      */
-    private void enqueueSingleCatalog(JsonNode becknContext, JsonNode catalogNode) throws IOException {
+    /** Builds the per-catalog ingestion record ({@code context} + one-element {@code catalogs[]}). */
+    private String buildSingleCatalogRecord(JsonNode becknContext, JsonNode catalogNode) throws IOException {
         ObjectNode newContext = (ObjectNode) becknContext.deepCopy();
 
         ObjectNode newRoot = objectMapper.createObjectNode();
@@ -425,25 +426,27 @@ public class CatalogPullCallbackService {
         newMessage.set(BecknFields.CATALOGS, singleCatalogArray);
         newRoot.set(BecknFields.MESSAGE, newMessage);
 
-        String transformedJson = objectMapper.writeValueAsString(newRoot);
-        pushService.enqueueForProcessing(transformedJson);
+        return objectMapper.writeValueAsString(newRoot);
     }
 
     /**
      * Receiver-level observability + per-catalog enqueue: emits per-catalog INFO logs (with
      * {@code catalogId} + {@code networkId} in MDC) and metrics (catalogs returned, resources total,
-     * accepted / rejected / processed), and enqueues EACH catalog as its OWN Kafka record via
-     * {@link #enqueueSingleCatalog} (C2 — never one giant record → no {@code RecordTooLargeException}).
+     * accepted / rejected / processed), and enqueues EACH catalog as its OWN Kafka record
+     * (C2 — never one giant record → no {@code RecordTooLargeException}).
      *
-     * <p>{@code accepted} is recorded once a catalog has a non-blank id (accepted-for-ingestion);
-     * {@code processed} is recorded ONLY AFTER its per-catalog enqueue succeeds, so a per-catalog
-     * enqueue failure is visible as accepted-but-not-processed. The persisted count is decided
-     * downstream.</p>
+     * <p>{@code accepted} is recorded once a catalog has a non-blank id AND fits the configured
+     * record cap; {@code processed} is recorded after its per-catalog enqueue. A catalog that is
+     * missing an id, or whose serialized record exceeds {@code app.catalog.max-payload-size} (the
+     * SAME cap the Kafka producer is configured with), is a clean {@code rejected} — checked BEFORE
+     * enqueue so a single oversized catalog (possible on the download path) can never throw a
+     * runtime {@code RecordTooLargeException} at send. The persisted count is decided downstream.</p>
      */
     private void enqueueAndObserve(JsonNode becknContext, JsonNode catalogArray, String mode) throws IOException {
         int catalogsReturned = catalogArray.size();
         metrics.recordOnPullCatalogsReturned(mode, catalogsReturned);
 
+        long maxRecordBytes = props.catalog().maxPayloadSize();
         int resourcesTotal = 0;
         int accepted = 0;
         int processed = 0;
@@ -456,13 +459,22 @@ public class CatalogPullCallbackService {
             }
             MDC.put(MdcField.CATALOG_ID, id);
             try {
+                // Build + size-guard the per-catalog record against the producer's configured cap
+                // BEFORE sending — an oversized single catalog is a clean rejection, not a send-time throw.
+                String record = buildSingleCatalogRecord(becknContext, catalogNode);
+                int recordBytes = record.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                if (recordBytes > maxRecordBytes) {
+                    log.warn("event={} reason=too_large sizeBytes={} limit={}",
+                            LogEvent.ON_PULL_CATALOG_REJECTED, recordBytes, maxRecordBytes);
+                    metrics.recordOnPullCatalogRejected(mode);
+                    continue;
+                }
                 int resourceCount = catalogNode.path(BecknFields.RESOURCES).size();
                 resourcesTotal += resourceCount;
                 accepted++;
                 metrics.recordOnPullCatalogAccepted(mode);
-                // C2: enqueue THIS catalog as its own Kafka record. Only count it processed once the
-                // per-catalog enqueue succeeds, so a per-catalog enqueue failure stays visible.
-                enqueueSingleCatalog(becknContext, catalogNode);
+                // C2: enqueue THIS catalog as its own Kafka record (never one giant array record).
+                pushService.enqueueForProcessing(record);
                 processed++;
                 metrics.recordOnPullCatalogProcessed(mode);
                 log.info("event={} resourceCount={}", LogEvent.ON_PULL_CATALOG_ENQUEUED, resourceCount);
