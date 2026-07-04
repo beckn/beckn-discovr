@@ -51,6 +51,10 @@ app:
     # for this window, so HttpClient's fetch-time re-resolution reuses the SAME validated IPs even if
     # a hostile DNS server returns TTL=0 and flips to a private IP after validation.
     pull-dns-cache-ttl-seconds: ${APP_CATALOG_PULL_DNS_CACHE_TTL_SECONDS:10}
+    # on_pull download HttpClient timeouts. connect = TCP handshake budget; read = per-request
+    # response budget. Absent => secure defaults (10s / 30s).
+    pull-connect-timeout-ms: ${APP_CATALOG_PULL_CONNECT_TIMEOUT_MS:10000}
+    pull-read-timeout-ms: ${APP_CATALOG_PULL_READ_TIMEOUT_MS:30000}
     # Dedicated executor for on_pull download/ingest — isolated from the publish pool so blocking
     # downloads never starve the catalog-publish pipeline. Sized for I/O (not CPU).
     pull-executor-core-pool-size: ${APP_CATALOG_PULL_EXECUTOR_CORE_POOL_SIZE:4}

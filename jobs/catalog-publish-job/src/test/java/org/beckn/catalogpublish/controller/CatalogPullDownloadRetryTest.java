@@ -79,7 +79,9 @@ class CatalogPullDownloadRetryTest {
                 /* pullMaxDecompressedBytes */ 10_000_000L,
                 /* pullDownloadMaxAttempts */ maxAttempts,
                 /* pullDownloadRetryBackoffMs */ 5L,
-                /* pullDnsCacheTtlSeconds */ null);
+                /* pullDnsCacheTtlSeconds */ null,
+                /* pullConnectTimeoutMs */ null,
+                /* pullReadTimeoutMs */ null);
         AppProperties props = new AppProperties(null, null, catalog);
 
         ctx = new AnnotationConfigApplicationContext();
