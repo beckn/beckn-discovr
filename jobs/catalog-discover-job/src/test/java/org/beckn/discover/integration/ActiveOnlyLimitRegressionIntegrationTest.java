@@ -83,10 +83,12 @@ class ActiveOnlyLimitRegressionIntegrationTest extends BaseIntegrationTest {
         seed("a1", "cat-active-1", true, "2026-05-01 12:00:00");
         seed("a2", "cat-active-2", true, "2026-05-01 11:00:00");
 
-        // Baseline: unfiltered, the cap grabs the 2 newest — both inactive.
+        // Baseline: unfiltered, the cap grabs the 2 newest — both inactive. (Order-independent:
+        // PostgreSQLAssembler collects catalogs into a Map, so the returned list order is not
+        // guaranteed to match the SQL ORDER BY — the invariant under test is the *set* the cap grabs.)
         List<Catalog> unfiltered = pgQueryEngine.executeFilterQuery(query(false));
         assertThat(unfiltered).extracting(Catalog::getId)
-                .containsExactly("cat-inactive-1", "cat-inactive-2");
+                .containsExactlyInAnyOrder("cat-inactive-1", "cat-inactive-2");
 
         // activeOnly: inactive excluded in WHERE (before LIMIT) → the 2 active survive the cap.
         List<Catalog> active = pgQueryEngine.executeFilterQuery(query(true));
