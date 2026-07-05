@@ -48,7 +48,7 @@
             }
           ],
           "validity": {
-            "endDate": "2025-01-15T23:59:59Z",
+            "endDate": "2999-12-31T23:59:59Z",
             "startDate": "2024-10-01T00:00:00Z"
           },
           "descriptor": {
@@ -174,7 +174,7 @@
             }
           ],
           "validity": {
-            "endDate": "2025-01-15T23:59:59Z",
+            "endDate": "2999-12-31T23:59:59Z",
             "startDate": "2024-10-01T00:00:00Z"
           },
           "descriptor": {
@@ -295,7 +295,7 @@
             }
           ],
           "validity": {
-            "endDate": "2025-01-15T23:59:59Z",
+            "endDate": "2999-12-31T23:59:59Z",
             "startDate": "2024-10-01T00:00:00Z"
           },
           "descriptor": {

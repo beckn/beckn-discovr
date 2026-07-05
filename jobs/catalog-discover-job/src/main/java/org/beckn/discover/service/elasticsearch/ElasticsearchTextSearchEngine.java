@@ -153,6 +153,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                                     .numCandidates(knnCandidates);
                             schemaFilters.forEach(kb::filter);
                             EsNetworkFilterBuilder.build(queryRequest).ifPresent(kb::filter);
+                            EsActiveValidityFilterBuilder.build(queryRequest, queryRequest.now()).ifPresent(kb::filter);
                             return kb;
                         }),
                         Map.class);
@@ -216,6 +217,7 @@ public class ElasticsearchTextSearchEngine implements TextSearchEngine {
                         }
                         keywordSchemaFilters.forEach(b::filter);
                         EsNetworkFilterBuilder.build(queryRequest).ifPresent(b::filter);
+                        EsActiveValidityFilterBuilder.build(queryRequest, queryRequest.now()).ifPresent(b::filter);
                         return b;
                     }))
                     .minScore(minScore)

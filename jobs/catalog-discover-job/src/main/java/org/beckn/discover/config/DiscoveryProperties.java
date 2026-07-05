@@ -115,12 +115,43 @@ public class DiscoveryProperties {
     public static class Filter {
         private boolean discardCatalogsWithoutOffers = true;
 
+        /**
+         * Default for the {@code ?active} value-match query param when it is omitted. When
+         * {@code true}, discovery returns only active catalogs by default; a request may
+         * override per-call with {@code ?active=true|false}. Value-match semantics — not an
+         * enable/disable toggle.
+         */
+        private boolean activeCatalog = true;
+
+        /**
+         * Default for the {@code ?validity} value-match query param when it is omitted. When
+         * {@code true}, discovery returns only currently-valid catalogs by default; overridable
+         * per-call with {@code ?validity=true|false}.
+         */
+        private boolean validCatalogs = true;
+
         public boolean isDiscardCatalogsWithoutOffers() {
             return discardCatalogsWithoutOffers;
         }
 
         public void setDiscardCatalogsWithoutOffers(boolean discardCatalogsWithoutOffers) {
             this.discardCatalogsWithoutOffers = discardCatalogsWithoutOffers;
+        }
+
+        public boolean isActiveCatalog() {
+            return activeCatalog;
+        }
+
+        public void setActiveCatalog(boolean activeCatalog) {
+            this.activeCatalog = activeCatalog;
+        }
+
+        public boolean isValidCatalogs() {
+            return validCatalogs;
+        }
+
+        public void setValidCatalogs(boolean validCatalogs) {
+            this.validCatalogs = validCatalogs;
         }
     }
 
