@@ -8,6 +8,7 @@ import org.beckn.catalogpublish.common.ErrorCodes;
 import org.beckn.catalogpublish.common.ErrorMessages;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.logging.LogEvent;
+import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.beckn.catalogpublish.util.CorrelationContext;
 import org.beckn.catalogpublish.util.ErrorSanitizer;
 import org.slf4j.Logger;
@@ -38,14 +39,19 @@ public class CatalogPushController {
     private final CatalogPushService pushService;
     private final ObjectMapper objectMapper;
     private final CorrelationContext correlationContext;
+    private final CatalogPullCallbackService pullCallbackService;
+    private final CatalogPublishMetrics metrics;
     private final long maxPayloadSize;
 
     public CatalogPushController(CatalogPushService pushService, AppProperties props,
-            ObjectMapper objectMapper, CorrelationContext correlationContext) {
+            ObjectMapper objectMapper, CorrelationContext correlationContext,
+            CatalogPullCallbackService pullCallbackService, CatalogPublishMetrics metrics) {
         this.pushService = pushService;
         this.maxPayloadSize = props.catalog().maxPayloadSize();
         this.objectMapper = objectMapper;
         this.correlationContext = correlationContext;
+        this.pullCallbackService = pullCallbackService;
+        this.metrics = metrics;
     }
 
     @PostMapping("/catalog/push")
@@ -66,7 +72,7 @@ public class CatalogPushController {
         correlationContext.setTagsFromHttp(request.getHeader("X-Tags"));
 
         // Parse once; reuse the tree for correlation-id extraction and context validation.
-        JsonNode root = tryParse(rawBody);
+        JsonNode root = tryParse(rawBody, LogEvent.PUSH_REJECTED);
         if (root == null) {
             // Unparseable JSON — distinct from a missing context. No messageId recoverable.
             return ResponseEntity.badRequest().body(
@@ -77,7 +83,7 @@ public class CatalogPushController {
 
         // Validate required context — reject with NACK if missing. The NACK still echoes
         // the messageId when present so the caller can correlate the failure.
-        if (!hasRequiredContext(root)) {
+        if (!hasRequiredContext(root, LogEvent.PUSH_REJECTED)) {
             return ResponseEntity.badRequest().body(
                     nackBody(messageId, ErrorCodes.CTX_MISSING_FIELD, ErrorMessages.SCH_MISSING_CONTEXT));
         }
@@ -88,6 +94,58 @@ public class CatalogPushController {
         // 200 Ack: the request is accepted for async processing and a catalog/on_publish
         // callback follows. Beckn maps 202 to AckNoCallback (which requires an error and
         // signals that NO callback will follow), so 200 Ack is the correct code here.
+        return ResponseEntity.ok(ackBody(messageId));
+    }
+
+    /**
+     * POST /catalog/on_pull — Beckn v2.0.0 pull callback ingestion.
+     *
+     * <p>Receives a {@code catalog/on_pull} callback (the asynchronous result of a prior
+     * {@code /catalog/pull}), returns {@code 200 Ack} immediately, and processes the
+     * payload asynchronously via {@link CatalogPullCallbackService}.</p>
+     */
+    @PostMapping("/catalog/on_pull")
+    public ResponseEntity<Map<String, Object>> onPull(
+            @RequestBody byte[] rawBytes,
+            HttpServletRequest request) {
+
+        if (rawBytes.length > maxPayloadSize) {
+            log.warn("event={} sizeBytes={} limit={}", LogEvent.ON_PULL_REJECTED, rawBytes.length, maxPayloadSize);
+            metrics.recordOnPullFailed("oversize");
+            // Oversized body is a client error → 400 NackBadRequest. 413 is not part of the
+            // Beckn response set (200/400/401/429/500). Payload not parsed — messageId omitted.
+            return ResponseEntity.badRequest().body(
+                    nackBody(null, ErrorCodes.SCH_SCHEMA_VALIDATION_FAILED, ErrorMessages.REQUEST_TOO_LARGE));
+        }
+
+        String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
+
+        correlationContext.setTagsFromHttp(request.getHeader("X-Tags"));
+
+        JsonNode root = tryParse(rawBody, LogEvent.ON_PULL_REJECTED);
+        if (root == null) {
+            metrics.recordOnPullFailed("invalid_json");
+            return ResponseEntity.badRequest().body(
+                    nackBody(null, ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON));
+        }
+
+        String messageId = contextText(root, BecknFields.MESSAGE_ID);
+
+        if (!hasRequiredContext(root, LogEvent.ON_PULL_REJECTED)) {
+            metrics.recordOnPullFailed("missing_context");
+            return ResponseEntity.badRequest().body(
+                    nackBody(messageId, ErrorCodes.CTX_MISSING_FIELD, ErrorMessages.SCH_MISSING_CONTEXT));
+        }
+
+        // Echo the ORIGINAL correlation IDs received from the CS (never generated) on the
+        // entry log; the async pipeline carries them via MDC for the remaining lines.
+        log.info("event={} messageId={} transactionId={} sizeBytes={}",
+                LogEvent.ON_PULL_RECEIVED, messageId,
+                contextText(root, BecknFields.TRANSACTION_ID), rawBytes.length);
+        pullCallbackService.processPullCallbackAsynchronously(rawBody);
+
+        // 200 Ack per beckn.yaml /catalog/on_pull — the callback receiver acknowledges
+        // synchronously; there is no further callback, so 200 Ack (not 202) is correct.
         return ResponseEntity.ok(ackBody(messageId));
     }
 
@@ -131,12 +189,16 @@ public class CatalogPushController {
         }
     }
 
-    /** Parses the body to a tree, or returns {@code null} on invalid JSON. */
-    private JsonNode tryParse(String rawBody) {
+    /**
+     * Parses the body to a tree, or returns {@code null} on invalid JSON. {@code rejectEvent}
+     * labels the WARN with the path-appropriate event ({@code push.rejected} vs
+     * {@code on_pull.rejected}) so the log reflects which endpoint the reject came from.
+     */
+    private JsonNode tryParse(String rawBody, String rejectEvent) {
         try {
             return objectMapper.readTree(rawBody);
         } catch (Exception e) {
-            log.warn("event={} reason=invalid-json error={}", LogEvent.PUSH_REJECTED, ErrorSanitizer.sanitize(e));
+            log.warn("event={} reason=invalid-json error={}", rejectEvent, ErrorSanitizer.sanitize(e));
             return null;
         }
     }
@@ -155,17 +217,17 @@ public class CatalogPushController {
      * (messageId or transactionId). No enrichment or fallback — callers must send a
      * complete Beckn context.
      */
-    private boolean hasRequiredContext(JsonNode root) {
+    private boolean hasRequiredContext(JsonNode root, String rejectEvent) {
         if (root == null) {
             return false; // invalid JSON already logged by tryParse
         }
         if (!root.path(BecknFields.CONTEXT).isObject()) {
-            log.warn("event={} reason=missing-context", LogEvent.PUSH_REJECTED);
+            log.warn("event={} reason=missing-context", rejectEvent);
             return false;
         }
         if (contextText(root, BecknFields.MESSAGE_ID) == null
                 && contextText(root, BecknFields.TRANSACTION_ID) == null) {
-            log.warn("event={} reason=missing-correlation-id", LogEvent.PUSH_REJECTED);
+            log.warn("event={} reason=missing-correlation-id", rejectEvent);
             return false;
         }
         return true;
