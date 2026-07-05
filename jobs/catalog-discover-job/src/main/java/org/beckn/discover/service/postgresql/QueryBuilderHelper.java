@@ -74,9 +74,12 @@ public final class QueryBuilderHelper {
     //   • validity absent / open-ended-inside / bare time-of-day / unparseable → counts as valid.
     //     validity=true matches those; validity=false matches ONLY a provably out-of-window date.
     //   • startDate inclusive, endDate inclusive.
-    // Values are matched via ::timestamptz against a bound "now" parameter — never concatenated.
-    // A regex guard inside CASE prevents a cast error on a non-date-shaped value (CASE is one of the
-    // few Postgres constructs that guarantees non-selected branches are not evaluated).
+    // Values are compared via the exception-safe SQL helper try_to_timestamptz(text) (returns NULL
+    // for any value PostgreSQL can't cast — malformed, out-of-range, non-date, or NULL) against a
+    // bound "now" parameter — never concatenated, never a raw ::timestamptz cast (which would 500 on
+    // a date-shaped-but-invalid value like '2020-13-45'). A NULL parse ⇒ "no usable bound" ⇒ the
+    // catalog counts as valid. The helper is provisioned by publish-job migration V6 (prod) and the
+    // discover integration test schema.
 
     /**
      * Catalog-level {@code isActive} value-match: {@code COALESCE(stored, true) = ?}. Binds one
@@ -86,30 +89,29 @@ public final class QueryBuilderHelper {
     public static final String ACTIVE_MATCH =
             "COALESCE((i.payload #>> '{catalogs,0,isActive}')::boolean, true) = ?";
 
-    /** Validity lower bound (valid direction): {@code startDate} absent/non-date OR {@code startDate <= now}. Binds one {@code timestamptz}. */
+    /** Validity lower bound (valid direction): {@code startDate} absent/unparseable OR {@code startDate <= now}. Binds one {@code timestamptz}. */
     public static final String VALIDITY_START_MATCH =
-            "(CASE WHEN i.payload #>> '{catalogs,0,validity,startDate}' IS NULL THEN TRUE "
-          + "WHEN i.payload #>> '{catalogs,0,validity,startDate}' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
-          + "THEN (i.payload #>> '{catalogs,0,validity,startDate}')::timestamptz <= ? ELSE TRUE END)";
+            "(try_to_timestamptz(i.payload #>> '{catalogs,0,validity,startDate}') IS NULL "
+          + "OR try_to_timestamptz(i.payload #>> '{catalogs,0,validity,startDate}') <= ?)";
 
-    /** Validity upper bound (valid direction): {@code endDate} absent/non-date OR {@code endDate >= now}. Binds one {@code timestamptz}. */
+    /** Validity upper bound (valid direction): {@code endDate} absent/unparseable OR {@code endDate >= now}. Binds one {@code timestamptz}. */
     public static final String VALIDITY_END_MATCH =
-            "(CASE WHEN i.payload #>> '{catalogs,0,validity,endDate}' IS NULL THEN TRUE "
-          + "WHEN i.payload #>> '{catalogs,0,validity,endDate}' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
-          + "THEN (i.payload #>> '{catalogs,0,validity,endDate}')::timestamptz >= ? ELSE TRUE END)";
+            "(try_to_timestamptz(i.payload #>> '{catalogs,0,validity,endDate}') IS NULL "
+          + "OR try_to_timestamptz(i.payload #>> '{catalogs,0,validity,endDate}') >= ?)";
 
     /**
      * Validity "not currently valid" predicate (invalid direction, {@code validity=false}):
-     * a catalog is out-of-window only when it has a parseable {@code startDate} in the future
-     * ({@code > now}) OR a parseable {@code endDate} in the past ({@code < now}). Absent,
-     * open-ended-inside, bare time-of-day, and unparseable values evaluate to FALSE and are
-     * therefore excluded (they count as valid). Binds two {@code timestamptz} params (now, now).
+     * a catalog is out-of-window only when it has a <em>parseable</em> {@code startDate} in the
+     * future ({@code > now}) OR a parseable {@code endDate} in the past ({@code < now}). Absent,
+     * open-ended-inside, bare time-of-day, and unparseable values yield NULL from
+     * {@code try_to_timestamptz} → the {@code IS NOT NULL} guard is false → excluded (they count as
+     * valid). Binds two {@code timestamptz} params (now, now).
      */
     public static final String VALIDITY_INVALID_MATCH =
-            "((CASE WHEN i.payload #>> '{catalogs,0,validity,startDate}' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
-          + "THEN (i.payload #>> '{catalogs,0,validity,startDate}')::timestamptz > ? ELSE FALSE END) "
-          + "OR (CASE WHEN i.payload #>> '{catalogs,0,validity,endDate}' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
-          + "THEN (i.payload #>> '{catalogs,0,validity,endDate}')::timestamptz < ? ELSE FALSE END))";
+            "((try_to_timestamptz(i.payload #>> '{catalogs,0,validity,startDate}') IS NOT NULL "
+          + "AND try_to_timestamptz(i.payload #>> '{catalogs,0,validity,startDate}') > ?) "
+          + "OR (try_to_timestamptz(i.payload #>> '{catalogs,0,validity,endDate}') IS NOT NULL "
+          + "AND try_to_timestamptz(i.payload #>> '{catalogs,0,validity,endDate}') < ?))";
 
     /** JSONPath exists — match everything (no filter provided). */
     public static final String JSONPATH_EXISTS_ALL = "exists($)";

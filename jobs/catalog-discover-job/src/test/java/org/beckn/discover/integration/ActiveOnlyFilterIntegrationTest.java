@@ -334,4 +334,35 @@ class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
                 jsonPathQuery("edge", DEFAULT_TEST_NETWORK, Boolean.FALSE, Boolean.FALSE));
         assertThat(catalogs).extracting(Catalog::getId).containsExactly("e-inactive-expired");
     }
+
+    // ── Date-shaped-but-invalid values must NOT crash the query (PR #397 review) ──
+
+    /** Seeds catalogs whose validity dates are date-SHAPED but uncastable — the crash cases the review reproduced. */
+    private void seedBadShape() {
+        String net = DEFAULT_TEST_NETWORK;
+        // month/day out of range — passes a shape regex but ::timestamptz would throw
+        seed("badshape", "bs1", "bad-out-of-range", net, "", "\"validity\":{\"endDate\":\"2020-13-45T00:00:00Z\"},");
+        // trailing garbage after a valid-looking date prefix
+        seed("badshape", "bs2", "bad-trailing",     net, "", "\"validity\":{\"startDate\":\"2020-01-01garbage\"},");
+    }
+
+    @Test
+    @DisplayName("validity=true: date-shaped-but-invalid values do NOT 500 and count as valid (kept)")
+    void dateShapedInvalid_validityTrue_keptNotCrash() throws Exception {
+        seedBadShape();
+        // Must not throw (try_to_timestamptz returns NULL instead of erroring the cast).
+        List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("badshape", DEFAULT_TEST_NETWORK, null, Boolean.TRUE));
+        assertThat(catalogs).extracting(Catalog::getId)
+                .containsExactlyInAnyOrder("bad-out-of-range", "bad-trailing");
+    }
+
+    @Test
+    @DisplayName("validity=false: date-shaped-but-invalid values are NOT out-of-window (excluded), no 500")
+    void dateShapedInvalid_validityFalse_excluded() throws Exception {
+        seedBadShape();
+        List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("badshape", DEFAULT_TEST_NETWORK, null, Boolean.FALSE));
+        assertThat(catalogs).isEmpty();
+    }
 }

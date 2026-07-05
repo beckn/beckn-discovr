@@ -224,11 +224,20 @@ public class DiscoveryService {
      * calling thread's MDC context so log correlation is preserved.
      */
     public CompletableFuture<DiscoverResponse> processDiscoveryRequestAsync(DiscoverRequest request) {
+        return processDiscoveryRequestAsync(request, null, null);
+    }
+
+    /**
+     * Asynchronous entry point carrying the {@code ?active}/{@code ?validity} value-match flags,
+     * so the async path honors them identically to the synchronous one (nullable ⇒ config default).
+     */
+    public CompletableFuture<DiscoverResponse> processDiscoveryRequestAsync(
+            DiscoverRequest request, Boolean active, Boolean validity) {
         Map<String, String> mdcCopy = MDC.getCopyOfContextMap();
         return CompletableFuture.supplyAsync(() -> {
             restoreMDC(mdcCopy);
             try {
-                return processDiscoveryRequest(request);
+                return processDiscoveryRequest(request, active, validity);
             } finally {
                 MDC.clear();
             }

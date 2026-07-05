@@ -61,8 +61,11 @@ class QueryBuilderActiveValidityTest {
         String sql = spec.sql();
         assertThat(sql).contains("catalogs,0,validity,startDate");
         assertThat(sql).contains("catalogs,0,validity,endDate");
-        assertThat(sql).contains("::timestamptz <= ?");
-        assertThat(sql).contains("::timestamptz >= ?");
+        // exception-safe parse (no raw ::timestamptz cast that could 500 on bad data), inclusive bounds
+        assertThat(sql).contains("try_to_timestamptz");
+        assertThat(sql).doesNotContain("::timestamptz");
+        assertThat(sql).contains("<= ?");
+        assertThat(sql).contains(">= ?");
         assertThat(sql.indexOf("catalogs,0,validity")).isLessThan(sql.indexOf("LIMIT"));
         assertThat(spec.parameters()).containsExactly("exists($)", TS, TS);
     }
@@ -72,8 +75,9 @@ class QueryBuilderActiveValidityTest {
     void validityFalse() {
         QuerySpec spec = build(null, Boolean.FALSE);
         String sql = spec.sql();
-        assertThat(sql).contains("::timestamptz > ?");
-        assertThat(sql).contains("::timestamptz < ?");
+        assertThat(sql).contains("try_to_timestamptz");
+        assertThat(sql).contains("> ?");
+        assertThat(sql).contains("< ?");
         assertThat(sql).doesNotContain("<= ?");
         assertThat(sql).doesNotContain(">= ?");
         assertThat(spec.parameters()).containsExactly("exists($)", TS, TS);
