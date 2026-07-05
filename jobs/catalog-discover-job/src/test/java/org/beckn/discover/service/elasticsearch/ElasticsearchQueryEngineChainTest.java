@@ -80,8 +80,7 @@ class ElasticsearchQueryEngineChainTest {
                 assembler,
                 properties,
                 withEmbeddingClient ? Optional.of(embeddingClient) : Optional.empty(),
-                withEmbeddingClient ? Optional.of(queryEnricher) : Optional.empty(),
-                java.time.Clock.systemUTC());
+                withEmbeddingClient ? Optional.of(queryEnricher) : Optional.empty());
     }
 
     private QueryRequest textOnlyRequest(String text) {

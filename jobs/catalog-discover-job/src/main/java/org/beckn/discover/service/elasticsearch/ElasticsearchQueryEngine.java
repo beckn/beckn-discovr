@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -70,7 +69,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
     private final Optional<EmbeddingClient> embeddingClient;
     private final Optional<QueryEnricher>   queryEnricher;
     private final int                       knnCandidates;
-    private final Clock                     clock;
 
     public ElasticsearchQueryEngine(PostgreSQLQueryEngine pgEngine,
                                     EsSpatialQueryBuilder spatialBuilder,
@@ -78,8 +76,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                                     EsSearchAssembler assembler,
                                     DiscoveryProperties discoveryProperties,
                                     Optional<EmbeddingClient> embeddingClient,
-                                    Optional<QueryEnricher> queryEnricher,
-                                    Clock clock) {
+                                    Optional<QueryEnricher> queryEnricher) {
         this.pgEngine        = pgEngine;
         this.spatialBuilder  = spatialBuilder;
         this.esClient        = esClient;
@@ -87,7 +84,6 @@ public class ElasticsearchQueryEngine implements QueryEngine {
         this.discoveryProperties = discoveryProperties;
         this.embeddingClient = embeddingClient;
         this.queryEnricher   = queryEnricher;
-        this.clock           = clock;
         this.knnCandidates   = Math.max(
                 discoveryProperties.getTextSearch().getEmbeddingModel().getKnnCandidates(),
                 discoveryProperties.getElasticsearch().getResultLimit());
@@ -153,7 +149,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                             geoQueries.forEach(kb::filter);
                             schemaFilters.forEach(kb::filter);
                             EsNetworkFilterBuilder.build(request).ifPresent(kb::filter);
-                            EsActiveValidityFilterBuilder.build(request, clock.instant()).ifPresent(kb::filter);
+                            EsActiveValidityFilterBuilder.build(request, request.now()).ifPresent(kb::filter);
                             return kb;
                         }), Map.class);
 
@@ -243,7 +239,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                             finalGeoFilters.forEach(bq::filter);
                             finalSchemaFilters.forEach(bq::filter);
                             EsNetworkFilterBuilder.build(request).ifPresent(bq::filter);
-                            EsActiveValidityFilterBuilder.build(request, clock.instant()).ifPresent(bq::filter);
+                            EsActiveValidityFilterBuilder.build(request, request.now()).ifPresent(bq::filter);
                             // text clauses contribute to score (mirrors Path D)
                             if (textMustQuery != null)   bq.must(textMustQuery);
                             if (textShouldQuery != null) bq.should(textShouldQuery);
@@ -387,7 +383,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                                 finalGeoFilters.forEach(kb::filter);
                                 schemaFilters.forEach(kb::filter);
                                 EsNetworkFilterBuilder.build(request).ifPresent(kb::filter);
-                                EsActiveValidityFilterBuilder.build(request, clock.instant()).ifPresent(kb::filter);
+                                EsActiveValidityFilterBuilder.build(request, request.now()).ifPresent(kb::filter);
                                 return kb;
                             });
                     // Apply the score floor only when set (>0), mirroring the BM25 branch.
@@ -457,7 +453,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                             finalGeoFilters.forEach(bq::filter);
                             schemaFilters.forEach(bq::filter);
                             EsNetworkFilterBuilder.build(request).ifPresent(bq::filter);
-                            EsActiveValidityFilterBuilder.build(request, clock.instant()).ifPresent(bq::filter);
+                            EsActiveValidityFilterBuilder.build(request, request.now()).ifPresent(bq::filter);
                             if (textMustQuery != null)   bq.must(textMustQuery);
                             if (textShouldQuery != null) bq.should(textShouldQuery);
                             return bq;
