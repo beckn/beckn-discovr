@@ -29,6 +29,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 /**
@@ -67,7 +69,7 @@ class DiscoveryEventConsumerTest {
         var validation = mock(DiscoveryValidationService.ValidationResult.class);
         when(validation.isValid()).thenReturn(true);
         when(validationService.validateDiscoverRequest(any(com.fasterxml.jackson.databind.JsonNode.class))).thenReturn(validation);
-        when(discoveryService.processDiscoveryRequest(any())).thenReturn(buildResponse());
+        when(discoveryService.processDiscoveryRequest(any(), any(), any())).thenReturn(buildResponse());
 
         // kafkaTemplate.send returns a CompletableFuture that fails asynchronously
         // (simulating broker timeout without blocking the calling thread)
@@ -99,7 +101,7 @@ class DiscoveryEventConsumerTest {
         var validation = mock(DiscoveryValidationService.ValidationResult.class);
         when(validation.isValid()).thenReturn(true);
         when(validationService.validateDiscoverRequest(any(com.fasterxml.jackson.databind.JsonNode.class))).thenReturn(validation);
-        when(discoveryService.processDiscoveryRequest(any())).thenReturn(buildResponse());
+        when(discoveryService.processDiscoveryRequest(any(), any(), any())).thenReturn(buildResponse());
 
         RecordMetadata meta = new RecordMetadata(new TopicPartition("test-response-topic", 0),
                 0, 0, 0, 0, 0);
@@ -132,7 +134,7 @@ class DiscoveryEventConsumerTest {
         var validation = mock(DiscoveryValidationService.ValidationResult.class);
         when(validation.isValid()).thenReturn(true);
         when(validationService.validateDiscoverRequest(any(com.fasterxml.jackson.databind.JsonNode.class))).thenReturn(validation);
-        when(discoveryService.processDiscoveryRequest(any())).thenReturn(buildResponse());
+        when(discoveryService.processDiscoveryRequest(any(), any(), any())).thenReturn(buildResponse());
 
         RecordMetadata recordMeta = new RecordMetadata(new TopicPartition("test-response-topic", 0),
                 0, 0, 0, 0, 0);
@@ -182,7 +184,7 @@ class DiscoveryEventConsumerTest {
         var validation = mock(DiscoveryValidationService.ValidationResult.class);
         when(validation.isValid()).thenReturn(true);
         when(validationService.validateDiscoverRequest(any(com.fasterxml.jackson.databind.JsonNode.class))).thenReturn(validation);
-        when(discoveryService.processDiscoveryRequest(any())).thenReturn(buildResponse());
+        when(discoveryService.processDiscoveryRequest(any(), any(), any())).thenReturn(buildResponse());
 
         // WHEN
         consumer.handleDiscoveryEvent(message, acknowledgment, 0, 0L, Instant.now().toEpochMilli(), null);
@@ -219,10 +221,57 @@ class DiscoveryEventConsumerTest {
         verifyNoInteractions(kafkaTemplate);
     }
 
+    @Test
+    void handleDiscoveryEvent_activeAndValidityInMeta_propagatedToService() throws Exception {
+        // GIVEN: envelope meta carries active=true and validity=false (set by the controller on POST)
+        String message = discoverJsonWithFilters(Boolean.TRUE, Boolean.FALSE);
+        var validation = mock(DiscoveryValidationService.ValidationResult.class);
+        when(validation.isValid()).thenReturn(true);
+        when(validationService.validateDiscoverRequest(any(com.fasterxml.jackson.databind.JsonNode.class))).thenReturn(validation);
+        when(discoveryService.processDiscoveryRequest(any(), any(), any())).thenReturn(buildResponse());
+        when(kafkaTemplate.send(any(org.apache.kafka.clients.producer.ProducerRecord.class)))
+                .thenReturn(CompletableFuture.completedFuture(new SendResult<>(null,
+                        new RecordMetadata(new TopicPartition("test-response-topic", 0), 0, 0, 0, 0, 0))));
+
+        // WHEN
+        consumer.handleDiscoveryEvent(message, acknowledgment, 0, 0L, Instant.now().toEpochMilli(), null);
+
+        // THEN: both flags are threaded into the service call with their exact values
+        verify(discoveryService).processDiscoveryRequest(any(), eq(Boolean.TRUE), eq(Boolean.FALSE));
+    }
+
+    @Test
+    void handleDiscoveryEvent_filtersAbsentInMeta_passedAsNull() throws Exception {
+        // GIVEN: no active/validity in meta (pre-existing/in-flight) → null ⇒ service applies config default
+        String message = discoverJsonWithFilters(null, null);
+        var validation = mock(DiscoveryValidationService.ValidationResult.class);
+        when(validation.isValid()).thenReturn(true);
+        when(validationService.validateDiscoverRequest(any(com.fasterxml.jackson.databind.JsonNode.class))).thenReturn(validation);
+        when(discoveryService.processDiscoveryRequest(any(), any(), any())).thenReturn(buildResponse());
+        when(kafkaTemplate.send(any(org.apache.kafka.clients.producer.ProducerRecord.class)))
+                .thenReturn(CompletableFuture.completedFuture(new SendResult<>(null,
+                        new RecordMetadata(new TopicPartition("test-response-topic", 0), 0, 0, 0, 0, 0))));
+
+        // WHEN
+        consumer.handleDiscoveryEvent(message, acknowledgment, 0, 0L, Instant.now().toEpochMilli(), null);
+
+        // THEN: absent flags ⇒ null args ⇒ service resolves config defaults downstream
+        verify(discoveryService).processDiscoveryRequest(any(), isNull(), isNull());
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private String validDiscoverJson() throws Exception {
         return validDiscoverJson(null, null);
+    }
+
+    /** Builds a valid discover envelope with optional {@code meta.active} / {@code meta.validity} flags. */
+    private String discoverJsonWithFilters(Boolean active, Boolean validity) throws Exception {
+        com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(validDiscoverJson());
+        var meta = (com.fasterxml.jackson.databind.node.ObjectNode) root.path("meta");
+        if (active != null)   meta.put("active", active);
+        if (validity != null) meta.put("validity", validity);
+        return objectMapper.writeValueAsString(root);
     }
 
     /**

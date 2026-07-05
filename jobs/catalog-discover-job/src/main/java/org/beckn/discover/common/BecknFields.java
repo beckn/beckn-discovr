@@ -82,4 +82,18 @@ public final class BecknFields {
     public static final String RECORD_ID        = "record_id";
     /** The actual Beckn response payload inside the envelope. */
     public static final String PAYLOAD          = "payload";
+    /**
+     * {@code ?active} value-match discover filter flag. Sourced from the HTTP query param (not the
+     * Beckn body). On the async POST path it is carried inside {@code meta} (only when supplied) so
+     * it survives the Kafka hop; the GET path passes it inline. {@code true} → only active catalogs;
+     * {@code false} → only explicitly inactive; absent → the {@code discovery.filter.activeCatalog}
+     * config default.
+     */
+    public static final String FILTER_ACTIVE    = "active";
+    /**
+     * {@code ?validity} value-match discover filter flag (companion to {@link #FILTER_ACTIVE}).
+     * {@code true} → only currently-valid catalogs; {@code false} → only not-currently-valid;
+     * absent → the {@code discovery.filter.validCatalogs} config default.
+     */
+    public static final String FILTER_VALIDITY  = "validity";
 }

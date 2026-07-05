@@ -162,6 +162,22 @@ public abstract class BaseIntegrationTest {
         } catch (Exception e) {
             throw new IllegalStateException("Failed to execute migration scripts", e);
         }
+        // Exception-safe timestamptz parse used by the ?validity filter (prod: publish-job migration
+        // V6). Executed as a single raw statement — ScriptUtils splits on ';' and cannot handle the
+        // PL/pgSQL $$-quoted body.
+        jdbcTemplate.execute("""
+                CREATE OR REPLACE FUNCTION try_to_timestamptz(txt text)
+                RETURNS timestamptz
+                LANGUAGE plpgsql
+                IMMUTABLE
+                PARALLEL SAFE
+                AS $$
+                BEGIN
+                    RETURN txt::timestamptz;
+                EXCEPTION WHEN others THEN
+                    RETURN NULL;
+                END;
+                $$""");
     }
 
     private void loadSampleData() throws IOException {

@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -115,6 +116,9 @@ public class DiscoveryService {
     // Chain-specific engines — present only when the relevant @ConditionalOnProperty fires.
     private final Optional<ElasticsearchQueryEngine> esQueryEngine;
     private final PostgreSQLQueryEngine   pgQueryEngine;
+    // Single source of "now" for validity evaluation — resolved once per request and threaded
+    // through QueryRequest so every engine step (PG + ES) shares the same instant.
+    private final Clock                   clock;
 
     public DiscoveryService(
             QueryEngine                                queryEngine,
@@ -126,7 +130,8 @@ public class DiscoveryService {
             DiscoveryProperties                        properties,
             @Qualifier("discoveryQueryExecutor") ExecutorService queryExecutor,
             Optional<ElasticsearchQueryEngine>         esQueryEngine,
-            PostgreSQLQueryEngine                      pgQueryEngine) {
+            PostgreSQLQueryEngine                      pgQueryEngine,
+            Clock                                      clock) {
         this.queryEngine          = queryEngine;
         this.textSearchEngine     = textSearchEngine;
         this.catalogPipeline      = catalogPipeline;
@@ -137,6 +142,7 @@ public class DiscoveryService {
         this.queryExecutor        = queryExecutor;
         this.esQueryEngine        = esQueryEngine;
         this.pgQueryEngine        = pgQueryEngine;
+        this.clock                = clock;
     }
 
     // ── Public entry points ──────────────────────────────────────────────────
@@ -146,9 +152,28 @@ public class DiscoveryService {
      * query path, applies the pipeline, and assembles the response.
      */
     public DiscoverResponse processDiscoveryRequest(DiscoverRequest request) {
+        return processDiscoveryRequest(request, null, null);
+    }
+
+    /**
+     * Synchronous entry point carrying the {@code ?active}/{@code ?validity} value-match flags.
+     * Each is a nullable {@link Boolean}: a non-null value is the caller's per-request override;
+     * {@code null} means "not supplied", in which case the {@code discovery.filter.activeCatalog}
+     * / {@code discovery.filter.validCatalogs} config default is applied. The resolved values are
+     * passed to the query engines, which filter in-query (before LIMIT), independently of network
+     * scoping. Value-match: {@code true} → only active / currently-valid; {@code false} → only
+     * inactive / not-currently-valid.
+     */
+    public DiscoverResponse processDiscoveryRequest(DiscoverRequest request, Boolean active, Boolean validity) {
         validateRequest(request);
         setupMDC(request.getContext());
         metrics.incrementTotalRequests();
+
+        // Resolve each dimension: explicit query param wins; otherwise fall back to config default.
+        Boolean effectiveActive   = active   != null ? active   : properties.getFilter().isActiveCatalog();
+        Boolean effectiveValidity = validity != null ? validity : properties.getFilter().isValidCatalogs();
+        // Resolve the validity reference instant ONCE here; every engine step reads it off QueryRequest.
+        Instant queryNow = clock.instant();
 
         Instant start = Instant.now();
         LatencyTracker tracker = properties.isLatencyTrackingEnabled() ? new LatencyTracker() : null;
@@ -156,7 +181,7 @@ public class DiscoveryService {
         try {
             log.info(LogEvent.QUERY_STARTED);
 
-            QueryRequest qr = QueryRequest.from(request);
+            QueryRequest qr = QueryRequest.from(request, effectiveActive, effectiveValidity, queryNow);
 
             // Track schema filter metric when ES path will apply schema push-down
             if (qr.hasSchemaFilters() && textSearchEngine.appliesSchemaFilter()) {
@@ -207,11 +232,20 @@ public class DiscoveryService {
      * calling thread's MDC context so log correlation is preserved.
      */
     public CompletableFuture<DiscoverResponse> processDiscoveryRequestAsync(DiscoverRequest request) {
+        return processDiscoveryRequestAsync(request, null, null);
+    }
+
+    /**
+     * Asynchronous entry point carrying the {@code ?active}/{@code ?validity} value-match flags,
+     * so the async path honors them identically to the synchronous one (nullable ⇒ config default).
+     */
+    public CompletableFuture<DiscoverResponse> processDiscoveryRequestAsync(
+            DiscoverRequest request, Boolean active, Boolean validity) {
         Map<String, String> mdcCopy = MDC.getCopyOfContextMap();
         return CompletableFuture.supplyAsync(() -> {
             restoreMDC(mdcCopy);
             try {
-                return processDiscoveryRequest(request);
+                return processDiscoveryRequest(request, active, validity);
             } finally {
                 MDC.clear();
             }
