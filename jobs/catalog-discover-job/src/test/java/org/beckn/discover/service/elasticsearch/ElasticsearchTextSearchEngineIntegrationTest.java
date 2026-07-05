@@ -89,7 +89,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
 
         searchEngine = new ElasticsearchTextSearchEngine(
                 esClient, new EsSearchAssembler(new CatalogProcessor()), TEST_MAPPER, buildProps(),
-                Optional.empty(), Optional.empty(), java.time.Clock.systemUTC());
+                Optional.empty(), Optional.empty());
 
         createIndexAndAlias();
         seedTestDocs();
@@ -408,7 +408,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         ElasticsearchTextSearchEngine strictEngine = new ElasticsearchTextSearchEngine(
                 esClient, new EsSearchAssembler(new CatalogProcessor()),
                 TEST_MAPPER, propsHighThreshold,
-                Optional.empty(), Optional.empty(), java.time.Clock.systemUTC());
+                Optional.empty(), Optional.empty());
 
         // "EcoPower CCS2" strongly matches ev-charger-001; ev-charger-002 is weaker
         // With threshold=1.0 only the top-scoring doc(s) are kept; those with same top score pass
@@ -435,7 +435,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         ElasticsearchTextSearchEngine noFilterEngine = new ElasticsearchTextSearchEngine(
                 esClient, new EsSearchAssembler(new CatalogProcessor()),
                 TEST_MAPPER, propsNoFilter,
-                Optional.empty(), Optional.empty(), java.time.Clock.systemUTC());
+                Optional.empty(), Optional.empty());
 
         // "EcoPower" matches ev-charger-001 and ev-charger-002 — both should be returned
         List<Catalog> catalogs = noFilterEngine.search("EcoPower", queryRequest("tx-rel-2"));
@@ -457,7 +457,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         ElasticsearchTextSearchEngine nameOnlyEngine = new ElasticsearchTextSearchEngine(
                 esClient, new EsSearchAssembler(new CatalogProcessor()),
                 TEST_MAPPER, propsNameOnly,
-                Optional.empty(), Optional.empty(), java.time.Clock.systemUTC());
+                Optional.empty(), Optional.empty());
 
         List<Catalog> catalogs = nameOnlyEngine.search("EcoPower", queryRequest("tx-field-1"));
 
@@ -475,7 +475,7 @@ class ElasticsearchTextSearchEngineIntegrationTest {
         assertThatThrownBy(() -> new ElasticsearchTextSearchEngine(
                 esClient, new EsSearchAssembler(new CatalogProcessor()),
                 TEST_MAPPER, propsEmptyFields,
-                Optional.empty(), Optional.empty(), java.time.Clock.systemUTC()))
+                Optional.empty(), Optional.empty()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("multiMatchFields");
     }

@@ -24,10 +24,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.io.StringReader;
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +37,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Integration test for the opt-in {@code activeOnly} filter on the Elasticsearch text-search
  * (T) path, against a real ES instance. Proves the same catalog-level {@code isActive}/{@code
  * validity} semantics as the PostgreSQL path, applied in-query (as an ES {@code filter}, before
- * {@code size}). A fixed {@link Clock} makes the validity boundaries deterministic.
+ * {@code size}). A fixed {@code now} carried on the {@link QueryRequest} makes the validity
+ * boundaries deterministic.
  */
 @Testcontainers
 class EsActiveValidityIntegrationTest {
@@ -72,8 +71,7 @@ class EsActiveValidityIntegrationTest {
         esClient = new ElasticsearchClient(new RestClientTransport(restClient, new JacksonJsonpMapper()));
         engine = new ElasticsearchTextSearchEngine(
                 esClient, new EsSearchAssembler(new CatalogProcessor()), TEST_MAPPER, buildProps(),
-                Optional.empty(), Optional.empty(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Optional.empty(), Optional.empty());
         createIndex();
         seedDocs();
         esClient.indices().refresh(r -> r.index(INDEX));
@@ -81,9 +79,11 @@ class EsActiveValidityIntegrationTest {
 
     private static QueryRequest query(boolean activeOnly) {
         // Map the legacy single flag onto the value-match API: activeOnly ⇒ active=TRUE + validity=TRUE.
+        // The fixed NOW is now carried on QueryRequest (the engine reads request.now()), replacing the
+        // previously-injected fixed Clock — so validity boundaries stay deterministic.
         return new QueryRequest("tx", "msg", null, List.of(), "widget",
                 List.of(), List.of(), List.of(), null,
-                activeOnly ? Boolean.TRUE : null, activeOnly ? Boolean.TRUE : null);
+                activeOnly ? Boolean.TRUE : null, activeOnly ? Boolean.TRUE : null, NOW);
     }
 
     @Test

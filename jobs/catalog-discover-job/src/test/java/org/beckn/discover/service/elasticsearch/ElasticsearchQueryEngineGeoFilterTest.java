@@ -210,6 +210,6 @@ class ElasticsearchQueryEngineGeoFilterTest {
         // (executeSpatialQuery does not call pgEngine)
         return new ElasticsearchQueryEngine(
                 null, spatialBuilder, esClient, assembler, props,
-                Optional.empty(), Optional.empty(), java.time.Clock.systemUTC());
+                Optional.empty(), Optional.empty());
     }
 }

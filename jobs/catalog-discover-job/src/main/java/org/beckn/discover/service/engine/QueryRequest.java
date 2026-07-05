@@ -3,6 +3,7 @@ package org.beckn.discover.service.engine;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.util.DiscoveryServiceUtil;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
@@ -54,7 +55,15 @@ public record QueryRequest(
          * their validity window (absent/open-ended/bare-time counts as valid); {@code FALSE} ⇒
          * only catalogs provably outside a parseable window. Independent of the other filters.
          */
-        Boolean validMatch
+        Boolean validMatch,
+        /**
+         * Reference instant that {@code validity} windows are evaluated against — resolved ONCE per
+         * discover request (from the injected {@link java.time.Clock} in {@code DiscoveryService})
+         * and shared by every engine step, so the PostgreSQL and Elasticsearch halves of a chain
+         * route (J+T / J+G+T) compare against the same "now". Only consulted when {@link #validMatch}
+         * is non-null.
+         */
+        Instant now
 ) {
 
     /**
@@ -72,30 +81,40 @@ public record QueryRequest(
         rawSchemaContextUrls = rawSchemaContextUrls != null ? List.copyOf(rawSchemaContextUrls) : List.of();
     }
 
-    /** Backward-compatible 7-arg constructor (rawSchemaContextUrls/networkId/active/valid default to empty/null). */
+    /** Backward-compatible 7-arg constructor (rawSchemaContextUrls/networkId/active/valid default to empty/null; now defaults to system time). */
     public QueryRequest(String transactionId, String messageId, String filters,
                         List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
                         List<String> schemaTypes, List<String> schemaContextUrls) {
         this(transactionId, messageId, filters, spatial, textSearch,
-                schemaTypes, schemaContextUrls, List.of(), null, null, null);
+                schemaTypes, schemaContextUrls, List.of(), null, null, null, Instant.now());
     }
 
-    /** Backward-compatible 8-arg constructor (networkId/active/valid default to null). */
+    /** Backward-compatible 8-arg constructor (networkId/active/valid default to null; now defaults to system time). */
     public QueryRequest(String transactionId, String messageId, String filters,
                         List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
                         List<String> schemaTypes, List<String> schemaContextUrls,
                         List<String> rawSchemaContextUrls) {
         this(transactionId, messageId, filters, spatial, textSearch,
-                schemaTypes, schemaContextUrls, rawSchemaContextUrls, null, null, null);
+                schemaTypes, schemaContextUrls, rawSchemaContextUrls, null, null, null, Instant.now());
     }
 
-    /** Backward-compatible 9-arg constructor (active/valid match default to null — no active/validity filtering). */
+    /** Backward-compatible 9-arg constructor (active/valid match default to null; now defaults to system time). */
     public QueryRequest(String transactionId, String messageId, String filters,
                         List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
                         List<String> schemaTypes, List<String> schemaContextUrls,
                         List<String> rawSchemaContextUrls, String networkId) {
         this(transactionId, messageId, filters, spatial, textSearch,
-                schemaTypes, schemaContextUrls, rawSchemaContextUrls, networkId, null, null);
+                schemaTypes, schemaContextUrls, rawSchemaContextUrls, networkId, null, null, Instant.now());
+    }
+
+    /** Backward-compatible 11-arg constructor (now defaults to system time) — for callers that build with active/valid but no explicit clock. */
+    public QueryRequest(String transactionId, String messageId, String filters,
+                        List<DiscoverRequest.SpatialConstraint> spatial, String textSearch,
+                        List<String> schemaTypes, List<String> schemaContextUrls,
+                        List<String> rawSchemaContextUrls, String networkId,
+                        Boolean activeMatch, Boolean validMatch) {
+        this(transactionId, messageId, filters, spatial, textSearch,
+                schemaTypes, schemaContextUrls, rawSchemaContextUrls, networkId, activeMatch, validMatch, Instant.now());
     }
 
     // ── Factory ─────────────────────────────────────────────────────────────
@@ -120,6 +139,18 @@ public record QueryRequest(
      * @throws NullPointerException if {@code request} or its {@code context} is null
      */
     public static QueryRequest from(DiscoverRequest request, Boolean activeMatch, Boolean validMatch) {
+        return from(request, activeMatch, validMatch, Instant.now());
+    }
+
+    /**
+     * Builds a {@code QueryRequest} carrying the resolved value-match flags and the request's
+     * single reference instant {@code now}. Production callers ({@code DiscoveryService}) resolve
+     * {@code now} once from the injected {@link java.time.Clock} and pass it here so every engine
+     * step shares one "now".
+     *
+     * @throws NullPointerException if {@code request} or its {@code context} is null
+     */
+    public static QueryRequest from(DiscoverRequest request, Boolean activeMatch, Boolean validMatch, Instant now) {
         Objects.requireNonNull(request, "DiscoverRequest must not be null");
         Objects.requireNonNull(request.getContext(), "DiscoverRequest.context must not be null");
 
@@ -140,7 +171,8 @@ public record QueryRequest(
                 schemaContextUrls,
                 request.getContext().getNetworkId(),
                 activeMatch,
-                validMatch
+                validMatch,
+                now
         );
     }
 
