@@ -82,6 +82,7 @@ public final class BecknFields {
     public static final String TRY              = "try";
     public static final String LINEAGE          = "lineage";
     public static final String SUBSCRIBER_ID    = "subscriberId";
+    public static final String SUBSCRIPTION_ID  = "subscriptionId";
 
     // ── Auth / ownership (MDC keys) ──────────────────────────────────────────
     /** MDC key: org-level identity from auth header keyId first segment. */

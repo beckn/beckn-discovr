@@ -24,6 +24,8 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -140,11 +142,13 @@ public class CatalogPullCallbackService {
                 recordPaginationIfPresent("inline", becknMessage);
                 log.info("event={} mode=INLINE catalogsReturned={}",
                         LogEvent.ON_PULL_MODE_SELECTED, inlineCatalogsArray.size());
-                enqueueAndObserve(becknContext, inlineCatalogsArray, "inline");
+                // INLINE: publishDirectives sit at message level alongside message.catalogs.
+                enqueueAndObserve(becknContext, inlineCatalogsArray,
+                        becknMessage.path(BecknFields.PUBLISH_DIRECTIVES), "inline");
                 metrics.recordOnPullProcessed("inline");
             } else if (!downloadManifestNode.isMissingNode() && !downloadManifestNode.isNull()) {
                 recordPaginationIfPresent("download", becknMessage);
-                processDownloadManifest(becknContext, downloadManifestNode);
+                processDownloadManifest(becknContext, becknMessage, downloadManifestNode);
             } else {
                 log.warn("event={} reason=empty-callback", LogEvent.ON_PULL_FAILED);
                 metrics.recordOnPullFailed("empty_callback");
@@ -179,10 +183,12 @@ public class CatalogPullCallbackService {
      * </ul>
      *
      * @param becknContext the callback context node
+     * @param becknMessage the callback message node (carries {@code publishDirectives} + pagination)
      * @param manifest the downloadManifest node
      * @throws Exception if download, checksum verification, or decoding fails
      */
-    private void processDownloadManifest(JsonNode becknContext, JsonNode manifest) throws Exception {
+    private void processDownloadManifest(JsonNode becknContext, JsonNode becknMessage, JsonNode manifest)
+            throws Exception {
         metrics.recordOnPullReceived("download");
         String downloadUrl = manifest.path("url").asText("");
         String fileFormat = manifest.path("format").asText("");
@@ -280,7 +286,11 @@ public class CatalogPullCallbackService {
         if (downloadedCatalogsArray.isArray() && !downloadedCatalogsArray.isEmpty()) {
             log.info("event={} mode=DOWNLOAD catalogsReturned={}",
                     LogEvent.ON_PULL_MODE_SELECTED, downloadedCatalogsArray.size());
-            enqueueAndObserve(becknContext, downloadedCatalogsArray, "download");
+            // DOWNLOAD: publishDirectives are read uniformly from the callback body message (same as
+            // inline) — the CS carries them alongside downloadManifest + pagination. The downloaded GCS
+            // JSON contains ONLY { catalogs }; it is read here for catalogs only.
+            enqueueAndObserve(becknContext, downloadedCatalogsArray,
+                    becknMessage.path(BecknFields.PUBLISH_DIRECTIVES), "download");
             metrics.recordOnPullProcessed("download");
         } else {
             log.warn("event={} reason=no-catalogs-in-download", LogEvent.ON_PULL_FAILED);
@@ -297,6 +307,8 @@ public class CatalogPullCallbackService {
         putIfPresentMdc(MdcField.MESSAGE_ID, becknContext.path(BecknFields.MESSAGE_ID).asText(null));
         putIfPresentMdc(MdcField.TRANSACTION_ID, becknContext.path(BecknFields.TRANSACTION_ID).asText(null));
         putIfPresentMdc(MdcField.NETWORK_ID, becknContext.path(BecknFields.NETWORK_ID).asText(null));
+        // context.subscriptionId is added to the CS callback context; carry it onto DS logs.
+        putIfPresentMdc(MdcField.SUBSCRIPTION_ID, becknContext.path(BecknFields.SUBSCRIPTION_ID).asText(null));
     }
 
     private static void putIfPresentMdc(String key, String value) {
@@ -413,8 +425,25 @@ public class CatalogPullCallbackService {
      * @param catalogNode the single catalog node to ingest
      * @throws IOException if JSON serialization fails
      */
-    /** Builds the per-catalog ingestion record ({@code context} + one-element {@code catalogs[]}). */
-    private String buildSingleCatalogRecord(JsonNode becknContext, JsonNode catalogNode) throws IOException {
+    /**
+     * Builds the per-catalog ingestion record ({@code context} + one-element {@code catalogs[]}).
+     *
+     * <p>Also forwards the ONE matching message-level {@code publishDirectives} entry — the directive
+     * whose {@code catalogId} equals this catalog's {@code id} — so the DS {@code PersistenceStep} can
+     * derive this catalog's item {@code network_id} from its {@code visibleTo}. {@code publishDirectives}
+     * is MESSAGE-level (sits alongside {@code catalogs}, never inside the catalog object). When no
+     * directive matches this catalog, {@code publishDirectives} is omitted entirely so PersistenceStep
+     * falls back to {@code context.networkId} as before — no crash.
+     *
+     * <p>Matches by {@code catalogId} — the same rule {@code PersistenceStep.extractVisibleTo} uses to
+     * read {@code visibleTo}, kept in sync MANUALLY (that method is {@code private} in another class and
+     * cannot be called from here, so this is an independent reimplementation, not code reuse). If
+     * PersistenceStep's matching changes, update this in lockstep.
+     *
+     * @param directivesById message-level directives indexed by {@code catalogId} (may be empty)
+     */
+    private String buildSingleCatalogRecord(JsonNode becknContext, JsonNode catalogNode,
+            Map<String, JsonNode> directivesById) throws IOException {
         ObjectNode newContext = (ObjectNode) becknContext.deepCopy();
 
         ObjectNode newRoot = objectMapper.createObjectNode();
@@ -424,9 +453,44 @@ public class CatalogPullCallbackService {
         ArrayNode singleCatalogArray = objectMapper.createArrayNode();
         singleCatalogArray.add(catalogNode.deepCopy());
         newMessage.set(BecknFields.CATALOGS, singleCatalogArray);
+
+        // Forward ONLY the directive matching this catalog's id (match by "catalogId"). Omit the field
+        // entirely when there is no match, so PersistenceStep falls back to context.networkId.
+        String catalogId = catalogNode.path(BecknFields.ID).asText(null);
+        JsonNode matchingDirective = catalogId == null ? null : directivesById.get(catalogId);
+        if (matchingDirective != null) {
+            ArrayNode singleDirectiveArray = objectMapper.createArrayNode();
+            singleDirectiveArray.add(matchingDirective.deepCopy());
+            newMessage.set(BecknFields.PUBLISH_DIRECTIVES, singleDirectiveArray);
+        }
         newRoot.set(BecknFields.MESSAGE, newMessage);
 
         return objectMapper.writeValueAsString(newRoot);
+    }
+
+    /**
+     * Indexes the message-level {@code publishDirectives} array by {@code catalogId} ONCE so the
+     * per-catalog loop can do O(1) lookups instead of a fresh linear scan per catalog (which was
+     * O(catalogs × directives), quadratic with one directive per catalog).
+     *
+     * <p>Returns an empty map when {@code directivesNode} is missing/null/not-an-array. When duplicate
+     * {@code catalogId}s appear the FIRST entry wins, preserving the previous first-match scan
+     * semantics. Entries with a null/blank {@code catalogId} are skipped (they could never match a
+     * catalog's {@code id}).
+     */
+    private static Map<String, JsonNode> indexDirectivesByCatalogId(JsonNode directivesNode) {
+        if (directivesNode == null || !directivesNode.isArray()) {
+            return Map.of();
+        }
+        Map<String, JsonNode> directivesById = new HashMap<>();
+        for (JsonNode directive : directivesNode) {
+            String catalogId = directive.path(BecknFields.CATALOG_ID).asText(null);
+            if (catalogId != null && !catalogId.isBlank()) {
+                // First-match wins: don't overwrite an already-seen catalogId.
+                directivesById.putIfAbsent(catalogId, directive);
+            }
+        }
+        return directivesById;
     }
 
     /**
@@ -442,9 +506,15 @@ public class CatalogPullCallbackService {
      * enqueue so a single oversized catalog (possible on the download path) can never throw a
      * runtime {@code RecordTooLargeException} at send. The persisted count is decided downstream.</p>
      */
-    private void enqueueAndObserve(JsonNode becknContext, JsonNode catalogArray, String mode) throws IOException {
+    private void enqueueAndObserve(JsonNode becknContext, JsonNode catalogArray, JsonNode directivesNode,
+            String mode) throws IOException {
         int catalogsReturned = catalogArray.size();
         metrics.recordOnPullCatalogsReturned(mode, catalogsReturned);
+
+        // Index the message-level publishDirectives by catalogId ONCE up front so each catalog is an
+        // O(1) lookup below, not a fresh linear scan over the whole directives array (which was
+        // quadratic: O(catalogs × directives)).
+        Map<String, JsonNode> directivesById = indexDirectivesByCatalogId(directivesNode);
 
         long maxRecordBytes = props.catalog().maxPayloadSize();
         int resourcesTotal = 0;
@@ -461,7 +531,7 @@ public class CatalogPullCallbackService {
             try {
                 // Build + size-guard the per-catalog record against the producer's configured cap
                 // BEFORE sending — an oversized single catalog is a clean rejection, not a send-time throw.
-                String record = buildSingleCatalogRecord(becknContext, catalogNode);
+                String record = buildSingleCatalogRecord(becknContext, catalogNode, directivesById);
                 int recordBytes = record.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
                 if (recordBytes > maxRecordBytes) {
                     log.warn("event={} reason=too_large sizeBytes={} limit={}",
