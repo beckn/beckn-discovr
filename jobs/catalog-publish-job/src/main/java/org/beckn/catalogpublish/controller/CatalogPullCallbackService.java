@@ -24,6 +24,8 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -428,16 +430,20 @@ public class CatalogPullCallbackService {
      *
      * <p>Also forwards the ONE matching message-level {@code publishDirectives} entry — the directive
      * whose {@code catalogId} equals this catalog's {@code id} — so the DS {@code PersistenceStep} can
-     * derive this catalog's item {@code network_id} from its {@code visibleTo} (via
-     * {@code extractVisibleTo}, keyed by {@code catalogId}). {@code publishDirectives} is MESSAGE-level
-     * (sits alongside {@code catalogs}, never inside the catalog object). When no directive matches this
-     * catalog, {@code publishDirectives} is omitted entirely so PersistenceStep falls back to
-     * {@code context.networkId} as before — no crash.
+     * derive this catalog's item {@code network_id} from its {@code visibleTo}. {@code publishDirectives}
+     * is MESSAGE-level (sits alongside {@code catalogs}, never inside the catalog object). When no
+     * directive matches this catalog, {@code publishDirectives} is omitted entirely so PersistenceStep
+     * falls back to {@code context.networkId} as before — no crash.
      *
-     * @param directivesNode the source {@code publishDirectives} array (may be missing/non-array)
+     * <p>Matches by {@code catalogId} — the same rule {@code PersistenceStep.extractVisibleTo} uses to
+     * read {@code visibleTo}, kept in sync MANUALLY (that method is {@code private} in another class and
+     * cannot be called from here, so this is an independent reimplementation, not code reuse). If
+     * PersistenceStep's matching changes, update this in lockstep.
+     *
+     * @param directivesById message-level directives indexed by {@code catalogId} (may be empty)
      */
     private String buildSingleCatalogRecord(JsonNode becknContext, JsonNode catalogNode,
-            JsonNode directivesNode) throws IOException {
+            Map<String, JsonNode> directivesById) throws IOException {
         ObjectNode newContext = (ObjectNode) becknContext.deepCopy();
 
         ObjectNode newRoot = objectMapper.createObjectNode();
@@ -451,7 +457,7 @@ public class CatalogPullCallbackService {
         // Forward ONLY the directive matching this catalog's id (match by "catalogId"). Omit the field
         // entirely when there is no match, so PersistenceStep falls back to context.networkId.
         String catalogId = catalogNode.path(BecknFields.ID).asText(null);
-        JsonNode matchingDirective = findMatchingDirective(directivesNode, catalogId);
+        JsonNode matchingDirective = catalogId == null ? null : directivesById.get(catalogId);
         if (matchingDirective != null) {
             ArrayNode singleDirectiveArray = objectMapper.createArrayNode();
             singleDirectiveArray.add(matchingDirective.deepCopy());
@@ -463,20 +469,28 @@ public class CatalogPullCallbackService {
     }
 
     /**
-     * Returns the single {@code publishDirectives} entry whose {@code catalogId} equals {@code catalogId}
-     * (the catalog's {@code id}), or {@code null} when {@code directivesNode} is not an array or no entry
-     * matches. Matches on {@code catalogId} identically to the DS {@code PersistenceStep.extractVisibleTo}.
+     * Indexes the message-level {@code publishDirectives} array by {@code catalogId} ONCE so the
+     * per-catalog loop can do O(1) lookups instead of a fresh linear scan per catalog (which was
+     * O(catalogs × directives), quadratic with one directive per catalog).
+     *
+     * <p>Returns an empty map when {@code directivesNode} is missing/null/not-an-array. When duplicate
+     * {@code catalogId}s appear the FIRST entry wins, preserving the previous first-match scan
+     * semantics. Entries with a null/blank {@code catalogId} are skipped (they could never match a
+     * catalog's {@code id}).
      */
-    private static JsonNode findMatchingDirective(JsonNode directivesNode, String catalogId) {
-        if (catalogId == null || directivesNode == null || !directivesNode.isArray()) {
-            return null;
+    private static Map<String, JsonNode> indexDirectivesByCatalogId(JsonNode directivesNode) {
+        if (directivesNode == null || !directivesNode.isArray()) {
+            return Map.of();
         }
+        Map<String, JsonNode> directivesById = new HashMap<>();
         for (JsonNode directive : directivesNode) {
-            if (catalogId.equals(directive.path(BecknFields.CATALOG_ID).asText(null))) {
-                return directive;
+            String catalogId = directive.path(BecknFields.CATALOG_ID).asText(null);
+            if (catalogId != null && !catalogId.isBlank()) {
+                // First-match wins: don't overwrite an already-seen catalogId.
+                directivesById.putIfAbsent(catalogId, directive);
             }
         }
-        return null;
+        return directivesById;
     }
 
     /**
@@ -497,6 +511,11 @@ public class CatalogPullCallbackService {
         int catalogsReturned = catalogArray.size();
         metrics.recordOnPullCatalogsReturned(mode, catalogsReturned);
 
+        // Index the message-level publishDirectives by catalogId ONCE up front so each catalog is an
+        // O(1) lookup below, not a fresh linear scan over the whole directives array (which was
+        // quadratic: O(catalogs × directives)).
+        Map<String, JsonNode> directivesById = indexDirectivesByCatalogId(directivesNode);
+
         long maxRecordBytes = props.catalog().maxPayloadSize();
         int resourcesTotal = 0;
         int accepted = 0;
@@ -512,7 +531,7 @@ public class CatalogPullCallbackService {
             try {
                 // Build + size-guard the per-catalog record against the producer's configured cap
                 // BEFORE sending — an oversized single catalog is a clean rejection, not a send-time throw.
-                String record = buildSingleCatalogRecord(becknContext, catalogNode, directivesNode);
+                String record = buildSingleCatalogRecord(becknContext, catalogNode, directivesById);
                 int recordBytes = record.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
                 if (recordBytes > maxRecordBytes) {
                     log.warn("event={} reason=too_large sizeBytes={} limit={}",
