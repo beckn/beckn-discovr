@@ -143,6 +143,151 @@ class CatalogPullCallbackServiceObservabilityTest {
     }
 
     @Test
+    void inline_eachPerCatalogRecord_carriesOnlyItsMatchingPublishDirective() throws Exception {
+        CatalogPushService push = Mockito.mock(CatalogPushService.class);
+        CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
+        CatalogPullCallbackService service = newService(push, metrics);
+
+        // 2 catalogs, each with its OWN message-level directive (visibleTo differs per catalog).
+        String payload = """
+                {
+                  "context": {"messageId":"m1","transactionId":"t1","networkId":"net-1","subscriptionId":"sub-1"},
+                  "message": {
+                    "status": "COMPLETED",
+                    "publishDirectives": [
+                      {"catalogId":"cat-1","catalogType":"REGULAR","updateMode":"MERGE","visibleTo":["netA"]},
+                      {"catalogId":"cat-2","catalogType":"REGULAR","updateMode":"MERGE","visibleTo":["netB"]}
+                    ],
+                    "catalogs": [
+                      {"id":"cat-1","resources":[{"id":"r1"}]},
+                      {"id":"cat-2","resources":[{"id":"r2"}]}
+                    ]
+                  }
+                }
+                """;
+
+        service.processPullCallbackAsynchronously(payload);
+
+        ArgumentCaptor<String> sent = ArgumentCaptor.forClass(String.class);
+        verify(push, times(2)).enqueueForProcessing(sent.capture());
+        java.util.List<String> records = sent.getAllValues();
+
+        String cat1Record = records.stream().filter(r -> r.contains("cat-1")).findFirst().orElseThrow();
+        String cat2Record = records.stream().filter(r -> r.contains("cat-2")).findFirst().orElseThrow();
+
+        // cat-1's record carries EXACTLY its directive (visibleTo=[netA]) and never netB, and the
+        // directive is message-level (message.publishDirectives), not inside the catalog object.
+        var cat1Msg = mapper.readTree(cat1Record).path("message");
+        var cat1Directives = cat1Msg.path("publishDirectives");
+        assertThat(cat1Directives.isArray()).isTrue();
+        assertThat(cat1Directives).hasSize(1);
+        assertThat(cat1Directives.get(0).path("catalogId").asText()).isEqualTo("cat-1");
+        assertThat(cat1Directives.get(0).path("visibleTo").get(0).asText()).isEqualTo("netA");
+        assertThat(cat1Record).doesNotContain("netB");
+        // Directive lives at message level, not on the catalog object.
+        assertThat(cat1Msg.path("catalogs").get(0).has("publishDirectives")).isFalse();
+
+        var cat2Directives = mapper.readTree(cat2Record).path("message").path("publishDirectives");
+        assertThat(cat2Directives).hasSize(1);
+        assertThat(cat2Directives.get(0).path("catalogId").asText()).isEqualTo("cat-2");
+        assertThat(cat2Directives.get(0).path("visibleTo").get(0).asText()).isEqualTo("netB");
+        assertThat(cat2Record).doesNotContain("netA");
+    }
+
+    @Test
+    void inline_catalogWithNoMatchingDirective_omitsPublishDirectives_noCrash() throws Exception {
+        CatalogPushService push = Mockito.mock(CatalogPushService.class);
+        CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
+        CatalogPullCallbackService service = newService(push, metrics);
+
+        // Directive only for cat-1; cat-2 has NO matching directive → its record omits publishDirectives
+        // (PersistenceStep falls back to context.networkId), and processing does not crash.
+        String payload = """
+                {
+                  "context": {"messageId":"m1","transactionId":"t1","networkId":"net-1"},
+                  "message": {
+                    "status": "COMPLETED",
+                    "publishDirectives": [
+                      {"catalogId":"cat-1","catalogType":"REGULAR","updateMode":"MERGE","visibleTo":["netA"]}
+                    ],
+                    "catalogs": [
+                      {"id":"cat-1","resources":[{"id":"r1"}]},
+                      {"id":"cat-2","resources":[{"id":"r2"}]}
+                    ]
+                  }
+                }
+                """;
+
+        service.processPullCallbackAsynchronously(payload);
+
+        ArgumentCaptor<String> sent = ArgumentCaptor.forClass(String.class);
+        verify(push, times(2)).enqueueForProcessing(sent.capture());
+        java.util.List<String> records = sent.getAllValues();
+
+        String cat1Record = records.stream().filter(r -> r.contains("cat-1")).findFirst().orElseThrow();
+        String cat2Record = records.stream().filter(r -> r.contains("cat-2")).findFirst().orElseThrow();
+
+        assertThat(mapper.readTree(cat1Record).path("message").path("publishDirectives")).hasSize(1);
+        // No matching directive for cat-2 → field omitted entirely (missing node), no crash.
+        assertThat(mapper.readTree(cat2Record).path("message").has("publishDirectives")).isFalse();
+    }
+
+    @Test
+    void download_perCatalogRecord_carriesDirectiveFromCallbackBody() throws Exception {
+        CatalogPushService push = Mockito.mock(CatalogPushService.class);
+        CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
+
+        // The downloaded GCS JSON contains ONLY { catalogs } (no publishDirectives, no pagination).
+        // Stub the download seam to return that JSON verbatim.
+        String downloadedJson = """
+                {
+                  "catalogs": [
+                    {"id":"dl-1","resources":[{"id":"r1"}]}
+                  ]
+                }
+                """;
+        byte[] body = downloadedJson.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String checksum = java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(body));
+
+        AppProperties props = new AppProperties(null, null, new AppProperties.Catalog(
+                10_000_000L, false,
+                "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml",
+                1, 4, null, null, null, true, null, null, null, null, null, null, null));
+        CatalogPullCallbackService service = Mockito.spy(new CatalogPullCallbackService(
+                push, mapper, metrics, props, new SecureCatalogDownloader(metrics, props)));
+        Mockito.doReturn(body).when(service).downloadCatalogFromUrl(Mockito.anyString());
+
+        // publishDirectives are read uniformly from the callback body message (alongside downloadManifest).
+        String payload = """
+                {
+                  "context": {"messageId":"m1","transactionId":"t1","networkId":"net-1"},
+                  "message": {
+                    "status": "COMPLETED",
+                    "publishDirectives": [
+                      {"catalogId":"dl-1","catalogType":"REGULAR","updateMode":"MERGE","visibleTo":["netD"]}
+                    ],
+                    "downloadManifest": {
+                      "url": "https://storage.googleapis.com/bucket/file.json",
+                      "format": "json",
+                      "checksum": "%s",
+                      "expiresAt": "2099-12-31T23:59:59Z"
+                    }
+                  }
+                }
+                """.formatted(checksum);
+
+        service.processPullCallbackAsynchronously(payload);
+
+        ArgumentCaptor<String> sent = ArgumentCaptor.forClass(String.class);
+        verify(push, times(1)).enqueueForProcessing(sent.capture());
+        var directives = mapper.readTree(sent.getValue()).path("message").path("publishDirectives");
+        assertThat(directives).hasSize(1);
+        assertThat(directives.get(0).path("catalogId").asText()).isEqualTo("dl-1");
+        assertThat(directives.get(0).path("visibleTo").get(0).asText()).isEqualTo("netD");
+    }
+
+    @Test
     void inline_noPagination_doesNotRecordPaginationTotal() {
         CatalogPushService push = Mockito.mock(CatalogPushService.class);
         CatalogPublishMetrics metrics = Mockito.mock(CatalogPublishMetrics.class);
