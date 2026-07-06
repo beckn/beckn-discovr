@@ -6,41 +6,40 @@
 
 ---
 
-## Summary
-
-Clients send filters in standard JSONPath (RFC 9535) instead of the current database's
-private dialect. A **Validator** parses the filter and checks it against a per-database
-**capability table**, then ACKs or NACKs instantly, with no database call. Translation to
-the database's own query language happens later, asynchronously, behind one swappable
-**sub-translator** per database. Unsupported or hostile filters are rejected up front;
-correctness is proven against the official JSONPath compliance suite. Existing filters
-keep working unchanged: the dialect is declared per request, and legacy is the default.
-
----
-
 ## 1. Problem Statement
+
+**The problem:** Today's database has its own path language (SQL:2016), which looks like
+RFC 9535 but isn't. RFC 9535 is the actual JSONPath standard, and clients are forced to
+write the database's dialect instead of RFC 9535.
 
 ### How filtering works today
 
-Clients filter catalog resources by sending a JSONPath-like string in
-`message.intent.filters.expression`. Discovr doesn't understand this string itself. It just
-hands it to the database as-is:
+Clients send a JSONPath-looking string in `message.intent.filters.expression`. Discovr
+does not interpret this string itself; it passes it directly to the database:
 
-- **Validation:** ask the database if it can parse the string. If yes, ACK. If no, NACK.
-- **Execution:** run the same string against the database, unchanged.
+- **Validation:** ask the database if it can parse the string. Yes, ACK. No, NACK.
+- **Execution:** run that same string against the database, unchanged.
 
-So the database decides what's valid, and the database's own path language is the only
-thing that ever runs the filter. Discovr has no independent understanding of the filter
-itself. This causes two problems:
+Whatever the database accepts becomes the effective filter language for clients. No
+other part of the system understands the filter.
 
-1. **Clients must write the database's dialect, not real JSONPath.** Today's database has
-   its own path language (it comes from the SQL standard, not the JSONPath standard),
-   which looks like RFC 9535 but isn't. RFC 9535 is the actual JSONPath standard. A filter written correctly in RFC 9535 gets rejected today, and
-   vice versa (see §3 for examples).
-2. **The system is locked into one database.** Validation and execution both run on the
-   exact same database-specific string. Switching to a different database, or adding a
-   second one, would mean rebuilding filtering from scratch, breaking every existing client
-   filter.
+### Two different standards that look alike
+
+The two look similar at a glance: the same `$`, the same `[...]`, the same `?(...)`
+filter shape. The details differ underneath, in quoting, wildcards, and existence checks
+(see §3 for exact examples). Because Discovr validates only against the database's
+grammar, only that grammar's version of a filter is ever accepted. A filter that is
+perfectly valid RFC 9535 is rejected today simply for not matching the database's rules,
+even though a client has good reason to assume "JSONPath" means the standard itself.
+
+This leads to two problems:
+
+1. **Clients write the database's dialect, not standard JSONPath**, and cannot tell the
+   two apart from the syntax alone.
+2. **A future database change would force every client to migrate.** Every filter a
+   client has already written is a string in today's one dialect. Replacing the database
+   would require every client to rewrite every filter, on a timeline set by Discovr
+   rather than by the client.
 
 ---
 
@@ -89,77 +88,134 @@ the last possible moment, which is what makes the database swappable.
 
 ### Validator
 
-- **What it takes:** the raw filter string the client sent.
-- **What it checks, in order, before the request is even acknowledged:**
-  - Is it valid RFC 9535? A syntax check against the RFC 9535 grammar, which also
-    produces the parsed filter tree used by everything downstream.
-  - Can the current database actually run it? Each node of the tree is looked up in a
-    **capability table**: a plain list, kept per database, of which RFC 9535 features
-    that database supports. The unsupported-features list in §4 is exactly the reject
-    side of this table for the current database.
-- **What it deliberately does not do: talk to the database.** Deciding ACK or NACK is a
-  parse plus a table lookup, nothing more. So a flood of never-seen-before filter strings
-  can't tie up database connections, and validation keeps working even while the database
-  is briefly unavailable.
-- **Why the Validator decides everything up front:** discover requests are ACKed
-  immediately and processed later, asynchronously. Once that async processing starts,
-  there's no way back to send a NACK. So everything that could reject a request has to be
-  decided before the ACK, and a table lookup makes that decision instant.
-- **What it produces:** if both checks pass, the request is acknowledged (ACK) and
-  queued, carrying the client's original filter string untouched. If either check fails,
-  the request is rejected (NACK) with a reason saying which check failed.
-- **What it's built with, and why:** the syntax check uses **ANTLR4**, a widely used
-  parser generator: given the formal RFC 9535 grammar, it generates the parser
-  automatically. Hand-writing one this size is slow and easy to get subtly wrong.
+**What it takes**
+The raw filter string the client sent.
+
+**What it checks, in order, before the request is even acknowledged**
+
+1. **Is it valid RFC 9535?** A syntax check against the RFC 9535 grammar, which also
+   produces the parsed filter tree used by everything downstream.
+2. **Can the current database actually run it?** Each node of the tree is looked up in a
+   **capability table**: a plain list, kept per database, of which RFC 9535 features
+   that database supports. The unsupported-features list in §4 is exactly the reject
+   side of this table for the current database.
+
+**What it deliberately does not do**
+Talk to the database. Deciding ACK or NACK is a parse plus a table lookup, nothing more.
+So a flood of never-seen-before filter strings can't tie up database connections, and
+validation keeps working even while the database is briefly unavailable.
+
+**Why the Validator decides everything up front**
+Discover requests are ACKed immediately and processed later, asynchronously. Once that
+async processing starts, there's no way back to send a NACK. So everything that could
+reject a request has to be decided before the ACK, and a table lookup makes that
+decision instant.
+
+**What it produces**
+If both checks pass, the request is acknowledged (ACK) and queued, carrying the client's
+original filter string untouched. If either check fails, the request is rejected (NACK)
+with a reason saying which check failed.
+
+**What it's built with, and why**
+The syntax check uses **ANTLR4**, a widely used parser generator: given the formal
+RFC 9535 grammar, it generates the parser automatically. Hand-writing one this size is
+slow and easy to get subtly wrong.
+
 ### Translator
 
-- **When it runs:** asynchronously, after the ACK, when the queued request is picked up
-  for processing. By then the filter has already passed both validation checks, so the
-  Translator never sees a filter it can't handle.
-- **What it takes:** the parsed filter tree, and which database the query needs to run
-  on. The filter is parsed again from the queued request using the same grammar; parsing
-  is cheap and always produces the same tree, so the Translator works on exactly what
-  the Validator approved.
-- **What it produces:** that database's own **native query form**: a path-language query
-  string for today's database, a structured query object for, say, a search engine. The
-  contract is "whatever that database natively runs", never "a string", because not every
-  database has a string path language to target.
-- **Example:** a real Discovr filter, matching resources from a specific manufacturer.
-  - Input (RFC 9535): `$.catalogs[*].resources[?(@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == 'Hindustan Unilever Limited')]`
-  - Output (today's target database): `$.catalogs[*].resources[*] ? (@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == "Hindustan Unilever Limited")`
-- **How it decides what to emit:** a small router hands the tree to the right
-  sub-translator, one per database, which emits that database's native query form.
-  Supporting a new database means plugging in one new sub-translator and one new
-  capability table, not rewriting the existing ones.
-- **What it's built with, and why:** no existing library does "read RFC 9535, output a
-  query for another engine"; every library found only evaluates filters in memory. So the
-  sub-translator is hand-built, walking the parsed filter tree and emitting output piece
-  by piece.
-- **A few examples of how the syntax differs:**
+**When it runs**
+Asynchronously, after the ACK, when the queued request is picked up for processing. By
+then the filter has already passed both validation checks, so the Translator never sees
+a filter it can't handle.
 
-  | Feature | RFC 9535 | Today's target database |
-  | :--- | :--- | :--- |
-  | Filter selector | `resources[?(@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == 'Hindustan Unilever Limited')]` | `resources[*] ? (@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == "Hindustan Unilever Limited")` |
-  | String quotes | single or double, e.g. `'Hindustan Unilever Limited'` | double only, e.g. `"Hindustan Unilever Limited"` |
-  | Existence check | `[?(@.resourceAttributes.rating)]` | `exists(@.resourceAttributes.rating)` |
-  | Regex | `match(@.resourceAttributes.name, 'Unilever.*')` | `@.resourceAttributes.name like_regex "Unilever.*"` |
-  | Array index | `[0]`, `[-1]` | `[0]`, `[last]` |
+**What it takes**
+The parsed filter tree, and which database the query needs to run on. The filter is
+parsed again from the queued request using the same grammar; parsing is cheap and always
+produces the same tree, so the Translator works on exactly what the Validator approved.
 
-- **What it can't translate:** nothing it's actually given; filters with unsupported
-  features (full list in §4) were already rejected before the ACK. If it's ever handed
-  something unexpected anyway, it refuses rather than guesses.
+**What it produces**
+That database's own **native query form**: a path-language query string for today's
+database, a structured query object for, say, a search engine. The contract is
+"whatever that database natively runs", never "a string", because not every database has
+a string path language to target.
+
+**Example:** a real Discovr filter, matching resources from a specific manufacturer.
+
+| | Filter |
+| :--- | :--- |
+| Input (RFC 9535) | `$.catalogs[*].resources[?(@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == 'Hindustan Unilever Limited')]` |
+| Output (today's target database) | `$.catalogs[*].resources[*] ? (@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == "Hindustan Unilever Limited")` |
+
+**How it decides what to emit**
+The Translator itself doesn't know how to speak any database's query language. It's a
+router in front of one sub-translator per database: it looks at which database this
+request is configured to run against, then hands the tree to that database's
+sub-translator, which is the piece that actually knows how to emit that database's
+native query form. Supporting a new database later means plugging in one new
+sub-translator and one new capability table for it, without touching the router or any
+existing sub-translator.
+
+**Today, one sub-translator**
+Right now only one database exists, so there's only one sub-translator registered, and
+the router has nothing to choose between. Adding Elasticsearch later doesn't change the
+router: it means registering a second sub-translator (ES tree → ES query object, since
+ES doesn't have a path-string language like today's database) and a second capability
+table for what ES itself can and can't express, which may differ from §4's list.
+
+**What it's built with, and why**
+No existing library does "read RFC 9535, output a query for another engine"; every
+library found only evaluates filters in memory. So the sub-translator is hand-built,
+walking the parsed filter tree and emitting output piece by piece.
+
+**A few examples of how the syntax differs**
+
+| Feature | RFC 9535 | Today's target database |
+| :--- | :--- | :--- |
+| Filter selector | `resources[?(@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == 'Hindustan Unilever Limited')]` | `resources[*] ? (@.resourceAttributes.packagedGoodsDeclaration.manufacturerOrPacker.name == "Hindustan Unilever Limited")` |
+| String quotes | single or double, e.g. `'Hindustan Unilever Limited'` | double only, e.g. `"Hindustan Unilever Limited"` |
+| Existence check | `[?(@.resourceAttributes.rating)]` | `exists(@.resourceAttributes.rating)` |
+| Regex | `match(@.resourceAttributes.name, 'Unilever.*')` | `@.resourceAttributes.name like_regex "Unilever.*"` |
+| Array index | `[0]`, `[-1]` | `[0]`, `[last]` |
+
+**How the walk actually works**
+The sub-translator walks the parsed filter tree (§3's tree diagram) one node at a time,
+and for each node type it has one fixed rule for what that node becomes in the target
+database's syntax. No interpretation, just a lookup per node, applied recursively until
+the whole tree has been visited. For the manufacturer filter:
+
+| Tree node | RFC 9535 piece | Rule applied | Output piece |
+| :--- | :--- | :--- | :--- |
+| Path step | `catalogs[*]`, `resources[*]` | Array steps are written the same way in both | `$.catalogs[*].resources[*]` |
+| Comparison | the `EQUALS` condition | RFC's `[?( ... )]` becomes SQL:2016's `? ( ... )` | `? (...)` |
+| Path reference | `@.resourceAttributes...name` | Copies through unchanged | `@.resourceAttributes...name` |
+| String literal | `'Hindustan Unilever Limited'` | Single quotes become double quotes | `"Hindustan Unilever Limited"` |
+
+Stitched together in tree order, these four pieces are exactly the output shown above.
+If a node's type has no rule at all (the §4 list), the walk stops right there and
+rejects the filter instead of guessing, which is also how the Validator can decide
+ACK or NACK by doing this same walk once, with no database involved.
+
+**What it can't translate**
+Nothing it's actually given; filters with unsupported features (full list in §4) were
+already rejected before the ACK. If it's ever handed something unexpected anyway, it
+refuses rather than guesses.
 
 ### Executor
 
-- **What it takes:** the translated query from the Translator.
-- **What it does:** sends the query to the database and runs it, returning the matching
-  resources.
-- **How it connects:** the translated query is passed as a **bind parameter**, never
-  pasted into the query text, so the database treats it as a value, never as something to
-  execute. That keeps a fully client-supplied filter safe to run.
-- **Why checking and running can't drift apart:** the same grammar and the same
-  capability table drive both. The same filter always produces the same tree, the same
-  verdict, and the same translated query.
+**What it takes**
+The translated query from the Translator.
+
+**What it does**
+Sends the query to the database and runs it, returning the matching resources.
+
+**How it connects**
+The translated query is passed as a **bind parameter**, never pasted into the query
+text, so the database treats it as a value, never as something to execute. That keeps a
+fully client-supplied filter safe to run.
+
+**Why checking and running can't drift apart**
+The same grammar and the same capability table drive both. The same filter always
+produces the same tree, the same verdict, and the same translated query.
 
 ---
 
