@@ -35,6 +35,9 @@ public record AppProperties(
 
         public record Messaging(
                         @NotBlank String brokerServers,
+                        // Producer max.request.size (bytes). 10 MiB — uniform Kafka pipeline
+                        // ceiling; DLT/event records re-carry the assembled catalog.
+                        @Positive int producerMaxRequestSize,
                         @Valid Consumer consumer,
                         @Valid Topics topics) {
         }
@@ -44,7 +47,11 @@ public record AppProperties(
                         int concurrency,
                         int maxPollRecords,
                         int sessionTimeoutMs,
-                        int maxPollIntervalMs) {
+                        int maxPollIntervalMs,
+                        // 10 MiB per-partition fetch — the ingestion topic carries the fully
+                        // assembled catalog from Catalg; Kafka's 1 MiB default would stall it.
+                        @Positive int maxPartitionFetchBytes,
+                        @Positive int fetchMaxBytes) {
         }
 
         public record Topics(

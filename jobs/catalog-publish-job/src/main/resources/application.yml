@@ -13,12 +13,18 @@ app:
 
   messaging:
     broker-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    # 10 MiB producer request ceiling — uniform Kafka pipeline limit (matches broker).
+    producer-max-request-size: ${KAFKA_MAX_REQUEST_SIZE:10485760}
     consumer:
       group-id: catalog-publish-group
       concurrency: 3
       max-poll-records: 10
       session-timeout-ms: 30000
       max-poll-interval-ms: 300000
+      # 10 MiB per-partition fetch — ingestion topic carries the assembled catalog;
+      # fetch-max-bytes stays at Kafka's 50 MiB default for multi-partition polls.
+      max-partition-fetch-bytes: ${KAFKA_MAX_PARTITION_FETCH_BYTES:10485760}
+      fetch-max-bytes: ${KAFKA_FETCH_MAX_BYTES:52428800}
     topics:
       ingestion-requests: discovr.publish.in.requests
       catalog-events: discovr.publish.out.events
@@ -26,7 +32,10 @@ app:
       failed: discovr.publish.dlt.requests
 
   catalog:
-    max-payload-size: 5242880
+    # 10 MiB — Discovr ingests the fully assembled catalog from Catalg's distribution/push
+    # (Catalg's API cap is 5 MiB on the raw publish; assembly + framing can reach the 10 MiB
+    # Kafka ceiling). Must be >= that ceiling or valid assembled catalogs are rejected.
+    max-payload-size: ${CATALOG_MAX_PAYLOAD_SIZE:10485760}
     validation-enabled: true
     schema-url: ${BECKN_PROTOCOL_API_SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml}
     parallel-catalog-threshold: 3
