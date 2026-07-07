@@ -88,13 +88,20 @@ public class CatalogPushController {
                     nackBody(messageId, ErrorCodes.CTX_MISSING_FIELD, ErrorMessages.SCH_MISSING_CONTEXT));
         }
 
-        log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
-        pushService.enqueueForProcessing(rawBody);
+        // Put transactionId/messageId onto MDC so the push.received milestone is traceable by them;
+        // cleared in finally so the IDs do not leak across pooled request threads.
+        try {
+            correlationContext.populateEntryIds(root.path(BecknFields.CONTEXT));
+            log.info("event={} sizeBytes={}", LogEvent.PUSH_RECEIVED, rawBytes.length);
+            pushService.enqueueForProcessing(rawBody);
 
-        // 200 Ack: the request is accepted for async processing and a catalog/on_publish
-        // callback follows. Beckn maps 202 to AckNoCallback (which requires an error and
-        // signals that NO callback will follow), so 200 Ack is the correct code here.
-        return ResponseEntity.ok(ackBody(messageId));
+            // 200 Ack: the request is accepted for async processing and a catalog/on_publish
+            // callback follows. Beckn maps 202 to AckNoCallback (which requires an error and
+            // signals that NO callback will follow), so 200 Ack is the correct code here.
+            return ResponseEntity.ok(ackBody(messageId));
+        } finally {
+            correlationContext.clear();
+        }
     }
 
     /**

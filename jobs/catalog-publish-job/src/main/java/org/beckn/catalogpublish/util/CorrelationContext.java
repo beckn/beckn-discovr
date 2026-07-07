@@ -1,5 +1,6 @@
 package org.beckn.catalogpublish.util;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.beckn.catalogpublish.dto.CatalogContext;
 import org.beckn.catalogpublish.logging.MdcField;
 import org.slf4j.MDC;
@@ -96,6 +97,30 @@ public class CorrelationContext {
     public void setTagsFromHttp(String tagsHeader) {
         if (tagsHeader != null && !tagsHeader.isBlank()) {
             MDC.put(MdcField.TAGS, tagsHeader);
+        }
+    }
+
+    /**
+     * Populates MDC with {@code transactionId} and {@code messageId} from a raw Beckn
+     * {@code context} node, for synchronous HTTP entry points (e.g. {@code /catalog/push})
+     * that log a milestone before the async publish pipeline runs. Only these two correlation
+     * IDs are set — {@code networkId}/{@code catalogId} are populated later by the publish
+     * consumer via {@link #populate(CatalogContext, String)}. No-op for absent/blank values.
+     *
+     * <p>Callers MUST {@link #clear()} in a finally so IDs do not leak across pooled request
+     * threads.
+     */
+    public void populateEntryIds(JsonNode contextNode) {
+        if (contextNode == null || !contextNode.isObject()) {
+            return;
+        }
+        String txnId = contextNode.path("transactionId").asText(null);
+        String msgId = contextNode.path("messageId").asText(null);
+        if (txnId != null && !txnId.isBlank()) {
+            MDC.put(MdcField.TRANSACTION_ID, txnId);
+        }
+        if (msgId != null && !msgId.isBlank()) {
+            MDC.put(MdcField.MESSAGE_ID, msgId);
         }
     }
 
