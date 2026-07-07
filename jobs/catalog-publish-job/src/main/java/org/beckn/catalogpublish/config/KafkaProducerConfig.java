@@ -25,6 +25,10 @@ public class KafkaProducerConfig {
         map.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         map.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 
+        // 10 MiB request ceiling — uniform Kafka pipeline limit; DLT/event records
+        // re-carry the assembled catalog, which can approach the broker ceiling.
+        map.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, props.messaging().producerMaxRequestSize());
+
         // Idempotent delivery: exactly-once within a single producer session.
         // Requires acks=all; retries > 0; max.in.flight <= 5 (all set below).
         map.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);

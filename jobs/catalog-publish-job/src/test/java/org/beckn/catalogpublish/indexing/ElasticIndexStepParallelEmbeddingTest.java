@@ -193,11 +193,11 @@ class ElasticIndexStepParallelEmbeddingTest {
                 "test", "test",
                 new org.beckn.catalogpublish.config.AppProperties.Hikari(5, 1, 30000L, 600000L, 1800000L));
         var consumer = new org.beckn.catalogpublish.config.AppProperties.Consumer(
-                "test-group", 1, 100, 30000, 300000);
+                "test-group", 1, 100, 30000, 300000, 10485760, 52428800);
         var topics = new org.beckn.catalogpublish.config.AppProperties.Topics(
                 "in", "events", "out", "failed");
         var messaging = new org.beckn.catalogpublish.config.AppProperties.Messaging(
-                "localhost:9092", consumer, topics);
+                "localhost:9092", 10485760, consumer, topics);
         return new org.beckn.catalogpublish.config.AppProperties(datasource, messaging, catalog);
     }
 }
