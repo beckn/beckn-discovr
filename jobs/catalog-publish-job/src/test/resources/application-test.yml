@@ -13,7 +13,6 @@ app:
 
   messaging:
     broker-servers: localhost:9092
-    producer-max-request-size: 10485760
     consumer:
       group-id: catalog-publish-test
       concurrency: 1

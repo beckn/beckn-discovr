@@ -1,7 +1,7 @@
 ---
 name: discovr-reliability-chaos
 description: Phase-2 chaos reliability agent for the Discovr stack on a dedicated GKE staging cluster. Injects faults (pod kills, ES node loss, ES cluster RED, PG failover, broker loss, external API blackhole, rolling restarts) under JMeter background load, observes recovery, asserts SLOs, and renders a top-level reliability scorecard plus a per-scenario detail report. Each chaos action requires explicit per-action user confirmation. Triggers on "run chaos", "run scenario DNN", "Phase 2", "chaos scenario".
-model: claude-opus-4-6
+model: claude-opus-4-8
 tools:
   - Read
   - Glob

@@ -13,8 +13,6 @@ app:
 
   messaging:
     broker-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    # 10 MiB producer request ceiling — uniform Kafka pipeline limit (matches broker).
-    producer-max-request-size: ${KAFKA_MAX_REQUEST_SIZE:10485760}
     consumer:
       group-id: catalog-publish-group
       concurrency: 3
@@ -32,11 +30,44 @@ app:
       failed: discovr.publish.dlt.requests
 
   catalog:
-    # 10 MiB — Discovr ingests the fully assembled catalog from Catalg's distribution/push
-    # (Catalg's API cap is 5 MiB on the raw publish; assembly + framing can reach the 10 MiB
-    # Kafka ceiling). Must be >= that ceiling or valid assembled catalogs are rejected.
+    # End-to-end size budget (keep this ordering):
+    #   Catalg inline-threshold (prod 1MB) <= Discovr max-payload-size (10MB) <= Kafka message.max.bytes (10MB)
+    # Catalg now runs a 10 MiB uniform Kafka ceiling (its API publish cap stays 5 MiB); a fully
+    # assembled catalog it distributes/pushes can reach 10 MiB, so Discovr must accept that or valid
+    # catalogs are rejected. max-payload-size MUST stay >= the Catalg inline threshold (1MB).
+    # With the on_pull per-catalog enqueue (PR #393 C2), each ingestion Kafka record carries exactly ONE
+    # catalog, so a single record stays under the broker max — the whole array is never one giant record.
+    # This value ALSO drives the Kafka producer max.request.size (KafkaProducerConfig) and the per-catalog
+    # on_pull size guard, so both use one config (not the 1 MiB Kafka client default). Keep <= broker
+    # message.max.bytes (now 10 MiB). A single catalog exceeding this is cleanly rejected (never a send throw).
     max-payload-size: ${CATALOG_MAX_PAYLOAD_SIZE:10485760}
     validation-enabled: true
+    # SSRF guard on the on_pull download path. Secure-by-default (true). Set to false ONLY for
+    # local/dev to allow downloads from localhost/private hosts (e.g. fake-gcs).
+    pull-ssrf-check-enabled: true
+    # Hard caps on the on_pull download path (gzip-bomb / OOM guard). The download is streamed and
+    # aborted the instant it exceeds max-download-bytes; decompression is aborted the instant the
+    # gunzipped output exceeds max-decompressed-bytes. Absent => secure defaults (50 MiB / 200 MiB).
+    pull-max-download-bytes: ${APP_CATALOG_PULL_MAX_DOWNLOAD_BYTES:52428800}
+    pull-max-decompressed-bytes: ${APP_CATALOG_PULL_MAX_DECOMPRESSED_BYTES:209715200}
+    # Bounded retry for TRANSIENT on_pull download failures (GCS 5xx / network / timeout) — the CS
+    # is fire-and-forget after our 200 Ack, so a transient blip would otherwise lose the pull result.
+    pull-download-max-attempts: ${APP_CATALOG_PULL_DOWNLOAD_MAX_ATTEMPTS:3}
+    pull-download-retry-backoff-ms: ${APP_CATALOG_PULL_DOWNLOAD_RETRY_BACKOFF_MS:1000}
+    # Positive DNS cache TTL (seconds) set at startup by DnsCacheHardeningConfig. Closes the
+    # DNS-rebinding TOCTOU on the on_pull download: the SSRF-validated positive resolution is cached
+    # for this window, so HttpClient's fetch-time re-resolution reuses the SAME validated IPs even if
+    # a hostile DNS server returns TTL=0 and flips to a private IP after validation.
+    pull-dns-cache-ttl-seconds: ${APP_CATALOG_PULL_DNS_CACHE_TTL_SECONDS:10}
+    # on_pull download HttpClient timeouts. connect = TCP handshake budget; read = per-request
+    # response budget. Absent => secure defaults (10s / 30s).
+    pull-connect-timeout-ms: ${APP_CATALOG_PULL_CONNECT_TIMEOUT_MS:10000}
+    pull-read-timeout-ms: ${APP_CATALOG_PULL_READ_TIMEOUT_MS:30000}
+    # Dedicated executor for on_pull download/ingest — isolated from the publish pool so blocking
+    # downloads never starve the catalog-publish pipeline. Sized for I/O (not CPU).
+    pull-executor-core-pool-size: ${APP_CATALOG_PULL_EXECUTOR_CORE_POOL_SIZE:4}
+    pull-executor-max-pool-size: ${APP_CATALOG_PULL_EXECUTOR_MAX_POOL_SIZE:8}
+    pull-executor-queue-capacity: ${APP_CATALOG_PULL_EXECUTOR_QUEUE_CAPACITY:100}
     schema-url: ${BECKN_PROTOCOL_API_SCHEMA_URL:https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml}
     parallel-catalog-threshold: 3
     # Thread pool size for parallel catalog processing within a single message.

@@ -25,9 +25,12 @@ public class KafkaProducerConfig {
         map.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         map.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 
-        // 10 MiB request ceiling — uniform Kafka pipeline limit; DLT/event records
-        // re-carry the assembled catalog, which can approach the broker ceiling.
-        map.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, props.messaging().producerMaxRequestSize());
+        // Max single-record size, driven by config (app.catalog.max-payload-size) — NOT the Kafka
+        // 1 MiB client default, which would reject any per-catalog on_pull record (or push body)
+        // between 1 MiB and the 5 MB payload budget with RecordTooLargeException. MAX_REQUEST_SIZE
+        // is an INT config: pass a primitive int (a Long throws ConfigException at producer creation).
+        // Shared producer → applies to push + on_pull + response/failure publishers alike.
+        map.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, Math.toIntExact(props.catalog().maxPayloadSize()));
 
         // Idempotent delivery: exactly-once within a single producer session.
         // Requires acks=all; retries > 0; max.in.flight <= 5 (all set below).

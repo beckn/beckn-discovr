@@ -60,6 +60,12 @@ discovery:
   latency-tracking-enabled: ${DISCOVERY_LATENCY_TRACKING_ENABLED:true}
   filter:
     discard-catalogs-without-offers: ${DISCOVERY_FILTER_DISCARD_CATALOGS_WITHOUT_OFFERS:true}
+    # Value-match defaults for the ?active / ?validity query params when they are omitted.
+    # true  → default to returning only active / currently-valid catalogs
+    # false → that dimension is not filtered by default
+    # A request always overrides per-call via ?active=true|false and ?validity=true|false.
+    active-catalog: ${DISCOVERY_FILTER_ACTIVE_CATALOG:true}
+    valid-catalogs: ${DISCOVERY_FILTER_VALID_CATALOGS:true}
   kafka:
     request-topic: ${KAFKA_REQUEST_TOPIC:discovr.discover.in.requests}
     response-topic: ${KAFKA_RESPONSE_TOPIC:discovr.discover.out.responses}

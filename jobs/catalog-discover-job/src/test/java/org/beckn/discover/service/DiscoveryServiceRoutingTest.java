@@ -72,7 +72,8 @@ class DiscoveryServiceRoutingTest {
                 responseProcessor, providerOfferEnricher, metrics,
                 properties, queryExecutor,
                 withEs ? Optional.of(esQueryEngine) : Optional.empty(),
-                pgQueryEngine);
+                pgQueryEngine,
+                java.time.Clock.systemUTC());
     }
 
     @BeforeEach

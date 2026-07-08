@@ -149,6 +149,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                             geoQueries.forEach(kb::filter);
                             schemaFilters.forEach(kb::filter);
                             EsNetworkFilterBuilder.build(request).ifPresent(kb::filter);
+                            EsActiveValidityFilterBuilder.build(request, request.now()).ifPresent(kb::filter);
                             return kb;
                         }), Map.class);
 
@@ -238,6 +239,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                             finalGeoFilters.forEach(bq::filter);
                             finalSchemaFilters.forEach(bq::filter);
                             EsNetworkFilterBuilder.build(request).ifPresent(bq::filter);
+                            EsActiveValidityFilterBuilder.build(request, request.now()).ifPresent(bq::filter);
                             // text clauses contribute to score (mirrors Path D)
                             if (textMustQuery != null)   bq.must(textMustQuery);
                             if (textShouldQuery != null) bq.should(textShouldQuery);
@@ -381,6 +383,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                                 finalGeoFilters.forEach(kb::filter);
                                 schemaFilters.forEach(kb::filter);
                                 EsNetworkFilterBuilder.build(request).ifPresent(kb::filter);
+                                EsActiveValidityFilterBuilder.build(request, request.now()).ifPresent(kb::filter);
                                 return kb;
                             });
                     // Apply the score floor only when set (>0), mirroring the BM25 branch.
@@ -450,6 +453,7 @@ public class ElasticsearchQueryEngine implements QueryEngine {
                             finalGeoFilters.forEach(bq::filter);
                             schemaFilters.forEach(bq::filter);
                             EsNetworkFilterBuilder.build(request).ifPresent(bq::filter);
+                            EsActiveValidityFilterBuilder.build(request, request.now()).ifPresent(bq::filter);
                             if (textMustQuery != null)   bq.must(textMustQuery);
                             if (textShouldQuery != null) bq.should(textShouldQuery);
                             return bq;

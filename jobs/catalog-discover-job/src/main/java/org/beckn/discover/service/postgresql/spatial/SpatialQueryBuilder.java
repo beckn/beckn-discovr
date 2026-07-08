@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -105,11 +106,23 @@ public class SpatialQueryBuilder {
         return build(constraints, rawSchemaContextUrls, limit, null);
     }
 
+    /** Network-scoped overload without active/validity filtering (delegates with both matches null). */
     public Optional<QuerySpec> build(
             List<DiscoverRequest.SpatialConstraint> constraints,
             List<String> rawSchemaContextUrls,
             int limit,
             String networkId) {
+        return build(constraints, rawSchemaContextUrls, limit, networkId, null, null, null);
+    }
+
+    public Optional<QuerySpec> build(
+            List<DiscoverRequest.SpatialConstraint> constraints,
+            List<String> rawSchemaContextUrls,
+            int limit,
+            String networkId,
+            Boolean activeMatch,
+            Boolean validMatch,
+            Instant now) {
 
         if (constraints == null || constraints.isEmpty()) {
             log.debug("event={} reason=no-constraints", LogEvent.SPATIAL_BUILD_SKIP);
@@ -124,7 +137,8 @@ public class SpatialQueryBuilder {
             return Optional.empty();
         }
 
-        template.schemaFiltersPaired(rawSchemaContextUrls).networkFilter(networkId);
+        template.schemaFiltersPaired(rawSchemaContextUrls).networkFilter(networkId)
+                .activeFilter(activeMatch).validityFilter(validMatch, now);
         QuerySpec spec = template.build(limit);
         log.debug("event={} added={} params={}", LogEvent.SPATIAL_BUILD_DONE, added, spec.parameters().size());
         return Optional.of(spec);
@@ -155,12 +169,25 @@ public class SpatialQueryBuilder {
         return buildCombined(constraints, filterExpression, rawSchemaContextUrls, limit, null);
     }
 
+    /** Network-scoped overload without active/validity filtering (delegates with both matches null). */
     public Optional<QuerySpec> buildCombined(
             List<DiscoverRequest.SpatialConstraint> constraints,
             String filterExpression,
             List<String> rawSchemaContextUrls,
             int limit,
             String networkId) {
+        return buildCombined(constraints, filterExpression, rawSchemaContextUrls, limit, networkId, null, null, null);
+    }
+
+    public Optional<QuerySpec> buildCombined(
+            List<DiscoverRequest.SpatialConstraint> constraints,
+            String filterExpression,
+            List<String> rawSchemaContextUrls,
+            int limit,
+            String networkId,
+            Boolean activeMatch,
+            Boolean validMatch,
+            Instant now) {
 
         if (constraints == null || constraints.isEmpty()) {
             log.debug("event={} reason=no-constraints", LogEvent.SPATIAL_COMBINED_SKIP);
@@ -178,7 +205,8 @@ public class SpatialQueryBuilder {
             return Optional.empty();
         }
 
-        template.schemaFiltersPaired(rawSchemaContextUrls).networkFilter(networkId);
+        template.schemaFiltersPaired(rawSchemaContextUrls).networkFilter(networkId)
+                .activeFilter(activeMatch).validityFilter(validMatch, now);
         QuerySpec spec = template.build(limit);
         log.debug("event={} added={} params={}", LogEvent.SPATIAL_COMBINED_BUILT, added, spec.parameters().size());
         return Optional.of(spec);
@@ -205,6 +233,7 @@ public class SpatialQueryBuilder {
         return buildCombinedWithAllowlist(constraints, filterExpression, rawSchemaContextUrls, limit, idAllowlist, null);
     }
 
+    /** Network-scoped allowlist overload without active/validity filtering (delegates with both matches null). */
     public Optional<QuerySpec> buildCombinedWithAllowlist(
             List<DiscoverRequest.SpatialConstraint> constraints,
             String filterExpression,
@@ -212,6 +241,20 @@ public class SpatialQueryBuilder {
             int limit,
             Collection<String> idAllowlist,
             String networkId) {
+        return buildCombinedWithAllowlist(constraints, filterExpression, rawSchemaContextUrls,
+                limit, idAllowlist, networkId, null, null, null);
+    }
+
+    public Optional<QuerySpec> buildCombinedWithAllowlist(
+            List<DiscoverRequest.SpatialConstraint> constraints,
+            String filterExpression,
+            List<String> rawSchemaContextUrls,
+            int limit,
+            Collection<String> idAllowlist,
+            String networkId,
+            Boolean activeMatch,
+            Boolean validMatch,
+            Instant now) {
 
         if (constraints == null || constraints.isEmpty()) {
             log.debug("event={} reason=no-constraints", LogEvent.SPATIAL_COMBINED_SKIP);
@@ -228,6 +271,7 @@ public class SpatialQueryBuilder {
 
         template.schemaFiltersPaired(rawSchemaContextUrls)
                 .networkFilter(networkId)
+                .activeFilter(activeMatch).validityFilter(validMatch, now)
                 .idAllowlist(idAllowlist);
         QuerySpec spec = template.build(limit);
         log.debug("event={} added={} allowlistSize={} params={}",
