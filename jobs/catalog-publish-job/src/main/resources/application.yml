@@ -19,6 +19,10 @@ app:
       max-poll-records: 10
       session-timeout-ms: 30000
       max-poll-interval-ms: 300000
+      # 10 MiB per-partition fetch — ingestion topic carries the assembled catalog;
+      # fetch-max-bytes stays at Kafka's 50 MiB default for multi-partition polls.
+      max-partition-fetch-bytes: ${KAFKA_MAX_PARTITION_FETCH_BYTES:10485760}
+      fetch-max-bytes: ${KAFKA_FETCH_MAX_BYTES:52428800}
     topics:
       ingestion-requests: discovr.publish.in.requests
       catalog-events: discovr.publish.out.events
@@ -27,15 +31,16 @@ app:
 
   catalog:
     # End-to-end size budget (keep this ordering):
-    #   Catalg inline-threshold (prod 1MB) <= Discovr max-payload-size (5MB) <= Kafka message.max.bytes (5MB)
-    # The Catalg CS inlines catalogs up to ~1MB and only switches to a downloadManifest above that,
-    # so max-payload-size MUST stay >= the 1MB inline threshold or valid inline callbacks are rejected.
+    #   Catalg inline-threshold (prod 1MB) <= Discovr max-payload-size (10MB) <= Kafka message.max.bytes (10MB)
+    # Catalg now runs a 10 MiB uniform Kafka ceiling (its API publish cap stays 5 MiB); a fully
+    # assembled catalog it distributes/pushes can reach 10 MiB, so Discovr must accept that or valid
+    # catalogs are rejected. max-payload-size MUST stay >= the Catalg inline threshold (1MB).
     # With the on_pull per-catalog enqueue (PR #393 C2), each ingestion Kafka record carries exactly ONE
-    # catalog, so a single record stays well under Kafka's max — the whole array is never one giant record.
+    # catalog, so a single record stays under the broker max — the whole array is never one giant record.
     # This value ALSO drives the Kafka producer max.request.size (KafkaProducerConfig) and the per-catalog
     # on_pull size guard, so both use one config (not the 1 MiB Kafka client default). Keep <= broker
-    # message.max.bytes. A single on_pull catalog exceeding this is cleanly rejected (never a send throw).
-    max-payload-size: 5242880
+    # message.max.bytes (now 10 MiB). A single catalog exceeding this is cleanly rejected (never a send throw).
+    max-payload-size: ${CATALOG_MAX_PAYLOAD_SIZE:10485760}
     validation-enabled: true
     # SSRF guard on the on_pull download path. Secure-by-default (true). Set to false ONLY for
     # local/dev to allow downloads from localhost/private hosts (e.g. fake-gcs).

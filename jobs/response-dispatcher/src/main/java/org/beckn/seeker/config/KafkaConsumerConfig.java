@@ -28,14 +28,20 @@ public class KafkaConsumerConfig {
     private final String bootstrapServers;
     private final String groupId;
     private final int listenerConcurrency;
+    private final int maxPartitionFetchBytes;
+    private final int fetchMaxBytes;
 
     public KafkaConsumerConfig(
             @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
             @Value("${spring.kafka.consumer.group-id}") String groupId,
-            @Value("${spring.kafka.listener.concurrency:1}") int listenerConcurrency) {
+            @Value("${spring.kafka.listener.concurrency:1}") int listenerConcurrency,
+            @Value("${spring.kafka.consumer.properties.max.partition.fetch.bytes:10485760}") int maxPartitionFetchBytes,
+            @Value("${spring.kafka.consumer.properties.fetch.max.bytes:52428800}") int fetchMaxBytes) {
         this.bootstrapServers = bootstrapServers;
         this.groupId = groupId;
         this.listenerConcurrency = listenerConcurrency;
+        this.maxPartitionFetchBytes = maxPartitionFetchBytes;
+        this.fetchMaxBytes = fetchMaxBytes;
     }
 
     @Bean
@@ -46,6 +52,9 @@ public class KafkaConsumerConfig {
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        // 10 MiB fetch ceiling — on_discover responses can carry multiple catalogs.
+        props.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, maxPartitionFetchBytes);
+        props.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, fetchMaxBytes);
         return new DefaultKafkaConsumerFactory<>(props);
     }
 

@@ -35,6 +35,9 @@ public class KafkaConsumerConfig {
         map.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, m.consumer().maxPollRecords());
         map.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, m.consumer().sessionTimeoutMs());
         map.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, m.consumer().maxPollIntervalMs());
+        // 10 MiB fetch ceiling — the ingestion topic carries Catalg's fully assembled catalog.
+        map.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, m.consumer().maxPartitionFetchBytes());
+        map.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, m.consumer().fetchMaxBytes());
         return new DefaultKafkaConsumerFactory<>(map);
     }
 

@@ -19,6 +19,8 @@ app:
       max-poll-records: 5
       session-timeout-ms: 10000
       max-poll-interval-ms: 60000
+      max-partition-fetch-bytes: 10485760
+      fetch-max-bytes: 52428800
     topics:
       ingestion-requests: catalog.v2.upload.requests
       catalog-events: catalog.v2.catalog.events
