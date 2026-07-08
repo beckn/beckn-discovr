@@ -326,6 +326,55 @@ class DiscoveryControllerTest {
                 .andExpect(jsonPath("$.error.message").doesNotExist());
     }
 
+    /**
+     * Legacy mode, malformed-JSON NACK path ({@code handleMalformedJson}). This exercises a
+     * different exception site than the auth-failure tests above (which go through
+     * {@code buildErrorResponse}), and it is the only NACK path where {@code messageId} is
+     * genuinely unrecoverable — the body never parses, so {@code context.messageId} is never
+     * captured. Asserts the flat envelope AND that {@code messageId} is dropped, never fabricated.
+     */
+    @Test
+    void postDiscover_flagTrue_malformedJson_usesLegacyFlatShape_withoutMessageId() throws Exception {
+        MockMvc legacyMvc = buildMockMvc(true);
+
+        legacyMvc.perform(post(DISCOVER_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ this is not valid json "))
+                .andExpect(status().isBadRequest())
+                // legacy flat: root-level status + error{errorCode,errorMessage}
+                .andExpect(jsonPath("$.status").value("NACK"))
+                .andExpect(jsonPath("$.error.errorCode").value("SCH_INVALID_JSON"))
+                .andExpect(jsonPath("$.error.errorMessage").isNotEmpty())
+                // unparseable body → messageId unrecoverable → dropped (not fabricated)
+                .andExpect(jsonPath("$.messageId").doesNotExist())
+                .andExpect(jsonPath("$.message").doesNotExist())
+                // v2.0 field names MUST be absent
+                .andExpect(jsonPath("$.error.code").doesNotExist())
+                .andExpect(jsonPath("$.error.message").doesNotExist());
+    }
+
+    /**
+     * Default mode, same malformed-JSON path — the v2.0 nested counterpart. Confirms the shared
+     * factory keeps the nested envelope here too, and that {@code messageId} is omitted (not null,
+     * not fabricated) when the body is unparseable.
+     */
+    @Test
+    void postDiscover_flagFalse_malformedJson_usesV20NestedShape_withoutMessageId() throws Exception {
+        // Default mockMvc — legacyAckNackSupport=false
+        mockMvc.perform(post(DISCOVER_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ this is not valid json "))
+                .andExpect(status().isBadRequest())
+                // v2.0 nested envelope
+                .andExpect(jsonPath("$.message.status").value("NACK"))
+                .andExpect(jsonPath("$.message.error.code").value("SCH_INVALID_JSON"))
+                .andExpect(jsonPath("$.message.error.message").isNotEmpty())
+                .andExpect(jsonPath("$.message.messageId").doesNotExist())
+                // legacy flat fields MUST be absent
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.error").doesNotExist());
+    }
+
     private static String buildPayload(String messageId, String transactionId) {
         return String.format("""
                 {
