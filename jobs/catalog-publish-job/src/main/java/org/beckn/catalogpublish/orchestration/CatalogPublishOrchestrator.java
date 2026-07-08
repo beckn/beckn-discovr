@@ -73,9 +73,25 @@ public class CatalogPublishOrchestrator {
     }
 
     public PublishOutcome processPublish(String rawMessage) {
+        return processParsed(parseAndPopulate(rawMessage));
+    }
+
+    /**
+     * Parses the raw message exactly once and populates MDC (transactionId, messageId,
+     * subscriptionId, networkId, catalogId, publishTimestamp) from the parsed context.
+     * Exposed separately from {@link #processParsed} so the Kafka consumer can emit its
+     * {@code consumer.received} milestone with the correlation IDs already on MDC —
+     * without re-parsing the payload.
+     */
+    public ParsedCatalogMessage parseAndPopulate(String rawMessage) {
         ParsedCatalogMessage parsed = parseStep.parse(rawMessage);
         String messageId = parsed.context().contextNode().path(BecknFields.MESSAGE_ID).asText(null);
         correlationContext.populate(parsed.context(), messageId);
+        return parsed;
+    }
+
+    /** Validates and persists an already-parsed message (MDC already populated by {@link #parseAndPopulate}). */
+    public PublishOutcome processParsed(ParsedCatalogMessage parsed) {
         validateStep.validate(parsed);
         // Pass the message node so PersistenceStep can read message-level publishDirectives array.
         JsonNode messageNode = parsed.rootNode().path(BecknFields.MESSAGE);

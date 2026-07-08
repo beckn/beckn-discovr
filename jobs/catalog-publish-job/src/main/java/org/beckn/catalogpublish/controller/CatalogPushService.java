@@ -5,9 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.logging.LogEvent;
+import org.beckn.catalogpublish.logging.MdcField;
 import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
@@ -54,18 +56,31 @@ public class CatalogPushService {
         // labelled push.received.
         final String transactionId = textOrNull(ctx, BecknFields.TRANSACTION_ID);
         final String messageId = textOrNull(ctx, BecknFields.MESSAGE_ID);
+        final String subscriptionId = textOrNull(ctx, BecknFields.SUBSCRIPTION_ID);
         final boolean fromOnPull = BecknFields.ACTION_ON_CATALOG_PULL
                 .equals(textOrNull(ctx, BecknFields.ACTION));
         final String successEvent = fromOnPull ? LogEvent.ON_PULL_RECEIVED : LogEvent.PUSH_RECEIVED;
 
         kafkaTemplate.send(ingestionTopic, key, rawBody).whenComplete((result, ex) -> {
-            if (ex != null) {
-                metrics.recordEnqueueFailure();
-                log.error("event={} topic={} transactionId={} messageId={} error={}",
-                        LogEvent.KAFKA_FAILED, ingestionTopic, transactionId, messageId, ex.getMessage(), ex);
-            } else {
-                log.info("event={} topic={} offset={}",
-                        successEvent, ingestionTopic, result.getRecordMetadata().offset());
+            // The producer-network thread inherits NO MDC. Set the captured correlation IDs so
+            // LogstashEncoder promotes them to structured top-level fields (consistent with every
+            // other flow line), then clear them so they never leak into another record's callback.
+            putIfNotNull(MdcField.TRANSACTION_ID, transactionId);
+            putIfNotNull(MdcField.MESSAGE_ID, messageId);
+            putIfNotNull(MdcField.SUBSCRIPTION_ID, subscriptionId);
+            try {
+                if (ex != null) {
+                    metrics.recordEnqueueFailure();
+                    log.error("event={} topic={} error={}",
+                            LogEvent.KAFKA_FAILED, ingestionTopic, ex.getMessage(), ex);
+                } else {
+                    log.info("event={} topic={} offset={}",
+                            successEvent, ingestionTopic, result.getRecordMetadata().offset());
+                }
+            } finally {
+                MDC.remove(MdcField.TRANSACTION_ID);
+                MDC.remove(MdcField.MESSAGE_ID);
+                MDC.remove(MdcField.SUBSCRIPTION_ID);
             }
         });
     }
@@ -82,6 +97,13 @@ public class CatalogPushService {
     private static String textOrNull(JsonNode ctx, String field) {
         String v = ctx.path(field).asText(null);
         return (v != null && !v.isBlank()) ? v : null;
+    }
+
+    /** Sets an MDC key only when the value is non-null (avoids writing empty correlation fields). */
+    private static void putIfNotNull(String key, String value) {
+        if (value != null) {
+            MDC.put(key, value);
+        }
     }
 
     /**
