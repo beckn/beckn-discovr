@@ -19,6 +19,13 @@ import org.springframework.validation.annotation.Validated;
 public class DiscoveryProperties {
 
     private boolean latencyTrackingEnabled = true;
+    /**
+     * When {@code true}, the synchronous ACK/NACK body reverts to the pre-2.0 flat shape
+     * ({@code {"status":"ACK"}} / {@code {"status":"NACK","error":{"errorCode":...,"errorMessage":...}}})
+     * for back-compat with BAPs built against the original response body. Default {@code false}
+     * keeps the Beckn v2.0 nested shape ({@code {"message":{"status":...,"messageId":...}}}).
+     */
+    private boolean legacyAckNackSupport = false;
     @Valid private Filter filter = new Filter();
     @Valid private Kafka kafka = new Kafka();
     @Valid private NLWeb nlweb = new NLWeb();
@@ -75,6 +82,14 @@ public class DiscoveryProperties {
 
     public void setLatencyTrackingEnabled(boolean latencyTrackingEnabled) {
         this.latencyTrackingEnabled = latencyTrackingEnabled;
+    }
+
+    public boolean isLegacyAckNackSupport() {
+        return legacyAckNackSupport;
+    }
+
+    public void setLegacyAckNackSupport(boolean legacyAckNackSupport) {
+        this.legacyAckNackSupport = legacyAckNackSupport;
     }
 
     public Filter getFilter() {

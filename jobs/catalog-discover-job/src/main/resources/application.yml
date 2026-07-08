@@ -58,6 +58,11 @@ discovery:
     # Supports {param} and :param wildcards. Leave empty to protect all endpoints.
     whitelisted-endpoints: ${SIGNATURE_WHITELISTED_ENDPOINTS:}
   latency-tracking-enabled: ${DISCOVERY_LATENCY_TRACKING_ENABLED:true}
+  # When true, the synchronous ACK/NACK body reverts to the pre-2.0 flat shape
+  # ({"status":"ACK"} / {"status":"NACK","error":{"errorCode":...,"errorMessage":...}})
+  # for back-compat with BAPs built against the original response body. Default false
+  # keeps the Beckn v2.0 nested shape ({"message":{"status":...,"messageId":...}}).
+  legacy-ack-nack-support: ${LEGACY_ACK_NACK_SUPPORT:false}
   filter:
     discard-catalogs-without-offers: ${DISCOVERY_FILTER_DISCARD_CATALOGS_WITHOUT_OFFERS:true}
     # Value-match defaults for the ?active / ?validity query params when they are omitted.
