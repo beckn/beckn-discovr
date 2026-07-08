@@ -32,6 +32,12 @@ public final class BecknFields {
     // ── AckResponse fields ───────────────────────────────────────────────────
     public static final String STATUS          = "status";
     public static final String ERROR           = "error";
+    /** Legacy (pre-2.0) NACK error field name — used only by {@code LegacyAckResponse}
+     *  when {@code discovery.legacy-ack-nack-support=true}. v2.0 uses {@link #CODE}. */
+    public static final String ERROR_CODE      = "errorCode";
+    /** Legacy (pre-2.0) NACK error field name — used only by {@code LegacyAckResponse}
+     *  when {@code discovery.legacy-ack-nack-support=true}. v2.0 uses {@link #MESSAGE}. */
+    public static final String ERROR_MESSAGE   = "errorMessage";
 
     // ── JSON-LD fields ────────────────────────────────────────────────────────
     public static final String AT_CONTEXT      = "@context";

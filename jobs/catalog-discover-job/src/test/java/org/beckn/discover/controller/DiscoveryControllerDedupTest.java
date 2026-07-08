@@ -84,7 +84,8 @@ class DiscoveryControllerDedupTest {
                 authorizationService,
                 (KafkaTemplate<String, String>) kafkaTemplate,
                 props,
-                executor);
+                executor,
+                new org.beckn.discover.model.AckResponseFactory(props));
 
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
