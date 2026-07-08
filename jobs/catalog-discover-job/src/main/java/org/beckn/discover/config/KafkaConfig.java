@@ -31,6 +31,17 @@ public class KafkaConfig {
     @Value("${spring.kafka.consumer.group-id}")
     private String groupId;
 
+    // 10 MiB uniform Kafka pipeline ceiling — discover requests/responses share the broker
+    // limit; on_discover responses can carry multiple catalogs.
+    @Value("${spring.kafka.consumer.properties.max.partition.fetch.bytes:10485760}")
+    private int maxPartitionFetchBytes;
+
+    @Value("${spring.kafka.consumer.properties.fetch.max.bytes:52428800}")
+    private int fetchMaxBytes;
+
+    @Value("${spring.kafka.producer.properties.max.request.size:10485760}")
+    private int maxRequestSize;
+
     @Bean
     public ConsumerFactory<String, String> consumerFactory() {
         Map<String, Object> props = new HashMap<>();
@@ -40,6 +51,8 @@ public class KafkaConfig {
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        props.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, maxPartitionFetchBytes);
+        props.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, fetchMaxBytes);
         props.put("spring.json.trusted.packages", "*");
         return new DefaultKafkaConsumerFactory<>(props);
     }
@@ -72,6 +85,8 @@ public class KafkaConfig {
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        // 10 MiB request ceiling — uniform Kafka pipeline limit.
+        props.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, maxRequestSize);
         props.put("spring.json.add.type.headers", false);
         // Durability: wait for all in-sync replicas to confirm, enable idempotent delivery
         props.put(ProducerConfig.ACKS_CONFIG, "all");

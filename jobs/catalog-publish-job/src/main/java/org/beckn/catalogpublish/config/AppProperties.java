@@ -44,7 +44,11 @@ public record AppProperties(
                         int concurrency,
                         int maxPollRecords,
                         int sessionTimeoutMs,
-                        int maxPollIntervalMs) {
+                        int maxPollIntervalMs,
+                        // 10 MiB per-partition fetch — the ingestion topic carries the fully
+                        // assembled catalog from Catalg; Kafka's 1 MiB default would stall it.
+                        @Positive int maxPartitionFetchBytes,
+                        @Positive int fetchMaxBytes) {
         }
 
         public record Topics(
