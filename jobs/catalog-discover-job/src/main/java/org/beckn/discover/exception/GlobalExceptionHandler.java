@@ -9,7 +9,8 @@ import org.beckn.discover.controller.DiscoveryController;
 import org.beckn.discover.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.beckn.discover.model.AckResponse;
+import org.beckn.discover.model.AckResponseBody;
+import org.beckn.discover.model.AckResponseFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -51,6 +52,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /** Single decision point for the ACK/NACK response shape (v2.0 nested vs. legacy flat). */
+    private final AckResponseFactory ackResponseFactory;
+
+    public GlobalExceptionHandler(AckResponseFactory ackResponseFactory) {
+        this.ackResponseFactory = ackResponseFactory;
+    }
+
     // ── Spring MVC infrastructure exceptions (malformed JSON, wrong method, …) ─
 
     @Override
@@ -68,7 +76,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("error", ex.getMessage()),
                 value("cause", ex.getCause() != null ? ex.getCause().getMessage() : "none"),
                 ex);
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+        AckResponseBody ackResponse = ackResponseFactory.nack(currentMessageId(),
                 ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
                 ErrorMessages.NET_SEARCH_SERVICE_UNAVAILABLE);
         // Spec maps transient server-side failures to 500 ServerError; /discover does not
@@ -81,7 +89,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.error(LogEvent.NACK_RESPONSE,
                 value("errorCode", ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE),
                 value("error", ex.getMessage()));
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+        AckResponseBody ackResponse = ackResponseFactory.nack(currentMessageId(),
                 ErrorCodes.NET_DOWNSTREAM_UNAVAILABLE,
                 ErrorMessages.NET_DOWNSTREAM_UNAVAILABLE);
         // Spec maps transient server-side failures to 500 ServerError; /discover does not
@@ -107,7 +115,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("errorCode", ErrorCodes.SCH_INVALID_JSON),
                 value("httpStatus", HttpStatus.BAD_REQUEST.value()),
                 value("error", ex.getOriginalMessage()));
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(),
+        AckResponseBody ackResponse = ackResponseFactory.nack(currentMessageId(),
                 ErrorCodes.SCH_INVALID_JSON, ErrorMessages.SCH_INVALID_JSON);
         return new ResponseEntity<>(ackResponse, HttpStatus.BAD_REQUEST);
     }
@@ -152,7 +160,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 value("httpStatus", status.value()),
                 value("error", ex.getMessage()));
 
-        AckResponse ackResponse = AckResponse.nack(currentMessageId(), code, message);
+        AckResponseBody ackResponse = ackResponseFactory.nack(currentMessageId(), code, message);
         return responseHeaders != null
                 ? new ResponseEntity<>(ackResponse, responseHeaders, status)
                 : new ResponseEntity<>(ackResponse, status);
