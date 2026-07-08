@@ -3,6 +3,7 @@ package org.beckn.catalogpublish.consumer;
 import org.beckn.catalogpublish.common.ErrorMessages;
 import org.beckn.catalogpublish.config.AppProperties;
 import org.beckn.catalogpublish.dto.CatalogOperation;
+import org.beckn.catalogpublish.dto.ParsedCatalogMessage;
 import org.beckn.catalogpublish.dto.ProcessingResult;
 import org.beckn.catalogpublish.dto.ProcessingStatus;
 import org.beckn.catalogpublish.dto.PublishOutcome;
@@ -26,7 +27,6 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.function.Function;
 
 import static org.beckn.catalogpublish.dto.CatalogOperation.PUBLISH;
 
@@ -65,12 +65,16 @@ public class CatalogPublishConsumer {
             Acknowledgment ack) {
         correlationContext.setTags(tagsHeader);
         metrics.recordProcessingTime(PUBLISH,
-                () -> dispatch(raw, topic, offset, ack, PUBLISH, orchestrator::processPublish));
+                () -> dispatch(raw, topic, offset, ack, PUBLISH));
     }
 
     private void dispatch(String raw, String topic, long offset, Acknowledgment ack,
-            CatalogOperation operation, Function<String, PublishOutcome> handler) {
+            CatalogOperation operation) {
         try {
+            // Clear any stale correlation IDs left on this pooled thread by a prior message,
+            // so the size-reject path below never logs another message's IDs.
+            correlationContext.populateFallback();
+
             long rawByteLen = payloadSizeBytes(raw);
             if (rawByteLen > maxPayloadSize) {
                 log.warn("event={} op={} topic={} offset={} sizeBytes={} limit={}",
@@ -79,10 +83,12 @@ public class CatalogPublishConsumer {
                 return;
             }
 
-            correlationContext.populateFallback();
+            // Parse once and populate MDC (transactionId/messageId/subscriptionId/...) BEFORE the
+            // receipt milestone, so consumer.received and every downstream line carry the IDs.
+            ParsedCatalogMessage parsed = orchestrator.parseAndPopulate(raw);
             log.info("event={} op={} topic={} offset={}", LogEvent.CONSUMER_RECEIVED, operation, topic, offset);
 
-            PublishOutcome outcome = handler.apply(raw);
+            PublishOutcome outcome = orchestrator.processParsed(parsed);
             List<ProcessingResult> results = outcome.results();
 
             // Retry if ANY catalog has INTERNAL_ERROR — partial failure must not be silently acked.

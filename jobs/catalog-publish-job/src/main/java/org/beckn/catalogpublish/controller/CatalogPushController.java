@@ -144,16 +144,21 @@ public class CatalogPushController {
                     nackBody(messageId, ErrorCodes.CTX_MISSING_FIELD, ErrorMessages.SCH_MISSING_CONTEXT));
         }
 
-        // Echo the ORIGINAL correlation IDs received from the CS (never generated) on the
-        // entry log; the async pipeline carries them via MDC for the remaining lines.
-        log.info("event={} messageId={} transactionId={} sizeBytes={}",
-                LogEvent.ON_PULL_RECEIVED, messageId,
-                contextText(root, BecknFields.TRANSACTION_ID), rawBytes.length);
-        pullCallbackService.processPullCallbackAsynchronously(rawBody);
+        // Put transactionId/messageId/subscriptionId onto MDC so the on_pull.received milestone
+        // (and the synchronous entry path) carry the same correlation IDs the async pipeline logs;
+        // cleared in finally so the IDs do not leak across pooled request threads. The async
+        // handler runs on its own pool thread and re-populates MDC from the payload.
+        try {
+            correlationContext.populateEntryIds(root.path(BecknFields.CONTEXT));
+            log.info("event={} sizeBytes={}", LogEvent.ON_PULL_RECEIVED, rawBytes.length);
+            pullCallbackService.processPullCallbackAsynchronously(rawBody);
 
-        // 200 Ack per beckn.yaml /catalog/on_pull — the callback receiver acknowledges
-        // synchronously; there is no further callback, so 200 Ack (not 202) is correct.
-        return ResponseEntity.ok(ackBody(messageId));
+            // 200 Ack per beckn.yaml /catalog/on_pull — the callback receiver acknowledges
+            // synchronously; there is no further callback, so 200 Ack (not 202) is correct.
+            return ResponseEntity.ok(ackBody(messageId));
+        } finally {
+            correlationContext.clear();
+        }
     }
 
     /**
