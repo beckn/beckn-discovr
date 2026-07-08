@@ -15,6 +15,10 @@ import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
+import org.beckn.catalogpublish.controller.CatalogPullCallbackService;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 
 /**
  * Integration tests for POST /catalog/push.
@@ -28,6 +32,9 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @SpyBean
+    private CatalogPullCallbackService pullCallbackService;
 
     // ── ACK response ──────────────────────────────────────────────────────────
 
@@ -444,5 +451,236 @@ class CatalogPushControllerIntegrationTest extends BaseIntegrationTest {
                         .content(fixture))
                 // Must succeed without any Authorization header
                 .andExpect(status().isOk());
+    }
+
+    // ── ON_PULL Tests ─────────────────────────────────────────────────────────
+
+    private static final String ON_PULL_PATH = "/beckn/catalog/on_pull";
+
+    @Test
+    void onPull_inlineValidPayload_returns200AndPersists() throws Exception {
+        String payload = """
+                {
+                  "context": {
+                    "networkId": "test-net",
+                    "messageId": "msg-inline-on-pull"
+                  },
+                  "message": {
+                    "status": "COMPLETED",
+                    "catalogs": [{
+                      "id": "cat-inline-on-pull",
+                      "resources": [{
+                        "id": "item-inline-1",
+                        "descriptor": {"name": "Inline Item"}
+                      }]
+                    }]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post(ON_PULL_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
+
+        await().atMost(10, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    long catCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-inline-on-pull");
+                    assertThat(catCount).isEqualTo(1);
+                });
+    }
+
+    @Test
+    void onPull_downloadManifestValidPayload_downloadsDecompressesVerifiesAndPersists() throws Exception {
+        String catalogsJson = """
+                {
+                  "catalogs": [{
+                    "id": "cat-download-on-pull",
+                    "resources": [{
+                      "id": "item-download-1",
+                      "descriptor": {"name": "Downloaded Item"}
+                    }]
+                  }]
+                }
+                """;
+        byte[] uncompressed = catalogsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] compressed = gzip(uncompressed);
+        // Per spec, checksum is the SHA-256 digest of the payload AT url (the compressed bytes).
+        String checksum = "sha256:" + sha256Hex(compressed);
+
+        // Stub downloadCatalogFromUrl to return the mock Gzip compressed catalogs
+        doReturn(compressed).when(pullCallbackService).downloadCatalogFromUrl(anyString());
+
+        String callbackPayload = """
+                {
+                  "context": {
+                    "networkId": "test-net",
+                    "messageId": "msg-download-on-pull"
+                  },
+                  "message": {
+                    "status": "COMPLETED",
+                    "downloadManifest": {
+                      "url": "https://mock-storage.com/catalog.json.gz",
+                      "format": "json.gz",
+                      "sizeBytes": %d,
+                      "checksum": "%s",
+                      "expiresAt": "2099-12-31T23:59:59Z"
+                    }
+                  }
+                }
+                """.formatted(compressed.length, checksum);
+
+        mockMvc.perform(post(ON_PULL_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(callbackPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
+
+        await().atMost(10, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    long catCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-download-on-pull");
+                    assertThat(catCount).isEqualTo(1);
+                });
+    }
+
+    @Test
+    void onPull_downloadManifestExpired_doesNotDownloadOrPersist() throws Exception {
+        // Spec: the DS MUST NOT download after expiresAt. The expiry guard runs before the
+        // download, so even a valid stubbed payload must never be fetched or persisted.
+        String catalogsJson = """
+                {
+                  "catalogs": [{
+                    "id": "cat-expired-on-pull",
+                    "resources": [{"id": "item-expired-1", "descriptor": {"name": "Expired Item"}}]
+                  }]
+                }
+                """;
+        byte[] compressed = gzip(catalogsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String checksum = "sha256:" + sha256Hex(compressed);
+        doReturn(compressed).when(pullCallbackService).downloadCatalogFromUrl(anyString());
+
+        String callbackPayload = """
+                {
+                  "context": {"networkId": "test-net", "messageId": "msg-expired-on-pull"},
+                  "message": {
+                    "status": "COMPLETED",
+                    "downloadManifest": {
+                      "url": "https://mock-storage.com/catalog.json.gz",
+                      "format": "json.gz",
+                      "sizeBytes": %d,
+                      "checksum": "%s",
+                      "expiresAt": "2000-01-01T00:00:00Z"
+                    }
+                  }
+                }
+                """.formatted(compressed.length, checksum);
+
+        mockMvc.perform(post(ON_PULL_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(callbackPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
+
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    long catCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-expired-on-pull");
+                    assertThat(catCount).isZero();
+                });
+    }
+
+    @Test
+    void onPull_downloadManifestChecksumMismatch_doesNotPersist() throws Exception {
+        // Spec: the DS MUST verify the checksum (digest of the payload AT url) before processing
+        // and discard the content on mismatch. Here the manifest carries the digest of the
+        // *uncompressed* bytes, which must not match the compressed payload-at-url.
+        String catalogsJson = """
+                {
+                  "catalogs": [{
+                    "id": "cat-mismatch-on-pull",
+                    "resources": [{"id": "item-mismatch-1", "descriptor": {"name": "Mismatch Item"}}]
+                  }]
+                }
+                """;
+        byte[] uncompressed = catalogsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] compressed = gzip(uncompressed);
+        String wrongChecksum = "sha256:" + sha256Hex(uncompressed);
+        doReturn(compressed).when(pullCallbackService).downloadCatalogFromUrl(anyString());
+
+        String callbackPayload = """
+                {
+                  "context": {"networkId": "test-net", "messageId": "msg-mismatch-on-pull"},
+                  "message": {
+                    "status": "COMPLETED",
+                    "downloadManifest": {
+                      "url": "https://mock-storage.com/catalog.json.gz",
+                      "format": "json.gz",
+                      "sizeBytes": %d,
+                      "checksum": "%s",
+                      "expiresAt": "2099-12-31T23:59:59Z"
+                    }
+                  }
+                }
+                """.formatted(compressed.length, wrongChecksum);
+
+        mockMvc.perform(post(ON_PULL_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(callbackPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.status").value("ACK"));
+
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    long catCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM item WHERE catalog_id = ?", Long.class, "cat-mismatch-on-pull");
+                    assertThat(catCount).isZero();
+                });
+    }
+
+    @Test
+    void onPull_missingCorrelationId_returns400Nack() throws Exception {
+        String payload = """
+                {
+                  "context": {
+                    "networkId": "test-net"
+                  },
+                  "message": {
+                    "status": "COMPLETED",
+                    "catalogs": []
+                  }
+                }
+                """;
+
+        mockMvc.perform(post(ON_PULL_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message.status").value("NACK"))
+                .andExpect(jsonPath("$.message.error.code").value(ErrorCodes.CTX_MISSING_FIELD));
+    }
+
+    private static byte[] gzip(byte[] input) throws Exception {
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.GZIPOutputStream gzos = new java.util.zip.GZIPOutputStream(baos)) {
+            gzos.write(input);
+        }
+        return baos.toByteArray();
+    }
+
+    private static String sha256Hex(byte[] bytes) {
+        try {
+            var md = java.security.MessageDigest.getInstance("SHA-256");
+            var digest = md.digest(bytes);
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

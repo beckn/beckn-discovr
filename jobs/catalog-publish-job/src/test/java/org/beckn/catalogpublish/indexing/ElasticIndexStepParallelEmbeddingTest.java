@@ -187,7 +187,7 @@ class ElasticIndexStepParallelEmbeddingTest {
         var catalog = new org.beckn.catalogpublish.config.AppProperties.Catalog(
                 10_000_000L, true,
                 "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml",
-                1, 4, esConfig, textSearch, indexing);
+                1, 4, esConfig, textSearch, indexing, true, null, null, null, null, null, null, null);
         var datasource = new org.beckn.catalogpublish.config.AppProperties.Datasource(
                 "jdbc:postgresql://localhost:5432/test", "org.postgresql.Driver",
                 "test", "test",
@@ -197,7 +197,7 @@ class ElasticIndexStepParallelEmbeddingTest {
         var topics = new org.beckn.catalogpublish.config.AppProperties.Topics(
                 "in", "events", "out", "failed");
         var messaging = new org.beckn.catalogpublish.config.AppProperties.Messaging(
-                "localhost:9092", 10485760, consumer, topics);
+                "localhost:9092", consumer, topics);
         return new org.beckn.catalogpublish.config.AppProperties(datasource, messaging, catalog);
     }
 }

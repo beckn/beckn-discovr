@@ -64,9 +64,9 @@ BAPs send `discover` requests → Discovr queries the catalog index → delivers
 |------|------|
 | Kafka consumer | `messaging/consumer/EventListener.java` |
 | HTTP callback delivery | `service/HttpService.java` |
-| Beckn HTTP signature | `service/SignatureService.java` |
+| Beckn auth + signature (SDK) | `config/BecknAuthConfiguration.java`, `config/SigningProperties.java` |
 | Logging constants | `logging/LogEvent.java`, `logging/MdcField.java`, `logging/BecknMdcContext.java` |
-| Config | `config/SeekerProperties.java` · `src/main/resources/application.yml` |
+| Config | `config/{HttpClientProperties,RegistryProperties,SigningProperties,StaticCallbackProperties}.java` · `src/main/resources/application.yml` |
 
 ---
 
@@ -239,12 +239,12 @@ Every `MdcField.java` across all 6 Java jobs (Catalg + Discovr) declares ALL con
 `config/es-index-template.json` — applies to `catalogs-*` index pattern.
 
 Critical rules:
-- **`item_attributes.@context` and `item_attributes.@type`** must be explicit `keyword` mappings inside the `item_attributes` object — never left to dynamic mapping
+- **`resource_attributes_context` and `resource_attributes_type`** are explicit flat `keyword` mappings (dynamic templates match `resource_attributes.*`) — never left to dynamic mapping
 - **`catalog_validity`** is explicit object mapping with `startDate`/`endDate` as `date` type
 - **`network_id`** is `keyword` (not text) — from context, not from resources
-- **`item_provider_name`** is `text` with a `raw` keyword sub-field for exact-match filtering
-- **`item_rateable`, `item_rating_value`, `item_rating_count`** use nullable wrappers — absent from ES doc when not in catalog data (no false defaults)
-- When adding new `item_attributes.*` fields: add them as explicit mappings, never rely on dynamic templates for attributes fields
+- **`resource_provider_name`** is `text` with a `raw` keyword sub-field for exact-match filtering
+- **`resource_rateable`, `resource_rating_value`, `resource_rating_count`** use nullable wrappers — absent from ES doc when not in catalog data (no false defaults)
+- When adding new `resource_attributes.*` fields: add them as explicit mappings, never rely on dynamic templates for attributes fields
 
 ---
 
@@ -261,25 +261,25 @@ Critical rules:
 - **Topic names from `@ConfigurationProperties`** — never hardcoded string literals
 - **Kafka publish**: `kafkaTemplate.send().whenComplete(...)` — never `.get()`
 - **Per-job Gradle wrappers**: run `./gradlew` from the specific job directory
-- **Item PK is `(id, catalog_id)`** — never use `bpp_id` as part of the item key; `Item.from()` takes `catalogId` and `subscriberId`, not `bppId`
-- **No `catalog`, `provider`, `networks`, `subscribers` tables** — these do not exist in Discovr DB; only `item` and `item_location_collection`
+- **Item PK is `(id, catalog_id)`** — never use `bpp_id` as part of the item key; `Item.from()` takes `catalogId`, `type`, `contextUrl`, `networkIds`, not `bppId`
+- **No `catalog`, `provider`, `networks`, `subscribers` tables** — these do not exist in Discovr DB; only `item`, `item_location_collection`, and `provider_offer`
 - **ES document ID = `catalogId:resourceId`** — format enforced in `CatalogDocumentAssembler`; never `bppId:resourceId`
 - **FULL replace scoped to `catalog_id` only** — `DELETE WHERE catalog_id = :catalogId`; no `bpp_id` predicate in any delete query
 - **No v1 backward compatibility** — `ContextNormalizer` deleted; `@JsonAlias` for snake_case `bpp_id`/`bap_id` removed; camelCase only
 - **DefaultErrorHandler on Kafka consumer** — do not ack on transient failures; let `DefaultErrorHandler` retry; ack only after successful processing
 - **`subscriberId` as Kafka message key on push path** — `CatalogPushService` sets key = `subscriberId` from `context.subscriberId` when publishing to internal Kafka topic
-- **`created_by` is immutable** — `Item` has `@Column(updatable = false)` on `createdBy`; upsert logic must not overwrite it
-- **`item` table stores both `created_by` and `subscriber_id`** — `created_by` = record_id (second `|`-segment of keyId, immutable ownership key); `subscriber_id` = org identity (first segment of keyId); these are two distinct columns: `created_by` for ownership checks, `subscriber_id` for org-level grouping. Never conflate them.
+- **`created_at` is immutable** — `Item` has `@Column(updatable = false)` on `created_at`; upsert logic must not overwrite it
+- **No ownership columns on `item`** — the `item` table has no `created_by`/`subscriber_id` columns (cols: `id, catalog_id, context_url, type, network_id, offer_ids, payload, created_at, updated_at`). `subscriberId` exists only as a log/MDC field and the push-path Kafka key — not persisted on `item`.
 
 ---
 
 ## Agents
 
-Nine agents in `.claude/agents/` — use in sequence for any non-trivial change:
+Thirteen agents in `.claude/agents/` — use in sequence for any non-trivial change:
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
-| `github-epics` | Sonnet | Requirement/bullets → proposed Epics + tasks for [Project 52](https://github.com/orgs/beckn/projects/52); **user approves before** `gh` creates issues and sets Release/Sprint. Skill: `.claude/skills/github-epics.md`. |
+| `github-stories` | Sonnet | Requirement/bullets → proposed Stories + tasks across Project boards (51 Catalg, 52 Discovr, 58 Pipeline); gathers sprint info for ALL boards; **user approves before** `gh` creates issues and sets Sprint/Status. Skill: `.claude/skills/github-stories.md`. |
 | `requirements` | Sonnet | Asks clarifying questions → produces structured REQ doc in `docs/requirements/`. **Always invoke before design for new features.** |
 | `design` | Opus | Asks clarifying questions → two proposals → scoring → Design Spec. **User approves before proceeding.** |
 | `implement` | Sonnet | Implements from Design Spec with tests. Runs autonomously. |
@@ -288,6 +288,10 @@ Nine agents in `.claude/agents/` — use in sequence for any non-trivial change:
 | `debug` | Sonnet | Reads failures, fixes minimally, re-tests. Max 3 rounds then reports. |
 | `migrate` | Sonnet | Applies Beckn protocol version migrations across source + fixtures. |
 | `verify` | Sonnet | Runs E2E scenarios against the live Docker stack. PASS/FAIL table. Use before/after every PR. |
+| `scenarios` | Sonnet | Generates test scenarios for a feature/design spec. Happy path, hostile-user, ownership, edge, error, integration. |
+| `perf-review` | Opus | Senior principal engineer performance review of a selected job/service; identifies throughput/latency bottlenecks. Writes a timestamped report to `docs/`. |
+| `discovr-reliability` | — | Phase-1 reliability: JMeter load + soak on the GKE staging cluster, observes ClickStack, writes an HTML report. Load + soak only, no chaos. |
+| `discovr-reliability-chaos` | — | Phase-2 chaos reliability: injects faults under background load, asserts SLOs, renders a reliability scorecard. Each chaos action needs explicit per-action confirmation. |
 
 **Development Workflow:**
 ```

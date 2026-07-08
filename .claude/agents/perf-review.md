@@ -1,7 +1,7 @@
 ---
 name: perf-review
 description: Senior principal engineer performance review agent. Profiles a selected Beckn Discovr job for throughput, latency, memory, and I/O bottlenecks. For catalog-discover-job, analyses the full ES + PostgreSQL hot path, parallel query routing, Kafka consumer threading, and response pipeline. Writes a timestamped report to docs/. Triggers on "performance review", "profile this job", "find bottlenecks", "perf review".
-model: claude-opus-4-6
+model: claude-opus-4-8
 tools:
   - Read
   - Glob
@@ -73,7 +73,7 @@ Read the component's source files systematically. Use the CLAUDE.md File Map as 
 
 1. `messaging/consumer/EventListener.java` — Kafka entry point; ack strategy; concurrency
 2. `service/MessageProcessingService.java` — orchestration
-3. `service/SignatureService.java` — Beckn HTTP signature computation; crypto cost per message
+3. `config/BecknAuthConfiguration.java` — Beckn HTTP signature via BecknAuth SDK; crypto cost per message
 4. `service/HttpService.java` — HTTP POST to BAP; connection pool; retry; timeout
 5. `config/RestTemplateConfig.java` — connection pool sizing, timeouts
 6. `config/KafkaConsumerConfig.java` — consumer concurrency, max.poll.records
@@ -138,7 +138,7 @@ For each bottleneck identified, reason through these lenses:
 - `fetch.max.bytes` / `max.partition.fetch.bytes` — not configured; defaults may cause starvation on large payloads
 - `listener.concurrency: 3` in discover-job — is this matched to partition count?
 - Offset commit: `ack-mode: manual_immediate` is correct; verify it is always called exactly once per message on success
-- Blocking `kafkaTemplate.send(record).get(30, TimeUnit.SECONDS)` in `DiscoveryEventConsumer.publishResponse()` — this blocks the consumer thread for up to 30 seconds on Kafka broker unavailability
+- Kafka publish must stay non-blocking: `DiscoveryEventConsumer.publishResponse()` uses `kafkaTemplate.send(...).whenComplete(...)` (never `.get()`) and acks in the success branch. Flag any NEW blocking `.get()` on a send path that would stall the consumer thread.
 
 ### Beckn HTTP Signature (response-dispatcher)
 - Signature computation (Ed25519 / RSA) is CPU-bound; is it done on the Kafka consumer thread or offloaded?

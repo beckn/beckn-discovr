@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1240" viewBox="0 0 1240 1240" font-family="Helvetica,Arial,sans-serif">
+<rect width="1240" height="1240" fill="#ffffff"/>
+<text x="620.0" y="48" font-size="28" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Fan-Out Sequence (INCREMENTAL mode)</text>
+<defs>
+<marker id="m1e1e1e" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#1e1e1e"/></marker>
+<marker id="m8b5cf6" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#8b5cf6"/></marker>
+<marker id="md97706" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#d97706"/></marker>
+</defs>
+<rect x="405" y="430" width="770" height="285" fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="4,4"/>
+<rect x="405" y="430" width="330" height="26" fill="#ececff" stroke="#999" stroke-width="1"/>
+<text x="413" y="448" font-size="14" fill="#444">loop  [per selected provider, in parallel]</text>
+<line x1="140" y1="120" x2="140" y2="1115" stroke="#b0b0b0" stroke-width="1.5" stroke-dasharray="6,5"/>
+<rect x="60.0" y="68" width="160" height="48" rx="8" fill="#a5d8ff" stroke="#2563eb" stroke-width="2"/>
+<text x="140" y="97" font-size="17" text-anchor="middle" fill="#1e1e1e">Consumer (CN)</text>
+<line x1="470" y1="120" x2="470" y2="1115" stroke="#b0b0b0" stroke-width="1.5" stroke-dasharray="6,5"/>
+<rect x="390.0" y="68" width="160" height="48" rx="8" fill="#d0bfff" stroke="#8b5cf6" stroke-width="2"/>
+<text x="470" y="97" font-size="17" text-anchor="middle" fill="#1e1e1e">Discovery Service</text>
+<line x1="800" y1="120" x2="800" y2="1115" stroke="#b0b0b0" stroke-width="1.5" stroke-dasharray="6,5"/>
+<rect x="720.0" y="68" width="160" height="48" rx="8" fill="#fff3bf" stroke="#d97706" stroke-width="2"/>
+<text x="800" y="97" font-size="17" text-anchor="middle" fill="#1e1e1e">Dedi Registry</text>
+<line x1="1090" y1="120" x2="1090" y2="1115" stroke="#b0b0b0" stroke-width="1.5" stroke-dasharray="6,5"/>
+<rect x="1010.0" y="68" width="160" height="48" rx="8" fill="#ffd8a8" stroke="#d97706" stroke-width="2"/>
+<text x="1090" y="97" font-size="17" text-anchor="middle" fill="#1e1e1e">Provider (PN)</text>
+<rect x="482" y="242" width="426" height="34" rx="4" fill="#fff3bf" stroke="#d9a300" stroke-width="1"/>
+<text x="490" y="264" font-size="14" fill="#665200">query index + select providers  (= participatingProviders)</text>
+<line x1="470" y1="236" x2="482" y2="236" stroke="#d9a300" stroke-width="1"/>
+<line x1="140" y1="180" x2="470" y2="180" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m1e1e1e)"/>
+<text x="305" y="172" font-size="15" text-anchor="middle" fill="#1e1e1e">1  POST /discover (fanOut)</text>
+<line x1="470" y1="224" x2="140" y2="224" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="7,5" marker-end="url(#m8b5cf6)"/>
+<text x="305" y="216" font-size="15" text-anchor="middle" fill="#8b5cf6">2  200 ACK</text>
+<line x1="470" y1="336" x2="140" y2="336" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m1e1e1e)"/>
+<text x="305" y="328" font-size="15" text-anchor="middle" fill="#1e1e1e">3  on_discover  INITIATED</text>
+<line x1="470" y1="475" x2="800" y2="475" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m1e1e1e)"/>
+<text x="635" y="467" font-size="15" text-anchor="middle" fill="#1e1e1e">4  resolve bppId</text>
+<line x1="800" y1="519" x2="470" y2="519" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="7,5" marker-end="url(#m8b5cf6)"/>
+<text x="635" y="511" font-size="15" text-anchor="middle" fill="#8b5cf6">url + key</text>
+<line x1="470" y1="575" x2="1090" y2="575" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m1e1e1e)"/>
+<text x="780" y="567" font-size="15" text-anchor="middle" fill="#1e1e1e">5  POST /discover</text>
+<line x1="1090" y1="632" x2="470" y2="632" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="7,5" marker-end="url(#m8b5cf6)"/>
+<text x="780" y="624" font-size="15" text-anchor="middle" fill="#8b5cf6">6  on_discover (live)</text>
+<line x1="470" y1="682" x2="140" y2="682" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m1e1e1e)"/>
+<text x="305" y="674" font-size="15" text-anchor="middle" fill="#1e1e1e">7  on_discover  PARTIAL</text>
+<line x1="470" y1="775" x2="140" y2="775" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m1e1e1e)"/>
+<text x="305" y="767" font-size="15" text-anchor="middle" fill="#1e1e1e">8  on_discover  COMPLETE</text>
+<text x="620.0" y="820" font-size="15" text-anchor="middle" fill="#757575">AGGREGATED mode: no INITIATED / PARTIAL stream -- one COMPLETE callback with all catalogs merged.</text>
+</svg>
