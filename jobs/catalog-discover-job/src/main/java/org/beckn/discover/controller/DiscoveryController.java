@@ -17,7 +17,8 @@ import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.logging.BecknMdcContext;
 import org.beckn.discover.logging.LogEvent;
 import org.beckn.discover.logging.MdcField;
-import org.beckn.discover.model.AckResponse;
+import org.beckn.discover.model.AckResponseBody;
+import org.beckn.discover.model.AckResponseFactory;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
 import org.beckn.discover.service.DiscoveryService;
@@ -79,6 +80,7 @@ public class DiscoveryController {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final DiscoveryProperties discoveryProperties;
     private final ExecutorService queryExecutor;
+    private final AckResponseFactory ackResponseFactory;
     /** Short-lived cache keyed on messageId — suppresses duplicate Kafka publishes on BAP retries (M10). */
     private final Cache<String, Boolean> messageIdDedupCache;
 
@@ -90,7 +92,8 @@ public class DiscoveryController {
             AuthorizationService authorizationService,
             KafkaTemplate<String, String> kafkaTemplate,
             DiscoveryProperties discoveryProperties,
-            @Qualifier("discoveryQueryExecutor") ExecutorService queryExecutor) {
+            @Qualifier("discoveryQueryExecutor") ExecutorService queryExecutor,
+            AckResponseFactory ackResponseFactory) {
         this.discoveryService = discoveryService;
         this.objectMapper = objectMapper;
         this.validationService = validationService;
@@ -99,6 +102,7 @@ public class DiscoveryController {
         this.kafkaTemplate = kafkaTemplate;
         this.discoveryProperties = discoveryProperties;
         this.queryExecutor = queryExecutor;
+        this.ackResponseFactory = ackResponseFactory;
         long dedupTtl = discoveryProperties.getKafka().getDedupCacheTtlSeconds();
         this.messageIdDedupCache = Caffeine.newBuilder()
                 .expireAfterWrite(dedupTtl, TimeUnit.SECONDS)
@@ -129,7 +133,7 @@ public class DiscoveryController {
      * response-dispatcher to forward to the BAP callback URL.</p>
      */
     @PostMapping("/discover")
-    public ResponseEntity<AckResponse> discoverPost(
+    public ResponseEntity<AckResponseBody> discoverPost(
             @RequestBody byte[] rawBytes,
             @RequestHeader HttpHeaders headers,
             @RequestParam(name = "active", required = false) Boolean active,
@@ -177,7 +181,7 @@ public class DiscoveryController {
     }
 
     /** Async pipeline: authorize → validate → publish to Kafka → ACK. */
-    private ResponseEntity<AckResponse> handleAsyncDiscoverRequest(
+    private ResponseEntity<AckResponseBody> handleAsyncDiscoverRequest(
             byte[] rawBytes, HttpHeaders headers, Boolean active, Boolean validity, HttpServletRequest httpRequest) throws Exception {
 
         String rawBody = new String(rawBytes, StandardCharsets.UTF_8);
@@ -224,7 +228,7 @@ public class DiscoveryController {
                 log.info(LogEvent.REQUEST_RECEIVED + ".duplicate-suppressed",
                         value("messageId", messageId),
                         value("transactionId", transactionId));
-                return ResponseEntity.ok(AckResponse.ack(messageId));
+                return ResponseEntity.ok(ackResponseFactory.ack(messageId));
             }
 
             String kafkaKey = transactionId != null ? transactionId : messageId;
@@ -288,7 +292,7 @@ public class DiscoveryController {
                         value("error", kafkaEx.getMessage()));
             }
 
-            return ResponseEntity.ok(AckResponse.ack(messageId));
+            return ResponseEntity.ok(ackResponseFactory.ack(messageId));
         } finally {
             BecknMdcContext.clear();
         }
