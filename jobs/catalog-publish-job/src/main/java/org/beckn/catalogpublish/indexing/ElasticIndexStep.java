@@ -178,7 +178,7 @@ public class ElasticIndexStep {
                 if (result.hasFailures()) {
                     publishFailures(schemaType, result, batch);
                 }
-                log.debug("event={} schemaType={} succeeded={} failed={}",
+                log.info("event={} schemaType={} succeeded={} failed={}",
                         LogEvent.ES_INDEXED, schemaType, result.succeeded().size(), result.failed().size());
             }
         } catch (Exception e) {
