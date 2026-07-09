@@ -21,7 +21,7 @@ import org.beckn.discover.common.BecknFields;
  * @version Beckn Protocol 2.0.0
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class AckResponse {
+public class AckResponse implements AckResponseBody {
 
     @JsonProperty(BecknFields.MESSAGE)
     private Message message;

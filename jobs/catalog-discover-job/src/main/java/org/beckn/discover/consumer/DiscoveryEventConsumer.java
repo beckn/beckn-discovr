@@ -113,6 +113,12 @@ public class DiscoveryEventConsumer {
         JsonNode metaNode = root.path(BecknFields.META);
         String subscriberId = metaNode.path(BecknFields.SUBSCRIBER_ID).asText(null);
         String recordId = metaNode.path(BecknFields.RECORD_ID).asText(null);
+        // Value-match flags ride in meta (set by the controller on the POST path). Absent ⇒ null ⇒
+        // the service applies the config default, so older/in-flight messages are unaffected.
+        Boolean active = metaNode.has(BecknFields.FILTER_ACTIVE)
+                ? metaNode.get(BecknFields.FILTER_ACTIVE).asBoolean() : null;
+        Boolean validity = metaNode.has(BecknFields.FILTER_VALIDITY)
+                ? metaNode.get(BecknFields.FILTER_VALIDITY).asBoolean() : null;
         JsonNode requestNode = root.path(BecknFields.PAYLOAD);
 
         // Populate MDC as early as possible
@@ -137,7 +143,7 @@ public class DiscoveryEventConsumer {
 
             // context-level MDC fields (transactionId, messageId, networkId) already set by BecknMdcContext.populate above
 
-            DiscoverResponse response = discoveryService.processDiscoveryRequest(discoverRequest);
+            DiscoverResponse response = discoveryService.processDiscoveryRequest(discoverRequest, active, validity);
 
             // Ack is moved into publishResponse's whenComplete success branch so that a
             // broker rejection keeps the message un-acked and the container error handler

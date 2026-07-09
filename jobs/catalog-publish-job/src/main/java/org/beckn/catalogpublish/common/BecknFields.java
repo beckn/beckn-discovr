@@ -74,12 +74,15 @@ public final class BecknFields {
     // ── Action values (v2.1 slash notation) ─────────────────────────────────
     public static final String ACTION_CATALOG_PUBLISH    = "catalog/publish";
     public static final String ACTION_ON_CATALOG_PUBLISH = "on_catalog_publish";
+    public static final String ACTION_ON_CATALOG_PULL    = "catalog/on_pull";
+    public static final String BECKN_VERSION             = "2.0.0";
 
 
     // ── Context v2.1 fields ───────────────────────────────────────────────────
     public static final String TRY              = "try";
     public static final String LINEAGE          = "lineage";
     public static final String SUBSCRIBER_ID    = "subscriberId";
+    public static final String SUBSCRIPTION_ID  = "subscriptionId";
 
     // ── Auth / ownership (MDC keys) ──────────────────────────────────────────
     /** MDC key: org-level identity from auth header keyId first segment. */

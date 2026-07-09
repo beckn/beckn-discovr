@@ -7,6 +7,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.beckn.auth.exception.BecknAuthException;
 import org.beckn.discover.config.DiscoveryProperties;
 import org.beckn.discover.exception.GlobalExceptionHandler;
+import org.beckn.discover.model.AckResponseFactory;
 import org.beckn.discover.service.DiscoveryService;
 import org.beckn.discover.service.authorization.AuthorizationService;
 import org.beckn.discover.service.authorization.AuthorizationService.AuthIdentity;
@@ -63,17 +64,13 @@ class DiscoveryControllerTest {
     @SuppressWarnings("rawtypes")
     @Mock private KafkaTemplate kafkaTemplate;
 
+    /** Default (Beckn v2.0 nested shape, legacy-ack-nack-support=false). */
     private MockMvc mockMvc;
     private ObjectMapper objectMapper;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setup() {
-        var props = new DiscoveryProperties();
-        props.getKafka().setRequestTopic("test.discover.requests");
-        props.getKafka().setResponseTopic("test.discover.responses");
-        props.getKafka().setDedupCacheTtlSeconds(60);
-
         // Schema validation always passes — lenient because auth-failure test never reaches validation
         var validResult = mock(DiscoveryValidationService.ValidationResult.class);
         lenient().when(validResult.isValid()).thenReturn(true);
@@ -90,12 +87,30 @@ class DiscoveryControllerTest {
                 .when(kafkaTemplate.send(any(ProducerRecord.class)))
                 .thenReturn(CompletableFuture.completedFuture(sendResult));
 
-        var executor = Executors.newFixedThreadPool(2);
         objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-        @SuppressWarnings("unchecked")
+        mockMvc = buildMockMvc(false);
+    }
+
+    /**
+     * Builds a stand-alone MockMvc wired with an {@link AckResponseFactory} configured for the
+     * given {@code legacyAckNackSupport} flag. The same factory instance backs both the controller
+     * (ACK) and the {@link GlobalExceptionHandler} (NACK) so both response construction sites honour
+     * the flag through the single decision point.
+     */
+    @SuppressWarnings("unchecked")
+    private MockMvc buildMockMvc(boolean legacyAckNackSupport) {
+        var props = new DiscoveryProperties();
+        props.getKafka().setRequestTopic("test.discover.requests");
+        props.getKafka().setResponseTopic("test.discover.responses");
+        props.getKafka().setDedupCacheTtlSeconds(60);
+        props.setLegacyAckNackSupport(legacyAckNackSupport);
+
+        var ackResponseFactory = new AckResponseFactory(props);
+        var executor = Executors.newFixedThreadPool(2);
+
         var controller = new DiscoveryController(
                 discoveryService,
                 objectMapper,
@@ -104,12 +119,13 @@ class DiscoveryControllerTest {
                 authorizationService,
                 (KafkaTemplate<String, String>) kafkaTemplate,
                 props,
-                executor);
+                executor,
+                ackResponseFactory);
 
         // Register GlobalExceptionHandler so auth failures produce correct HTTP status codes
-        mockMvc = MockMvcBuilders
+        return MockMvcBuilders
                 .standaloneSetup(controller)
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(ackResponseFactory))
                 .build();
     }
 
@@ -204,6 +220,159 @@ class DiscoveryControllerTest {
                 .andExpect(jsonPath("$.message.transactionId").doesNotExist());
 
         verify(kafkaTemplate, never()).send(any(ProducerRecord.class));
+    }
+
+    // ── legacy-ack-nack-support flag: response-shape switching (issue #406 / #408) ──────────
+
+    /**
+     * Guard test: the default MUST be false so the out-of-the-box shape stays Beckn v2.0 nested.
+     * Fails loudly if someone flips the {@code discovery.legacy-ack-nack-support} default.
+     */
+    @Test
+    void legacyAckNackSupport_defaultsToFalse() {
+        assertThat(new DiscoveryProperties().isLegacyAckNackSupport()).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void postDiscover_flagFalse_ack_usesV20NestedShape() throws Exception {
+        doReturn(new AuthIdentity("bpp.seller.io", "bpp-key-001"))
+                .when(authorizationService).authorizeRequest(any(), any());
+
+        String messageId = UUID.randomUUID().toString();
+        // Default mockMvc is built with legacyAckNackSupport=false
+        mockMvc.perform(post(DISCOVER_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(buildPayload(messageId, UUID.randomUUID().toString())))
+                .andExpect(status().isOk())
+                // v2.0 nested envelope
+                .andExpect(jsonPath("$.message.status").value("ACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                // legacy flat fields MUST be absent
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.error").doesNotExist());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void postDiscover_flagTrue_ack_usesLegacyFlatShape() throws Exception {
+        doReturn(new AuthIdentity("bpp.seller.io", "bpp-key-001"))
+                .when(authorizationService).authorizeRequest(any(), any());
+
+        MockMvc legacyMvc = buildMockMvc(true);
+
+        String messageId = UUID.randomUUID().toString();
+        legacyMvc.perform(post(DISCOVER_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(buildPayload(messageId, UUID.randomUUID().toString())))
+                .andExpect(status().isOk())
+                // legacy flat: root-level status, no message wrapper, no messageId
+                .andExpect(jsonPath("$.status").value("ACK"))
+                .andExpect(jsonPath("$.message").doesNotExist())
+                .andExpect(jsonPath("$.messageId").doesNotExist())
+                .andExpect(jsonPath("$.error").doesNotExist());
+    }
+
+    @Test
+    void postDiscover_flagFalse_nack_usesV20NestedShape() throws Exception {
+        var pd = ProblemDetail.forStatus(401);
+        pd.setDetail("Signature verification failed");
+        pd.setProperty("code", "AUT_SIGNATURE_INVALID");
+        doThrow(new ErrorResponseException(HttpStatusCode.valueOf(401), pd,
+                BecknAuthException.signatureVerificationFailed("bad sig", "SEC_SIGNATURE_INVALID")))
+                .when(authorizationService).authorizeRequest(any(), any());
+
+        String messageId = UUID.randomUUID().toString();
+        // Default mockMvc — legacyAckNackSupport=false
+        mockMvc.perform(post(DISCOVER_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(buildPayload(messageId, UUID.randomUUID().toString())))
+                .andExpect(status().isUnauthorized())
+                // v2.0 nested envelope: code/message under message.error, echoes messageId
+                .andExpect(jsonPath("$.message.status").value("NACK"))
+                .andExpect(jsonPath("$.message.messageId").value(messageId))
+                .andExpect(jsonPath("$.message.error.code").value("AUT_SIGNATURE_INVALID"))
+                .andExpect(jsonPath("$.message.error.message").value("Signature verification failed"))
+                // legacy flat fields MUST be absent
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.error").doesNotExist());
+    }
+
+    @Test
+    void postDiscover_flagTrue_nack_usesLegacyFlatShape() throws Exception {
+        var pd = ProblemDetail.forStatus(401);
+        pd.setDetail("Signature verification failed");
+        pd.setProperty("code", "AUT_SIGNATURE_INVALID");
+        doThrow(new ErrorResponseException(HttpStatusCode.valueOf(401), pd,
+                BecknAuthException.signatureVerificationFailed("bad sig", "SEC_SIGNATURE_INVALID")))
+                .when(authorizationService).authorizeRequest(any(), any());
+
+        MockMvc legacyMvc = buildMockMvc(true);
+
+        String messageId = UUID.randomUUID().toString();
+        legacyMvc.perform(post(DISCOVER_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(buildPayload(messageId, UUID.randomUUID().toString())))
+                .andExpect(status().isUnauthorized())
+                // legacy flat: root-level status + error{errorCode,errorMessage}, no message, no messageId.
+                // The code VALUE and message VALUE are identical to v2.0 — only the envelope/field names change.
+                .andExpect(jsonPath("$.status").value("NACK"))
+                .andExpect(jsonPath("$.error.errorCode").value("AUT_SIGNATURE_INVALID"))
+                .andExpect(jsonPath("$.error.errorMessage").value("Signature verification failed"))
+                .andExpect(jsonPath("$.message").doesNotExist())
+                .andExpect(jsonPath("$.messageId").doesNotExist())
+                // v2.0 field names MUST be absent
+                .andExpect(jsonPath("$.error.code").doesNotExist())
+                .andExpect(jsonPath("$.error.message").doesNotExist());
+    }
+
+    /**
+     * Legacy mode, malformed-JSON NACK path ({@code handleMalformedJson}). This exercises a
+     * different exception site than the auth-failure tests above (which go through
+     * {@code buildErrorResponse}), and it is the only NACK path where {@code messageId} is
+     * genuinely unrecoverable — the body never parses, so {@code context.messageId} is never
+     * captured. Asserts the flat envelope AND that {@code messageId} is dropped, never fabricated.
+     */
+    @Test
+    void postDiscover_flagTrue_malformedJson_usesLegacyFlatShape_withoutMessageId() throws Exception {
+        MockMvc legacyMvc = buildMockMvc(true);
+
+        legacyMvc.perform(post(DISCOVER_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ this is not valid json "))
+                .andExpect(status().isBadRequest())
+                // legacy flat: root-level status + error{errorCode,errorMessage}
+                .andExpect(jsonPath("$.status").value("NACK"))
+                .andExpect(jsonPath("$.error.errorCode").value("SCH_INVALID_JSON"))
+                .andExpect(jsonPath("$.error.errorMessage").isNotEmpty())
+                // unparseable body → messageId unrecoverable → dropped (not fabricated)
+                .andExpect(jsonPath("$.messageId").doesNotExist())
+                .andExpect(jsonPath("$.message").doesNotExist())
+                // v2.0 field names MUST be absent
+                .andExpect(jsonPath("$.error.code").doesNotExist())
+                .andExpect(jsonPath("$.error.message").doesNotExist());
+    }
+
+    /**
+     * Default mode, same malformed-JSON path — the v2.0 nested counterpart. Confirms the shared
+     * factory keeps the nested envelope here too, and that {@code messageId} is omitted (not null,
+     * not fabricated) when the body is unparseable.
+     */
+    @Test
+    void postDiscover_flagFalse_malformedJson_usesV20NestedShape_withoutMessageId() throws Exception {
+        // Default mockMvc — legacyAckNackSupport=false
+        mockMvc.perform(post(DISCOVER_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ this is not valid json "))
+                .andExpect(status().isBadRequest())
+                // v2.0 nested envelope
+                .andExpect(jsonPath("$.message.status").value("NACK"))
+                .andExpect(jsonPath("$.message.error.code").value("SCH_INVALID_JSON"))
+                .andExpect(jsonPath("$.message.error.message").isNotEmpty())
+                .andExpect(jsonPath("$.message.messageId").doesNotExist())
+                // legacy flat fields MUST be absent
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.error").doesNotExist());
     }
 
     private static String buildPayload(String messageId, String transactionId) {

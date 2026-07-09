@@ -103,7 +103,10 @@ public class PostgreSQLService {
                 request.filters(),
                 request.rawSchemaContextUrls(),
                 resultLimit(),
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                request.now());
         return executeQuery(query, "jsonpath", request.transactionId(), "PostgreSQL JSONPath query failed");
     }
 
@@ -125,7 +128,10 @@ public class PostgreSQLService {
                 request.spatial(),
                 request.rawSchemaContextUrls(),
                 resultLimit(),
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                request.now());
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-conditions", LogEvent.SPATIAL_QUERY_SKIP);
             return new ArrayList<>();
@@ -156,7 +162,10 @@ public class PostgreSQLService {
                 request.rawSchemaContextUrls(),
                 resultLimit(),
                 idAllowlist,
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                request.now());
         return executeQuery(query, "jsonpath-chain", request.transactionId(), "PostgreSQL chain JSONPath query failed");
     }
 
@@ -188,7 +197,10 @@ public class PostgreSQLService {
                 request.rawSchemaContextUrls(),
                 resultLimit(),
                 idAllowlist,
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                request.now());
 
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP + ".chain");
@@ -220,7 +232,10 @@ public class PostgreSQLService {
                 request.filters(),
                 request.rawSchemaContextUrls(),
                 resultLimit(),
-                request.networkId());
+                request.networkId(),
+                request.activeMatch(),
+                request.validMatch(),
+                request.now());
         if (queryOpt.isEmpty()) {
             log.debug("event={} reason=no-spatial-conditions", LogEvent.COMBINED_QUERY_SKIP);
             return Optional.empty();
