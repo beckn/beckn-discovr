@@ -42,6 +42,17 @@ import java.util.List;
  * <p>The assembled catalogs are passed to the
  * {@link org.beckn.discover.service.response.CatalogPipeline} by the caller;
  * this engine does not run the pipeline itself.</p>
+ *
+ * <h3>KNOWN LIMITATION — {@code ?active}/{@code ?validity} filters are NOT applied on this path</h3>
+ * <p>The active/validity value-match filters are enforced in-query by the PostgreSQL and
+ * Elasticsearch engines against the {@code isActive}/{@code validity} (PG) and
+ * {@code catalog_is_active}/{@code catalog_validity} (ES) fields. NLWeb delegates text search to an
+ * external service that has no notion of those fields, so a text-only request routed to NLWeb
+ * <b>cannot</b> honor {@code ?active}/{@code ?validity} — it emits a WARN
+ * ({@code event=nlweb.active-filter-not-applied}) and returns results unfiltered by
+ * activity/validity. Deployments that require the filter guarantee on text search must use
+ * {@code discovery.text-search.engine=elasticsearch}. (Filtering still applies to the J / G / J+G
+ * routes even under NLWeb, since those run on PostgreSQL.)</p>
  */
 @Service
 @ConditionalOnProperty(
@@ -80,6 +91,12 @@ public class NLWebTextSearchEngine implements TextSearchEngine {
         log.info(LogEvent.NLWEB_SEARCH_STARTED,
                 value("transactionId", txId),
                 value("query", text));
+        // The active/validity value-match filters are applied in-query by the PostgreSQL and
+        // Elasticsearch engines only. NLWeb delegates to an external service with no such field
+        // support, so the flags are intentionally NOT applied on this path.
+        if (queryRequest.hasActiveMatch() || queryRequest.hasValidMatch()) {
+            log.warn("event=nlweb.active-filter-not-applied transactionId={} reason=nlweb-engine-has-no-active-validity-support", txId);
+        }
         Instant start = Instant.now();
 
         try {

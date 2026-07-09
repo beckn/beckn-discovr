@@ -6,7 +6,7 @@ description: >
   offer-only, cross-BPP resolution, discover (sync/async), spatial search, Elasticsearch,
   response dispatcher, DB checks — and reports a PASS/FAIL table.
   Triggers on "verify", "run verification", "check all scenarios", "integration test".
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read
@@ -34,10 +34,9 @@ You are the **Beckn Discovr Verification Agent**. You test the Discovr stack end
 | Catalog Evaluator | internal | beckn-catalg |
 | Catalog Delivery | internal | beckn-catalg |
 | Catalg Postgres | `docker exec catalog-service-postgres psql -U catalog_user -d catalog_db` | beckn-catalg |
-| KVRocks | `kvrocks:6666` (internal) | beckn-catalg |
 | Kafka | `localhost:9092` | shared |
 
-Containers: `catalog-api-service`, `catalog-indexer-job`, `catalog-delivery-job`, `catalog-evaluator-job`, `catalog-publish`, `catalog-discover-job`, `response-dispatcher`, `catalog-service-postgres`, `discovery-service-postgres`, `discovery-elasticsearch`, `kafka`, `kvrocks`
+Containers: `catalog-api-service`, `catalog-indexer-job`, `catalog-delivery-job`, `catalog-evaluator-job`, `discovr-ingestion`, `catalog-discover-job`, `response-dispatcher`, `catalog-service-postgres`, `discovery-service-postgres`, `discovery-elasticsearch`, `kafka`
 
 ## Pre-check — Build and Start Stack
 
@@ -69,7 +68,7 @@ If Catalg is not available, run Discovr-only scenarios (direct push + discover) 
 ### Step 3: Wait for readiness (poll, max 120s)
 - Discovr Postgres: `docker exec discovery-service-postgres pg_isready -U catalog_user`
 - Elasticsearch: `curl -s http://localhost:9200/_cluster/health | grep -E '"status":"(green|yellow)"'`
-- Catalog Publish: `docker logs catalog-publish 2>&1 | grep "Started"`
+- Catalog Publish: `docker logs discovr-ingestion 2>&1 | grep "Started"`
 - Discover Job: `docker logs catalog-discover-job 2>&1 | grep "Started"`
 
 ### Step 4: Verify Elasticsearch index exists
@@ -102,7 +101,7 @@ Use `uuidgen | tr '[:upper:]' '[:lower:]'` for all messageId/transactionId value
 ## Execution Order
 
 ```
- 1. Direct push to catalog-publish → wait for indexing — SC-01 to SC-05
+ 1. Direct push to discovr-ingestion → wait for indexing — SC-01 to SC-05
  2. Discover sync (GET) — text search, spatial, validation errors — SC-06 to SC-15c
  3. Discover async (POST) — ACK + response dispatcher — SC-16, SC-17
  4. MERGE mode — re-publish to same catalog, verify upsert — SC-18 to SC-21
@@ -217,7 +216,7 @@ docker inspect catalog-discover-job --format '{{range .Config.Env}}{{println .}}
 | SC-18 | MERGE: add R4, update OFFER-1 discount to 25% | POST push same catalog `DSC-VERIFY-<TS>` with R4 + updated OFFER-1 (no `updateMode` → defaults MERGE) | HTTP 202 `{"message":{"status":"ACK","messageId":"<uuid>","transactionId":"<uuid>"}}` |
 | SC-19 | DB: 4 resources after MERGE | `SELECT id FROM item WHERE catalog_id = 'DSC-VERIFY-<TS>'` | 4 rows (R1, R2, R3 preserved + R4 added) |
 | SC-20 | DB: offer propagated to R1 and R2 | `SELECT payload FROM item WHERE id = 'R1-<TS>'` | Payload JSON contains offer with `discount: "25%"` |
-| SC-21 | Catalog-publish logs show MERGE mode | `docker logs catalog-publish` | Log entry with `mode=MERGE` and `inserted=1 updated=` |
+| SC-21 | Catalog-publish logs show MERGE mode | `docker logs discovr-ingestion` | Log entry with `mode=MERGE` and `inserted=1 updated=` |
 
 ### 5. FULL Replace Mode
 
@@ -234,8 +233,8 @@ FULL_CAT_ID="DSC-FULL-<TS>"
 | SC-24 | FULL replace with only 1 resource | POST push same `FULL_CAT_ID` with `publishDirectives: { "updateMode": "FULL" }` and only 1 resource | HTTP 202 ACK |
 | SC-25 | DB: only 1 resource (old 2 gone) | `SELECT id FROM item WHERE catalog_id = 'DSC-FULL-<TS>'` | Exactly 1 row |
 | SC-25a | ES: old docs cleaned | `curl -s 'http://localhost:9200/beckn-catalog-*/_search?q=catalog_id:DSC-FULL-<TS>'` | `hits.total.value` = 1 |
-| SC-25b | Logs show FULL replace with delete counts | `docker logs catalog-publish` | `event=full.replace.deleted` with `deletedItems=3 deletedLocations=` |
-| SC-25c | Logs show mode=FULL at persist completion | `docker logs catalog-publish` | `event=persist.completed` with `mode=FULL` |
+| SC-25b | Logs show FULL replace with delete counts | `docker logs discovr-ingestion` | `event=full.replace.deleted` with `deletedItems=3 deletedLocations=` |
+| SC-25c | Logs show mode=FULL at persist completion | `docker logs discovr-ingestion` | `event=persist.completed` with `mode=FULL` |
 
 ### 6. Offer-Only Push + Cross-BPP Resolution
 
@@ -258,7 +257,7 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
 
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
-| SC-32 | Subscribe via Catalg API | POST `http://localhost:3000/catalog/subscription` with callback URL `http://catalog-publish:8080/catalog/push` | `status = "ACTIVE"` |
+| SC-32 | Subscribe via Catalg API | POST `http://localhost:3000/catalog/subscription` with callback URL `http://discovr-ingestion:8080/catalog/push` | `status = "ACTIVE"` |
 | SC-33 | Publish via Catalg API | POST `http://localhost:3000/catalog/publish` | `{"status":"ACK"}` (Catalg Node.js API — separate repo, not yet migrated to the wrapped `message` form) |
 | SC-34 | Wait for pipeline: indexer → evaluator → delivery → push | Poll Discovr postgres for item rows | Items from SC-33 appear in Discovr DB (max 60s) |
 | SC-35 | Discover catalog published via full pipeline | GET discover with matching textSearch | `message.catalogs` includes the SC-33 catalog |
@@ -276,7 +275,7 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
 
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
-| SC-40 | Catalog-publish logs are structured JSON | `docker logs catalog-publish 2>&1 \| head -5` | JSON with `@timestamp`, `level`, `message` fields |
+| SC-40 | Catalog-publish logs are structured JSON | `docker logs discovr-ingestion 2>&1 \| head -5` | JSON with `@timestamp`, `level`, `message` fields |
 | SC-41 | Discover job logs are structured JSON | `docker logs catalog-discover-job 2>&1 \| head -5` | JSON with MDC fields |
 | SC-42 | Metrics endpoint available | `curl -s http://localhost:8085/actuator/prometheus` | Contains `discovr_publish_success`, `discovr_publish_full_replace`, `discovr_publish_persist_inserted` |
 | SC-43 | Response dispatcher logs structured | `docker logs response-dispatcher 2>&1 \| head -5` | JSON format with `@timestamp` |
@@ -333,7 +332,7 @@ OFFER_BPP_ID="bpp.offer-only-<TS>.in"
    Assert: document count matches item count
 4. **Catalog-publish logs**:
    ```bash
-   docker logs catalog-publish 2>&1 | grep "${CAT_ID}" | tail -5
+   docker logs discovr-ingestion 2>&1 | grep "${CAT_ID}" | tail -5
    ```
    Assert: `persist.completed` log entry with correct mode and counts
 
@@ -384,7 +383,7 @@ Run at: <ISO timestamp>
 ### Infrastructure
 | Container | Status |
 |-----------|--------|
-| catalog-publish | UP |
+| discovr-ingestion | UP |
 | catalog-discover-job | UP |
 | response-dispatcher | UP |
 | discovery-service-postgres | UP/healthy |
@@ -416,7 +415,7 @@ When a scenario FAILS, report:
   Expected: SELECT returns exactly 1 row
   Actual: 3 rows returned (old resources not deleted)
   DB state: item rows for DSC-FULL-<TS>: id=R1 id=R2 id=R3
-  Logs: docker logs catalog-publish | grep "full.replace" → <paste actual lines>
+  Logs: docker logs discovr-ingestion | grep "full.replace" → <paste actual lines>
   Possible cause: FULL replace delete not executing — check publishDirectives parsing
 ```
 

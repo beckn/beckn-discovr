@@ -7,7 +7,7 @@ Verify structured JSON logging, metric endpoints, and correct event naming acros
 
 | # | Scenario | Method | Expected |
 |---|----------|--------|----------|
-| SC-40 | Catalog-publish logs are structured JSON | `docker logs catalog-publish` | JSON with `@timestamp`, `level`, `message` fields |
+| SC-40 | Discovr ingestion logs are structured JSON | `docker logs discovr-ingestion` | JSON with `@timestamp`, `level`, `message` fields |
 | SC-41 | Discover job logs are structured JSON | `docker logs catalog-discover-job` | JSON with MDC fields |
 | SC-42 | Prometheus metrics endpoint | `curl -s http://localhost:8085/actuator/prometheus` | Contains `discovr_publish_success`, `discovr_publish_full_replace`, `discovr_publish_persist_inserted`, `discovr_publish_offer_resolve_success` |
 | SC-43 | Response dispatcher logs | `docker logs response-dispatcher` | JSON format with `@timestamp` |
@@ -30,7 +30,7 @@ All log events must use `dot.separated.lowercase` format:
 - `discovr_publish_failure_total` (tagged by op)
 - `discovr_publish_message_duration_seconds` (tagged by op)
 - `discovr_publish_full_replace_total`
-- `discovr_publish_full_replace_deleted_items_total`
+- `discovr_publish_full_replace_deleted_resources_total`
 - `discovr_publish_full_replace_deleted_locations_total`
 - `discovr_publish_full_replace_deleted_es_docs_total`
 - `discovr_publish_merge_total`

@@ -19,6 +19,13 @@ import org.springframework.validation.annotation.Validated;
 public class DiscoveryProperties {
 
     private boolean latencyTrackingEnabled = true;
+    /**
+     * When {@code true}, the synchronous ACK/NACK body reverts to the pre-2.0 flat shape
+     * ({@code {"status":"ACK"}} / {@code {"status":"NACK","error":{"errorCode":...,"errorMessage":...}}})
+     * for back-compat with BAPs built against the original response body. Default {@code false}
+     * keeps the Beckn v2.0 nested shape ({@code {"message":{"status":...,"messageId":...}}}).
+     */
+    private boolean legacyAckNackSupport = false;
     @Valid private Filter filter = new Filter();
     @Valid private Kafka kafka = new Kafka();
     @Valid private NLWeb nlweb = new NLWeb();
@@ -77,6 +84,14 @@ public class DiscoveryProperties {
         this.latencyTrackingEnabled = latencyTrackingEnabled;
     }
 
+    public boolean isLegacyAckNackSupport() {
+        return legacyAckNackSupport;
+    }
+
+    public void setLegacyAckNackSupport(boolean legacyAckNackSupport) {
+        this.legacyAckNackSupport = legacyAckNackSupport;
+    }
+
     public Filter getFilter() {
         return filter;
     }
@@ -115,12 +130,43 @@ public class DiscoveryProperties {
     public static class Filter {
         private boolean discardCatalogsWithoutOffers = true;
 
+        /**
+         * Default for the {@code ?active} value-match query param when it is omitted. When
+         * {@code true}, discovery returns only active catalogs by default; a request may
+         * override per-call with {@code ?active=true|false}. Value-match semantics — not an
+         * enable/disable toggle.
+         */
+        private boolean activeCatalog = true;
+
+        /**
+         * Default for the {@code ?validity} value-match query param when it is omitted. When
+         * {@code true}, discovery returns only currently-valid catalogs by default; overridable
+         * per-call with {@code ?validity=true|false}.
+         */
+        private boolean validCatalogs = true;
+
         public boolean isDiscardCatalogsWithoutOffers() {
             return discardCatalogsWithoutOffers;
         }
 
         public void setDiscardCatalogsWithoutOffers(boolean discardCatalogsWithoutOffers) {
             this.discardCatalogsWithoutOffers = discardCatalogsWithoutOffers;
+        }
+
+        public boolean isActiveCatalog() {
+            return activeCatalog;
+        }
+
+        public void setActiveCatalog(boolean activeCatalog) {
+            this.activeCatalog = activeCatalog;
+        }
+
+        public boolean isValidCatalogs() {
+            return validCatalogs;
+        }
+
+        public void setValidCatalogs(boolean validCatalogs) {
+            this.validCatalogs = validCatalogs;
         }
     }
 

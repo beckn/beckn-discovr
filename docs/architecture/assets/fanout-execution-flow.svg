@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1240" viewBox="0 0 1240 1240" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1240" height="1240" fill="#ffffff"/>
+<text x="620.0" y="55" font-size="30" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Fan-Out Execution Flow</text>
+<defs>
+<marker id="ah2563eb" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#2563eb"/></marker>
+<marker id="ah15803d" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#15803d"/></marker>
+<marker id="ahd97706" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#d97706"/></marker>
+<marker id="ah8b5cf6" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#8b5cf6"/></marker>
+<marker id="ah0e9488" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#0e9488"/></marker>
+</defs>
+<rect x="40" y="440" width="200" height="150" rx="12" ry="12" fill="#a5d8ff" stroke="#2563eb" stroke-width="2"/>
+<text x="140.0" y="508.8" font-size="22" text-anchor="middle" fill="#1e1e1e">Consumer</text>
+<text x="140.0" y="536.3" font-size="22" text-anchor="middle" fill="#1e1e1e">(CN)</text>
+<rect x="470" y="360" width="300" height="320" rx="12" ry="12" fill="#d0bfff" stroke="#8b5cf6" stroke-width="2"/>
+<text x="620.0" y="513.8" font-size="22" text-anchor="middle" fill="#1e1e1e">Discovery</text>
+<text x="620.0" y="541.3" font-size="22" text-anchor="middle" fill="#1e1e1e">Service (DS)</text>
+<rect x="420" y="760" width="220" height="95" rx="12" ry="12" fill="#c3fae8" stroke="#0e9488" stroke-width="2"/>
+<text x="530.0" y="802.5" font-size="18" text-anchor="middle" fill="#1e1e1e">Static Index</text>
+<text x="530.0" y="825.0" font-size="18" text-anchor="middle" fill="#1e1e1e">(ES / PostGIS)</text>
+<rect x="700" y="760" width="240" height="95" rx="12" ry="12" fill="#fff3bf" stroke="#d97706" stroke-width="2"/>
+<text x="820.0" y="802.5" font-size="18" text-anchor="middle" fill="#1e1e1e">Dedi Registry</text>
+<text x="820.0" y="825.0" font-size="18" text-anchor="middle" fill="#1e1e1e">(url + key)</text>
+<rect x="1010" y="360" width="180" height="85" rx="12" ry="12" fill="#ffd8a8" stroke="#d97706" stroke-width="2"/>
+<text x="1100.0" y="409.0" font-size="19" text-anchor="middle" fill="#1e1e1e">Provider PN-1</text>
+<rect x="1010" y="490" width="180" height="85" rx="12" ry="12" fill="#ffd8a8" stroke="#d97706" stroke-width="2"/>
+<text x="1100.0" y="539.0" font-size="19" text-anchor="middle" fill="#1e1e1e">Provider PN-2</text>
+<rect x="1010" y="620" width="180" height="85" rx="12" ry="12" fill="#ffd8a8" stroke="#d97706" stroke-width="2"/>
+<text x="1100.0" y="669.0" font-size="19" text-anchor="middle" fill="#1e1e1e">Provider PN-3</text>
+<line x1="240" y1="460" x2="470" y2="460" stroke="#2563eb" stroke-width="2" marker-end="url(#ah2563eb)"/>
+<rect x="264" y="436" width="181" height="22" fill="#ffffff" opacity="0.9"/>
+<text x="355" y="452" font-size="16" text-anchor="middle" fill="#2563eb">1  /discover (fanOut)</text>
+<line x1="470" y1="500" x2="240" y2="500" stroke="#15803d" stroke-width="2" marker-end="url(#ah15803d)"/>
+<rect x="329" y="476" width="52" height="22" fill="#ffffff" opacity="0.9"/>
+<text x="355" y="492" font-size="16" text-anchor="middle" fill="#15803d">2  ACK</text>
+<line x1="470" y1="560" x2="240" y2="560" stroke="#8b5cf6" stroke-width="2" marker-end="url(#ah8b5cf6)"/>
+<rect x="277" y="536" width="156" height="22" fill="#ffffff" opacity="0.9"/>
+<text x="355" y="552" font-size="16" text-anchor="middle" fill="#8b5cf6">7  on_discover x N</text>
+<line x1="560" y1="680" x2="540" y2="760" stroke="#0e9488" stroke-width="2" marker-end="url(#ah0e9488)"/>
+<rect x="469" y="697" width="162" height="21" fill="#ffffff" opacity="0.9"/>
+<text x="550" y="712" font-size="15" text-anchor="middle" fill="#0e9488">3  query -&gt; catalogs</text>
+<line x1="690" y1="680" x2="820" y2="760" stroke="#d97706" stroke-width="2" marker-end="url(#ahd97706)"/>
+<rect x="690" y="697" width="130" height="21" fill="#ffffff" opacity="0.9"/>
+<text x="755" y="712" font-size="15" text-anchor="middle" fill="#d97706">4  resolve bppId</text>
+<line x1="770" y1="420" x2="1010" y2="410" stroke="#d97706" stroke-width="2" marker-end="url(#ahd97706)"/>
+<line x1="770" y1="470" x2="1010" y2="532" stroke="#d97706" stroke-width="2" marker-end="url(#ahd97706)"/>
+<rect x="797" y="478" width="186" height="21" fill="#ffffff" opacity="0.9"/>
+<text x="890" y="493" font-size="15" text-anchor="middle" fill="#d97706">5  /discover (parallel)</text>
+<line x1="770" y1="520" x2="1010" y2="662" stroke="#d97706" stroke-width="2" marker-end="url(#ahd97706)"/>
+<line x1="1010" y1="378" x2="770" y2="486" stroke="#15803d" stroke-width="2" stroke-dasharray="8,6" marker-end="url(#ah15803d)"/>
+<rect x="805" y="409" width="170" height="21" fill="#ffffff" opacity="0.9"/>
+<text x="890" y="424" font-size="15" text-anchor="middle" fill="#15803d">6  on_discover (live)</text>
+<text x="620.0" y="905" font-size="15" text-anchor="middle" fill="#757575">Steps 3-6 happen inside the DS. Provider URLs are resolved dynamically from the dedi registry (step 4).</text>
+</svg>

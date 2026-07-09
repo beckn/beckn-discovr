@@ -5,7 +5,7 @@ description: >
   edge cases, error cases, and integration scenarios. Output is structured for the verify agent
   and test-runner to execute. Triggers on "generate scenarios", "test scenarios for", "what should
   we test", "acceptance scenarios".
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Glob
@@ -31,7 +31,7 @@ If a GitHub issue is given, read it with `gh issue view`.
 
 Read the input and identify:
 - What APIs/endpoints are involved
-- What data flows through the system (publish → index → evaluate → deliver → discover)
+- What data flows through the system (catalog/push → index into Postgres + Elasticsearch → discover query → on_discover response dispatch)
 - What validations exist
 - What the expected behavior is
 
@@ -66,9 +66,9 @@ Produce scenarios in these categories:
 - Network/service failures
 
 **Integration** — Cross-service interactions
-- Publish → Indexer → Evaluator → Delivery → Discover flow
-- Subscription matching
-- Pull after publish
+- catalog/push → index (Postgres + Elasticsearch) → discover query → on_discover dispatch flow
+- Multi-network / schema-type filtering on discover
+- Offer resolution across catalogs (provider_offer, Phase 3)
 - MERGE behavior
 
 ## Output Format

@@ -66,7 +66,8 @@ class DiscoveryServiceTest {
                 responseProcessor, providerOfferEnricher, metrics,
                 properties, queryExecutor,
                 Optional.empty(),  // no ES engine in unit tests
-                pgQueryEngine);
+                pgQueryEngine,
+                java.time.Clock.systemUTC());
     }
 
     @Test
