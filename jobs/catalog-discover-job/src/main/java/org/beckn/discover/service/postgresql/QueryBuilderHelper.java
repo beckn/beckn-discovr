@@ -3,6 +3,7 @@ package org.beckn.discover.service.postgresql;
 import org.beckn.discover.util.DiscoveryServiceUtil;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -112,6 +113,71 @@ public final class QueryBuilderHelper {
           + "AND try_to_timestamptz(i.payload #>> '{catalogs,0,validity,startDate}') > ?) "
           + "OR (try_to_timestamptz(i.payload #>> '{catalogs,0,validity,endDate}') IS NOT NULL "
           + "AND try_to_timestamptz(i.payload #>> '{catalogs,0,validity,endDate}') < ?))";
+
+    // ── validity time-of-day (startTime/endTime) fallback ──────────────────────
+    //
+    // Per core-v2.0.0-lts, TimePeriod allows startDate/endDate OR startTime/endTime (a daily
+    // recurring window, e.g. "09:00–21:00" or an overnight "22:00–02:00"). Priority: startDate/
+    // endDate — if EITHER is present — always wins over startTime/endTime, even if both are
+    // present together. Time-of-day is evaluated only when BOTH date fields are absent. "Present"
+    // means the JSON key exists (regardless of parseability) — an unparseable date still routes
+    // through the date branch (consistent with the existing null-safe date semantics above); it
+    // does not silently fall back to time-of-day. Comparison is UTC and wrap-around aware: a
+    // same-day window when startTime <= endTime, otherwise treated as spanning midnight. The
+    // helper is provisioned by publish-job migration V7 (prod) and the discover integration test
+    // schema.
+
+    /** True when either raw validity date field is present (regardless of parseability). */
+    private static final String VALIDITY_HAS_DATE_FIELDS =
+            "(i.payload #>> '{catalogs,0,validity,startDate}' IS NOT NULL "
+          + "OR i.payload #>> '{catalogs,0,validity,endDate}' IS NOT NULL)";
+
+    /** True when both raw validity time-of-day fields are present (regardless of parseability). */
+    private static final String VALIDITY_HAS_BOTH_TIME_FIELDS =
+            "(i.payload #>> '{catalogs,0,validity,startTime}' IS NOT NULL "
+          + "AND i.payload #>> '{catalogs,0,validity,endTime}' IS NOT NULL)";
+
+    /**
+     * Null-safe "currently within the daily time-of-day window" predicate. Either bound
+     * unparseable ⇒ not evaluable ⇒ counts as valid (mirrors the date predicates' unparseable
+     * handling above). Otherwise wrap-around aware: same-day window when {@code startTime <=
+     * endTime} ({@code now BETWEEN start AND end}); overnight window otherwise ({@code now >=
+     * start OR now <= end}). Binds the {@code now} time-of-day parameter three times — once for
+     * the same-day branch, twice for the overnight branch — every {@code ?} in the CASE
+     * expression must be bound regardless of which arm actually executes for a given row.
+     */
+    private static final String VALIDITY_TIME_IN_WINDOW =
+            "(try_to_time(i.payload #>> '{catalogs,0,validity,startTime}') IS NULL "
+          + "OR try_to_time(i.payload #>> '{catalogs,0,validity,endTime}') IS NULL "
+          + "OR (CASE WHEN try_to_time(i.payload #>> '{catalogs,0,validity,startTime}') "
+          + "<= try_to_time(i.payload #>> '{catalogs,0,validity,endTime}') "
+          + "THEN ? BETWEEN try_to_time(i.payload #>> '{catalogs,0,validity,startTime}') "
+          + "AND try_to_time(i.payload #>> '{catalogs,0,validity,endTime}') "
+          + "ELSE (? >= try_to_time(i.payload #>> '{catalogs,0,validity,startTime}') "
+          + "OR ? <= try_to_time(i.payload #>> '{catalogs,0,validity,endTime}')) END))";
+
+    /**
+     * Combined {@code ?validity=true} predicate — priority-ordered: date fields (if either
+     * present) always win over time-of-day fields; time-of-day applies only when both date
+     * fields are absent; if nothing usable is present at all, the catalog counts as valid.
+     * Binds, in order: now (x2, date bounds), now's time-of-day (x3, time bounds).
+     */
+    public static final String VALIDITY_MATCH =
+            "(" + "(" + VALIDITY_HAS_DATE_FIELDS + " AND " + VALIDITY_START_MATCH + " AND " + VALIDITY_END_MATCH + ")"
+          + " OR (NOT " + VALIDITY_HAS_DATE_FIELDS + " AND " + VALIDITY_HAS_BOTH_TIME_FIELDS + " AND " + VALIDITY_TIME_IN_WINDOW + ")"
+          + " OR (NOT " + VALIDITY_HAS_DATE_FIELDS + " AND NOT " + VALIDITY_HAS_BOTH_TIME_FIELDS + ")"
+          + ")";
+
+    /**
+     * Combined {@code ?validity=false} predicate — same priority ordering as {@link
+     * #VALIDITY_MATCH}. A catalog with nothing usable present is never "out of window" (absent ⇒
+     * always counts valid), so that branch is correctly omitted here. Binds, in order: now (x2,
+     * date bounds), now's time-of-day (x3, time bounds).
+     */
+    public static final String VALIDITY_NOT_MATCH =
+            "(" + "(" + VALIDITY_HAS_DATE_FIELDS + " AND " + VALIDITY_INVALID_MATCH + ")"
+          + " OR (NOT " + VALIDITY_HAS_DATE_FIELDS + " AND " + VALIDITY_HAS_BOTH_TIME_FIELDS + " AND NOT " + VALIDITY_TIME_IN_WINDOW + ")"
+          + ")";
 
     /** JSONPath exists — match everything (no filter provided). */
     public static final String JSONPATH_EXISTS_ALL = "exists($)";
@@ -278,11 +344,14 @@ public final class QueryBuilderHelper {
          * filter), evaluated against {@code $.catalogs[0].validity} of the item payload. No-op
          * when {@code validMatch} is {@code null} (dimension not filtered).
          *
-         * <p>{@code TRUE} (currently valid) adds the two inclusive-bound conditions
-         * ({@link #VALIDITY_START_MATCH}, {@link #VALIDITY_END_MATCH}); absent/open-ended/
-         * bare-time/unparseable values pass. {@code FALSE} (not currently valid) adds
-         * {@link #VALIDITY_INVALID_MATCH}; only a provably out-of-window date matches. The
-         * {@code now} instant is bound as a {@code timestamptz} {@code ?} — never concatenated.</p>
+         * <p>Priority-ordered: {@code startDate}/{@code endDate} — if either is present — always
+         * wins; {@code startTime}/{@code endTime} (a UTC, wrap-around-aware daily window) applies
+         * only when both date fields are absent; a catalog with nothing usable present counts as
+         * valid. {@code TRUE} (currently valid) adds {@link #VALIDITY_MATCH}; absent/open-ended/
+         * unparseable/non-evaluable values pass. {@code FALSE} (not currently valid) adds
+         * {@link #VALIDITY_NOT_MATCH}; only a provably out-of-window value matches. {@code now}
+         * is bound as a {@code timestamptz} and (for the time-of-day branch) as its UTC
+         * time-of-day — never concatenated.</p>
          *
          * @param validMatch {@code null} ⇒ no-op; {@code TRUE} ⇒ within window; {@code FALSE} ⇒ outside window
          * @param now        the reference instant validity windows are evaluated against
@@ -293,11 +362,11 @@ public final class QueryBuilderHelper {
             }
             Objects.requireNonNull(now, "now must not be null when validMatch is set");
             OffsetDateTime ts = now.atOffset(ZoneOffset.UTC);
+            LocalTime nowTime = now.atZone(ZoneOffset.UTC).toLocalTime();
             if (validMatch) {
-                condition(VALIDITY_START_MATCH, ts);
-                condition(VALIDITY_END_MATCH, ts);
+                condition(VALIDITY_MATCH, ts, ts, nowTime, nowTime, nowTime);
             } else {
-                condition(VALIDITY_INVALID_MATCH, ts, ts);
+                condition(VALIDITY_NOT_MATCH, ts, ts, nowTime, nowTime, nowTime);
             }
             return this;
         }
