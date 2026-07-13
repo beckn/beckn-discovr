@@ -44,7 +44,11 @@ public record AppProperties(
                         int concurrency,
                         int maxPollRecords,
                         int sessionTimeoutMs,
-                        int maxPollIntervalMs) {
+                        int maxPollIntervalMs,
+                        // 10 MiB per-partition fetch — the ingestion topic carries the fully
+                        // assembled catalog from Catalg; Kafka's 1 MiB default would stall it.
+                        @Positive int maxPartitionFetchBytes,
+                        @Positive int fetchMaxBytes) {
         }
 
         public record Topics(
@@ -62,7 +66,73 @@ public record AppProperties(
                         @Min(1) int processingPoolSize,
                         @Valid Elasticsearch elasticsearch,
                         @Valid TextSearch textSearch,
-                        @Valid Indexing indexing) {
+                        @Valid Indexing indexing,
+                        Boolean pullSsrfCheckEnabled,
+                        Long pullMaxDownloadBytes,
+                        Long pullMaxDecompressedBytes,
+                        Integer pullDownloadMaxAttempts,
+                        Long pullDownloadRetryBackoffMs,
+                        Integer pullDnsCacheTtlSeconds,
+                        Integer pullConnectTimeoutMs,
+                        Integer pullReadTimeoutMs) {
+                /** Default hard cap for the compressed bytes downloaded on the on_pull path: 50 MiB. */
+                public static final long DEFAULT_MAX_DOWNLOAD_BYTES = 52_428_800L;
+                /** Default hard cap for the decompressed (gunzipped) bytes on the on_pull path: 200 MiB. */
+                public static final long DEFAULT_MAX_DECOMPRESSED_BYTES = 209_715_200L;
+                /** Default total attempts (1 initial + 2 retries) for a transient on_pull download failure. */
+                public static final int DEFAULT_DOWNLOAD_MAX_ATTEMPTS = 3;
+                /** Default base backoff between on_pull download retries (multiplied by attempt number). */
+                public static final long DEFAULT_DOWNLOAD_RETRY_BACKOFF_MS = 1_000L;
+                /**
+                 * Default positive DNS cache TTL (seconds) applied at startup by DnsCacheHardeningConfig.
+                 * Caching the SSRF-validated positive resolution for this window closes the DNS-rebinding
+                 * TOCTOU: HttpClient's fetch-time re-resolution reuses the same validated IPs.
+                 */
+                public static final int DEFAULT_DNS_CACHE_TTL_SECONDS = 10;
+                /** Default TCP connect timeout for the on_pull download HttpClient: 10s. */
+                public static final int DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
+                /** Default per-request read timeout for the on_pull download: 30s. */
+                public static final int DEFAULT_READ_TIMEOUT_MS = 30_000;
+
+                /**
+                 * Secure-by-default: when {@code app.catalog.pull-ssrf-check-enabled} is absent
+                 * (binds to {@code null}), the SSRF guard on the on_pull download path stays ENABLED.
+                 * Only an explicit {@code false} disables it (for local/dev). A {@code Boolean}
+                 * component is used deliberately so the absent case defaults to {@code true} rather
+                 * than a primitive {@code boolean}'s insecure {@code false}.
+                 *
+                 * <p>{@code maxDownloadBytes} / {@code maxDecompressedBytes} follow the same
+                 * secure-default pattern: a {@code Long} so an absent (null) value defaults to the
+                 * bounded constant above rather than an unbounded download/decompress. They cap the
+                 * on_pull download path to defend against gzip-bomb / OOM (env-bindable via
+                 * {@code APP_CATALOG_PULL_MAX_DOWNLOAD_BYTES} / {@code APP_CATALOG_PULL_MAX_DECOMPRESSED_BYTES}).</p>
+                 */
+                public Catalog {
+                        if (pullSsrfCheckEnabled == null) {
+                                pullSsrfCheckEnabled = Boolean.TRUE;
+                        }
+                        if (pullMaxDownloadBytes == null) {
+                                pullMaxDownloadBytes = DEFAULT_MAX_DOWNLOAD_BYTES;
+                        }
+                        if (pullMaxDecompressedBytes == null) {
+                                pullMaxDecompressedBytes = DEFAULT_MAX_DECOMPRESSED_BYTES;
+                        }
+                        if (pullDownloadMaxAttempts == null || pullDownloadMaxAttempts < 1) {
+                                pullDownloadMaxAttempts = DEFAULT_DOWNLOAD_MAX_ATTEMPTS;
+                        }
+                        if (pullDownloadRetryBackoffMs == null || pullDownloadRetryBackoffMs < 0) {
+                                pullDownloadRetryBackoffMs = DEFAULT_DOWNLOAD_RETRY_BACKOFF_MS;
+                        }
+                        if (pullDnsCacheTtlSeconds == null || pullDnsCacheTtlSeconds < 0) {
+                                pullDnsCacheTtlSeconds = DEFAULT_DNS_CACHE_TTL_SECONDS;
+                        }
+                        if (pullConnectTimeoutMs == null || pullConnectTimeoutMs < 1) {
+                                pullConnectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS;
+                        }
+                        if (pullReadTimeoutMs == null || pullReadTimeoutMs < 1) {
+                                pullReadTimeoutMs = DEFAULT_READ_TIMEOUT_MS;
+                        }
+                }
         }
 
         /**

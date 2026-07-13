@@ -1,7 +1,7 @@
 ---
 name: discovr-reliability
 description: Phase-1 reliability testing agent for the Discovr stack on a dedicated GKE staging cluster. Drives JMeter load runs on a remote VM via gcloud compute ssh, observes ClickStack (OpenTelemetry/ClickHouse) for indexing throughput, query latency, on_discover callback health, and JVM/ES/PG vitals. Generates a consolidated HTML report. Load + soak only — no chaos. Triggers on "run reliability", "load test discovr", "soak test discovr", "reliability scenario NN".
-model: claude-opus-4-6
+model: claude-opus-4-8
 tools:
   - Read
   - Glob

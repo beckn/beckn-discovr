@@ -1,5 +1,6 @@
 package org.beckn.catalogpublish.util;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.beckn.catalogpublish.dto.CatalogContext;
 import org.beckn.catalogpublish.logging.MdcField;
 import org.slf4j.MDC;
@@ -8,8 +9,8 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * MDC population and clear for trace context (messageId, transactionId, networkId, catalogId).
- * MDC is populated once from the parsed context so no double-parse occurs.
+ * MDC population and clear for trace context (messageId, transactionId, networkId, catalogId,
+ * subscriptionId). MDC is populated once from the parsed context so no double-parse occurs.
  */
 @Component
 public class CorrelationContext {
@@ -50,11 +51,20 @@ public class CorrelationContext {
             } else {
                 MDC.remove(MdcField.PUBLISH_TIMESTAMP);
             }
+            // subscriptionId — correlates a catalog/push to its originating subscription
+            // (stamped by beckn-catalg#492); absent for catalog/publish, so simply not set.
+            String subscriptionId = ctx.contextNode().path("subscriptionId").asText(null);
+            if (subscriptionId != null && !subscriptionId.isBlank()) {
+                MDC.put(MdcField.SUBSCRIPTION_ID, subscriptionId);
+            } else {
+                MDC.remove(MdcField.SUBSCRIPTION_ID);
+            }
         } else {
             MDC.remove(MdcField.CATALOG_ID);
             MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
             MDC.remove(MdcField.AUTH_RECORD_ID);
             MDC.remove(MdcField.PUBLISH_TIMESTAMP);
+            MDC.remove(MdcField.SUBSCRIPTION_ID);
         }
     }
 
@@ -70,6 +80,7 @@ public class CorrelationContext {
         MDC.remove(MdcField.AUTH_SUBSCRIBER_ID);
         MDC.remove(MdcField.AUTH_RECORD_ID);
         MDC.remove(MdcField.PUBLISH_TIMESTAMP);
+        MDC.remove(MdcField.SUBSCRIPTION_ID);
     }
 
     /**
@@ -96,6 +107,37 @@ public class CorrelationContext {
     public void setTagsFromHttp(String tagsHeader) {
         if (tagsHeader != null && !tagsHeader.isBlank()) {
             MDC.put(MdcField.TAGS, tagsHeader);
+        }
+    }
+
+    /**
+     * Populates MDC with {@code transactionId} and {@code messageId} from a raw Beckn
+     * {@code context} node, for synchronous HTTP entry points (e.g. {@code /catalog/push})
+     * that log a milestone before the async publish pipeline runs. Only these two correlation
+     * IDs are set — {@code networkId}/{@code catalogId} are populated later by the publish
+     * consumer via {@link #populate(CatalogContext, String)}. The {@code subscriptionId}
+     * (stamped by beckn-catalg#492 for correlating a push to its originating subscription)
+     * is also set here when present so the synchronous entry milestone log carries it.
+     * No-op for absent/blank values.
+     *
+     * <p>Callers MUST {@link #clear()} in a finally so IDs do not leak across pooled request
+     * threads.
+     */
+    public void populateEntryIds(JsonNode contextNode) {
+        if (contextNode == null || !contextNode.isObject()) {
+            return;
+        }
+        String txnId = contextNode.path("transactionId").asText(null);
+        String msgId = contextNode.path("messageId").asText(null);
+        if (txnId != null && !txnId.isBlank()) {
+            MDC.put(MdcField.TRANSACTION_ID, txnId);
+        }
+        if (msgId != null && !msgId.isBlank()) {
+            MDC.put(MdcField.MESSAGE_ID, msgId);
+        }
+        String subscriptionId = contextNode.path("subscriptionId").asText(null);
+        if (subscriptionId != null && !subscriptionId.isBlank()) {
+            MDC.put(MdcField.SUBSCRIPTION_ID, subscriptionId);
         }
     }
 
