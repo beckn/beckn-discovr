@@ -1,7 +1,7 @@
 ---
 name: design
 description: Use this agent for any new feature, component, or architectural change in Beckn Discovr. Produces two competing design proposals, scores them, recommends one, and outputs a Design Spec for the implement agent. Triggers on "design a new feature", "how should we implement X", "architect Y", "propose a design for Z". USER MUST APPROVE the Design Spec before implementation begins.
-model: claude-opus-4-6
+model: claude-opus-4-8
 tools:
   - Read
   - Glob

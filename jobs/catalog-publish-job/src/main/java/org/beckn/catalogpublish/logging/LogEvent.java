@@ -33,6 +33,27 @@ public final class LogEvent {
     public static final String PUSH_RECEIVED = "push.received";
     public static final String PUSH_REJECTED = "push.rejected";
 
+    // HTTP pull callback endpoint
+    public static final String ON_PULL_RECEIVED = "on_pull.received";
+    public static final String ON_PULL_REJECTED = "on_pull.rejected";
+    public static final String ON_PULL_FAILED   = "on_pull.failed";
+    public static final String ON_PULL_SSRF_DISABLED = "on_pull.ssrf.disabled";
+    public static final String ON_PULL_MODE_SELECTED     = "on_pull.mode_selected";
+    public static final String ON_PULL_DOWNLOAD_STARTED  = "on_pull.download.started";
+    public static final String ON_PULL_CHECKSUM_VERIFIED = "on_pull.checksum.verified";
+    public static final String ON_PULL_DECOMPRESSED      = "on_pull.decompressed";
+    public static final String ON_PULL_CATALOG_ENQUEUED  = "on_pull.catalog.enqueued";
+    public static final String ON_PULL_CATALOG_REJECTED  = "on_pull.catalog.rejected";
+    public static final String ON_PULL_COMPLETED         = "on_pull.completed";
+    // on_pull download-manifest failure reasons (distinct from the generic processing error)
+    public static final String ON_PULL_DOWNLOAD_HTTP_ERROR = "on_pull.download.http_error";
+    public static final String ON_PULL_DOWNLOAD_RETRY      = "on_pull.download.retry";
+    public static final String ON_PULL_SSRF_REJECT          = "on_pull.ssrf.reject";
+    public static final String ON_PULL_CHECKSUM_MISMATCH    = "on_pull.checksum.mismatch";
+    public static final String ON_PULL_DECOMPRESS_ERROR     = "on_pull.decompress.error";
+    // on_pull download/decompress exceeded the configured hard cap (gzip-bomb / OOM guard)
+    public static final String ON_PULL_SIZE_EXCEEDED        = "on_pull.size.exceeded";
+
     // Auth filter
     public static final String AUTH_SKIPPED       = "auth.skipped";
     public static final String AUTH_VERIFY_START  = "auth.verify.start";

@@ -14,9 +14,9 @@ Verify synchronous discover via GET. Covers text search, spatial search, JSONPat
 | SC-07 | Text search — response field validation | Same response as SC-06 | Each catalog: `id`, `descriptor.name`, `bppId`, `resources[].id`, `resources[].descriptor`. No `rateable: false`, no `ratingValue: 0` on items without ratings |
 | SC-08 | Spatial search (s_dwithin near Bengaluru) | GET with spatial [77.5946, 12.9716], distanceMeters 5000 | `context.action = "on_discover"`, results include test item near MG Road |
 | SC-09 | Spatial search (far away) | GET with [0.0, 0.0], distanceMeters 1000 | `message.catalogs` = empty array |
-| SC-10 | Wrong action | GET with `"action": "wrong"` | NACK: `errorCode = "SCHEMA_VALIDATION_FAILED"` |
+| SC-10 | Wrong action | GET with `"action": "wrong"` | NACK: `error.code = "SCH_SCHEMA_VALIDATION_FAILED"` |
 | SC-11 | Missing transactionId | GET without `transactionId` | NACK (UUID validation fails) |
-| SC-12 | Missing bapId | GET without `bapId` | NACK |
+| SC-12 | Missing messageId | GET without `messageId` | NACK (only `transactionId` + `messageId` are required; `bapId` is optional and not validated) |
 | SC-13 | Missing intent (empty) | GET with `message.intent: {}` | NACK (at least one search criterion) |
 | SC-14 | Negative distanceMeters | GET with `distanceMeters: -1` | NACK (must be >= 0) |
 | SC-15 | Invalid JSONPath expression | GET with `expression: "not-a-path"` | NACK (must start with $) |
@@ -31,4 +31,4 @@ For every discover response:
 2. `message.catalogs` is array (may be empty for no-match scenarios)
 3. Field names: `resources` (not `items`), `resourceAttributes` (not `itemAttributes`)
 4. No `@context`/`@type` on Resource or Descriptor — only on `resourceAttributes`
-5. NACK responses: `status = "NACK"`, `error.errorCode`, `error.errorMessage` present
+5. NACK responses: `message.status = "NACK"`, `error.code`, `error.message` present

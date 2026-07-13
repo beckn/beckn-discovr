@@ -18,7 +18,7 @@ Verify the complete pipeline: Subscribe via Catalg → Publish via Catalg → In
 
 - SC-32: Verify `context.action = "catalog/on_subscription"`, `message.subscriptions` array
 - SC-33: Verify `{"status":"ACK"}` — no extra fields
-- SC-34: Poll `SELECT count(*) FROM item WHERE bpp_id LIKE '%pipeline-verify%'` until > 0
+- SC-34: Poll `SELECT count(*) FROM item WHERE payload::text LIKE '%pipeline-verify%'` until > 0 (there is no `bpp_id` column — BPP identity lives inside the `payload` JSON / `context_url`)
 - SC-35: Verify discover response has correct `resources` field structure, catalog metadata
-- Check delivery logs: `docker logs catalog-delivery-job` for callback attempt
-- Check catalog-publish logs: `docker logs catalog-publish` for ingestion
+- Check delivery logs: `docker logs catalog-delivery-job` for callback attempt (Catalg)
+- Check Discovr ingestion logs: `docker logs discovr-ingestion` for ingestion
