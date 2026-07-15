@@ -1,7 +1,7 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.3.3'
-    id 'io.spring.dependency-management' version '1.1.6'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.7'
     id 'jacoco'
     id 'org.cyclonedx.bom' version '3.2.2'
 }
@@ -14,6 +14,14 @@ java {
         languageVersion = JavaLanguageVersion.of(17)
     }
 }
+
+// Security overrides for transitive CVEs (bump Spring Boot BOM-managed versions).
+// jackson → CVE-2026-54515 · logback → CVE-2026-10532
+// opentelemetry → CVE-2026-45292 · commons-lang3 → CVE-2025-48924
+ext['jackson-bom.version'] = '2.21.5'
+ext['logback.version'] = '1.5.35'
+ext['opentelemetry.version'] = '1.62.0'
+ext['commons-lang3.version'] = '3.18.0'
 
 repositories {
     mavenCentral()
@@ -45,17 +53,16 @@ dependencies {
     implementation 'com.github.java-json-tools:json-patch:1.13'
 
     // Beckn Auth SDK (composite build — signature verification for /catalog/push)
+    // BouncyCastle (bcprov) is provided transitively by the auth SDK — no direct use here.
     implementation 'org.beckn:beckn-auth-sdk'
-    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
-    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
     implementation 'org.springframework.retry:spring-retry'
     implementation 'org.springframework:spring-aspects'
 
     implementation 'org.locationtech.jts:jts-core:1.19.0'
     implementation 'org.hibernate.orm:hibernate-spatial'
 
-    runtimeOnly 'org.postgresql:postgresql:42.7.3'
-    testRuntimeOnly 'org.postgresql:postgresql:42.7.3'
+    runtimeOnly 'org.postgresql:postgresql'
+    testRuntimeOnly 'org.postgresql:postgresql'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.kafka:spring-kafka-test'
@@ -63,6 +70,11 @@ dependencies {
     testImplementation 'org.testcontainers:postgresql:1.20.1'
     testImplementation 'org.testcontainers:kafka:1.20.1'
     testImplementation 'org.awaitility:awaitility:4.2.0'
+
+    // Transitive CVE constraint — commons-compress (via testcontainers), CVE-2024-25710
+    constraints {
+        testImplementation 'org.apache.commons:commons-compress:1.26.0'
+    }
 }
 
 // Unit tests: no Testcontainers, safe to parallelise across JVM forks.
