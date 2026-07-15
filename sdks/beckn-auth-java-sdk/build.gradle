@@ -14,7 +14,7 @@ repositories {
 
 dependencies {
     // Cryptography: BLAKE2b-512 and SubjectPublicKeyInfo ASN.1 parsing
-    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.84'
 
     // JSON parsing: For Registry API responses
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
