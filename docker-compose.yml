@@ -297,12 +297,9 @@ services:
     networks:
       - beckn-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080'"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+    # No healthcheck — the DHI distroless runtime has no shell/bash/curl.
+    # Liveness/readiness is handled by the orchestrator (k8s httpGet probes);
+    # local compose dependents gate on service_started instead.
 
   # ── Discovr Dispatcher ──────────────────────────────────────────────────
   # Delivers on_discover callbacks to Buyers (BAPs); failures go to DLT topic.
@@ -343,16 +340,14 @@ services:
       - OTEL_LOGS_EXPORTER=none
     depends_on:
       catalog-discover-job:
-        condition: service_healthy
+        # service_started (not service_healthy): the discover-job's distroless
+        # runtime has no in-container healthcheck; gate on container start.
+        condition: service_started
     networks:
       - beckn-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+    # No healthcheck — the DHI distroless runtime has no shell/curl.
+    # Liveness/readiness is handled by the orchestrator (k8s httpGet probes).
 
   # ── NP Signer + Buyer Signer ────────────────────────────────────────────
   # Two signing services are needed because each DeDi registry record holds
