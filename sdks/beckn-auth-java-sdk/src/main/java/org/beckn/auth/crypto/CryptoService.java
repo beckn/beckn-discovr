@@ -2,7 +2,7 @@ package org.beckn.auth.crypto;
 
 import org.beckn.auth.exception.BecknAuthException;
 import org.beckn.auth.logging.Logger;
-import org.bouncycastle.asn1.edec.EdECObjectIdentifiers;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.crypto.digests.Blake2bDigest;
@@ -299,8 +299,11 @@ public final class CryptoService {
      */
     private byte[] wrapRawPublicKeyInX509Spki(byte[] rawPublicKey) {
         try {
+            // Ed25519 algorithm OID per RFC 8410 (id-Ed25519 = 1.3.101.112).
+            // Built from the raw OID to stay independent of BouncyCastle's internal
+            // package layout (EdECObjectIdentifiers moved to an internal package in 1.81+).
             AlgorithmIdentifier algorithmIdentifier = new AlgorithmIdentifier(
-                    EdECObjectIdentifiers.id_Ed25519);
+                    new ASN1ObjectIdentifier("1.3.101.112"));
             SubjectPublicKeyInfo publicKeyInfo = new SubjectPublicKeyInfo(algorithmIdentifier, rawPublicKey);
             return publicKeyInfo.getEncoded();
         } catch (Exception exception) {
