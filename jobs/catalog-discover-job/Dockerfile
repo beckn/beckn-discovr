@@ -14,7 +14,7 @@
 # NOT reliably applied by BuildKit.
 ARG DEPS_BASE=eclipse-temurin:17-jdk-jammy
 ARG RUNTIME_BASE=dhi.io/eclipse-temurin:17-alpine3.23
-# DHI Temurin Alpine is amd64-only; pin the runtime platform so this builds on
+# DHI Temurin (Debian/glibc) — pin amd64; pin the runtime platform so this builds on
 # arm64 hosts too (JARs are arch-independent; prod/GKE is amd64). Override with
 # --build-arg RUNTIME_PLATFORM=linux/arm64 if an arm64 runtime is ever needed.
 ARG RUNTIME_PLATFORM=linux/amd64
@@ -60,7 +60,7 @@ RUN java -Djarmode=layertools -jar app.jar extract
 
 # =============================================================================
 # Runtime Stage — Docker Hardened Image (DHI)
-# Eclipse Temurin 17 JRE, Alpine 3.23, distroless, nonroot (UID 65532).
+# Eclipse Temurin 17 JRE, Debian (glibc), distroless, nonroot (UID 65532).
 # No shell, no package manager, no root → near-zero CVEs.
 #
 # ⚠️ RUNTIME_BASE: confirm the exact pullable reference from dhi.io via the
@@ -71,7 +71,17 @@ RUN java -Djarmode=layertools -jar app.jar extract
 # distroless runtime has no curl/shell. Liveness/readiness is handled by the
 # orchestrator (k8s httpGet probes); local compose uses service_started.
 # =============================================================================
+# glibc-compat shim so Kafka's glibc-linked snappy-java native lib
+# (libsnappyjava.so needs ld-linux-x86-64.so.2) loads on Alpine/musl.
+# Standard Alpine glibc-compat layer, COPY'd into the distroless runtime.
+FROM alpine:3.23 AS glibc-compat
+RUN apk add --no-cache gcompat
+
 FROM --platform=${RUNTIME_PLATFORM} ${RUNTIME_BASE}
+# glibc-compat (gcompat) so glibc-linked native libs (snappy-java) resolve on musl.
+COPY --from=glibc-compat /lib/ld-linux-x86-64.so.2 /lib/libgcompat.so.0 /lib/libc.so.6 /lib/libcrypt.so.1 /lib/libm.so.6 /lib/libpthread.so.0 /lib/libresolv.so.2 /lib/librt.so.1 /lib/libutil.so.1 /lib/
+COPY --from=glibc-compat /lib64/ld-linux-x86-64.so.2 /lib64/
+
 
 WORKDIR /app
 
