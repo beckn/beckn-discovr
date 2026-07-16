@@ -14,7 +14,7 @@
 # NOT reliably applied by BuildKit.
 ARG DEPS_BASE=eclipse-temurin:17-jdk-jammy
 ARG RUNTIME_BASE=dhi.io/eclipse-temurin:17-alpine3.23
-# DHI Temurin (Debian/glibc) — pin amd64; pin the runtime platform so this builds on
+# DHI Temurin Alpine (musl) — pin amd64; pin the runtime platform so this builds on
 # arm64 hosts too (JARs are arch-independent; prod/GKE is amd64). Override with
 # --build-arg RUNTIME_PLATFORM=linux/arm64 if an arm64 runtime is ever needed.
 ARG RUNTIME_PLATFORM=linux/amd64
@@ -60,7 +60,7 @@ RUN java -Djarmode=layertools -jar app.jar extract
 
 # =============================================================================
 # Runtime Stage — Docker Hardened Image (DHI)
-# Eclipse Temurin 17 JRE, Debian (glibc), distroless, nonroot (UID 65532).
+# Eclipse Temurin 17 JRE, Alpine 3.23 (musl), distroless, nonroot (UID 65532).
 # No shell, no package manager, no root → near-zero CVEs.
 #
 # ⚠️ RUNTIME_BASE: confirm the exact pullable reference from dhi.io via the
