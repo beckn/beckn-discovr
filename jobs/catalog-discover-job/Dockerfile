@@ -14,7 +14,7 @@
 # NOT reliably applied by BuildKit.
 ARG DEPS_BASE=eclipse-temurin:17-jdk-jammy
 ARG RUNTIME_BASE=dhi.io/eclipse-temurin:17-alpine3.23
-# DHI Temurin Alpine is amd64-only; pin the runtime platform so this builds on
+# DHI Temurin Alpine (musl) — pin amd64; pin the runtime platform so this builds on
 # arm64 hosts too (JARs are arch-independent; prod/GKE is amd64). Override with
 # --build-arg RUNTIME_PLATFORM=linux/arm64 if an arm64 runtime is ever needed.
 ARG RUNTIME_PLATFORM=linux/amd64
@@ -37,7 +37,7 @@ RUN ./gradlew dependencies --no-daemon
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
     && curl -sL -o /tmp/otel-javaagent.jar \
-        https://repo1.maven.org/maven2/io/opentelemetry/javaagent/opentelemetry-javaagent/2.11.0/opentelemetry-javaagent-2.11.0.jar
+        https://repo1.maven.org/maven2/io/opentelemetry/javaagent/opentelemetry-javaagent/2.29.0/opentelemetry-javaagent-2.29.0.jar
 
 # Step 4: Copy source — only layers below here are invalidated on code changes.
 COPY jobs/catalog-discover-job/src/ src/
@@ -60,7 +60,7 @@ RUN java -Djarmode=layertools -jar app.jar extract
 
 # =============================================================================
 # Runtime Stage — Docker Hardened Image (DHI)
-# Eclipse Temurin 17 JRE, Alpine 3.23, distroless, nonroot (UID 65532).
+# Eclipse Temurin 17 JRE, Alpine 3.23 (musl), distroless, nonroot (UID 65532).
 # No shell, no package manager, no root → near-zero CVEs.
 #
 # ⚠️ RUNTIME_BASE: confirm the exact pullable reference from dhi.io via the
@@ -71,7 +71,18 @@ RUN java -Djarmode=layertools -jar app.jar extract
 # distroless runtime has no curl/shell. Liveness/readiness is handled by the
 # orchestrator (k8s httpGet probes); local compose uses service_started.
 # =============================================================================
+# glibc-compat shim so Kafka's glibc-linked snappy-java native lib
+# (libsnappyjava.so needs ld-linux-x86-64.so.2) loads on Alpine/musl.
+# Standard Alpine glibc-compat layer, COPY'd into the distroless runtime.
+FROM --platform=${RUNTIME_PLATFORM} alpine:3.23 AS glibc-compat
+RUN apk add --no-cache gcompat
+
 FROM --platform=${RUNTIME_PLATFORM} ${RUNTIME_BASE}
+# gcompat provides the glibc loader (ld-linux-x86-64.so.2) + glibc-ABI shim libs
+# (this set = `apk info -L gcompat`); copying them lets glibc-linked native libs
+# (Kafka snappy-java) load under musl. Keep in sync if the gcompat layout changes.
+COPY --from=glibc-compat /lib/ld-linux-x86-64.so.2 /lib/libgcompat.so.0 /lib/libc.so.6 /lib/libcrypt.so.1 /lib/libm.so.6 /lib/libpthread.so.0 /lib/libresolv.so.2 /lib/librt.so.1 /lib/libutil.so.1 /lib/
+COPY --from=glibc-compat /lib64/ld-linux-x86-64.so.2 /lib64/
 
 WORKDIR /app
 

@@ -55,6 +55,9 @@ dependencies {
     // Beckn Auth SDK (composite build — signature verification for /catalog/push)
     // BouncyCastle (bcprov) is provided transitively by the auth SDK — no direct use here.
     implementation 'org.beckn:beckn-auth-sdk'
+    // Runtime Cache impl the BecknAuth SDK needs for signature caching (no direct
+    // import, so grep-based "unused" checks miss it — do not remove).
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
     implementation 'org.springframework.retry:spring-retry'
     implementation 'org.springframework:spring-aspects'
 
