@@ -37,7 +37,7 @@ RUN ./gradlew dependencies --no-daemon
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
     && curl -sL -o /tmp/otel-javaagent.jar \
-        https://repo1.maven.org/maven2/io/opentelemetry/javaagent/opentelemetry-javaagent/2.11.0/opentelemetry-javaagent-2.11.0.jar
+        https://repo1.maven.org/maven2/io/opentelemetry/javaagent/opentelemetry-javaagent/2.29.0/opentelemetry-javaagent-2.29.0.jar
 
 # Step 4: Copy source — only layers below here are invalidated on code changes.
 COPY jobs/catalog-discover-job/src/ src/
