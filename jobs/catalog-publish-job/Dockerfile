@@ -65,14 +65,15 @@ RUN java -Djarmode=layertools -jar app.jar extract
 # glibc-compat shim so Kafka's glibc-linked snappy-java native lib
 # (libsnappyjava.so needs ld-linux-x86-64.so.2) loads on Alpine/musl.
 # Standard Alpine glibc-compat layer, COPY'd into the distroless runtime.
-FROM alpine:3.23 AS glibc-compat
+FROM --platform=${RUNTIME_PLATFORM} alpine:3.23 AS glibc-compat
 RUN apk add --no-cache gcompat
 
 FROM --platform=${RUNTIME_PLATFORM} ${RUNTIME_BASE}
-# glibc-compat (gcompat) so glibc-linked native libs (snappy-java) resolve on musl.
+# gcompat provides the glibc loader (ld-linux-x86-64.so.2) + glibc-ABI shim libs
+# (this set = `apk info -L gcompat`); copying them lets glibc-linked native libs
+# (Kafka snappy-java) load under musl. Keep in sync if the gcompat layout changes.
 COPY --from=glibc-compat /lib/ld-linux-x86-64.so.2 /lib/libgcompat.so.0 /lib/libc.so.6 /lib/libcrypt.so.1 /lib/libm.so.6 /lib/libpthread.so.0 /lib/libresolv.so.2 /lib/librt.so.1 /lib/libutil.so.1 /lib/
 COPY --from=glibc-compat /lib64/ld-linux-x86-64.so.2 /lib64/
-
 
 WORKDIR /app
 
