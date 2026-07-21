@@ -1,0 +1,104 @@
+name: 'Scan report'
+description: >
+  Publish a security-scan report to the run's job summary and to a single
+  sticky PR comment (created once, updated in place on every push). Report-only.
+
+inputs:
+  title:
+    description: 'Human-readable section title (also used as the comment heading).'
+    required: true
+  marker:
+    description: 'Unique HTML-comment marker that identifies this sticky comment.'
+    required: true
+  report-file:
+    description: 'Path to the plain-text scan output to publish.'
+    required: true
+  github-token:
+    description: 'Token used to upsert the PR comment.'
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    # Always visible on the run page, regardless of PR/permissions.
+    - name: Append to job summary
+      shell: bash
+      env:
+        TITLE: ${{ inputs.title }}
+        REPORT_FILE: ${{ inputs.report-file }}
+      run: |
+        {
+          echo "## ${TITLE}"
+          echo ""
+          echo '```'
+          if [ -s "${REPORT_FILE}" ]; then
+            cat "${REPORT_FILE}"
+          else
+            echo "(no findings)"
+          fi
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    # Sticky comment right on the PR. continue-on-error so a read-only token
+    # (e.g. a fork PR) can never fail the build.
+    - name: Upsert sticky PR comment
+      if: github.event_name == 'pull_request'
+      continue-on-error: true
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const marker = ${{ toJSON(inputs.marker) }};
+          const title  = ${{ toJSON(inputs.title) }};
+          const file   = ${{ toJSON(inputs.report-file) }};
+          const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+          let raw = '';
+          try { raw = fs.readFileSync(file, 'utf8').trim(); } catch (e) { /* file may be absent */ }
+          if (!raw) raw = '(no findings)';
+
+          // GitHub hard-caps a comment body at 65536 chars; leave headroom.
+          const LIMIT = 60000;
+          let note = '';
+          if (raw.length > LIMIT) {
+            raw = raw.slice(0, LIMIT);
+            note = `\n\n_Output truncated — see the [full run](${runUrl}) for everything._`;
+          }
+
+          const body = [
+            marker,
+            `### ${title}`,
+            `Report-only — these findings do **not** block this PR. [View full run](${runUrl})`,
+            '',
+            '<details><summary>Findings</summary>',
+            '',
+            '```',
+            raw,
+            '```',
+            '</details>' + note,
+          ].join('\n');
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            per_page: 100,
+          });
+          const existing = comments.find(c => c.body && c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+          }
