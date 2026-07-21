@@ -30,18 +30,22 @@ runs:
         TITLE: ${{ inputs.title }}
         REPORT_FILE: ${{ inputs.report-file }}
       run: |
-        FENCE='```'
+        # Fence sized longer than any backtick run in the content. The grep is
+        # guarded (`|| true`) because it exits 1 when there are no backticks,
+        # which would otherwise trip `bash -eo pipefail`.
+        fence='```'
         if [ -s "${REPORT_FILE}" ]; then
-          longest=$(grep -oE '`+' "${REPORT_FILE}" | awk '{ if (length > m) m = length } END { print m+0 }')
-          n=$(( longest + 1 )); [ "$n" -lt 3 ] && n=3
-          FENCE=$(printf '`%.0s' $(seq 1 "$n"))
+          longest=$( { grep -oE '`+' "${REPORT_FILE}" || true; } | awk 'BEGIN{m=0}{ if (length>m) m=length } END { print m }')
+          n=$((longest + 1))
+          if [ "$n" -lt 3 ]; then n=3; fi
+          fence=$(printf '`%.0s' $(seq 1 "$n"))
         fi
         {
           echo "## ${TITLE}"
           echo ""
-          echo "${FENCE}"
+          echo "${fence}"
           if [ -s "${REPORT_FILE}" ]; then cat "${REPORT_FILE}"; else echo "(no findings)"; fi
-          echo "${FENCE}"
+          echo "${fence}"
         } >> "$GITHUB_STEP_SUMMARY"
 
     # Sticky comment right on the PR. continue-on-error so a read-only token
