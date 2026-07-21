@@ -27,6 +27,15 @@ below blocks the POC — they are follow-ups.
   `catalog_part_state` rows orphan; same when a multi-part catalog drops a part. Matches the OQ-1
   "log and skip" fallback — confirm it's a conscious gap. (`crawl/Crawler.java`, `state/StateStore.java`)
 
+- [ ] **M4 — Pushes only changed parts, not all parts of the catalog (diverges from §5.4).**
+  `Crawler.pushCatalog` sends only `d.changedParts()`; the design says push *all* parts of a
+  changed record. This is correct ONLY if the publish pipeline MERGEs at the resource level
+  (upserts the pushed part's resources into the existing catalog). If a push replaces the
+  catalog's resource set, pushing one changed part of a multi-part catalog would drop the other
+  parts' resources. Sharpens OQ-3 — confirm pipeline merge semantics, or push all parts for safety.
+  Also: a resource *removed* from a part won't propagate under MERGE (same family as M3 deletion
+  gap) — add/modify flow, delete doesn't. (`crawl/Crawler.java`, `crawl/Differ.java`)
+
 ## LOW
 
 - [ ] **L1 — ETag columns are dead.** `manifest_etag`/`index_etag` exist and `CrawlerHttpClient`
