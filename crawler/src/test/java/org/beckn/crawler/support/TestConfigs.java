@@ -16,7 +16,7 @@ public final class TestConfigs {
                 "/.well-known/dedi.json",
                 pushEndpoint,
                 Duration.ofMinutes(2),
-                new CrawlerProperties.Http(Duration.ofSeconds(30), 10_485_760L),
+                new CrawlerProperties.Http(Duration.ofSeconds(30), 10_485_760L, false),
                 "./feedback.log");
     }
 }

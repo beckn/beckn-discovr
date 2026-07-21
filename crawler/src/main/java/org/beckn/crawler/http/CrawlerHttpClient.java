@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Thin GET/POST wrapper over the JDK HttpClient. Enforces a per-request timeout and a byte
@@ -21,13 +22,17 @@ public class CrawlerHttpClient {
     /** A fetched body plus its ETag (may be null — hosts like the ngrok node send none). */
     public record Response(int status, byte[] body, String etag) {}
 
+    private static final AtomicLong CB_SEQ = new AtomicLong();
+
     private final HttpClient client;
     private final Duration timeout;
     private final long maxBytes;
+    private final boolean cacheBust;
 
     public CrawlerHttpClient(CrawlerProperties props) {
         this.timeout = props.http().timeout();
         this.maxBytes = props.http().maxPartBytes();
+        this.cacheBust = props.http().cacheBust();
         this.client = HttpClient.newBuilder()
                 .connectTimeout(timeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -36,7 +41,7 @@ public class CrawlerHttpClient {
 
     /** GET the URL as raw bytes. Rejects a body larger than the configured cap. */
     public Response get(String url) throws IOException, InterruptedException {
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+        HttpRequest req = HttpRequest.newBuilder(URI.create(withCacheBuster(url)))
                 .timeout(timeout)
                 .GET()
                 .build();
@@ -58,5 +63,15 @@ public class CrawlerHttpClient {
                 .build();
         HttpResponse<byte[]> resp = client.send(req, HttpResponse.BodyHandlers.ofByteArray());
         return new Response(resp.statusCode(), resp.body(), null);
+    }
+
+    /**
+     * When cache-busting is on, append a unique {@code cb} query param so a CDN in front of the
+     * bucket can't serve a stale copy. Not applied to POST (the push endpoint is our own service).
+     */
+    private String withCacheBuster(String url) {
+        if (!cacheBust) return url;
+        String token = System.nanoTime() + "-" + CB_SEQ.incrementAndGet();
+        return url + (url.indexOf('?') >= 0 ? '&' : '?') + "cb=" + token;
     }
 }

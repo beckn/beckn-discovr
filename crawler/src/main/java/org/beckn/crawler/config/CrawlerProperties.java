@@ -30,5 +30,12 @@ public record CrawlerProperties(
     public record Http(
             @NotNull Duration timeout,
             /** Safety cap on a single fetched part (bytes). */
-            long maxPartBytes) {}
+            long maxPartBytes,
+            /**
+             * Append a unique {@code ?cb=} query param to every GET so CDN-cached buckets
+             * (e.g. GitHub raw, max-age 300s) always return fresh bytes. Digests are computed
+             * over the body, not the URL, so this is safe. Default on for the GitHub-raw POC;
+             * turn off for a real object store that serves fresh or honours ETags.
+             */
+            boolean cacheBust) {}
 }
