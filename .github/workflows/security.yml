@@ -3,16 +3,20 @@ name: Security Scanning
 # ═════════════════════════════════════════════════════════════════════════════
 # Trivy + Checkov security scanning on pull requests.
 #
-#   • Checkov  — static analysis of Dockerfiles, docker-compose, and GitHub
-#                Actions workflows for misconfiguration (IaC / config hygiene).
-#   • Trivy fs — dependency-CVE (Gradle) + secret scan of the repo.
+#   • checkov     — static analysis of Dockerfiles and GitHub Actions workflows
+#                   for misconfiguration (IaC / config hygiene).
+#   • trivy-fs    — secret scan of the working tree (no npm here — Java repo).
+#   • trivy-sbom  — Java/Gradle dependency-CVE scan. Trivy cannot resolve
+#                   Gradle build files directly, so each Java job's existing
+#                   CycloneDX plugin (org.cyclonedx.bom) emits a full runtime
+#                   SBOM, which Trivy then scans. No lockfiles to maintain.
 #
 # Rollout mode: REPORT-ONLY.
-#   Both scanners are non-blocking (soft_fail / exit-code 0) so builds stay
-#   green while the known DHI app-level dependency-CVE backlog is burned down.
-#   Findings are uploaded to the GitHub Security → Code scanning tab (SARIF)
-#   and printed to the Actions log. Flip to blocking (exit-code 1 on new
-#   CRITICAL/HIGH) once the backlog is clear — see the security-scanning Story.
+#   Every scanner is non-blocking (--soft-fail / --exit-code 0) so builds stay
+#   green while the known app-level dependency-CVE backlog is burned down.
+#   Findings are published to (1) the run's Job Summary and (2) a sticky PR
+#   comment (one per scanner, updated in place). Flip to blocking (exit-code 1
+#   on new CRITICAL/HIGH) once the backlog is clear — see the security Story.
 #
 # Image-layer CVE scanning (Trivy image) runs at release build time in
 # docker.yml, not here — the built image only exists there.
@@ -29,6 +33,7 @@ on:
       - '**/Dockerfile*'
       - 'docker-compose*.yml'
       - '.github/workflows/**'
+      - '.github/actions/**'
       - 'jobs/**/build.gradle'
       - 'sdks/**'
 
@@ -36,10 +41,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# security-events: write is required to upload SARIF to the code-scanning tab.
+# pull-requests: write lets the jobs upsert their sticky PR comment.
 permissions:
   contents: read
-  security-events: write
+  pull-requests: write
 
 jobs:
   checkov:
@@ -58,38 +63,36 @@ jobs:
       - name: Install Checkov
         run: pip install --no-input checkov==3.3.8
 
-      # Report-only (--soft-fail never errors). One scan emits both a
-      # human-readable CLI report to the Actions log and SARIF into
-      # ./checkov-report/ for the Security → Code scanning tab.
-      # NOTE: Checkov 3.x has no docker_compose framework — compose files are
-      # not misconfig-scanned here (tracked as a follow-up).
+      # Report-only (--soft-fail never errors). CLI report is teed to a file
+      # for the summary + PR comment. NOTE: Checkov 3.x has no docker_compose
+      # framework — compose files are not misconfig-scanned here (follow-up).
       - name: Run Checkov (report-only)
         run: |
+          set +e
           checkov --directory . \
             --framework dockerfile github_actions \
             --compact --quiet --soft-fail \
-            --output cli --output sarif \
-            --output-file-path console,checkov-report || true
+            --output cli \
+            --output-file-path console 2>&1 | tee checkov-output.txt
+          exit 0
 
-      - name: Upload Checkov SARIF
+      - name: Publish Checkov report
         if: always()
-        continue-on-error: true                 # tolerate code-scanning being disabled
-        uses: github/codeql-action/upload-sarif@v3
+        uses: ./.github/actions/scan-report
         with:
-          sarif_file: checkov-report            # directory: uploads all *.sarif within
-          category: checkov
+          title: '🛡️ Checkov — Dockerfiles & GitHub Actions workflows'
+          marker: '<!-- sec-scan:checkov -->'
+          report-file: checkov-output.txt
 
   trivy-fs:
-    name: Trivy — dependencies & secrets (filesystem)
+    name: Trivy — secrets (filesystem)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Human-readable findings in the Actions log (visible regardless of
-      # whether code scanning is enabled on the repo).
-      - name: Trivy filesystem scan (table)
+      - name: Trivy filesystem scan (secrets)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
@@ -98,25 +101,95 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH,MEDIUM
           format: table
+          output: trivy-fs.txt
           exit-code: '0'                         # report-only
 
-      # Machine-readable SARIF for the Security → Code scanning tab.
-      - name: Trivy filesystem scan (SARIF)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln,secret
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH,MEDIUM
-          format: sarif
-          output: trivy-fs.sarif
-          exit-code: '0'
-
-      - name: Upload Trivy SARIF
+      - name: Publish Trivy filesystem report
         if: always()
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: ./.github/actions/scan-report
         with:
-          sarif_file: trivy-fs.sarif
-          category: trivy-fs
+          title: '🛡️ Trivy — filesystem (secrets)'
+          marker: '<!-- sec-scan:trivy-fs -->'
+          report-file: trivy-fs.txt
+
+  trivy-sbom:
+    name: Trivy — Java/Gradle dependencies (SBOM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # Pinned release binary (no curl|sh) — needed for `trivy sbom` in a loop.
+      - name: Install Trivy CLI
+        env:
+          TRIVY_VERSION: '0.70.0'
+        run: |
+          set -euo pipefail
+          curl -sfL -o /tmp/trivy.tar.gz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar -xzf /tmp/trivy.tar.gz -C /tmp trivy
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+          trivy --version
+
+      # Each Java job is a standalone Gradle build (composite-includes the SDK).
+      # cyclonedxDirectBom resolves the runtime classpath and writes a BOM; we
+      # locate it robustly (config'd path vs plugin default) and scan it.
+      - name: Generate SBOMs and scan (report-only)
+        run: |
+          set +e
+          : > trivy-sbom.txt
+          MODULES="jobs/catalog-publish-job jobs/response-dispatcher jobs/catalog-discover-job"
+          for m in $MODULES; do
+            {
+              echo "================================================================"
+              echo "Module: $m"
+              echo "================================================================"
+            } | tee -a trivy-sbom.txt
+            ( cd "$m" && chmod +x gradlew \
+                && ( ./gradlew cyclonedxDirectBom --no-daemon --console=plain \
+                     || ./gradlew cyclonedxBom --no-daemon --console=plain ) )
+            BOM=$(find "$m/build" \( -name 'bom.json' -o -name 'bom.xml' \) 2>/dev/null | head -n1)
+            if [ -z "$BOM" ]; then
+              echo "  ⚠️  No SBOM produced for $m — skipped" | tee -a trivy-sbom.txt
+              continue
+            fi
+            COMPONENTS=$(grep -c '"purl"' "$BOM" 2>/dev/null || echo '?')
+            echo "  SBOM: $BOM (${COMPONENTS} components)" | tee -a trivy-sbom.txt
+            # Findings table -> stdout (captured); Trivy logs/warnings -> stderr
+            # (job log only, keeps the noise out of the summary/PR comment).
+            trivy sbom "$BOM" \
+              --severity CRITICAL,HIGH,MEDIUM \
+              --ignore-unfixed \
+              --exit-code 0 \
+              --format table > /tmp/module-findings.txt
+            if [ -s /tmp/module-findings.txt ]; then
+              cat /tmp/module-findings.txt | tee -a trivy-sbom.txt
+            else
+              echo "  ✓ No fixable CRITICAL/HIGH/MEDIUM vulnerabilities." | tee -a trivy-sbom.txt
+            fi
+          done
+          exit 0
+
+      - name: Upload SBOMs (artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovr-sboms
+          path: 'jobs/**/build/reports/**/bom.json'
+          if-no-files-found: ignore
+
+      - name: Publish Trivy SBOM report
+        if: always()
+        uses: ./.github/actions/scan-report
+        with:
+          title: '🛡️ Trivy — Java/Gradle dependencies (SBOM)'
+          marker: '<!-- sec-scan:trivy-sbom -->'
+          report-file: trivy-sbom.txt
