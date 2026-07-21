@@ -18,6 +18,7 @@ ARG RUNTIME_BASE=dhi.io/eclipse-temurin:17-alpine3.23
 # arm64 hosts too (JARs are arch-independent; prod/GKE is amd64). Override with
 # --build-arg RUNTIME_PLATFORM=linux/arm64 if an arm64 runtime is ever needed.
 ARG RUNTIME_PLATFORM=linux/amd64
+# checkov:skip=CKV_DOCKER_7:base image pinned via build ARG to an explicit DHI/temurin tag (not latest)
 FROM ${DEPS_BASE} AS builder
 
 WORKDIR /app/jobs/catalog-discover-job
@@ -77,6 +78,7 @@ RUN java -Djarmode=layertools -jar app.jar extract
 FROM --platform=${RUNTIME_PLATFORM} alpine:3.23 AS glibc-compat
 RUN apk add --no-cache gcompat
 
+# checkov:skip=CKV_DOCKER_2:runtime health handled by Kubernetes probes; distroless image has no shell for HEALTHCHECK
 FROM --platform=${RUNTIME_PLATFORM} ${RUNTIME_BASE}
 # gcompat provides the glibc loader (ld-linux-x86-64.so.2) + glibc-ABI shim libs
 # (this set = `apk info -L gcompat`); copying them lets glibc-linked native libs
