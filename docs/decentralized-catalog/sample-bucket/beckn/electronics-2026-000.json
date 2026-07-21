@@ -1,0 +1,34 @@
+{
+  "id": "bpp.techmart.com/electronics-2026",
+  "descriptor": { "name": "TechMart Electronics 2026" },
+  "provider": {
+    "id": "bpp.techmart.com/techmart-retail",
+    "descriptor": { "name": "TechMart Retail" }
+  },
+  "bppId": "bpp.techmart.com",
+  "bppUri": "https://techmart.com/beckn",
+  "isActive": true,
+  "validity": { "startDate": "2026-01-01T00:00:00Z", "endDate": "2026-12-31T23:59:59Z" },
+  "resources": [
+    {
+      "id": "bpp.techmart.com/item-laptop-xps-15",
+      "descriptor": { "name": "Dell XPS 15", "shortDesc": "15-inch developer laptop" },
+      "resourceAttributes": {
+        "@context": "https://schema.beckn.org/retail/schema/1.1.0/context.jsonld",
+        "@type": "Product",
+        "brand": "Dell",
+        "price": { "value": "189900", "currency": "INR" }
+      }
+    },
+    {
+      "id": "bpp.techmart.com/item-laptop-macbook-air",
+      "descriptor": { "name": "Apple MacBook Air M3", "shortDesc": "13-inch ultralight laptop" },
+      "resourceAttributes": {
+        "@context": "https://schema.beckn.org/retail/schema/1.1.0/context.jsonld",
+        "@type": "Product",
+        "brand": "Apple",
+        "price": { "value": "134900", "currency": "INR" }
+      }
+    }
+  ]
+}
