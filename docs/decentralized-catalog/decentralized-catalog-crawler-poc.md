@@ -53,6 +53,7 @@ the crawler is configured directly with one or more manifest URLs.
 | Fidelity | Fetch + digest + push; defer signatures & DeDi | Proves the novel/risky parts; digests give integrity; auth is orthogonal. |
 | Language | **Go**, own service (deferred, not blocking) | Lightweight concurrent poller, decoupled from the Java jobs. |
 | Schema validation | Let the **publish pipeline** validate | Avoids reimplementing JSON-schema validation in the crawler for the POC. |
+| State storage | A simple **PostgreSQL table** | Discovr already runs Postgres; a table is safe across multiple crawler instances (a flat file is not) and supports staleness queries later. |
 | Concurrency | **Sequential** per pass (one provider, one part at a time) | Simplest correct POC; parallelism is an easy later optimization. |
 
 ## 4. The three hosted files
@@ -125,7 +126,7 @@ Keep these as separate, independently testable units:
 | `Differ` | Compare index against `StateStore`; emit fetch/retire work items | StateStore |
 | `Fetcher` | GET a part; verify `sha256` against index digest | HttpClient |
 | `Pusher` | Build Beckn envelope; POST `/catalog/push`; interpret ACK/NACK | HttpClient |
-| `StateStore` | Persist/read last-seen `{etag, version, digest, updatedAt}` | — |
+| `StateStore` | Persist/read last-seen `{etag, version, digest}` in the `crawl_state` table | PostgreSQL |
 | `FeedbackLog` | Append structured reject/skip records | — |
 | `Crawler` | Orchestrate a pass across providers | all of the above |
 
@@ -139,26 +140,36 @@ crawler:
   http:
     timeout: "30s"
     maxPartBytes: 10485760         # 10 MB safety cap per part fetch
-  statePath: "./crawler-state.json"
+  db:                              # state store (see 5.3)
+    url: "${CRAWLER_DB_URL}"       # e.g. postgres://.../discovr
   feedbackLogPath: "./feedback.log"
 ```
 
-### 5.3 State store (shape)
-One record per fetched URL. Committed **only after** a successful push, so a crash mid-pass
-re-does that catalog rather than skipping it.
+### 5.3 State store (PostgreSQL table)
+One row per fetched URL — this is the crawler's memory of "what I saw last time." A row is
+written/updated **only after** the corresponding push succeeds (index-ETag row only after all
+its catalogs are handled), so a crash mid-pass re-does that catalog rather than skipping it.
 
-```json
-{
-  "https://storage.googleapis.com/techmart-beckn/beckn/index.json": {
-    "etag": "\"a1b2c3\"",
-    "version": 42
-  },
-  "https://storage.googleapis.com/techmart-beckn/beckn/electronics-2026-000.json": {
-    "digest": "sha256:182472dd...e041e8",
-    "updatedAt": "2026-07-17T09:00:00Z"
-  }
-}
+```sql
+CREATE TABLE crawl_state (
+  url          TEXT PRIMARY KEY,   -- index URL or part URL
+  etag         TEXT,               -- index rows: last ETag seen (for If-None-Match)
+  version      BIGINT,             -- index rows: last index.version accepted
+  digest       TEXT,               -- part rows: last verified sha256:<hex>
+  source_updated_at TIMESTAMPTZ,   -- from the file (index/part updatedAt)
+  last_seen_at TIMESTAMPTZ         -- when the crawler last checked this url
+);
 ```
+
+Reads driving each check:
+- `SELECT etag FROM crawl_state WHERE url = <indexUrl>` → sent as `If-None-Match`.
+- `SELECT version ...` → compared: `newIndex.version >= stored.version` (else rollback).
+- `SELECT digest FROM crawl_state WHERE url = <partUrl>` → compared to the index digest to
+  decide whether the part changed.
+
+Writes use `INSERT ... ON CONFLICT (url) DO UPDATE` (upsert) after a successful push.
+`last_seen_at` also supports the later staleness rule ("drop catalogs not re-verified within
+the window") without extra bookkeeping.
 
 ### 5.4 One crawl pass
 ```
