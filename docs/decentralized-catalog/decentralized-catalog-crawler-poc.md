@@ -171,6 +171,17 @@ Writes use `INSERT ... ON CONFLICT (url) DO UPDATE` (upsert) after a successful 
 `last_seen_at` also supports the later staleness rule ("drop catalogs not re-verified within
 the window") without extra bookkeeping.
 
+**Deferred columns (add with DeDi, not now).** The table stays URL-keyed for the POC because
+every check (ETag, version, digest) is by URL and needs nothing else. Two columns become
+required once the DeDi layer lands, and are intentionally left out until then:
+- `subscriber_id` — the BPP/subscriber identity from the manifest/index (`= bppId`, the level
+  DeDi registers; **not** the catalog's `provider.id`, which is a seller inside a catalog).
+  Needed for per-provider de-registration cleanup (`DELETE ... WHERE subscriber_id = ?`) and
+  grouping — both provider-lifecycle operations that are non-goals for the POC (see OQ-4).
+- `catalog_id` — the owning catalog of a part row. Needed for real RETIRED cleanup (OQ-1): a
+  RETIRED index entry carries no `parts`, so without this column the crawler can't map the
+  retired catalog back to its part-state rows to delete them.
+
 ### 5.4 One crawl pass
 ```
 FOR each configured manifest URL:
