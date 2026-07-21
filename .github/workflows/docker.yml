@@ -35,6 +35,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# checkov:skip=CKV_GHA_7:deps_base_tag selects the prebuilt deps-base image tag; intentional and required
+# Least-privilege default; jobs widen as needed (e.g. id-token: write for OIDC).
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     name: Build & Push — ${{ matrix.name }}

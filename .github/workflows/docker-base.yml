@@ -36,6 +36,10 @@ on:
       - 'deps/v*'
   workflow_dispatch:
 
+# Least-privilege default; jobs widen as needed (e.g. id-token: write for OIDC).
+permissions:
+  contents: read
+
 jobs:
   build-gradle-deps-base:
     name: Build & Push — gradle-deps-base
