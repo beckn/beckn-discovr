@@ -1,0 +1,25 @@
+{
+  "dedi_version": "0.1",
+  "type": "dedi-manifest",
+  "domain": "techmart.example",
+  "name": "TechMart Provider Node",
+  "keys": [
+    { "kid": "key-001", "kty": "OKP", "crv": "Ed25519", "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo" }
+  ],
+  "updated_at": "2026-07-17T09:00:00Z",
+  "next_update": "2026-07-24T09:00:00Z",
+  "files": [
+    {
+      "registry": "beckn-catalogs",
+      "url": "https://techmart.example/dedi/beckn-catalogs.dedi.json",
+      "digest": "sha-256:60e0f0733c6d7009773ba837f254be2892cb9b62e9fa5407107c21134b1134ae",
+      "schema": "https://schema.nfh.global/dedi/BecknCatalogIndexRecord/1.0.0/schema.json",
+      "state": "live"
+    }
+  ],
+  "proof": {
+    "verification_method": "key-001",
+    "canonicalization": "JCS",
+    "jws": "UNSIGNED_LOCAL_TEST_DATA_NO_CRYPTOGRAPHIC_SIGNATURE"
+  }
+}
