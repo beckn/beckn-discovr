@@ -19,6 +19,8 @@
 #   docker build --build-arg DEPS_BASE=localhost/beckn-discovr/gradle-deps-base:1.0 \
 #     -f jobs/catalog-discover-job/Dockerfile .
 # =============================================================================
+# checkov:skip=CKV_DOCKER_2:build-only base image (Gradle cache); never run as a container
+# checkov:skip=CKV_DOCKER_3:build-only base image (Gradle cache); never run as a container
 FROM eclipse-temurin:17-jdk-jammy
 
 # =============================================================================
