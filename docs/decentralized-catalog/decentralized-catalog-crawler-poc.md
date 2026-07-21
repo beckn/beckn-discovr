@@ -157,7 +157,7 @@ may split across parts sharing one catalog `id`; the pipeline merges them (§5.8
 | `Differ` | Compare index records/parts against `StateStore`; emit fetch/retire work items | StateStore |
 | `Fetcher` | GET a part; verify `sha-256` against the index digest | HttpClient |
 | `Pusher` | Build Beckn envelope; POST `/catalog/push`; interpret ACK/NACK | HttpClient |
-| `StateStore` | Persist/read last-seen state in `provider_index_state` + `catalog_part_state` | PostgreSQL |
+| `StateStore` | Persist/read last-seen state in `index_crawl_state` + `catalog_part_state` | PostgreSQL |
 | `FeedbackLog` | Append structured reject/skip records | — |
 | `Crawler` | Orchestrate a pass across providers | all of the above |
 
@@ -186,7 +186,7 @@ rather than skipping it.
 
 ```sql
 -- "Did anything change for this provider?"  (one row per index = one per provider for the POC)
-CREATE TABLE provider_index_state (
+CREATE TABLE index_crawl_state (
   index_url     TEXT PRIMARY KEY,   -- from manifest.files[].url
   manifest_etag TEXT,               -- optional ETag on /.well-known/dedi.json
   index_etag    TEXT,               -- optional ETag on the index
@@ -212,7 +212,7 @@ crawler find all part rows for a catalog when a catalog drops a part or goes RET
 stays the primary key; `catalog_id` is an indexed attribute.
 
 Reads driving each check:
-- `provider_index_state.index_digest` → compare to manifest `files[].digest` (did the index
+- `index_crawl_state.index_digest` → compare to manifest `files[].digest` (did the index
   change at all?). `manifest_etag` / `index_etag` are the optional `If-None-Match` shortcuts.
 - `catalog_part_state.digest` → compare to the index's `parts[].digest` (did this catalog change?).
 - `catalog_part_state.version` → compare to the record's `details.version` (rollback guard; all
@@ -221,7 +221,7 @@ Reads driving each check:
 Writes use `INSERT ... ON CONFLICT (<pk>) DO UPDATE`.
 
 **Deferred column (add with DeDi, not now).**
-- `subscriber_id` on `provider_index_state` — the provider/subscriber `domain` (= `bppId`;
+- `subscriber_id` on `index_crawl_state` — the provider/subscriber `domain` (= `bppId`;
   **not** the catalog's `provider.id`). Only earns its place with the DeDi de-registration +
   per-provider grouping flow (OQ-4); nothing in the POC reads it. `catalog_id` is included now
   (see above) because it is free to populate and needed for catalog-level cleanup.
