@@ -2,6 +2,7 @@ package org.beckn.crawler.crawl;
 
 import org.beckn.crawler.config.CrawlerProperties;
 import org.beckn.crawler.feedback.FeedbackLog;
+import org.beckn.crawler.logging.LogEvent;
 import org.beckn.crawler.model.FeedModels.Index;
 import org.beckn.crawler.state.StateStore;
 import org.slf4j.Logger;
@@ -11,13 +12,15 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
+import static net.logstash.logback.argument.StructuredArguments.value;
+
 /**
  * Orchestrates one crawl pass over all configured providers (design doc §5.4).
  * Guiding rule: state advances only after a confirmed 200 Ack, so every failure self-heals
  * on the next pass and a partially-fetched catalog is never indexed.
  *
- * <p>Logs are written as a simple, human-readable lifecycle so the flow is easy to follow in a
- * live demo.
+ * <p>Logs use the same structured style as the discover/publish jobs: the message is a stable
+ * event id and the data rides along as {@code value("key", val)} pairs.
  */
 @Component
 public class Crawler {
@@ -47,44 +50,45 @@ public class Crawler {
 
     /** Runs one full pass across every configured provider. Never throws — errors are logged. */
     public void runPass() {
-        log.info("═════ Crawl pass starting — {} provider(s) ═════", props.providers().size());
+        log.info(LogEvent.PASS_STARTED, value("providers", props.providers().size()));
         for (String provider : props.providers()) {
             try {
                 crawlProvider(provider);
             } catch (Exception e) {
-                log.error("[{}] Provider failed ({}) — leaving state untouched, moving on", provider, e.toString());
+                log.error(LogEvent.PROVIDER_FAILED, value("provider", provider), value("error", e.toString()));
                 feedback.record(provider, null, "resolve", "provider_error", e.toString());
             }
         }
-        log.info("═════ Crawl pass complete ═════");
+        log.info(LogEvent.PASS_COMPLETED);
     }
 
     private void crawlProvider(String provider) throws Exception {
-        log.info("[{}] Checking provider", provider);
+        log.info(LogEvent.PROVIDER_CHECKING, value("provider", provider));
 
         // 1. RESOLVE — fetch the tiny manifest.
         ManifestResolver.Resolved manifest = manifestResolver.resolve(provider);
-        String domain = manifest.domain();
-        log.info("[{}] Manifest OK — index = {}", domain, manifest.indexUrl());
+        String domain = manifest.domain();   // technical identity (bppId, integrity check)
+        String name = manifest.name();       // human-friendly label for logs
+        log.info(LogEvent.MANIFEST_RESOLVED, value("provider", name), value("indexUrl", manifest.indexUrl()));
 
         // 2. CHEAP TOP-LEVEL CHECK — did anything change at all? (the "unmodified" scenario)
         var storedDigest = state.findIndexDigest(manifest.indexUrl());
         if (storedDigest.isPresent() && storedDigest.get().equalsIgnoreCase(manifest.indexDigest())) {
-            log.info("[{}] No change since last run → skipping (0 catalogs pushed)", domain);
+            log.info(LogEvent.INDEX_UNCHANGED, value("provider", name), value("pushed", 0));
             return;
         }
-        log.info("[{}] Change detected (index digest differs) → fetching index", domain);
+        log.info(LogEvent.INDEX_CHANGED, value("provider", name));
 
         // 3. FETCH + VERIFY INDEX
         Index index;
         try {
             index = indexPoller.fetchAndVerify(manifest);
         } catch (IndexPoller.IndexIntegrityException e) {
-            log.warn("[{}] Index failed integrity check → skipping provider ({})", domain, e.getMessage());
+            log.warn(LogEvent.INDEX_INTEGRITY_FAILED, value("provider", name), value("reason", e.getMessage()));
             feedback.record(domain, null, "validate", "index_integrity", e.getMessage());
             return;
         }
-        log.info("[{}] Index verified — {} record(s) to evaluate", domain, index.records().size());
+        log.info(LogEvent.INDEX_VERIFIED, value("provider", name), value("records", index.records().size()));
 
         // 4-6. Decide + act per catalog record.
         boolean retryNeeded = false;
@@ -92,17 +96,17 @@ public class Crawler {
         for (Differ.Decision d : differ.diff(index)) {
             String catalogId = d.record().details().catalogId();
             switch (d.action()) {
-                case SKIP_UNCHANGED -> log.info("   • {} : unchanged → skip", catalogId);
+                case SKIP_UNCHANGED -> log.info(LogEvent.CATALOG_UNCHANGED, value("catalogId", catalogId));
                 case SKIP_NON_PUBLIC -> {
-                    log.info("   • {} : not public → skip", catalogId);
+                    log.info(LogEvent.CATALOG_NONPUBLIC, value("catalogId", catalogId), value("detail", d.detail()));
                     feedback.record(domain, catalogId, "validate", "non_public", d.detail());
                 }
                 case SKIP_ROLLBACK -> {
-                    log.warn("   • {} : version rollback → reject ({})", catalogId, d.detail());
+                    log.warn(LogEvent.CATALOG_ROLLBACK, value("catalogId", catalogId), value("detail", d.detail()));
                     feedback.record(domain, catalogId, "validate", "version_rollback", d.detail());
                 }
                 case RETIRE -> {
-                    log.info("   • {} : RETIRED → skip (POC logs the intent)", catalogId);
+                    log.info(LogEvent.CATALOG_RETIRED, value("catalogId", catalogId), value("detail", d.detail()));
                     feedback.record(domain, catalogId, "validate", "retired_skipped", d.detail());
                 }
                 case PUSH -> {
@@ -114,11 +118,12 @@ public class Crawler {
 
         // 7. Advance the index digest only if the whole pass succeeded — else re-detect + retry.
         if (retryNeeded) {
-            log.warn("[{}] Done — {} catalog(s) pushed, some failed → NOT advancing state, will retry next pass",
-                    domain, pushed);
+            log.warn(LogEvent.PROVIDER_RETRY, value("provider", name), value("pushed", pushed),
+                    value("stateUpdated", false));
         } else {
             state.upsertIndexState(manifest.indexUrl(), manifest.indexDigest(), index.nextUpdate());
-            log.info("[{}] Done — {} catalog(s) pushed, state updated", domain, pushed);
+            log.info(LogEvent.PROVIDER_DONE, value("provider", name), value("pushed", pushed),
+                    value("stateUpdated", true));
         }
     }
 
@@ -126,20 +131,20 @@ public class Crawler {
     private boolean pushCatalog(String domain, Differ.Decision d) {
         String catalogId = d.record().details().catalogId();
         long version = d.record().details().version();
-        log.info("   • {} : changed → fetching {} part(s)", catalogId, d.changedParts().size());
+        log.info(LogEvent.CATALOG_CHANGED, value("catalogId", catalogId), value("parts", d.changedParts().size()));
 
         List<byte[]> bodies = new ArrayList<>();
         try {
             for (var part : d.changedParts()) {
                 bodies.add(fetcher.fetchVerified(part.url(), part.digest()));
-                log.info("       fetched + digest verified: {}", part.url());
+                log.info(LogEvent.PART_FETCHED, value("catalogId", catalogId), value("url", part.url()));
             }
         } catch (Fetcher.DigestMismatchException e) {
-            log.warn("   • {} : digest mismatch → reject, not indexed ({})", catalogId, e.getMessage());
+            log.warn(LogEvent.CATALOG_DIGEST_MISMATCH, value("catalogId", catalogId), value("reason", e.getMessage()));
             feedback.record(domain, catalogId, "verify", "digest_mismatch", e.getMessage());
             return false;
         } catch (Exception e) {
-            log.warn("   • {} : fetch failed → skip ({})", catalogId, e.toString());
+            log.warn(LogEvent.CATALOG_FETCH_FAILED, value("catalogId", catalogId), value("error", e.toString()));
             feedback.record(domain, catalogId, "fetch", "fetch_error", e.toString());
             return false;
         }
@@ -148,12 +153,12 @@ public class Crawler {
         try {
             result = pusher.push(domain, bodies);
         } catch (Exception e) {
-            log.warn("   • {} : push errored → skip ({})", catalogId, e.toString());
+            log.warn(LogEvent.CATALOG_PUSH_REJECTED, value("catalogId", catalogId), value("error", e.toString()));
             feedback.record(domain, catalogId, "push", "push_error", e.toString());
             return false;
         }
         if (!result.ack()) {
-            log.warn("   • {} : push rejected ({}) → will retry next pass", catalogId, result.detail());
+            log.warn(LogEvent.CATALOG_PUSH_REJECTED, value("catalogId", catalogId), value("detail", result.detail()));
             feedback.record(domain, catalogId, "push", "push_nack", result.detail());
             return false;
         }
@@ -161,7 +166,8 @@ public class Crawler {
         for (var part : d.changedParts()) {
             state.upsertPart(part.url(), catalogId, version, part.digest(), part.lastModified());
         }
-        log.info("   • {} : pushed → 200 OK (version {}, {} part(s))", catalogId, version, d.changedParts().size());
+        log.info(LogEvent.CATALOG_PUSHED, value("catalogId", catalogId), value("version", version),
+                value("parts", d.changedParts().size()), value("status", result.status()));
         return true;
     }
 }
