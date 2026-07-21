@@ -11,16 +11,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# Least-privilege default; jobs widen as needed (e.g. id-token: write for OIDC).
+# Least-privilege default; jobs widen as needed (e.g. pull-requests: read on check-changes).
 permissions:
   contents: read
-  pull-requests: read   # dorny/paths-filter reads changed files via the PR API
 
 jobs:
   # dorny/paths-filter uses the GitHub API on pull_request events — no checkout needed.
   check-changes:
     name: Check Modified Files
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # dorny/paths-filter reads changed files via the PR API
     outputs:
       discover: ${{ steps.filter.outputs.discover }}
       publish: ${{ steps.filter.outputs.publish }}
