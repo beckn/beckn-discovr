@@ -1,0 +1,81 @@
+{
+  "dedi_version": "0.1",
+  "type": "dedi-file",
+  "source_url": "https://techmart.example/dedi/beckn-catalogs.dedi.json",
+  "next_update": "2026-07-24T09:00:00Z",
+
+  "publisher": {
+    "domain": "techmart.example",
+    "key": { "kid": "key-001", "kty": "OKP", "crv": "Ed25519", "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo" }
+  },
+  "namespace": "techmart.example",
+
+  "registry": {
+    "name": "beckn-catalogs",
+    "schema": "https://schema.nfh.global/dedi/BecknCatalogIndexRecord/1.0.0/schema.json",
+    "state": "live",
+    "updated_at": "2026-07-17T09:00:00Z"
+  },
+
+  "records": [
+    {
+      "record_name": "CAT-ELECTRONICS-2026",
+      "details": {
+        "catalogId": "CAT-ELECTRONICS-2026",
+        "version": 42,
+        "catalogType": "REGULAR",
+        "status": "ACTIVE",
+        "visibility": "public",
+        "updatedAt": "2026-07-17T09:00:00Z",
+        "schemaTypes": ["https://schema.beckn.org/retail/schema/1.1.0/context.jsonld"],
+        "parts": [
+          {
+            "url": "https://techmart.example/catalogs/CAT-ELECTRONICS-2026-000.json",
+            "digest": "sha-256:c0d680701b672e7875b9b287eb363e9fe108e01c3c476517f1f4adc2ebad2189",
+            "lastModified": "2026-07-17T09:00:00Z"
+          },
+          {
+            "url": "https://techmart.example/catalogs/CAT-ELECTRONICS-2026-001.json",
+            "digest": "sha-256:dc44fd9261046b18cbc0c88762572264554340774020b01fbbf12d8dbe51c906",
+            "lastModified": "2026-06-12T11:30:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "record_name": "CAT-EON-EXCLUSIVE-2026",
+      "details": {
+        "catalogId": "CAT-EON-EXCLUSIVE-2026",
+        "version": 12,
+        "catalogType": "REGULAR",
+        "status": "ACTIVE",
+        "visibility": { "networks": ["eon-retail"] },
+        "updatedAt": "2026-07-14T08:00:00Z",
+        "schemaTypes": ["https://schema.beckn.org/retail/schema/1.1.0/context.jsonld"],
+        "parts": [
+          {
+            "url": "https://techmart.example/catalogs/CAT-EON-EXCLUSIVE-2026.json",
+            "digest": "sha-256:c35db743c55396e65d8daa24a8bb7418c3bc8c073ffffcaf21869c9e371f43ad",
+            "lastModified": "2026-07-14T08:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "record_name": "CAT-ELECTRONICS-2025",
+      "details": {
+        "catalogId": "CAT-ELECTRONICS-2025",
+        "version": 30,
+        "status": "RETIRED",
+        "updatedAt": "2026-01-31T00:00:00Z",
+        "retiredAt": "2026-01-31T00:00:00Z"
+      }
+    }
+  ],
+
+  "proof": {
+    "verification_method": "key-001",
+    "canonicalization": "JCS",
+    "jws": "UNSIGNED_LOCAL_TEST_DATA_NO_CRYPTOGRAPHIC_SIGNATURE"
+  }
+}
