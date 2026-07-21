@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: decentralized-catalog-crawler
+  # Crawler state lives in Discovr's Postgres (design doc §5.3). Flyway creates the two tables.
+  datasource:
+    url: ${CRAWLER_DB_URL}
+    username: ${CRAWLER_DB_USERNAME}
+    password: ${CRAWLER_DB_PASSWORD}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # The crawler owns only its two tables; baseline so it coexists with the discover schema.
+    baseline-on-migrate: true
+    baseline-version: 0
+    table: flyway_schema_history_crawler
+
+# All crawler settings — nothing hardcoded; every value is overridable via env.
+crawler:
+  providers: ${CRAWLER_PROVIDERS}                 # comma-separated base URLs
+  well-known-path: ${CRAWLER_WELL_KNOWN_PATH:/.well-known/dedi.json}
+  push-endpoint: ${CRAWLER_PUSH_ENDPOINT}
+  poll-interval: ${CRAWLER_POLL_INTERVAL}         # e.g. 2m
+  http:
+    timeout: ${CRAWLER_HTTP_TIMEOUT:30s}
+    max-part-bytes: ${CRAWLER_MAX_PART_BYTES:10485760}
+  feedback-log-path: ${CRAWLER_FEEDBACK_LOG_PATH:./feedback.log}
+
+logging:
+  level:
+    org.beckn.crawler: INFO

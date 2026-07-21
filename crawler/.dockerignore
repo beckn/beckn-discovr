@@ -1,0 +1,9 @@
+# Local build output — the image compiles from source inside the builder stage.
+build/
+.gradle/
+# Logs and IDE noise
+*.log
+.idea/
+*.iml
+.vscode/
+.DS_Store
