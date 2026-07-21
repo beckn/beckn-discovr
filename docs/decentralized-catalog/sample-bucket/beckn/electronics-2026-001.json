@@ -1,0 +1,34 @@
+{
+  "id": "bpp.techmart.com/electronics-2026",
+  "descriptor": { "name": "TechMart Electronics 2026" },
+  "provider": {
+    "id": "bpp.techmart.com/techmart-retail",
+    "descriptor": { "name": "TechMart Retail" }
+  },
+  "bppId": "bpp.techmart.com",
+  "bppUri": "https://techmart.com/beckn",
+  "isActive": true,
+  "validity": { "startDate": "2026-01-01T00:00:00Z", "endDate": "2026-12-31T23:59:59Z" },
+  "resources": [
+    {
+      "id": "bpp.techmart.com/item-phone-pixel-9",
+      "descriptor": { "name": "Google Pixel 9", "shortDesc": "6.3-inch flagship phone" },
+      "resourceAttributes": {
+        "@context": "https://schema.beckn.org/retail/schema/1.1.0/context.jsonld",
+        "@type": "Product",
+        "brand": "Google",
+        "price": { "value": "79900", "currency": "INR" }
+      }
+    },
+    {
+      "id": "bpp.techmart.com/item-headphones-sony-xm5",
+      "descriptor": { "name": "Sony WH-1000XM5", "shortDesc": "Noise-cancelling headphones" },
+      "resourceAttributes": {
+        "@context": "https://schema.beckn.org/retail/schema/1.1.0/context.jsonld",
+        "@type": "Product",
+        "brand": "Sony",
+        "price": { "value": "29990", "currency": "INR" }
+      }
+    }
+  ]
+}

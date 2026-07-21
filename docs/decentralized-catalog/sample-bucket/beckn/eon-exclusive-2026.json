@@ -1,0 +1,24 @@
+{
+  "id": "bpp.techmart.com/eon-exclusive-2026",
+  "descriptor": { "name": "TechMart EON-Exclusive Deals 2026" },
+  "provider": {
+    "id": "bpp.techmart.com/techmart-retail",
+    "descriptor": { "name": "TechMart Retail" }
+  },
+  "bppId": "bpp.techmart.com",
+  "bppUri": "https://techmart.com/beckn",
+  "isActive": true,
+  "validity": { "startDate": "2026-01-01T00:00:00Z", "endDate": "2026-12-31T23:59:59Z" },
+  "resources": [
+    {
+      "id": "bpp.techmart.com/item-tv-lg-oled-65",
+      "descriptor": { "name": "LG OLED 65\" C4", "shortDesc": "EON-network exclusive pricing" },
+      "resourceAttributes": {
+        "@context": "https://schema.beckn.org/retail/schema/1.1.0/context.jsonld",
+        "@type": "Product",
+        "brand": "LG",
+        "price": { "value": "219900", "currency": "INR" }
+      }
+    }
+  ]
+}
