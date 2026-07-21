@@ -43,33 +43,33 @@ permissions:
 
 jobs:
   checkov:
-    name: Checkov — Dockerfiles / compose / workflows
+    name: Checkov — Dockerfiles & workflows
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Human-readable findings in the Actions log (report-only).
-      - name: Checkov (CLI output)
-        uses: bridgecrewio/checkov-action@v12.1347.0
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          directory: .
-          framework: dockerfile,docker_compose,github_actions
-          quiet: true
-          soft_fail: true                       # report-only
-          output_format: cli
+          python-version: '3.12'
 
-      # SARIF (written into ./checkov-report/) for the code-scanning tab.
-      - name: Checkov (SARIF output)
-        uses: bridgecrewio/checkov-action@v12.1347.0
-        with:
-          directory: .
-          framework: dockerfile,docker_compose,github_actions
-          quiet: true
-          soft_fail: true
-          output_format: sarif
-          output_file_path: checkov-report
+      - name: Install Checkov
+        run: pip install --no-input checkov==3.3.8
+
+      # Report-only (--soft-fail never errors). One scan emits both a
+      # human-readable CLI report to the Actions log and SARIF into
+      # ./checkov-report/ for the Security → Code scanning tab.
+      # NOTE: Checkov 3.x has no docker_compose framework — compose files are
+      # not misconfig-scanned here (tracked as a follow-up).
+      - name: Run Checkov (report-only)
+        run: |
+          checkov --directory . \
+            --framework dockerfile github_actions \
+            --compact --quiet --soft-fail \
+            --output cli --output sarif \
+            --output-file-path console,checkov-report || true
 
       - name: Upload Checkov SARIF
         if: always()
