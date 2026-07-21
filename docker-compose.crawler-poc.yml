@@ -19,7 +19,7 @@ services:
   # ── Zookeeper ──────────────────────────────────────────────────────────────
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.1
-    container_name: crawler-poc-zookeeper
+    container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -29,7 +29,7 @@ services:
   # ── Kafka (single broker) ──────────────────────────────────────────────────
   kafka:
     image: confluentinc/cp-kafka:7.6.1
-    container_name: crawler-poc-kafka
+    container_name: kafka
     depends_on:
       - zookeeper
     ports:
@@ -57,7 +57,7 @@ services:
   # ── PostgreSQL (Discover DB — also holds the crawler's two state tables) ─────
   postgres-discovery:
     image: postgis/postgis:15-3.3
-    container_name: crawler-poc-postgres
+    container_name: postgres
     ports:
       - "5434:5432"
     environment:
@@ -79,7 +79,7 @@ services:
   # ── Elasticsearch (Discover text/spatial index) ─────────────────────────────
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.3.1
-    container_name: crawler-poc-elasticsearch
+    container_name: elasticsearch
     ports:
       - "9200:9200"
     environment:
@@ -104,7 +104,7 @@ services:
       context: .
       dockerfile: jobs/catalog-publish-job/Dockerfile
     image: beckn/catalog-publish-job:1.0
-    container_name: crawler-poc-ingestion
+    container_name: ingestion
     ports:
       - "8085:8080"
     environment:
@@ -173,7 +173,7 @@ services:
       context: .
       dockerfile: jobs/catalog-discover-job/Dockerfile
     image: beckn/catalog-discover:1.0
-    container_name: crawler-poc-discover
+    container_name: discover
     ports:
       - "8082:8080"
     environment:
@@ -240,7 +240,7 @@ services:
       context: .
       dockerfile: jobs/response-dispatcher/Dockerfile
     image: beckn/response-dispatcher:1.0
-    container_name: crawler-poc-dispatcher
+    container_name: dispatcher
     ports:
       - "8086:8080"
     environment:
@@ -282,7 +282,7 @@ services:
       context: ./crawler
       dockerfile: Dockerfile
     image: beckn/decentralized-catalog-crawler:0.1
-    container_name: crawler-poc-crawler
+    container_name: crawler
     environment:
       # State store — reuses the Discover Postgres (its own two tables via Flyway).
       - CRAWLER_DB_URL=jdbc:postgresql://postgres-discovery:5432/catalog_db
