@@ -157,7 +157,7 @@ may split across parts sharing one catalog `id`; the pipeline merges them (§5.8
 | `Differ` | Compare index records/parts against `StateStore`; emit fetch/retire work items | StateStore |
 | `Fetcher` | GET a part; verify `sha-256` against the index digest | HttpClient |
 | `Pusher` | Build Beckn envelope; POST `/catalog/push`; interpret ACK/NACK | HttpClient |
-| `StateStore` | Persist/read last-seen `{etag, version, digest}` in `crawl_state` | PostgreSQL |
+| `StateStore` | Persist/read last-seen state in `provider_index_state` + `catalog_part_state` | PostgreSQL |
 | `FeedbackLog` | Append structured reject/skip records | — |
 | `Crawler` | Orchestrate a pass across providers | all of the above |
 
@@ -177,37 +177,54 @@ crawler:
   feedbackLogPath: "./feedback.log"
 ```
 
-### 5.3 State store (PostgreSQL table)
-One row per fetched URL — the crawler's memory of "what I saw last time." A row is upserted
-**only after** its push succeeds, so a crash mid-pass re-does that catalog rather than skipping it.
+### 5.3 State store (PostgreSQL — two tables)
+The crawler's memory of "what I saw last time." It answers two distinct questions, so it is
+modelled as two tables rather than one polymorphic table — each column then means exactly one
+thing. Both are URL-keyed (URLs are globally unique and are what every check keys on). Rows are
+upserted **only after** the corresponding push succeeds, so a crash mid-pass re-does that catalog
+rather than skipping it.
 
 ```sql
-CREATE TABLE crawl_state (
-  url          TEXT PRIMARY KEY,   -- manifest url, index url, or part url
-  etag         TEXT,               -- optional HTTP ETag (if the host sends one)
-  digest       TEXT,               -- index row: last index digest; part row: last verified part digest
-  version      BIGINT,             -- part row: owning catalog's details.version (rollback guard)
-  source_updated_at TIMESTAMPTZ,   -- from the file (updatedAt / lastModified)
-  last_seen_at TIMESTAMPTZ         -- when the crawler last checked this url
+-- "Did anything change for this provider?"  (one row per index = one per provider for the POC)
+CREATE TABLE provider_index_state (
+  index_url     TEXT PRIMARY KEY,   -- from manifest.files[].url
+  manifest_etag TEXT,               -- optional ETag on /.well-known/dedi.json
+  index_etag    TEXT,               -- optional ETag on the index
+  index_digest  TEXT,               -- last accepted index digest (compared to manifest.files[].digest)
+  next_update   TIMESTAMPTZ,        -- provider's re-crawl hint
+  last_seen_at  TIMESTAMPTZ
 );
+
+-- "Did this catalog change, and is it a rollback?"  (one row per catalog part)
+CREATE TABLE catalog_part_state (
+  part_url          TEXT PRIMARY KEY,   -- from records[].details.parts[].url
+  catalog_id        TEXT NOT NULL,      -- owning catalog (records[].details.catalogId)
+  version           BIGINT,             -- owning catalog's details.version (rollback guard)
+  digest            TEXT,               -- last verified part digest
+  source_updated_at TIMESTAMPTZ,        -- parts[].lastModified
+  last_seen_at      TIMESTAMPTZ
+);
+CREATE INDEX ix_catalog_part_state_catalog_id ON catalog_part_state (catalog_id);
 ```
 
+`catalog_id` is populated now (it's free — the crawler has it while writing the row) and lets the
+crawler find all part rows for a catalog when a catalog drops a part or goes RETIRED. `part_url`
+stays the primary key; `catalog_id` is an indexed attribute.
+
 Reads driving each check:
-- index row `digest` → compare to manifest `files[].digest` (did the index change at all?).
-- index row `etag` → optional `If-None-Match` on the index.
-- part row `digest` → compare to the index's `parts[].digest` (did this catalog change?).
-- part row `version` → compare to the record's `details.version` (rollback guard; all parts of a
-  catalog share its version).
+- `provider_index_state.index_digest` → compare to manifest `files[].digest` (did the index
+  change at all?). `manifest_etag` / `index_etag` are the optional `If-None-Match` shortcuts.
+- `catalog_part_state.digest` → compare to the index's `parts[].digest` (did this catalog change?).
+- `catalog_part_state.version` → compare to the record's `details.version` (rollback guard; all
+  parts of a catalog share its version).
 
-Writes use `INSERT ... ON CONFLICT (url) DO UPDATE`.
+Writes use `INSERT ... ON CONFLICT (<pk>) DO UPDATE`.
 
-**Deferred columns (add with DeDi, not now).** Kept URL-keyed for the POC because every check is
-by URL. Add when the DeDi layer lands:
-- `subscriber_id` — the provider/subscriber `domain` (= `bppId`; **not** the catalog's
-  `provider.id`). Needed for per-provider de-registration cleanup + grouping (OQ-4).
-- `catalog_id` — the owning catalog of a part row. Needed for real RETIRED cleanup (OQ-1): a
-  RETIRED record carries no `parts`, so without it the crawler can't map a retired catalog back
-  to its part-state rows.
+**Deferred column (add with DeDi, not now).**
+- `subscriber_id` on `provider_index_state` — the provider/subscriber `domain` (= `bppId`;
+  **not** the catalog's `provider.id`). Only earns its place with the DeDi de-registration +
+  per-provider grouping flow (OQ-4); nothing in the POC reads it. `catalog_id` is included now
+  (see above) because it is free to populate and needed for catalog-level cleanup.
 
 ### 5.4 One crawl pass
 ```
