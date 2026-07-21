@@ -1,0 +1,112 @@
+name: Security Scanning
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Trivy + Checkov security scanning on pull requests.
+#
+#   • Checkov  — static analysis of Dockerfiles, docker-compose, and GitHub
+#                Actions workflows for misconfiguration (IaC / config hygiene).
+#   • Trivy fs — dependency-CVE (Gradle) + secret scan of the repo.
+#
+# Rollout mode: REPORT-ONLY.
+#   Both scanners are non-blocking (soft_fail / exit-code 0) so builds stay
+#   green while the known DHI app-level dependency-CVE backlog is burned down.
+#   Findings are uploaded to the GitHub Security → Code scanning tab (SARIF)
+#   and printed to the Actions log. Flip to blocking (exit-code 1 on new
+#   CRITICAL/HIGH) once the backlog is clear — see the security-scanning Story.
+#
+# Image-layer CVE scanning (Trivy image) runs at release build time in
+# docker.yml, not here — the built image only exists there.
+# ═════════════════════════════════════════════════════════════════════════════
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release-*'
+      - development
+      - security/dependency-vulns   # integration branch for this rollout
+    paths:
+      - '**/Dockerfile*'
+      - 'docker-compose*.yml'
+      - '.github/workflows/**'
+      - 'jobs/**/build.gradle'
+      - 'sdks/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# security-events: write is required to upload SARIF to the code-scanning tab.
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  checkov:
+    name: Checkov — Dockerfiles / compose / workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        id: checkov
+        uses: bridgecrewio/checkov-action@v12.1347.0
+        with:
+          directory: .
+          framework: dockerfile,docker_compose,github_actions
+          quiet: true
+          soft_fail: true                       # report-only
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+
+      - name: Upload Checkov SARIF
+        if: always()
+        continue-on-error: true                 # tolerate code-scanning being disabled
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+
+  trivy-fs:
+    name: Trivy — dependencies & secrets (filesystem)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Human-readable findings in the Actions log (visible regardless of
+      # whether code scanning is enabled on the repo).
+      - name: Trivy filesystem scan (table)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH,MEDIUM
+          format: table
+          exit-code: '0'                         # report-only
+
+      # Machine-readable SARIF for the Security → Code scanning tab.
+      - name: Trivy filesystem scan (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH,MEDIUM
+          format: sarif
+          output: trivy-fs.sarif
+          exit-code: '0'
+
+      - name: Upload Trivy SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
