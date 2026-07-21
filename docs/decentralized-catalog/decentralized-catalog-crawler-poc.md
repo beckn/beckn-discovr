@@ -60,9 +60,9 @@ live reference node (`angular-absently-gab.ngrok-free.dev`) whose three files ma
 | Entry point | Config = provider **domain**; crawler hardcodes the `/.well-known/dedi.json` path | `.well-known` is a fixed DeDi standard path; only the domain varies per provider. |
 | Hosting | Provider hosts (domain **or** bucket); crawler reads **in place** | Preserves decentralization; copying to our bucket would recentralize. |
 | Fidelity | Fetch + digest-chain verify + push; defer `proof` signatures & DeDi registry | Proves the novel parts; digests give integrity; auth is orthogonal. |
-| Language | **Go**, own service (deferred, not blocking) | Lightweight concurrent poller, decoupled from the Java jobs. |
+| Language | **Any** (Java, Go, …); runs as its own service | Design is language-agnostic — the file formats, digest chain, and DB schema below don't depend on it. Pick per team preference; not a blocker. |
 | Schema validation | Let the **publish pipeline** validate | Avoids reimplementing JSON-schema validation in the crawler for the POC. |
-| State storage | A simple **PostgreSQL table** | Discovr already runs Postgres; safe across multiple crawler instances; supports staleness queries. |
+| State storage | **PostgreSQL** (two tables — §5.3) | Discovr already runs Postgres; safe across multiple crawler instances; supports staleness queries. |
 | Concurrency | **Sequential** per pass | Simplest correct POC; parallelism is an easy later optimization. |
 
 ## 4. The three DeDi files
@@ -211,6 +211,27 @@ CREATE INDEX ix_catalog_part_state_catalog_id ON catalog_part_state (catalog_id)
 crawler find all part rows for a catalog when a catalog drops a part or goes RETIRED. `part_url`
 stays the primary key; `catalog_id` is an indexed attribute.
 
+**Where each column comes from (provenance).** Every column is copied from a specific place —
+either a field inside a DeDi file or an HTTP response header. Nothing is invented.
+
+| Table.column | Source | Set when |
+|--------------|--------|----------|
+| `index_crawl_state.index_url` | manifest `files[].url` | first time a provider is crawled |
+| `index_crawl_state.manifest_etag` | HTTP `ETag` header on `GET /.well-known/dedi.json` | after a successful pass |
+| `index_crawl_state.index_etag` | HTTP `ETag` header on `GET <index url>` | after a successful pass |
+| `index_crawl_state.index_digest` | manifest `files[].digest` (once the fetched index's bytes match it) | after all records handled |
+| `index_crawl_state.next_update` | manifest / index `next_update` | after a successful pass |
+| `index_crawl_state.last_seen_at` | crawler clock | every pass that reaches the index |
+| `catalog_part_state.part_url` | index `records[].details.parts[].url` | when the part is first pushed |
+| `catalog_part_state.catalog_id` | index `records[].details.catalogId` | when the part is pushed |
+| `catalog_part_state.version` | index `records[].details.version` | when the part is pushed |
+| `catalog_part_state.digest` | index `records[].details.parts[].digest` (once the part's bytes match it) | after that part's push returns 200 |
+| `catalog_part_state.source_updated_at` | index `records[].details.parts[].lastModified` | when the part is pushed |
+| `catalog_part_state.last_seen_at` | crawler clock | every pass that inspects the part |
+
+Note the two digest columns are written **only after** the bytes have been verified against them
+— the table holds *proven* digests, never merely announced ones.
+
 Reads driving each check:
 - `index_crawl_state.index_digest` → compare to manifest `files[].digest` (did the index
   change at all?). `manifest_etag` / `index_etag` are the optional `If-None-Match` shortcuts.
@@ -265,7 +286,8 @@ FOR each configured provider domain:
        non-200 / NACK → feedback + skip (state NOT advanced → retried next pass)
 
   7. PERSIST STATE  (only for catalogs that pushed 200)
-     upsert part digests/version; then upsert index digest (+ ETag); manifest untouched unless moved
+     per pushed catalog: upsert each part into catalog_part_state (digest, version, catalog_id, ...)
+     once all records handled: upsert index_crawl_state (index_digest, manifest_etag, index_etag, next_update)
 ```
 
 ### 5.5 How a catalog update is detected (walkthrough)
@@ -374,8 +396,8 @@ fetched + verified, so a spoofed or lost signal costs freshness, never correctne
    re-run; confirm only that part is refetched and pushed, and RETIRED is handled.
 
 ## 7. Acceptance criteria (POC is "done" when)
-- A fresh run against a provider domain pushes both public catalogs' parts; they are returnable
-  via `/beckn/discover`.
+- A fresh run against a provider domain pushes the public catalog's two parts
+  (`CAT-ELECTRONICS-2026-000` + `-001`); they are returnable via `/beckn/discover`.
 - The network-restricted catalog (`CAT-EON-EXCLUSIVE-2026`) is **not** pushed.
 - A second run with **no change** stops after the manifest top-level check → **zero** pushes.
 - Editing one part (re-hashed up the chain + version bump) refetches/pushes **only that part**.
