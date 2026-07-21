@@ -11,12 +11,11 @@ name: Security Scanning
 #                   CycloneDX plugin (org.cyclonedx.bom) emits a full runtime
 #                   SBOM, which Trivy then scans. No lockfiles to maintain.
 #
-# Rollout mode: REPORT-ONLY.
-#   Every scanner is non-blocking (--soft-fail / --exit-code 0) so builds stay
-#   green while the known app-level dependency-CVE backlog is burned down.
-#   Findings are published to (1) the run's Job Summary and (2) a sticky PR
-#   comment (one per scanner, updated in place). Flip to blocking (exit-code 1
-#   on new CRITICAL/HIGH) once the backlog is clear — see the security Story.
+# Rollout mode: REPORT-ONLY (advisory, by policy).
+#   Every scanner is non-blocking (--soft-fail / --exit-code 0). Findings are
+#   advisory — published to (1) the run's Job Summary and (2) a sticky PR
+#   comment (one per scanner, updated in place). The REVIEWER decides whether
+#   any finding should block the merge; these scans do NOT hard-fail the PR.
 #
 # Image-layer CVE scanning (Trivy image) runs at release build time in
 # docker.yml, not here — the built image only exists there.
