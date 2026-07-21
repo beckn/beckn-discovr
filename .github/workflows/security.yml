@@ -139,28 +139,32 @@ jobs:
           trivy --version
 
       # Each Java job is a standalone Gradle build (composite-includes the SDK).
-      # cyclonedxDirectBom resolves the runtime classpath and writes a BOM; we
-      # locate it robustly (config'd path vs plugin default) and scan it.
+      # cyclonedxDirectBom resolves the runtime classpath and writes the BOM.
+      # NOTE: Trivy supports cyclonedx-JSON only (NOT cyclonedx-xml — it exits
+      # FATAL on XML), so we pin bom.json explicitly. The `cyclonedxDirectBom`
+      # task exists in every job (no legacy `cyclonedxBom` fallback — that task
+      # is a no-op here and would scan test+compile classpaths). A non-zero
+      # Trivy exit is surfaced so a scan error can't masquerade as "clean".
       - name: Generate SBOMs and scan (report-only)
         run: |
           set +e
           : > trivy-sbom.txt
           MODULES="jobs/catalog-publish-job jobs/response-dispatcher jobs/catalog-discover-job"
+          issues=0
           for m in $MODULES; do
             {
               echo "================================================================"
               echo "Module: $m"
               echo "================================================================"
             } | tee -a trivy-sbom.txt
-            ( cd "$m" && chmod +x gradlew \
-                && ( ./gradlew cyclonedxDirectBom --no-daemon --console=plain \
-                     || ./gradlew cyclonedxBom --no-daemon --console=plain ) )
-            BOM=$(find "$m/build" \( -name 'bom.json' -o -name 'bom.xml' \) 2>/dev/null | head -n1)
+            ( cd "$m" && chmod +x gradlew && ./gradlew cyclonedxDirectBom --no-daemon --console=plain )
+            BOM=$(find "$m/build" -name 'bom.json' 2>/dev/null | head -n1)
             if [ -z "$BOM" ]; then
-              echo "  ⚠️  No SBOM produced for $m — skipped" | tee -a trivy-sbom.txt
+              echo "  ❌ No JSON SBOM produced for $m — scan SKIPPED (investigate)" | tee -a trivy-sbom.txt
+              issues=1
               continue
             fi
-            COMPONENTS=$(grep -c '"purl"' "$BOM" 2>/dev/null || echo '?')
+            COMPONENTS=$(grep -o '"purl"' "$BOM" 2>/dev/null | wc -l | tr -d ' ')
             echo "  SBOM: $BOM (${COMPONENTS} components)" | tee -a trivy-sbom.txt
             # Findings table -> stdout (captured); Trivy logs/warnings -> stderr
             # (job log only, keeps the noise out of the summary/PR comment).
@@ -169,12 +173,17 @@ jobs:
               --ignore-unfixed \
               --exit-code 0 \
               --format table > /tmp/module-findings.txt
-            if [ -s /tmp/module-findings.txt ]; then
+            trc=$?
+            if [ "$trc" -ne 0 ]; then
+              echo "  ❌ Trivy scan errored (exit $trc) for $m — see job log" | tee -a trivy-sbom.txt
+              issues=1
+            elif [ -s /tmp/module-findings.txt ]; then
               cat /tmp/module-findings.txt | tee -a trivy-sbom.txt
             else
-              echo "  ✓ No fixable CRITICAL/HIGH/MEDIUM vulnerabilities." | tee -a trivy-sbom.txt
+              echo "  ✓ No fixable CRITICAL/HIGH/MEDIUM vulnerabilities (${COMPONENTS} components scanned)." | tee -a trivy-sbom.txt
             fi
           done
+          [ "$issues" -ne 0 ] && echo "::warning::One or more SBOM scans were skipped or errored — see the Trivy SBOM report."
           exit 0
 
       - name: Upload SBOMs (artifact)

@@ -22,22 +22,26 @@ runs:
   using: composite
   steps:
     # Always visible on the run page, regardless of PR/permissions.
+    # The code fence is sized longer than any backtick run in the content so a
+    # finding containing ``` cannot break out of the block.
     - name: Append to job summary
       shell: bash
       env:
         TITLE: ${{ inputs.title }}
         REPORT_FILE: ${{ inputs.report-file }}
       run: |
+        FENCE='```'
+        if [ -s "${REPORT_FILE}" ]; then
+          longest=$(grep -oE '`+' "${REPORT_FILE}" | awk '{ if (length > m) m = length } END { print m+0 }')
+          n=$(( longest + 1 )); [ "$n" -lt 3 ] && n=3
+          FENCE=$(printf '`%.0s' $(seq 1 "$n"))
+        fi
         {
           echo "## ${TITLE}"
           echo ""
-          echo '```'
-          if [ -s "${REPORT_FILE}" ]; then
-            cat "${REPORT_FILE}"
-          else
-            echo "(no findings)"
-          fi
-          echo '```'
+          echo "${FENCE}"
+          if [ -s "${REPORT_FILE}" ]; then cat "${REPORT_FILE}"; else echo "(no findings)"; fi
+          echo "${FENCE}"
         } >> "$GITHUB_STEP_SUMMARY"
 
     # Sticky comment right on the PR. continue-on-error so a read-only token
@@ -67,6 +71,11 @@ runs:
             note = `\n\n_Output truncated — see the [full run](${runUrl}) for everything._`;
           }
 
+          // Fence must be longer than any run of backticks in the content, so a
+          // finding that contains ``` cannot terminate the block early.
+          const longestRun = (raw.match(/`+/g) || []).reduce((m, s) => Math.max(m, s.length), 0);
+          const fence = '`'.repeat(Math.max(3, longestRun + 1));
+
           const body = [
             marker,
             `### ${title}`,
@@ -74,13 +83,15 @@ runs:
             '',
             '<details><summary>Findings</summary>',
             '',
-            '```',
+            fence,
             raw,
-            '```',
+            fence,
             '</details>' + note,
           ].join('\n');
 
-          const { data: comments } = await github.rest.issues.listComments({
+          // Paginate: on a busy PR the sticky comment can fall outside page 1,
+          // which would otherwise create a duplicate on every push.
+          const comments = await github.paginate(github.rest.issues.listComments, {
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: context.issue.number,
