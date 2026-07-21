@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Same structure as the discover + publish jobs: structured JSON (Logstash encoder) in normal
+  runs, plain text under the "test" profile. MDC fields and value("key",val) args are promoted
+  to top-level JSON keys.
+-->
+<configuration>
+
+  <springProperty scope="context" name="appName"
+                  source="spring.application.name" defaultValue="crawler"/>
+
+  <!-- ── Normal runs: structured JSON ─────────────────────────────────────── -->
+  <springProfile name="!test">
+
+    <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <includeContext>false</includeContext>
+        <customFields>{"service":"${appName}"}</customFields>
+        <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSZ</timestampPattern>
+      </encoder>
+    </appender>
+
+    <appender name="ASYNC_JSON" class="ch.qos.logback.classic.AsyncAppender">
+      <appender-ref ref="JSON_STDOUT"/>
+      <queueSize>1024</queueSize>
+      <discardingThreshold>0</discardingThreshold>
+      <includeCallerData>false</includeCallerData>
+      <neverBlock>true</neverBlock>
+    </appender>
+
+    <logger name="org.beckn.crawler" level="INFO" additivity="false">
+      <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+
+    <!-- Quiet framework internals so the crawler's own events stand out -->
+    <logger name="org.springframework" level="WARN" additivity="false"><appender-ref ref="ASYNC_JSON"/></logger>
+    <logger name="org.apache.kafka"    level="WARN" additivity="false"><appender-ref ref="ASYNC_JSON"/></logger>
+    <logger name="com.zaxxer.hikari"   level="WARN" additivity="false"><appender-ref ref="ASYNC_JSON"/></logger>
+    <logger name="org.flywaydb"        level="INFO" additivity="false"><appender-ref ref="ASYNC_JSON"/></logger>
+
+    <root level="WARN">
+      <appender-ref ref="ASYNC_JSON"/>
+    </root>
+
+  </springProfile>
+
+  <!-- ── Test profile: plain text so test output stays readable ────────────── -->
+  <springProfile name="test">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%mdc] - %msg%n</pattern>
+      </encoder>
+    </appender>
+    <logger name="org.beckn.crawler" level="INFO" additivity="false"><appender-ref ref="CONSOLE"/></logger>
+    <root level="WARN"><appender-ref ref="CONSOLE"/></root>
+  </springProfile>
+
+</configuration>

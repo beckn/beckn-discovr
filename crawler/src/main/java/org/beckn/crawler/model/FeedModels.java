@@ -19,7 +19,7 @@ public final class FeedModels {
 
     /** manifest — {@code /.well-known/dedi.json} (type: dedi-manifest). */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Manifest(String type, String domain, List<FileRef> files) {
+    public record Manifest(String type, String domain, String name, List<FileRef> files) {
         @JsonIgnoreProperties(ignoreUnknown = true)
         public record FileRef(String registry, String url, String digest, String state) {}
     }

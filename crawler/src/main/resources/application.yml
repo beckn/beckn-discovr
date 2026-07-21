@@ -1,6 +1,6 @@
 spring:
   application:
-    name: decentralized-catalog-crawler
+    name: crawler
   # Crawler state lives in Discovr's Postgres (design doc §5.3). Flyway creates the two tables.
   datasource:
     url: ${CRAWLER_DB_URL}

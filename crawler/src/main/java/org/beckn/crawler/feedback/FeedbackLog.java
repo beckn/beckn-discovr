@@ -2,9 +2,12 @@ package org.beckn.crawler.feedback;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.crawler.config.CrawlerProperties;
+import org.beckn.crawler.logging.LogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -40,14 +43,15 @@ public class FeedbackLog {
         entry.put("reason", reason);
         entry.put("detail", detail);
         // Always surface on the console for the demo, and persist for the record.
-        log.warn("Feedback logged — {}/{} at [{}]: {} ({})", domain, catalogId, stage, reason, detail);
+        log.warn(LogEvent.FEEDBACK, value("domain", domain), value("catalogId", catalogId),
+                value("stage", stage), value("reason", reason), value("detail", detail));
         try {
             String line = mapper.writeValueAsString(entry) + System.lineSeparator();
             if (path.getParent() != null) Files.createDirectories(path.getParent());
             Files.writeString(path, line, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
-            log.error("Could not write feedback log to {} ({})", path, e.getMessage());
+            log.error(LogEvent.FEEDBACK_WRITE_FAILED, value("path", path.toString()), value("error", e.getMessage()));
         }
     }
 }
