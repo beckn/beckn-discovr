@@ -282,7 +282,24 @@ The digest chain is the mechanism; ETag only saves a fetch. A stale/missing ETag
 never correctness.
 
 ### 5.7 Digest handling
-- Digests are `"sha-256:<lowercase-hex>"`. Parse the algorithm before `:`; strip it before comparing.
+All digests are **SHA-256**, written `"sha-256:<lowercase-hex>"` (hyphen — not `sha256:`).
+
+**A file never carries its own digest — the digest always lives in its parent.** This is the
+"checksum published beside the download" pattern, and it's what lets the crawler verify a file
+*before trusting its contents*:
+
+| File | Holds a digest of | Carries its own digest? |
+|------|-------------------|-------------------------|
+| manifest (`/.well-known/dedi.json`) | the **index** (`files[].digest`) | no |
+| index (`/dedi/…dedi.json`) | each **catalog part** (`parts[].digest`) | no |
+| catalog part (`/catalogs/*.json`) | — (it is the thing being hashed) | no |
+
+So the crawler always knows a file's expected hash *from the level above* before it fetches:
+manifest → index hash → (fetch index) → part hash → (fetch part). Verification is therefore
+compare-after-fetch against a hash you already hold, never something read out of the file itself.
+
+Rules:
+- Parse the algorithm before `:`; strip the `sha-256:` prefix before comparing.
 - Compute `sha-256` over the **exact response bytes**, before any JSON re-serialization.
 - Compare case-insensitively; a mismatch is a hard reject (never index unverified bytes).
 
