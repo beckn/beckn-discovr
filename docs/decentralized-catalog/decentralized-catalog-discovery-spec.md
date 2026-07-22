@@ -9,7 +9,7 @@ catalog host and without the consumer ever trusting data it cannot cryptographic
 This is a **protocol and contract** document. It defines the files a publisher hosts, the
 record a publisher registers in DeDi, the keys and signatures involved, and the pull
 handshake for restricted catalogs. It intentionally says nothing about how any particular
-consumer implements its crawler or indexer.
+consumer implements its crawler or ingestion component.
 
 ---
 
@@ -18,12 +18,13 @@ consumer implements its crawler or indexer.
 There is **no central catalog server**. Each **provider** publishes its catalog as a set of
 static, content-addressed files on its own infrastructure, and **registers a pointer** to
 those files in **DeDi**, a decentralized directory. Each **consumer node** on the network
-(for example, a mobility app such as Namma Yatri) runs its own **crawler + indexer**. The
-crawler asks DeDi "who is publishing catalogs?", follows the pointers, **verifies every file
-against a digest chain rooted in the provider's public key**, pulls the catalog files (using
-a signed, time-boxed handshake when they are restricted), and hands the raw files to its own
-indexer for processing. When a provider updates a catalog, the digest changes, the crawler
-notices, re-pulls only what changed, and re-indexes.
+(for example, a mobility app such as Namma Yatri) runs its own **crawler + ingestion pipeline**.
+The crawler asks DeDi "who is publishing catalogs?", follows the pointers, and **verifies the
+signed digest chain rooted in the provider's public key**. It then hands each catalog file — as a
+**reference** (its URL + expected digest), obtained via a signed, time-boxed handshake when
+restricted — to its **ingestion component**, which fetches the bytes, checks them against the
+digest, and indexes. When a provider updates a catalog, the digest changes, the crawler notices,
+and only the changed parts are re-fetched and re-indexed.
 
 Trust flows **top-down through digests**; data flows **provider → consumer**; and the consumer
 **never indexes anything it has not verified**.
@@ -36,12 +37,11 @@ Trust flows **top-down through digests**; data flows **provider → consumer**; 
 |-------|-----------|----------------|
 | **Provider / Publisher** | Provider's own infra | Hosts the manifest, the catalog index, and the catalog part files. Registers a record in DeDi. Signs its published documents. Honors authenticated pull requests for restricted files. |
 | **DeDi** (Decentralized Directory) | Network infrastructure | Holds one record per participant: identity, public key(s), and a pointer to that participant's entry document. Exposes a lookup/search API so anyone can enumerate participants and resolve their pointers. |
-| **Consumer node** | Consumer's own infra | Runs a **crawler** (discovers, verifies, pulls) and an **indexer** (processes and stores what the crawler delivers). Also holds its **own key pair**, registered in DeDi, used to authenticate itself to providers. |
+| **Consumer node** | Consumer's own infra | Runs a **crawler** (discovers, verifies the digest chain, obtains fetchable URLs) and an **ingestion component** (fetches the bytes, verifies them, parses, indexes). Also holds its **own key pair**, registered in DeDi, used to authenticate itself to providers. |
 
-> **Key separation of concerns:** the crawler **fetches and forwards**; it does not parse or
-> understand catalog contents. The indexer **processes**. This keeps the trust boundary thin —
-> the crawler's only job is "get the exact bytes the provider published, prove they're
-> authentic, and deliver them."
+> **Separation of concerns:** the crawler **discovers and verifies the trust chain**, then hands
+> a verified **reference** (URL + digest) onward — it does not fetch or parse catalog contents.
+> The **ingestion component** fetches and processes. This keeps the crawler's trust boundary thin.
 
 ---
 
@@ -92,8 +92,10 @@ DeDi record ──► Manifest ──► Catalog Index ──► Catalog Part fi
 
 ### 4.1 The Manifest — `/.well-known/dedi.json`
 
-The provider's stable, well-known entry point. It declares the provider's identity, its
-public key(s), and points to one or more registry index files, each with a digest.
+The provider's entry point, always at this **fixed well-known URL**. It declares the provider's
+identity, its public key(s), and points to one or more registry index files, each with a digest.
+Its *location* is stable; its *content* is re-published whenever an index digest below it
+changes (because the manifest carries that digest).
 
 ```json
 {
@@ -135,8 +137,11 @@ Notable fields:
 - **`files[].networkId`** — the network this catalog registry is published under (mirrors the
   registry's `networkId` in DeDi and in the index). Lets a crawler skip an entire registry that
   is not on its network before even fetching the index.
-- **`next_update`** — a hint for when the provider expects to publish next; consumers use it to
-  pace polling. It is a hint, not a guarantee.
+- **`updated_at` / `next_update`** — when the document was last published, and the provider's
+  hint for when it will publish next. The crawler uses `next_update` only to **pace polling**
+  ("don't re-check before this"); set it to your real change cadence — minutes if catalogs change
+  often, longer if rarely. It's advisory: the **digest**, not this timestamp, decides whether
+  anything actually changed.
 - **`proof`** — a detached signature over the canonicalized document (JCS canonicalization,
   JWS signature), produced with the key named by `verification_method`.
 
@@ -375,17 +380,18 @@ This is the read path, from a consumer node's crawler. Every step that ingests a
 3. INDEX      Follow manifest.files[].url. Before trusting, hash the downloaded index and
               check it equals manifest.files[].digest. Then verify index.proof.
 
-4. PARTS      For each record's parts[]: this is the leaf. If the part's digest is unchanged
-              since last time, skip it. Otherwise pull it (§7 if restricted), hash it, and
-              confirm it equals parts[].digest.
+4. PARTS      For each record's parts[]: if the part's digest is unchanged since last time,
+              skip it. Otherwise get a fetchable URL — the public part URL, or a presigned URL
+              via the §7 handshake if restricted.
 
-5. DELIVER    Hand the verified raw part bytes to the local indexer (§8). Never index bytes
-              whose digest did not match.
+5. HAND OFF   Pass the reference (URL + parts[].digest + catalog metadata) to the ingestion
+              component (§8). It fetches, checks the bytes against the digest, and indexes.
+              Bytes whose digest does not match are never indexed.
 ```
 
 **Rejection is silent and safe.** If any digest fails, any signature fails, or a version goes
 backward, the crawler rejects that document and keeps the last known-good state. A tampered or
-mis-published file simply never reaches the indexer.
+mis-published file simply never gets indexed.
 
 ---
 
@@ -442,26 +448,37 @@ Content-Type: application/json
 
 Here `X-Expires=1784721600` = `2026-07-22T12:00:00Z` — two hours after the request — matching
 `expiresAt`. The `digest` equals the part digest for `CAT-EON-EXCLUSIVE-2026.json` in the index
-(§4.2), so the crawler can verify the downloaded bytes.
+(§4.2), so whoever fetches the bytes can verify them.
 
-### 7.3 Step 3 — the crawler downloads within the window, then verifies
+> **Publisher requirement — presigned URLs must be bearer-usable.** The component that
+> *authenticates* (the crawler, which holds the consumer key) may not be the same component that
+> ultimately *fetches* the bytes (see §8). The presigned URL must therefore be usable by **any
+> bearer of the link within its validity window** — it carries its authorization in the link
+> itself (embedded signature + expiry) and must **not** be bound to the requester's IP or client
+> identity.
 
-The crawler fetches the presigned URL **before it expires**, hashes the bytes, and confirms
-they match the `digest` announced in the index (§4.2). If the window lapses, the crawler
-simply repeats Step 1 to obtain a fresh link.
+### 7.3 Step 3 — the bytes are fetched within the window and verified
+
+The URL must be fetched **before it expires**; the fetched bytes are hashed and checked against
+the `digest` from the index (§4.2). Because the presigned URL is self-authenticating (it carries
+its own signature + expiry), this fetch is a plain GET and **need not be done by the crawler
+itself** — the crawler can hand the **reference** (URL + digest + metadata) to the consumer
+node's ingestion component, which performs the fetch, the digest check, and the indexing (§8).
+If the window lapses before the fetch, the crawler repeats Step 1 for a fresh link.
 
 ```
-Consumer crawler                          Provider
-      │  signed pull request (consumer key)   │
-      │ ─────────────────────────────────────►│  verify signer via DeDi
-      │                                        │  check entitlement
-      │      presigned URL + expiry + digest   │
-      │ ◄─────────────────────────────────────│
-      │  GET presigned URL (within 1–2h)       │
-      │ ─────────────────────────────────────►│
-      │            catalog part bytes          │
-      │ ◄─────────────────────────────────────│
-      │  hash == index digest?  ── yes ──► deliver to indexer
+Consumer node                             Provider
+  crawler │  signed pull request (consumer key)   │
+  (key)   │ ─────────────────────────────────────►│  verify signer via DeDi
+          │                                        │  check entitlement
+          │      presigned URL + expiry + digest   │
+          │ ◄─────────────────────────────────────│
+          │  hand reference (URL + digest + metadata) ──► ingestion component
+ingestion │  GET presigned URL (within 1–2h)       │
+          │ ─────────────────────────────────────►│
+          │            catalog part bytes          │
+          │ ◄─────────────────────────────────────│
+          │  hash == index digest?  ── yes ──► parse + index
 ```
 
 > **Why presign instead of streaming the file on the signed request?** It decouples
@@ -476,23 +493,30 @@ recommended default for scale.
 
 ---
 
-## 8. Handing off to the indexer — and why the crawler doesn't process
+## 8. Handing off to the ingestion component — the crawler doesn't process
 
-Once a part is verified, the crawler **pushes the raw, unmodified bytes to the consumer node's
-own indexer**. The indexer parses the catalog, normalizes it, and makes it searchable. The
-crawler does none of this.
+The crawler's job ends at **trust and discovery**. Once it has verified the chain and (for
+restricted catalogs) obtained the presigned URL, it hands a **verified reference** to the
+consumer node's ingestion component:
 
-This split matters:
+- the **URL** — public part URL, or the presigned URL;
+- the **`digest`** from the verified index — the integrity anchor;
+- the catalog **metadata** — `catalogId`, `version`, `networkId`, `schemaTypes`.
 
-- **Thin trust boundary.** The crawler's contract is narrow and auditable: "deliver exactly the
-  verified bytes." No parsing bugs in the crawler can corrupt what gets indexed.
-- **The provider's file format is the indexer's problem, not the network's.** Providers can
-  evolve catalog structure (within the agreed schema) without changing crawler behavior.
-- **Processing scales independently.** Fetching and indexing have very different resource
-  profiles; separating them lets each scale on its own.
+The ingestion component **fetches the URL, verifies the bytes against that `digest`, then parses
+and indexes**. The crawler never downloads or parses catalog content.
 
-The consumer node signs this internal handoff with **its own key** (the same identity it
-presented to the provider), so the indexer can trust the origin of what it receives.
+Why the split:
+
+- **Thin, auditable trust boundary.** The crawler only discovers, verifies the chain, and passes
+  a digest it has already checked. It holds the signing key; it never touches catalog structure.
+- **Format independence.** Providers can evolve catalog structure (within the agreed schema)
+  without changing the crawler.
+- **No double-fetch.** Bytes flow provider → ingestion component directly, not provider →
+  crawler → ingestion.
+
+Integrity holds end-to-end: the ingestion component indexes bytes only if they hash to the
+`digest` the crawler verified against the provider's signed index.
 
 ---
 
@@ -505,12 +529,13 @@ Everything hangs off **digests**, so updates need no notifications or webhooks:
    - **Unchanged** → nothing to do; stop.
    - **Changed** → fetch and verify the new index.
 3. Within the new index, it compares each part's `digest` to what it last indexed.
-   - **Unchanged parts** → skipped (no download, no re-index).
-   - **Changed or new parts** → pulled (§7), verified, and re-delivered to the indexer.
+   - **Unchanged parts** → skipped (no fetch, no re-index).
+   - **Changed or new parts** → a fresh reference (URL + digest) is handed to the ingestion
+     component (§7–§8), which fetches, verifies, and re-indexes.
 4. **Version guard:** a record whose `version` is not greater than the indexed version is
    ignored, even if bytes differ — this prevents rollback/replay of stale catalogs.
-5. **Retirement:** a record marked `RETIRED` (or dropped from the index) tells the indexer to
-   remove that catalog.
+5. **Retirement:** a record marked `RETIRED` (or dropped from the index) tells the ingestion
+   component to remove that catalog.
 
 Because change detection is "does the announced digest differ from what I hold," a provider
 that republishes identical content (same bytes → same digest) triggers no work, and a provider
@@ -536,7 +561,7 @@ To participate, a provider must:
       document, referenced by `kid`.
 - [ ] **Register a DeDi record** binding domain + public key + manifest URL.
 - [ ] For restricted catalogs: **verify signed pull requests** (resolving the caller's key via
-      DeDi) and **issue short-lived presigned links**.
+      DeDi) and **issue short-lived, bearer-usable presigned links** (not IP/identity-bound).
 - [ ] On every change: bump `version`, recompute the affected **part digest**, propagate it up
       to the **index digest** in the manifest, and update `updated_at` / `next_update`.
 
@@ -571,8 +596,9 @@ To participate, a provider must:
 | **`networkId` (registry)** | The network a whole catalog registry is published under, in DeDi and mirrored in the manifest. Coarse discovery filter. |
 | **`visibility` `{ scope, networks }`** | Per-catalog access + membership. `scope` = `public` \| `restricted` (access); `networks` = the networks the catalog belongs to (and, when restricted, the allow-list). |
 | **`networkIds` (consumer)** | The networks a consumer node belongs to, on its DeDi record. Providers use it to authorize restricted pulls. |
-| **Consumer node** | A network participant that runs a crawler + indexer and holds its own registered key (e.g. a rider app). |
-| **Crawler** | The consumer-side component that discovers, verifies, and pulls catalog files, then forwards raw bytes to the indexer. It does not process catalog content. |
-| **Indexer** | The consumer-side component that parses and makes catalogs searchable. |
-| **Presigned link** | A short-lived, self-authenticating URL a provider issues after verifying a signed pull request. |
+| **Consumer node** | A network participant that runs a crawler + ingestion component and holds its own registered key (e.g. a rider app). |
+| **Crawler** | The consumer-side component that discovers, verifies the digest chain, and (for restricted catalogs) authenticates to obtain the presigned URL. It hands a verified reference (URL + digest) to the ingestion component; it does not fetch or parse catalog content. |
+| **Ingestion component** | The consumer-side component that fetches the referenced URL, verifies the bytes against the digest, then parses and indexes the catalog. |
+| **Reference** | What the crawler hands to the ingestion component: a URL (public or presigned) + the expected `digest` + catalog metadata. |
+| **Presigned link** | A short-lived, self-authenticating URL a provider issues after verifying a signed pull request. Must be bearer-usable within its window (not IP/identity-bound). |
 | **Proof** | A detached signature (JWS over a JCS-canonicalized document) proving a document was signed by the declared key. |
