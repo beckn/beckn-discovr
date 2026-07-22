@@ -1,4 +1,4 @@
-import type { Catalog, DiscoverResult } from './types'
+import type { Catalog, DiscoverResult, SourceRow } from './types'
 
 export interface SearchOutcome {
   catalogs: Catalog[]
@@ -38,4 +38,43 @@ export async function search(q: string): Promise<SearchOutcome> {
     0,
   )
   return { catalogs, resourceCount }
+}
+
+// ── Crawler sources ─────────────────────────────────────────────────────────
+
+export async function listSources(): Promise<{ sources: SourceRow[]; error?: string }> {
+  try {
+    const res = await fetch('/api/crawler/sources')
+    const data = await res.json()
+    if (!res.ok || data?.error) return { sources: [], error: data?.error || `HTTP ${res.status}` }
+    return { sources: Array.isArray(data?.sources) ? data.sources : [] }
+  } catch {
+    return { sources: [], error: 'Could not reach the crawler service.' }
+  }
+}
+
+export async function registerSource(
+  dediUrl: string,
+  displayName: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/crawler/sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dediUrl, displayName }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data?.error || `HTTP ${res.status}` }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Could not reach the crawler service.' }
+  }
+}
+
+export async function removeSource(id: string): Promise<void> {
+  try {
+    await fetch(`/api/crawler/sources/${id}`, { method: 'DELETE' })
+  } catch {
+    /* best-effort */
+  }
 }

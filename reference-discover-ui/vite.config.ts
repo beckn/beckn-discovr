@@ -2,6 +2,7 @@ import { defineConfig, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import http from 'node:http'
 import { randomUUID } from 'node:crypto'
+import pg from 'pg'
 
 /**
  * Where the Discovr discover job listens. The synchronous discover endpoint is a
@@ -111,8 +112,132 @@ function discoverApi() {
   }
 }
 
+// ── Crawler admin API ──────────────────────────────────────────────────────
+// Reads/writes the crawler's Postgres directly (server-side only; the browser never
+// sees credentials). Submitting a source = one INSERT into crawler_source; the crawler
+// picks it up on its next poll. "Last synced" is derived from the crawl-state tables.
+const pool = new pg.Pool({
+  host: process.env.CRAWLER_DB_HOST || 'localhost',
+  port: Number(process.env.CRAWLER_DB_PORT || 5434),
+  database: process.env.CRAWLER_DB_NAME || 'catalog_db',
+  user: process.env.CRAWLER_DB_USER || 'catalog_user',
+  password: process.env.CRAWLER_DB_PASSWORD || 'catalog123',
+  max: 4,
+})
+
+function hostOf(u?: string): string | null {
+  if (!u) return null
+  try {
+    return new URL(u).host
+  } catch {
+    return null
+  }
+}
+
+/** Assemble the providers list: each crawler_source row + last-synced/counts by host match. */
+async function listSources() {
+  const [sources, indexes, parts] = await Promise.all([
+    pool.query(
+      `SELECT id, dedi_url, display_name, created_at
+         FROM crawler_source WHERE status = true ORDER BY created_at`,
+    ),
+    pool.query(`SELECT index_url, last_seen_at FROM index_crawl_state`),
+    pool.query(`SELECT part_url, catalog_id, last_seen_at FROM catalog_part_state`),
+  ])
+
+  return sources.rows.map((s: any) => {
+    const host = hostOf(s.dedi_url)
+    const idxHits = indexes.rows.filter((r: any) => hostOf(r.index_url) === host)
+    const partHits = parts.rows.filter((r: any) => hostOf(r.part_url) === host)
+    const times = [...idxHits, ...partHits]
+      .map((r: any) => r.last_seen_at)
+      .filter(Boolean)
+      .map((t: any) => new Date(t).getTime())
+    const lastSynced = times.length ? new Date(Math.max(...times)).toISOString() : null
+    const catalogs = new Set(partHits.map((r: any) => r.catalog_id)).size
+    return {
+      id: s.id,
+      dediUrl: s.dedi_url,
+      displayName: s.display_name,
+      createdAt: s.created_at,
+      catalogs,
+      lastSynced,
+    }
+  })
+}
+
+function crawlerApi() {
+  const handler: Connect.NextHandleFunction = (rawReq, res, next) => {
+    const req = rawReq as http.IncomingMessage
+    const url = req.url || ''
+    if (!url.startsWith('/api/crawler/sources')) return next()
+
+    const send = (status: number, obj: unknown) => {
+      res.statusCode = status
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify(obj))
+    }
+
+    // GET /api/crawler/sources — list providers with last-synced + counts.
+    if (req.method === 'GET') {
+      listSources()
+        .then((sources) => send(200, { sources }))
+        .catch((e) => send(500, { error: e?.message || String(e) }))
+      return
+    }
+
+    // POST /api/crawler/sources — register a dedi.json (INSERT; re-enable if it existed).
+    if (req.method === 'POST') {
+      let body = ''
+      req.on('data', (c) => (body += c))
+      req.on('end', async () => {
+        try {
+          const { dediUrl, displayName } = body ? JSON.parse(body) : {}
+          const trimmed = String(dediUrl ?? '').trim()
+          if (!trimmed || !hostOf(trimmed)) {
+            return send(400, { error: 'Enter a valid dedi.json URL (including https://).' })
+          }
+          const r = await pool.query(
+            `INSERT INTO crawler_source (dedi_url, display_name, status)
+               VALUES ($1, $2, true)
+             ON CONFLICT (dedi_url)
+               DO UPDATE SET status = true, display_name = EXCLUDED.display_name
+             RETURNING id, dedi_url, display_name, created_at`,
+            [trimmed, (displayName ?? '').trim() || null],
+          )
+          send(201, r.rows[0])
+        } catch (e: any) {
+          send(500, { error: e?.message || String(e) })
+        }
+      })
+      return
+    }
+
+    // DELETE /api/crawler/sources/{id} — stop crawling (status=false).
+    if (req.method === 'DELETE') {
+      const id = url.split('/').pop()?.split('?')[0]
+      pool
+        .query(`UPDATE crawler_source SET status = false WHERE id = $1`, [id])
+        .then(() => send(200, { id, removed: true }))
+        .catch((e) => send(500, { error: e?.message || String(e) }))
+      return
+    }
+
+    return next()
+  }
+  return {
+    name: 'crawler-api',
+    configureServer(server: any) {
+      server.middlewares.use(handler)
+    },
+    configurePreviewServer(server: any) {
+      server.middlewares.use(handler)
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), discoverApi()],
+  plugins: [react(), discoverApi(), crawlerApi()],
   server: { port: 5173, host: true },
   preview: { port: 4173, host: true },
 })
