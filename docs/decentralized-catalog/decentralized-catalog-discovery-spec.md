@@ -8,7 +8,7 @@ catalog host and without the consumer ever trusting data it cannot cryptographic
 
 This is a **protocol and contract** document. It defines the files a publisher hosts, the
 record a publisher registers in DeDi, the keys and signatures involved, and the pull
-handshake for protected catalogs. It intentionally says nothing about how any particular
+handshake for restricted catalogs. It intentionally says nothing about how any particular
 consumer implements its crawler or indexer.
 
 ---
@@ -21,7 +21,7 @@ those files in **DeDi**, a decentralized directory. Each **consumer node** on th
 (for example, a mobility app such as Namma Yatri) runs its own **crawler + indexer**. The
 crawler asks DeDi "who is publishing catalogs?", follows the pointers, **verifies every file
 against a digest chain rooted in the provider's public key**, pulls the catalog files (using
-a signed, time-boxed handshake when they are protected), and hands the raw files to its own
+a signed, time-boxed handshake when they are restricted), and hands the raw files to its own
 indexer for processing. When a provider updates a catalog, the digest changes, the crawler
 notices, re-pulls only what changed, and re-indexes.
 
@@ -34,7 +34,7 @@ Trust flows **top-down through digests**; data flows **provider → consumer**; 
 
 | Actor | Runs where | Responsibility |
 |-------|-----------|----------------|
-| **Provider / Publisher** | Provider's own infra | Hosts the manifest, the catalog index, and the catalog part files. Registers a record in DeDi. Signs its published documents. Honors authenticated pull requests for protected files. |
+| **Provider / Publisher** | Provider's own infra | Hosts the manifest, the catalog index, and the catalog part files. Registers a record in DeDi. Signs its published documents. Honors authenticated pull requests for restricted files. |
 | **DeDi** (Decentralized Directory) | Network infrastructure | Holds one record per participant: identity, public key(s), and a pointer to that participant's entry document. Exposes a lookup/search API so anyone can enumerate participants and resolve their pointers. |
 | **Consumer node** | Consumer's own infra | Runs a **crawler** (discovers, verifies, pulls) and an **indexer** (processes and stores what the crawler delivers). Also holds its **own key pair**, registered in DeDi, used to authenticate itself to providers. |
 
@@ -63,7 +63,7 @@ published — unmodified in transit or at rest?"*
 ### 3.2 Consumer key — proves who is asking (consumer → provider)
 
 The **consumer node's public key** is also registered in DeDi. When a consumer pulls a
-**protected** catalog file, its crawler **signs the pull request** with its private key. The
+**restricted** catalog file, its crawler **signs the pull request** with its private key. The
 provider looks the consumer up in DeDi, verifies the signature, and only then releases the
 file (as a time-boxed link — see §7).
 
@@ -257,7 +257,7 @@ Notable fields:
 The actual catalog payload (Beckn v2.0 catalog structure — providers, resources, offers).
 These are ordinary static JSON files at the URLs named in the index. Their **only**
 requirement in this spec is: **the bytes served must hash to the digest announced in the
-index.** They may be public, or protected (§7).
+index.** They may be public, or restricted (§7).
 
 ### 4.4 Where network identity appears — and why in three places
 
@@ -269,10 +269,19 @@ Network shows up at three levels, each answering a different question. They are 
 | **Index catalog record** | `details.visibility.networks` (with `scope`) | *Which networks does this specific catalog belong to, and is it public or restricted?* | Crawler — per-catalog relevance; Provider — the allow-list for restricted pulls. |
 | **Consumer-node DeDi record** | `details.networkIds` | *Which networks does this consumer belong to?* | Provider — entitlement check when a consumer requests a restricted catalog (§7). |
 
-**Consistency rule:** a catalog's `visibility.networks` should be within (or equal to) the
-registry's `networkId` reach. In the running example the registry is homed on `ondc-retail`; the
-electronics catalog is public and additionally affiliated to `eon-retail`, and the exclusive
-catalog is restricted to `eon-retail` members.
+**How the levels combine (worked example).** `registry.networkId` is the network the registry
+is *published under* in DeDi — a crawler processes a registry when that `networkId` is one of
+its **own** `networkIds`. `visibility.networks` is then an independent per-catalog scope; it
+need **not** be a subset of the registry's network. In the running example the registry is homed
+on `ondc-retail`, so a consumer node like Namma Yatri (`networkIds: ["ondc-retail",
+"eon-retail"]`) processes it, and inside it finds:
+
+- **`CAT-ELECTRONICS-2026`** — `scope: public`, affiliated to `ondc-retail` + `eon-retail` →
+  fetched directly by anyone.
+- **`CAT-EON-EXCLUSIVE-2026`** — `scope: restricted` to `eon-retail` → **visible in the index to
+  everyone**, but pullable only by `eon-retail` members. Namma Yatri qualifies (it is an
+  `eon-retail` member); an `ondc-retail`-only consumer would see the record but be refused the
+  pull (§7).
 
 ---
 
@@ -293,7 +302,6 @@ A DeDi record for a catalog publisher looks like this (illustrative):
   "details": {
     "domain": "techmart.example",
     "name": "TechMart Provider Node",
-    "role": "catalog-provider",
     "keys": [
       { "kid": "key-001", "kty": "OKP", "crv": "Ed25519",
         "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo" }
@@ -305,10 +313,12 @@ A DeDi record for a catalog publisher looks like this (illustrative):
 }
 ```
 
-A **consumer node registers the same way**, with `role: "consumer-node"`, its own public key,
-and the **`networkIds` it belongs to**. A provider reads this record to (a) verify a consumer's
-signed pull request and (b) decide entitlement to restricted catalogs (§7). The `kid` here is
-the one referenced by the `keyId` in the §7 pull request.
+A **consumer node registers the same way** — its own public key plus the **`networkIds` it
+belongs to**. A provider reads this record to (a) verify a consumer's signed pull request and
+(b) decide entitlement to restricted catalogs (§7). The `kid` here is the one referenced by the
+`keyId` in the §7 pull request. Provider and consumer records are told apart by **shape** — a
+provider record carries `manifest_url`, a consumer record carries `networkIds` — so no explicit
+role field is needed.
 
 ```json
 {
@@ -317,7 +327,6 @@ the one referenced by the `keyId` in the §7 pull request.
   "details": {
     "domain": "namma-yatri.example",
     "name": "Namma Yatri Consumer Node",
-    "role": "consumer-node",
     "networkIds": ["ondc-retail", "eon-retail"],
     "keys": [
       { "kid": "key-001", "kty": "OKP", "crv": "Ed25519",
@@ -367,7 +376,7 @@ This is the read path, from a consumer node's crawler. Every step that ingests a
               check it equals manifest.files[].digest. Then verify index.proof.
 
 4. PARTS      For each record's parts[]: this is the leaf. If the part's digest is unchanged
-              since last time, skip it. Otherwise pull it (§7 if protected), hash it, and
+              since last time, skip it. Otherwise pull it (§7 if restricted), hash it, and
               confirm it equals parts[].digest.
 
 5. DELIVER    Hand the verified raw part bytes to the local indexer (§8). Never index bytes
@@ -399,13 +408,14 @@ Signature: keyId="namma-yatri.example#key-001",
            algorithm="ed25519",
            created=1784714400,
            expires=1784714460,
-           headers="(request-target) host created digest",
+           headers="(request-target) (created) (expires) host",
            signature="<base64-signature>"
 ```
 
 `created` / `expires` are UNIX epoch seconds — here `1784714400` = `2026-07-22T10:00:00Z`, with
-a 60-second freshness window (`1784714460` = `2026-07-22T10:01:00Z`). `signature` is the
-base64 Ed25519 signature the provider recomputes to verify the request.
+a 60-second freshness window (`1784714460` = `2026-07-22T10:01:00Z`). The covered `headers`
+list omits `digest` because a GET pull carries no body. `signature` is the base64 Ed25519
+signature the provider recomputes over those covered components to verify the request.
 
 ### 7.2 Step 2 — the provider verifies and issues a time-boxed link
 
@@ -525,7 +535,7 @@ To participate, a provider must:
 - [ ] **Sign** the manifest and index (JCS canonicalization + JWS) with the key declared in the
       document, referenced by `kid`.
 - [ ] **Register a DeDi record** binding domain + public key + manifest URL.
-- [ ] For protected catalogs: **verify signed pull requests** (resolving the caller's key via
+- [ ] For restricted catalogs: **verify signed pull requests** (resolving the caller's key via
       DeDi) and **issue short-lived presigned links**.
 - [ ] On every change: bump `version`, recompute the affected **part digest**, propagate it up
       to the **index digest** in the manifest, and update `updated_at` / `next_update`.
@@ -540,7 +550,7 @@ To participate, a provider must:
   documents with it, and retire the old `kid` once no live document references it.
 - **Rollback / replay protection.** The monotonic `version` per record prevents an attacker (or
   a stale mirror) from replacing a catalog with an older signed copy.
-- **Short presigned windows.** Keep protected-link expiry short (1–2h). A leaked link dies
+- **Short presigned windows.** Keep presigned-link expiry short (1–2h). A leaked link dies
   quickly, and consumers can always re-request one.
 - **Least disclosure in DeDi.** DeDi holds only identity, keys, and a pointer — never catalog
   data or private keys.
