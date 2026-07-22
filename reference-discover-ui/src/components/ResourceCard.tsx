@@ -73,15 +73,16 @@ export default function ResourceCard({ resource, catalog, offers = [] }: Props) 
         <p className="resource-short">{d?.shortDesc || ''}</p>
 
         <div className="resource-tags">
-          <span className="chip chip--catalog" title={catalog.id}>
+          <span className="chip chip--catalog" title={catalogName}>
             <span className="chip-ico" aria-hidden="true">
               ▤
             </span>
-            {catalogName}
+            <span className="chip-label">{catalogName}</span>
           </span>
-          {seller && <span className="chip chip--seller">{seller}</span>}
-          {place && <span className="chip">{place}</span>}
         </div>
+
+        {/* One fixed line so every collapsed card is the same height regardless of content. */}
+        <div className="resource-sub">{[seller, place].filter(Boolean).join(' · ') || ' '}</div>
 
         <button className="details-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
           {open ? 'Hide details' : 'Details'}

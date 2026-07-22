@@ -53,6 +53,21 @@ export function fmtPlace(a?: Address): string | undefined {
   return [a.addressLocality, a.addressRegion].filter(Boolean).join(', ') || undefined
 }
 
+/** "just now" / "40s ago" / "5 min ago" / "2 h ago" / a date for older. */
+export function relativeTime(iso: string | null): string {
+  if (!iso) return 'never'
+  const t = new Date(iso).getTime()
+  if (isNaN(t)) return 'never'
+  const secs = Math.max(0, Math.round((Date.now() - t) / 1000))
+  if (secs < 5) return 'just now'
+  if (secs < 60) return `${secs}s ago`
+  const mins = Math.round(secs / 60)
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `${hrs} h ago`
+  return fmtDate(iso) || 'a while ago'
+}
+
 export function coordsOf(loc?: { geo?: { coordinates?: number[] } }): string | undefined {
   const c = loc?.geo?.coordinates
   if (!Array.isArray(c) || c.length < 2) return undefined

@@ -79,3 +79,13 @@ export interface DiscoverResult {
   message?: { catalogs?: Catalog[] }
   error?: string
 }
+
+// A registered crawler source, as returned by /api/crawler/sources.
+export interface SourceRow {
+  id: string
+  dediUrl: string
+  displayName?: string | null
+  createdAt?: string
+  catalogs: number
+  lastSynced: string | null
+}
