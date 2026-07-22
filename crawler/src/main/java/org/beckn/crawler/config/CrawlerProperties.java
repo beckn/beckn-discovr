@@ -15,10 +15,16 @@ import java.util.List;
 @Validated
 @ConfigurationProperties(prefix = "crawler")
 public record CrawlerProperties(
-        /** Provider base URLs. POC: domains only; DeDi registry replaces this later. */
-        @NotEmpty List<String> providers,
-        /** Fixed DeDi standard path appended to each provider base to reach the manifest. */
-        @NotNull String wellKnownPath,
+        /**
+         * Full DeDi manifest URLs to crawl (each a complete URL to a manifest / dedi.json).
+         * Used when {@code source=config}; may be empty when {@code source=db}.
+         */
+        List<String> providers,
+        /**
+         * Where the manifest-URL list comes from: {@code config} (the {@code providers} list) or
+         * {@code db} (active rows in the {@code crawler_source} table, re-read every index poll).
+         */
+        @NotNull String source,
         /** Absolute URL of the discover /catalog/push endpoint. */
         @NotNull String pushEndpoint,
         /**

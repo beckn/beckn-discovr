@@ -68,7 +68,7 @@ class CrawlerIntegrationTest {
         reg.add("CRAWLER_DB_URL", POSTGRES::getJdbcUrl);
         reg.add("CRAWLER_DB_USERNAME", POSTGRES::getUsername);
         reg.add("CRAWLER_DB_PASSWORD", POSTGRES::getPassword);
-        reg.add("CRAWLER_PROVIDERS", () -> bucket.baseUrl());
+        reg.add("CRAWLER_PROVIDERS", () -> bucket.baseUrl() + "/.well-known/dedi.json");
         reg.add("CRAWLER_PUSH_ENDPOINT", () -> bucket.baseUrl() + "/catalog/push");
         reg.add("CRAWLER_MANIFEST_REFRESH_INTERVAL", () -> "7d");  // scheduler is off anyway
         reg.add("CRAWLER_INDEX_POLL_INTERVAL", () -> "1m");        // scheduler is off anyway

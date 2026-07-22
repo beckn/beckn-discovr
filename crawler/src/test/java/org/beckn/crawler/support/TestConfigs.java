@@ -12,8 +12,8 @@ public final class TestConfigs {
 
     public static CrawlerProperties props(String pushEndpoint) {
         return new CrawlerProperties(
-                List.of("https://prov.example"),
-                "/.well-known/dedi.json",
+                List.of("https://prov.example/dedi.json"),   // full manifest URL
+                "config",                                    // source
                 pushEndpoint,
                 Duration.ofDays(7),      // manifestRefreshInterval
                 Duration.ofMinutes(1),   // indexPollInterval

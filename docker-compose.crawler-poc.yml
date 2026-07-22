@@ -290,12 +290,11 @@ services:
       - CRAWLER_DB_URL=jdbc:postgresql://postgres-discovery:5432/catalog_db
       - CRAWLER_DB_USERNAME=catalog_user
       - CRAWLER_DB_PASSWORD=catalog123
-      # Data source: comma-separated bucket base URL(s). Defaults to the POC tech-mart
-      # bucket; override CRAWLER_PROVIDERS in the shell/.env to point elsewhere.
-      - CRAWLER_PROVIDERS=${CRAWLER_PROVIDERS:-https://raw.githubusercontent.com/ameersohel45/tech-mart/main/bucket}
-      # Manifest path appended to each provider base. The tech-mart bucket hosts the
-      # manifest at the repo root (/dedi.json), not the DeDi default /.well-known/dedi.json.
-      - CRAWLER_WELL_KNOWN_PATH=${CRAWLER_WELL_KNOWN_PATH:-/dedi.json}
+      # Where the manifest-URL list comes from: "config" (CRAWLER_PROVIDERS) or "db" (crawler_source table).
+      - CRAWLER_SOURCE=${CRAWLER_SOURCE:-config}
+      # Full DeDi manifest URL(s), comma-separated. Defaults to the POC tech-mart bucket manifest.
+      # (Used when CRAWLER_SOURCE=config; may be empty when CRAWLER_SOURCE=db.)
+      - CRAWLER_PROVIDERS=${CRAWLER_PROVIDERS:-https://raw.githubusercontent.com/ameersohel45/tech-mart/main/bucket/dedi.json}
       # Push into Discover Ingestion (internal port 8080). The service applies the
       # beckn.api-prefix (/beckn), so the full path is /beckn/catalog/push.
       - CRAWLER_PUSH_ENDPOINT=http://discovr-ingestion:8080/beckn/catalog/push
