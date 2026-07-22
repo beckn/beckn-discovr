@@ -134,36 +134,40 @@ function hostOf(u?: string): string | null {
   }
 }
 
-/** Assemble the providers list: each crawler_source row + last-synced/counts by host match. */
+/**
+ * Assemble the providers list. Joins crawl state to each source by the provider's DeDi identity
+ * (crawler_source.provider_domain, stamped by the crawler after the first crawl). Exact — no host
+ * guessing. provider_domain is null until the first successful crawl, so such a source shows as
+ * "pending" with no counts.
+ */
 async function listSources() {
-  const [sources, indexes, parts] = await Promise.all([
-    pool.query(
-      `SELECT id, dedi_url, display_name, created_at
-         FROM crawler_source WHERE status = true ORDER BY created_at`,
-    ),
-    pool.query(`SELECT index_url, last_seen_at FROM index_crawl_state`),
-    pool.query(`SELECT part_url, catalog_id, last_seen_at FROM catalog_part_state`),
-  ])
+  const { rows } = await pool.query(`
+    SELECT s.id,
+           s.dedi_url,
+           COALESCE(NULLIF(s.provider_name, ''), NULLIF(s.display_name, '')) AS name,
+           s.provider_domain,
+           s.created_at,
+           GREATEST(MAX(i.last_seen_at), MAX(c.last_seen_at))                AS last_synced,
+           COUNT(DISTINCT c.catalog_id)                                     AS catalogs
+      FROM crawler_source s
+      LEFT JOIN index_crawl_state  i
+             ON s.provider_domain IS NOT NULL AND i.provider_domain = s.provider_domain
+      LEFT JOIN catalog_part_state c
+             ON s.provider_domain IS NOT NULL AND c.provider_domain = s.provider_domain
+     WHERE s.status = true
+     GROUP BY s.id, s.dedi_url, name, s.provider_domain, s.created_at
+     ORDER BY s.created_at
+  `)
 
-  return sources.rows.map((s: any) => {
-    const host = hostOf(s.dedi_url)
-    const idxHits = indexes.rows.filter((r: any) => hostOf(r.index_url) === host)
-    const partHits = parts.rows.filter((r: any) => hostOf(r.part_url) === host)
-    const times = [...idxHits, ...partHits]
-      .map((r: any) => r.last_seen_at)
-      .filter(Boolean)
-      .map((t: any) => new Date(t).getTime())
-    const lastSynced = times.length ? new Date(Math.max(...times)).toISOString() : null
-    const catalogs = new Set(partHits.map((r: any) => r.catalog_id)).size
-    return {
-      id: s.id,
-      dediUrl: s.dedi_url,
-      displayName: s.display_name,
-      createdAt: s.created_at,
-      catalogs,
-      lastSynced,
-    }
-  })
+  return rows.map((r: any) => ({
+    id: r.id,
+    dediUrl: r.dedi_url,
+    displayName: r.name,
+    providerDomain: r.provider_domain,
+    createdAt: r.created_at,
+    catalogs: Number(r.catalogs) || 0,
+    lastSynced: r.last_synced ? new Date(r.last_synced).toISOString() : null,
+  }))
 }
 
 function crawlerApi() {

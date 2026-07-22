@@ -1,250 +1,157 @@
-# Crawler UI — Design Doc (simplified, demo-scoped)
+# Crawler UI — Design (as built)
 
-**Goal:** from the UI, register a provider's DeDi endpoint, and watch the crawler pull
-**manifest → index → catalogs → push → discoverable**, then see an ongoing dashboard of crawled
-sources — with the **smallest possible change to the crawler**.
+**Goal:** from the UI, register a provider's `dedi.json`, then see per-provider **catalog count**
+and **last-synced time**. The crawler picks up a newly registered source on its next poll and syncs
+changed catalogs into Discover. Kept deliberately simple — no crawler HTTP API, no pipeline
+visualization.
 
-This is the demo-scoped design. It deliberately avoids a crawler HTTP API, dynamic-registry
-services, and status endpoints. It is grounded in the crawler code as it exists today (`crawler/`).
-
-Related: [`decentralized-catalog-crawler-poc.md`](./decentralized-catalog-crawler-poc.md) · UI lives in `reference-discover-ui/`.
-
----
-
-## 1. Principle
-
-The crawler **already** does the work and **already** persists the results (two Postgres tables) on
-its normal schedule. So the UI is almost entirely a **reader** of existing state. The only thing the
-UI can't do today is *add a source*, because the crawler reads its provider list from static config.
-
-So we make exactly **one** crawler change — the source list becomes **table-first, config-fallback** —
-and everything else is UI reading/writing Postgres. No crawler API.
+This doc reflects the **shipped** implementation. Crawler lives in `crawler/`; UI in
+`reference-discover-ui/`. Related: [`decentralized-catalog-crawler-poc.md`](./decentralized-catalog-crawler-poc.md).
 
 ---
 
-## 2. The one crawler change
-
-Today both crawl loops iterate `CrawlerProperties.providers` (static config). Change them to read a
-small table, falling back to config when the table is empty.
-
-**New table** — `V2__crawler_source.sql`:
-
-```sql
-CREATE TABLE crawler_source (
-  id           UUID PRIMARY KEY,
-  dedi_url     TEXT NOT NULL UNIQUE,      -- provider domain / manifest URL
-  display_name TEXT,
-  enabled      BOOLEAN NOT NULL DEFAULT true,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-```
-
-**Source resolution** — add a tiny `SourceRegistry` used by `Crawler.refreshManifests()` and
-`Crawler.runIndexPass()` in place of `props.providers()`:
+## 1. Shape
 
 ```
-list() =
-  SELECT dedi_url FROM crawler_source WHERE enabled = true
-  → if that is empty, fall back to CrawlerProperties.providers (config)
-```
-
-Why this fits the existing code with no other change:
-- `Crawler.pollProvider` already **lazily resolves** a provider whose manifest isn't cached
-  (`if (registries == null) manifestResolver.resolve(provider)`). So a newly-inserted `crawler_source`
-  row is picked up on the **next scheduled index poll** — no restart, no trigger endpoint.
-- State still lands in the existing `index_crawl_state` / `catalog_part_state` tables exactly as today.
-
-**That is the entire crawler change.** No controller, no `spring-boot-starter-web`, no status/submit
-APIs, no exposed port.
-
----
-
-## 3. Architecture
-
-```
-Browser (Crawler view)
-   │  POST /api/crawler/sources { dediUrl, displayName }     ← "submit"
-   │  GET  /api/crawler/status                                ← dashboard + pipeline
+Browser (Crawler tab)
+   │  POST /api/crawler/sources { dediUrl, displayName }   ← register
+   │  GET  /api/crawler/sources                             ← providers table (poll 5s)
+   │  DELETE /api/crawler/sources/{id}                      ← stop crawling
    ▼
-Vite dev-proxy  (reference-discover-ui/vite.config.ts, Node — server-side)
-   │   INSERT into crawler_source            (submit)
-   │   SELECT from crawler_source + index_crawl_state + catalog_part_state   (status)
+Vite dev-proxy (reference-discover-ui/vite.config.ts, Node — server-side, uses `pg`)
+   │   INSERT/UPDATE/SELECT on crawler_source; SELECT (join) on the two crawl-state tables
    ▼
-PostgreSQL (catalog_db)                       ← same DB the crawler + discover use
+PostgreSQL (catalog_db)
    ▲
-   │  reads crawler_source (∪ config), writes state tables on its normal schedule
-Crawler service  (unchanged except §2)
+   │  reads crawler_source (crawler.source=db), writes crawl state + stamps provider identity
+Crawler service
 ```
 
-- The **browser never touches Postgres.** All SQL is in the Node dev-proxy (server-side), same file
-  and pattern as the existing discover proxy.
-- **Accepted trade-off:** the UI proxy holds DB credentials and knows the crawler's table schema
-  (one `INSERT`, a few `SELECT`s). This is the cost of having no crawler API; acceptable for a local
-  demo, and it stays server-side. Not for production as-is.
+- The **browser never touches Postgres** — all SQL is in the Node dev-proxy (server-side).
+- **Deliberate trade-off:** the proxy holds DB credentials + schema knowledge (the price of having
+  no crawler API). Fine for a local demo; not for production.
 
 ---
 
-## 4. UI proxy endpoints (browser ↔ proxy)
+## 2. The crawler already provides the source switch (no UI-only hack needed)
 
-These live in `vite.config.ts` alongside the discover proxy. The proxy talks to Postgres with the
-`pg` npm package (one new dev dependency), read-only except the single submit `INSERT`.
+Implemented in `crawler/` (by the crawler owner):
+- **`crawler.source`** config switch — `config` (`crawler.providers` list) or **`db`**
+  (`crawler_source` table). The POC compose defaults to **`db`**.
+- **`DbSourceRegistry`** reads `SELECT dedi_url, display_name FROM crawler_source WHERE status = true`
+  **on every index poll** (default `crawler.index-poll-interval = 1m`), so a row added in the UI is
+  crawled within ~1 minute — no restart.
+- `dedi_url` is a **full manifest URL** (e.g. `https://…/dedi.json`); the crawler fetches it directly.
 
-### 4.1 Submit a source
-`POST /api/crawler/sources`
+So the UI just writes rows into `crawler_source`; the crawler does the rest.
 
-Request:
-```json
-{ "dediUrl": "techmart.example", "displayName": "TechMart" }
+---
+
+## 3. Data model
+
+### 3.1 `crawler_source` — the provider registry (UI writes here)
+`V2__crawler_source.sql` + `V3__provider_identity.sql`:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | uuid (PK, `gen_random_uuid()`) | source id |
+| `dedi_url` | text (UNIQUE) | the manifest URL the user registered |
+| `display_name` | text | user-entered label |
+| `status` | boolean (default true) | only `true` rows are crawled |
+| `created_at` | timestamptz | when registered |
+| `provider_domain` | text | **resolved from the manifest** after first crawl (`domain`/bppId) |
+| `provider_name` | text | **resolved from the manifest** after first crawl (`name`) |
+
+### 3.2 Crawl state — reused, now with a provider link
+`V3` adds `provider_domain` to both existing tables so crawl state ties to a provider by its DeDi
+identity (not by URL/host guessing):
+
+- `index_crawl_state` (PK `index_url`): `index_digest`, `next_update`, **`provider_domain`**, `last_seen_at`, …
+- `catalog_part_state` (PK `part_url`): `catalog_id`, `version`, `digest`, **`provider_domain`**, `last_seen_at`, …
+
+### 3.3 How the link is populated (crawler)
+When the crawler resolves a source's manifest it learns `domain` + `name` (`ManifestResolver.Resolved`),
+and:
+- stamps `provider_domain` on every `index_crawl_state` / `catalog_part_state` row it writes
+  (`StateStore.upsertIndexState/upsertPart`, fed `reg.domain()`);
+- writes `provider_domain` + `provider_name` back onto the `crawler_source` row
+  (`StateStore.updateSourceIdentity`, called from `Crawler.recordSourceIdentity`).
+
+**Why `provider_domain` (the manifest `domain`) and not a UUID:** it's the provider's real, stable
+DeDi identity (bppId), present in the manifest, already extracted by the crawler, and it groups a
+provider's index + catalogs naturally. It also works for config-mode crawling. `provider_name` is the
+authoritative name to display.
+
+---
+
+## 4. UI proxy endpoints (`vite.config.ts`)
+
+| Method | Path | Behaviour |
+|--------|------|-----------|
+| `POST` | `/api/crawler/sources` | Validate URL → `INSERT INTO crawler_source (dedi_url, display_name)`; on `dedi_url` conflict, re-enable (`status=true`). Returns the row. |
+| `GET`  | `/api/crawler/sources` | One row per active source with **name**, **dedi_url**, **catalogs**, **last-synced** — see the join below. |
+| `DELETE` | `/api/crawler/sources/{id}` | `UPDATE crawler_source SET status = false` (stops crawling; indexed catalogs remain). |
+
+**The status join (exact, by provider identity):**
+```sql
+SELECT s.id, s.dedi_url,
+       COALESCE(NULLIF(s.provider_name,''), NULLIF(s.display_name,'')) AS name,
+       s.provider_domain, s.created_at,
+       GREATEST(MAX(i.last_seen_at), MAX(c.last_seen_at)) AS last_synced,
+       COUNT(DISTINCT c.catalog_id)                       AS catalogs
+FROM   crawler_source s
+LEFT   JOIN index_crawl_state  i ON s.provider_domain IS NOT NULL AND i.provider_domain = s.provider_domain
+LEFT   JOIN catalog_part_state c ON s.provider_domain IS NOT NULL AND c.provider_domain = s.provider_domain
+WHERE  s.status = true
+GROUP  BY s.id, s.dedi_url, name, s.provider_domain, s.created_at
+ORDER  BY s.created_at;
 ```
-Behaviour: validate non-empty URL → `INSERT INTO crawler_source (id, dedi_url, display_name) …`
-(generate a UUID). The crawler picks it up on its next poll.
-
-Response `201`:
-```json
-{ "id": "…", "dediUrl": "techmart.example", "displayName": "TechMart", "status": "PENDING" }
-```
-Errors: `400` invalid URL · `409` `{ "error": "Source already registered" }` (UNIQUE `dedi_url`).
-
-### 4.2 Status (dashboard + pipeline)
-`GET /api/crawler/status`
-
-Returns every source with its live crawl state, assembled from `crawler_source` +
-`index_crawl_state` + `catalog_part_state`:
-
-```json
-{
-  "sources": [
-    {
-      "id": "…",
-      "dediUrl": "techmart.example",
-      "displayName": "TechMart",
-      "enabled": true,
-      "stage": "DISCOVERABLE",                       // see §6
-      "indexDigest": "sha-256:60e0…34ae",
-      "lastCrawledAt": "2026-07-22T07:14:17Z",        // max(last_seen_at)
-      "nextUpdate": "2026-08-04T00:00:00Z",
-      "catalogs": [
-        { "catalogId": "CAT-GROCERY-FRESHMART-100", "version": 1, "parts": 1,
-          "digest": "sha-256:d3c4…", "lastSeenAt": "2026-07-22T07:14:17Z" }
-      ],
-      "counts": { "catalogs": 2, "resources": 4 }
-    }
-  ]
-}
-```
-
-Notes on assembly:
-- `crawler_source` gives the row + display name. A source with no state rows yet = `PENDING`.
-- Link state rows to a source by matching the source's `dedi_url` against `index_url` / part URLs
-  (URL prefix), since the state tables have no `source_id` (no schema change to them). This is the
-  one slightly loose join; acceptable for the demo. (If it gets messy, add `source_id` later.)
-- `resources` count: `catalog_part_state` stores parts, not resources. For the demo, show
-  **catalog + part counts** from the tables, and optionally the **resource count from the Discover
-  API** (already available) for the "N discoverable" number.
-
-### 4.3 (optional) Disable a source
-`DELETE /api/crawler/sources/{id}` → `UPDATE crawler_source SET enabled = false`. Crawler stops
-crawling it next pass. Indexed catalogs remain in Discover (no un-publish path exists — call this out).
+Before the first crawl, `provider_domain` is null → the joins match nothing → the source shows as
+**pending** (0 catalogs, no last-synced).
 
 ---
 
 ## 5. UI views (`reference-discover-ui`)
 
-### 5.1 Navigation
-Header gets a two-view switch: **Discover** (existing search) and **Crawler**.
-
-### 5.2 Register a source
-- One input: **DeDi endpoint** (domain or manifest URL) + optional **display name**.
-- Hint under it: the resolved path the crawler fetches (`…/.well-known/dedi.json`).
-- **Submit** → `POST /api/crawler/sources`. On success, show the new source in `PENDING` and start
-  polling status; it flips to live once the crawler's next pass runs.
-
-### 5.3 Trust-chain pipeline (the highlight)
-For each source, render the chain the crawler walks — this is where the digest integrity shows:
-
-```
-①  Manifest         ②  Index            ③  Catalog parts     ④  Pushed          ⑤  Discoverable
-   dedi.json           beckn-catalogs       CAT-… (1 part)       → /catalog/push     indexed
-   digest ✓            digest ✓             digest ✓             ✓                   4 resources
-   ●━━━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━━━○
-```
-
-Stage + counts + ✓ badges come from `GET /api/crawler/status`. Because state rows are written **only
-after a verified digest and a 200 push**, a row's existence *is* the ✓ for that stage.
-
-### 5.4 Sources dashboard
-| Source | Last crawl | Next refresh | Catalogs | Resources | Status |
-|--------|-----------|--------------|----------|-----------|--------|
-| techmart.example | 40s ago | ~in 80s | 2 | 4 | ✓ Healthy |
-
-Auto-refreshes (poll every ~2–5s) so you watch it update live. Row action: **Remove** (disable).
-"→ View in Discover" jumps to the search view.
+- **Header nav:** `Discover` (the search app) | `Crawler`. Discover UI lives in `DiscoverView`.
+- **CrawlerView** (`components/CrawlerView.tsx`):
+  - **Register form** — `dedi.json` URL + optional name → `POST`.
+  - **Providers table** — one row per source: **Provider** (name + resolved domain), **dedi.json**,
+    **Catalogs**, **Last synced** (green dot = synced, amber = pending), **Remove**.
+  - **Auto-refreshes every 5s** so counts / last-synced update on their own.
 
 ---
 
-## 6. Stage derivation (from existing state)
+## 6. "Last synced" semantics (important)
 
-`stage` per source, computed server-side in the proxy:
+`last_synced` = `MAX(last_seen_at)` across the provider's crawl-state rows. Those rows are written
+**only when the crawler actually applies a change** (index digest differs → verified → pushed). So:
 
-| Stage | Condition |
-|-------|-----------|
-| `PENDING` | `crawler_source` row exists, no matching `index_crawl_state` row yet |
-| `INDEX_VERIFIED` | an `index_crawl_state` row matches the source (digest accepted) but no parts yet |
-| `DISCOVERABLE` | `catalog_part_state` rows exist for the source (pushed + acked) |
-| `FAILED` | (optional) surfaced from the crawler feedback log if wired; otherwise omit for the demo |
+- It means **"last time this provider's data changed and was synced,"** not "last time it was checked."
+- The crawler checks every ~1 min; if nothing changed it writes nothing, so the timestamp holds.
+- Edit a catalog → within ~1 min the digest differs → it syncs → "Last synced" jumps to now.
 
-Manifest/index/parts sub-badges come from the presence of the index row + part rows + their digests.
-
----
-
-## 7. Timing
-
-A newly submitted source becomes visible in the pipeline within **one index-poll cycle**
-(`crawler.indexPollInterval`, ~2 min in the compose file). For a snappier demo, lower that interval
-in `docker-compose.crawler-poc.yml` (e.g. `30s`). The UI polls `GET /api/crawler/status` and advances
-the stepper as rows appear.
+(A "last checked" that ticks every poll would need the crawler to stamp `last_seen_at` on every poll —
+not done; out of scope.)
 
 ---
 
-## 8. Build order
+## 7. End-to-end flow
 
-1. **Crawler (only change):** `V2__crawler_source.sql`; `SourceRegistry` (table ∪ config); swap the
-   two `props.providers()` loops to use it. Seed nothing — config still works when the table is empty.
-2. **UI proxy:** add `pg`; `POST /api/crawler/sources` (INSERT) and `GET /api/crawler/status`
-   (SELECT + assemble) in `vite.config.ts`; optional `DELETE`.
-3. **UI views:** header nav (Discover | Crawler); Register form; pipeline stepper; sources dashboard;
-   auto-refresh.
-4. **Compose:** (optional) lower `indexPollInterval` for the demo; ensure the proxy can reach Postgres
-   (`localhost:5434`).
-
-Demo-first option: build the **Crawler view against a mocked `/api/crawler/status`** to lock the UX,
-then wire the real SQL.
+1. User registers `https://…/dedi.json` → row in `crawler_source` (`provider_domain` null → pending).
+2. Next index poll (~1 min): `DbSourceRegistry` returns the row → crawler resolves the manifest →
+   stamps `provider_domain`/`provider_name` on the source and `provider_domain` on crawl-state rows →
+   pushes changed catalogs to Discover.
+3. UI's 5s poll now shows the real **provider name + domain**, **catalog count**, and **last-synced**.
+4. Those catalogs are now searchable in the **Discover** tab.
 
 ---
 
-## 9. Open questions
+## 8. Notes / limits
 
-- **OQ-1 — Submit input.** Domain vs full manifest URL? Accept either; if it doesn't end in the
-  well-known path the crawler already appends `wellKnownPath`, so store what the user typed.
-- **OQ-2 — Source ↔ state join.** URL-prefix match (no schema change) vs adding `source_id` to the
-  state tables (cleaner joins, touches `StateStore` upserts). Demo: start with URL-prefix.
-- **OQ-3 — Resource count.** From `catalog_part_state` we have parts, not resources; take the
-  resource number from the Discover API, or show part counts only.
-- **OQ-4 — Proxy DB access.** The proxy holds DB creds/schema knowledge. Fine for local demo; note it
-  as the deliberate trade for "no crawler API."
-- **OQ-5 — Remove semantics.** Disable-only (recommended); indexed catalogs stay in Discover.
-
----
-
-## 10. Acceptance criteria
-
-1. Submitting a DeDi endpoint inserts a `crawler_source` row; **no crawler restart** needed.
-2. Within one poll cycle the pipeline advances manifest → index → catalogs → discoverable, with
-   digest ✓ badges and correct catalog/part counts, from real state.
-3. The sources dashboard lists each source with last-crawl / next-refresh / counts / status and
-   auto-refreshes.
-4. Newly crawled catalogs appear in the Discover view (and its catalog filter) with no further change.
-5. With an **empty** `crawler_source` table, the crawler still crawls the **config** providers
-   (no regression).
-6. The crawler gains **only** the table + source-resolution change — no HTTP API, no new port.
-```
+- **Auth:** none in the POC (matches the rest of the stack).
+- **Remove = disable** (`status=false`); no un-publish path exists, so indexed catalogs stay in
+  Discover.
+- **No default provider** — the UI never seeds a source; the table starts empty and idles until a
+  user registers one.
+- **Dead ETag columns** (`manifest_etag`, `index_etag`) remain unused; candidate for cleanup.

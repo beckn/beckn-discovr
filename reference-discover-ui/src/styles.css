@@ -909,6 +909,15 @@ h4,
   white-space: nowrap;
 }
 
+.prov-domain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--fw-regular);
+  color: #9aa0aa;
+  margin-top: 2px;
+}
+
 .prov-url {
   max-width: 340px;
 }
