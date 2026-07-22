@@ -174,6 +174,12 @@ public record AppProperties(
                         int poolSize,
                         int poolQueueCapacity,
                         int maxFailureAttempts,
+                        /**
+                         * Schema type to use when a resource has none (no @type). Such items are
+                         * otherwise skipped for ES indexing; set this to index them under
+                         * {@code <indexPrefix>-<defaultSchemaType>} instead. Blank/unset = skip.
+                         */
+                        String defaultSchemaType,
                         @Valid Mapping mapping) {
 
                 /** Configurable ES index template mapping settings. */

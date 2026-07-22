@@ -114,6 +114,9 @@ app:
       pool-size: 2
       pool-queue-capacity: 200
       max-failure-attempts: 5
+      # Schema type used when a resource has no @type. Blank = skip such items (current behaviour);
+      # set a value to index them under <index-prefix>-<default-schema-type> instead.
+      default-schema-type: ${APP_CATALOG_ELASTICSEARCH_DEFAULT_SCHEMA_TYPE:}
       mapping:
         total-fields-limit: ${ES_MAPPING_TOTAL_FIELDS_LIMIT:2000}
         depth-limit: ${ES_MAPPING_DEPTH_LIMIT:10}

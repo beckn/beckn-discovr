@@ -148,6 +148,8 @@ services:
       - ES_MAPPING_TEMPLATE_FILE=/config/es-index-template.json
       - CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED=false
       - CATALOG_INDEXING_MAX_TEXT_BLOB_BYTES=8192
+      # Index resources that have no @type under <index-prefix>-attributes instead of skipping them.
+      - APP_CATALOG_ELASTICSEARCH_DEFAULT_SCHEMA_TYPE=${APP_CATALOG_ELASTICSEARCH_DEFAULT_SCHEMA_TYPE:-Attributes}
     volumes:
       - ./config/es-index-template.json:/config/es-index-template.json
     depends_on:
