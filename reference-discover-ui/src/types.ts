@@ -1,12 +1,27 @@
-// Shapes mirrored from the on_discover response (only the fields the UI renders).
+// Types mirror the Beckn v2.0 schema (protocol-specifications-v2/api/v2.0.0/beckn.yaml):
+// Catalog / Resource / Offer / Provider / Descriptor / Location / MediaFile / TimePeriod.
+//
+// The domain-specific *Attributes bags (resourceAttributes, offerAttributes,
+// providerAttributes, considerationAttributes / PriceSpecification) are DYNAMIC per domain
+// and are intentionally NOT modelled or rendered here — the UI stays generic across domains.
 
+export interface MediaFile {
+  uri?: string
+  label?: string
+  mimeType?: string
+}
+
+// beckn.yaml Descriptor
 export interface Descriptor {
+  code?: string
   name?: string
   shortDesc?: string
   longDesc?: string
-  mediaFile?: { uri: string; label?: string; mimeType?: string }[]
+  thumbnailImage?: string
+  mediaFile?: MediaFile[]
 }
 
+// beckn.yaml Address
 export interface Address {
   streetAddress?: string
   addressLocality?: string
@@ -15,11 +30,32 @@ export interface Address {
   addressCountry?: string
 }
 
+// beckn.yaml GeoJSONGeometry
+export interface GeoJSONGeometry {
+  type?: string
+  coordinates?: number[]
+}
+
+// beckn.yaml Location = geo (+ optional address)
 export interface Location {
-  geo?: { type: string; coordinates: number[] }
+  geo?: GeoJSONGeometry
   address?: Address
 }
 
+// beckn.yaml TimePeriod (catalog / offer validity)
+export interface TimePeriod {
+  startDate?: string
+  endDate?: string
+}
+
+// beckn.yaml Provider (providerAttributes omitted — dynamic)
+export interface Provider {
+  id?: string
+  descriptor?: Descriptor
+  availableAt?: Location[]
+}
+
+// beckn.yaml Rating is not a core Resource field; Discovr surfaces it as an extension.
 export interface Rating {
   ratingValue?: number
   ratingCount?: number
@@ -27,52 +63,38 @@ export interface Rating {
   worstRating?: number
 }
 
-export interface Provider {
-  id?: string
-  descriptor?: Descriptor
-  availableAt?: Location[]
-}
-
-/**
- * Price is not present in the current dataset, so we accept the shapes a publisher
- * is most likely to use and render defensively when one turns up.
- */
-export type Price =
-  | number
-  | string
-  | {
-      value?: number | string
-      amount?: number | string
-      currency?: string
-      currencyCode?: string
-    }
-
+// beckn.yaml Resource = id + descriptor (+ resourceAttributes, dynamic — not modelled).
+// provider / availableAt / rating / category are Discovr's extended resource fields, present
+// in on_discover data; rendered only when available.
 export interface Resource {
   id: string
   descriptor?: Descriptor
+  provider?: Provider
   availableAt?: Location[]
   rating?: Rating
-  provider?: Provider
-  price?: Price
+  category?: string
 }
 
+// beckn.yaml Offer (addOns / considerations / offerAttributes omitted — dynamic).
 export interface Offer {
   id: string
   descriptor?: Descriptor
-  validity?: { startDate?: string; endDate?: string }
   provider?: Provider
   resourceIds?: string[]
-  price?: Price
+  validity?: TimePeriod
 }
 
+// beckn.yaml Catalog
 export interface Catalog {
   id: string
   descriptor?: Descriptor
   provider?: Provider
-  validity?: { startDate?: string; endDate?: string }
-  isActive?: boolean
   resources?: Resource[]
   offers?: Offer[]
+  validity?: TimePeriod
+  isActive?: boolean
+  bppId?: string
+  bppUri?: string
 }
 
 export interface DiscoverResult {
@@ -80,7 +102,7 @@ export interface DiscoverResult {
   error?: string
 }
 
-// A registered crawler source, as returned by /api/crawler/sources.
+// A registered crawler source, as returned by /api/crawler/sources (not a Beckn schema).
 export interface SourceRow {
   id: string
   dediUrl: string

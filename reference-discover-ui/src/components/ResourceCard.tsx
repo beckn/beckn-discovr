@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Catalog, Offer, Resource } from '../types'
-import { coordsOf, fmtAddress, fmtPlace, fmtPrice, fmtValidity } from '../format'
+import { coordsOf, fmtAddress, fmtPlace, fmtValidity, imageOf, resourceNames } from '../format'
 
 interface Props {
   resource: Resource
@@ -11,14 +11,13 @@ interface Props {
 export default function ResourceCard({ resource, catalog, offers = [] }: Props) {
   const d = resource.descriptor
   const title = d?.name || resource.id || 'Untitled resource'
-  const img = Array.isArray(d?.mediaFile) ? d.mediaFile.find((m) => m?.uri)?.uri : undefined
+  const img = imageOf(d)
   const loc = Array.isArray(resource.availableAt) ? resource.availableAt[0] : undefined
   const place = fmtPlace(loc?.address)
   const address = fmtAddress(loc?.address)
   const coords = coordsOf(loc)
   const rating = resource.rating
   const seller = resource.provider?.descriptor?.name
-  const price = fmtPrice(resource.price)
 
   const catalogName = catalog.descriptor?.name || catalog.id
   const catalogProvider = catalog.provider?.descriptor?.name
@@ -66,8 +65,6 @@ export default function ResourceCard({ resource, catalog, offers = [] }: Props) 
             </span>
           )}
         </div>
-
-        {price && <div className="resource-price">{price}</div>}
 
         {/* Always rendered so every collapsed card reserves the same space → uniform rows. */}
         <p className="resource-short">{d?.shortDesc || ''}</p>
@@ -150,26 +147,36 @@ export default function ResourceCard({ resource, catalog, offers = [] }: Props) 
             </div>
 
             {offers.length > 0 && (
-              <div className="resource-offers">
-                {offers.map((o) => (
-                  <div className="mini-offer" key={o.id}>
-                    <span className="mini-offer-tag">%</span>
-                    <div>
-                      <div className="mini-offer-name">
-                        {o.descriptor?.name || o.id}
-                        {fmtPrice(o.price) && (
-                          <span className="mini-offer-price">{fmtPrice(o.price)}</span>
-                        )}
+              <div className="detail-group">
+                <div className="detail-group-title">
+                  Offers ({offers.length})
+                </div>
+                <div className="resource-offers">
+                  {offers.map((o) => {
+                    // A bundle/combo offer covers more than one resource.
+                    const applies = resourceNames(catalog, o.resourceIds)
+                    const isBundle = applies.length > 1
+                    return (
+                      <div className="mini-offer" key={o.id}>
+                        <span className="mini-offer-tag">%</span>
+                        <div>
+                          <div className="mini-offer-name">{o.descriptor?.name || o.id}</div>
+                          {o.descriptor?.shortDesc && (
+                            <div className="mini-offer-desc">{o.descriptor.shortDesc}</div>
+                          )}
+                          {isBundle && (
+                            <div className="mini-offer-applies">
+                              Bundle · applies to: {applies.join(', ')}
+                            </div>
+                          )}
+                          {fmtValidity(o.validity) && (
+                            <div className="mini-offer-valid">Valid {fmtValidity(o.validity)}</div>
+                          )}
+                        </div>
                       </div>
-                      {o.descriptor?.shortDesc && (
-                        <div className="mini-offer-desc">{o.descriptor.shortDesc}</div>
-                      )}
-                      {fmtValidity(o.validity) && (
-                        <div className="mini-offer-valid">Valid {fmtValidity(o.validity)}</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>
