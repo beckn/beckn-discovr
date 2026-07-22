@@ -774,6 +774,12 @@ h4,
 }
 
 /* ── Register (full-page) view ──────────────────────────── */
+/* Fill remaining height so the footer stays pinned to the bottom (like Discover's
+   .results), instead of floating up when the view is short. */
+.crawler {
+  flex: 1;
+}
+
 .crawler-inner {
   max-width: 1000px;
   margin: 0 auto;
@@ -869,7 +875,7 @@ h4,
 
 /* Providers table */
 .providers-wrap {
-  overflow-x: auto;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
@@ -878,8 +884,17 @@ h4,
 .providers {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: var(--text-sm);
 }
+
+/* Column widths so everything fits without a horizontal scroller (URL truncates). */
+.providers th:nth-child(1) { width: 22%; }
+.providers th:nth-child(2) { width: 30%; }
+.providers th:nth-child(3) { width: 11%; }
+.providers th:nth-child(4) { width: 15%; }
+.providers th:nth-child(5) { width: 14%; }
+.providers th:nth-child(6) { width: 8%; }
 
 .providers th {
   text-align: left;
@@ -911,7 +926,7 @@ h4,
 .prov-name {
   font-weight: var(--fw-semibold);
   color: var(--ink);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .prov-domain {
@@ -921,10 +936,6 @@ h4,
   font-weight: var(--fw-regular);
   color: #9aa0aa;
   margin-top: 2px;
-}
-
-.prov-url {
-  max-width: 340px;
 }
 
 .prov-url a {
