@@ -107,6 +107,10 @@ h4,
 .brand-left {
   display: flex;
   align-items: center;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 /* Logo art is black; invert it to white on the dark header. */
@@ -739,36 +743,37 @@ h4,
   background: var(--card);
 }
 
-/* ── Header nav ─────────────────────────────────────────── */
-.site-nav {
+/* ── Header right cluster ───────────────────────────────── */
+.header-right {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 20px;
 }
 
-.nav-link {
-  border: none;
-  background: none;
-  color: rgba(255, 255, 255, 0.6);
+/* Register button (top-right; toggles the full-page register view) */
+.register-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
   font-family: var(--font-display);
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
   font-weight: var(--fw-semibold);
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
   cursor: pointer;
-  transition: color 0.12s ease, background 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
-.nav-link:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
+.register-trigger:hover,
+.register-trigger.is-open {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
-.nav-link.is-active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-/* ── Crawler view ───────────────────────────────────────── */
+/* ── Register (full-page) view ──────────────────────────── */
 .crawler-inner {
   max-width: 1000px;
   margin: 0 auto;
@@ -939,23 +944,6 @@ h4,
   text-decoration: underline;
 }
 
-.sync-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  margin-right: 7px;
-  vertical-align: middle;
-}
-
-.sync-dot.ok {
-  background: #12a150;
-}
-
-.sync-dot.pending {
-  background: #d0932a;
-}
-
 .prov-actions {
   text-align: right;
 }
@@ -974,11 +962,30 @@ h4,
   text-decoration: underline;
 }
 
+/* sync status dot */
+.sync-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-right: 7px;
+  vertical-align: middle;
+}
+
+.sync-dot.ok {
+  background: #12a150;
+}
+
+.sync-dot.pending {
+  background: #d0932a;
+}
+
 @media (max-width: 640px) {
-  .site-nav {
-    order: 3;
+  .register-fields {
+    flex-direction: column;
+  }
+  .register-btn {
     width: 100%;
-    justify-content: center;
   }
   .hero-inner {
     padding: 32px 20px 28px;

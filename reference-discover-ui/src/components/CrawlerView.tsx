@@ -50,10 +50,10 @@ export default function CrawlerView() {
   return (
     <main className="crawler">
       <div className="crawler-inner">
-        <h1 className="crawler-title">Providers</h1>
+        <h1 className="crawler-title">Register a provider</h1>
         <p className="crawler-sub">
-          Register a provider’s <code>dedi.json</code>. The crawler checks it every minute and syncs
-          any changed catalogs into Discover.
+          Add a provider’s <code>dedi.json</code>. The crawler checks it every minute and syncs any
+          changed catalogs into Discover automatically.
         </p>
 
         <form className="register" onSubmit={submit}>
