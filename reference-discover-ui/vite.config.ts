@@ -148,6 +148,7 @@ async function listSources() {
            s.provider_domain,
            s.created_at,
            GREATEST(MAX(i.last_seen_at), MAX(c.last_seen_at))                AS last_synced,
+           MAX(c.source_updated_at)                                          AS source_updated,
            COUNT(DISTINCT c.catalog_id)                                     AS catalogs
       FROM crawler_source s
       LEFT JOIN index_crawl_state  i
@@ -167,6 +168,7 @@ async function listSources() {
     createdAt: r.created_at,
     catalogs: Number(r.catalogs) || 0,
     lastSynced: r.last_synced ? new Date(r.last_synced).toISOString() : null,
+    sourceUpdated: r.source_updated ? new Date(r.source_updated).toISOString() : null,
   }))
 }
 

@@ -89,4 +89,5 @@ export interface SourceRow {
   createdAt?: string
   catalogs: number
   lastSynced: string | null
+  sourceUpdated: string | null
 }

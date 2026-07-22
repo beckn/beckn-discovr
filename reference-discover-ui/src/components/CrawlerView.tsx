@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { SourceRow } from '../types'
 import { listSources, registerSource, removeSource } from '../api'
-import { relativeTime } from '../format'
+import { fmtDate, relativeTime } from '../format'
 
 export default function CrawlerView() {
   const [sources, setSources] = useState<SourceRow[]>([])
@@ -99,6 +99,7 @@ export default function CrawlerView() {
                   <th>Provider</th>
                   <th>dedi.json</th>
                   <th className="num">Catalogs</th>
+                  <th>Source updated</th>
                   <th>Last synced</th>
                   <th></th>
                 </tr>
@@ -116,6 +117,7 @@ export default function CrawlerView() {
                       </a>
                     </td>
                     <td className="num">{s.catalogs}</td>
+                    <td>{s.sourceUpdated ? fmtDate(s.sourceUpdated) : '—'}</td>
                     <td>
                       <span className={`sync-dot ${s.lastSynced ? 'ok' : 'pending'}`} />
                       {s.lastSynced ? relativeTime(s.lastSynced) : 'pending…'}
