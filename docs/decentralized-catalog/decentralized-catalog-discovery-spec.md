@@ -110,8 +110,9 @@ public key(s), and points to one or more registry index files, each with a diges
   "files": [
     {
       "registry": "beckn-catalogs",
+      "networkId": "ondc-retail",
       "url": "https://techmart.example/dedi/beckn-catalogs.dedi.json",
-      "digest": "sha-256:60e0f0733c6d7009773ba837f254be2892cb9b62e9fa5407107c21134b1134ae",
+      "digest": "sha-256:be40742e5ffa2c8c948d28c78115b718c1913cd753fc4773d4870fa5b26d0595",
       "schema": "https://schema.nfh.global/dedi/BecknCatalogIndexRecord/1.0.0/schema.json",
       "state": "live"
     }
@@ -131,6 +132,9 @@ Notable fields:
 - **`files[].digest`** — the SHA-256 of the index file this points to. A consumer that has the
   manifest can detect any change to the index without downloading it, and can reject an index
   whose bytes don't match.
+- **`files[].networkId`** — the network this catalog registry is published under (mirrors the
+  registry's `networkId` in DeDi and in the index). Lets a crawler skip an entire registry that
+  is not on its network before even fetching the index.
 - **`next_update`** — a hint for when the provider expects to publish next; consumers use it to
   pace polling. It is a hint, not a guarantee.
 - **`proof`** — a detached signature over the canonicalized document (JCS canonicalization,
@@ -155,6 +159,7 @@ record lists its **parts** (the actual data files) with **digests** and modifica
   "namespace": "techmart.example",
   "registry": {
     "name": "beckn-catalogs",
+    "networkId": "ondc-retail",
     "schema": "https://schema.nfh.global/dedi/BecknCatalogIndexRecord/1.0.0/schema.json",
     "state": "live",
     "updated_at": "2026-07-17T09:00:00Z"
@@ -167,7 +172,7 @@ record lists its **parts** (the actual data files) with **digests** and modifica
         "version": 42,
         "catalogType": "REGULAR",
         "status": "ACTIVE",
-        "visibility": "public",
+        "visibility": { "scope": "public", "networks": ["ondc-retail", "eon-retail"] },
         "updatedAt": "2026-07-17T09:00:00Z",
         "schemaTypes": ["https://schema.beckn.org/retail/schema/1.1.0/context.jsonld"],
         "parts": [
@@ -190,7 +195,7 @@ record lists its **parts** (the actual data files) with **digests** and modifica
         "catalogId": "CAT-EON-EXCLUSIVE-2026",
         "version": 12,
         "status": "ACTIVE",
-        "visibility": { "networks": ["eon-retail"] },
+        "visibility": { "scope": "restricted", "networks": ["eon-retail"] },
         "updatedAt": "2026-07-14T08:00:00Z",
         "schemaTypes": ["https://schema.beckn.org/retail/schema/1.1.0/context.jsonld"],
         "parts": [
@@ -200,6 +205,16 @@ record lists its **parts** (the actual data files) with **digests** and modifica
             "lastModified": "2026-07-14T08:00:00Z"
           }
         ]
+      }
+    },
+    {
+      "record_name": "CAT-ELECTRONICS-2025",
+      "details": {
+        "catalogId": "CAT-ELECTRONICS-2025",
+        "version": 30,
+        "status": "RETIRED",
+        "updatedAt": "2026-01-31T00:00:00Z",
+        "retiredAt": "2026-01-31T00:00:00Z"
       }
     }
   ],
@@ -213,16 +228,29 @@ record lists its **parts** (the actual data files) with **digests** and modifica
 
 Notable fields:
 
+- **`registry.networkId`** — the network this catalog registry is published under in DeDi. It is
+  the coarsest network filter: a crawler serving only `foo-mobility` ignores a registry whose
+  `networkId` is `ondc-retail`.
 - **`records[]`** — one per catalog. A catalog is split into one or more **parts** so large
   catalogs can be published, changed, and pulled incrementally.
 - **`details.version`** — a monotonically increasing catalog version. A consumer must **never
   accept a lower version than it has already indexed** (rollback protection).
 - **`details.status`** — `ACTIVE` / `RETIRED` etc. A retired record signals the consumer to
   drop that catalog. Parts may be omitted for retired records.
-- **`details.visibility`** — `"public"`, or `{ "networks": [...] }` to restrict a catalog to
-  named networks. Restricted catalogs are the ones that require the authenticated pull in §7.
+- **`details.visibility`** — an object `{ "scope", "networks" }`:
+  - **`scope`** — the *access* axis. `"public"` = the part files may be fetched directly;
+    `"restricted"` = the part files require the authenticated pull in §7.
+  - **`networks`** — the *membership* axis: the networks this catalog belongs to. For
+    `restricted`, this doubles as the **allow-list** — only consumers who are members of one of
+    these networks may pull it. For `public`, it is affiliation only (anyone may fetch, but a
+    crawler can still use it to decide relevance).
 - **`parts[].digest`** — the SHA-256 of the catalog part file. This is the leaf of the digest
   chain; it is what the consumer checks the downloaded bytes against.
+
+> **Restricted records stay listed.** A `restricted` record still appears in the public index,
+> so its *existence and metadata* (name, version, schema types) are visible to everyone — only
+> the *part-file bytes* are access-controlled. If existence itself must be hidden from
+> non-members, omit restricted records from the public index (or publish a per-network index).
 
 ### 4.3 The Catalog Part files
 
@@ -230,6 +258,21 @@ The actual catalog payload (Beckn v2.0 catalog structure — providers, resource
 These are ordinary static JSON files at the URLs named in the index. Their **only**
 requirement in this spec is: **the bytes served must hash to the digest announced in the
 index.** They may be public, or protected (§7).
+
+### 4.4 Where network identity appears — and why in three places
+
+Network shows up at three levels, each answering a different question. They are not redundant:
+
+| Level | Field | Answers | Used by |
+|-------|-------|---------|---------|
+| **DeDi registry / namespace** | `registry.networkId` (also mirrored in `manifest.files[].networkId`) | *Which network is this whole catalog registry published under?* | Crawler — coarse filter: skip entire registries not on my network, before fetching the index. |
+| **Index catalog record** | `details.visibility.networks` (with `scope`) | *Which networks does this specific catalog belong to, and is it public or restricted?* | Crawler — per-catalog relevance; Provider — the allow-list for restricted pulls. |
+| **Consumer-node DeDi record** | `details.networkIds` | *Which networks does this consumer belong to?* | Provider — entitlement check when a consumer requests a restricted catalog (§7). |
+
+**Consistency rule:** a catalog's `visibility.networks` should be within (or equal to) the
+registry's `networkId` reach. In the running example the registry is homed on `ondc-retail`; the
+electronics catalog is public and additionally affiliated to `eon-retail`, and the exclusive
+catalog is restricted to `eon-retail` members.
 
 ---
 
@@ -262,8 +305,32 @@ A DeDi record for a catalog publisher looks like this (illustrative):
 }
 ```
 
-A **consumer node registers the same way**, with `role: "consumer-node"` and its own public
-key — this is what lets a provider verify a consumer's signed pull request (§7).
+A **consumer node registers the same way**, with `role: "consumer-node"`, its own public key,
+and the **`networkIds` it belongs to**. A provider reads this record to (a) verify a consumer's
+signed pull request and (b) decide entitlement to restricted catalogs (§7). The `kid` here is
+the one referenced by the `keyId` in the §7 pull request.
+
+```json
+{
+  "namespace": "beckn-catalogs",
+  "record_name": "namma-yatri.example",
+  "details": {
+    "domain": "namma-yatri.example",
+    "name": "Namma Yatri Consumer Node",
+    "role": "consumer-node",
+    "networkIds": ["ondc-retail", "eon-retail"],
+    "keys": [
+      { "kid": "key-001", "kty": "OKP", "crv": "Ed25519",
+        "x": "3sMB0mFhZ2t8p1n9c2fXqRZ0kd7vJmS5aQwYbN4uHkE" }
+    ],
+    "state": "live",
+    "updated_at": "2026-07-20T09:00:00Z"
+  }
+}
+```
+
+Because this consumer's `networkIds` includes `eon-retail`, it **is** entitled to pull the
+restricted `CAT-EON-EXCLUSIVE-2026` catalog; a consumer without `eon-retail` would be refused.
 
 > **Why register a pointer instead of the catalog itself?** DeDi stays small and stable — it
 > holds identity + key + a URL, not catalog data. Catalog data lives with the provider, who
@@ -276,8 +343,9 @@ For this model to work, DeDi must offer, at minimum, a **read/lookup API**:
 | Capability | Purpose |
 |-----------|---------|
 | **List / search records in a namespace** (e.g. `beckn-catalogs`) | So a crawler can enumerate every catalog provider without knowing them in advance. |
-| **Resolve a single record by name/domain** | So a provider can look up a *consumer's* public key to verify a pull request, and vice versa. |
-| **Return the record's public key(s) and pointer** | The two things every verification step needs. |
+| **Filter by `networkId`** | So a crawler serving one network fetches only registries published under that network, ignoring the rest at lookup time. |
+| **Resolve a single record by name/domain** | So a provider can look up a *consumer's* public key **and `networkIds`** to verify a pull request and check entitlement, and vice versa. |
+| **Return the record's public key(s), `networkId(s)`, and pointer** | The three things the verification and entitlement steps need. |
 
 Write operations (register, update key, retire) are performed by the record owner and are out
 of scope for this document beyond noting they must be authenticated to the record's key.
@@ -314,9 +382,9 @@ mis-published file simply never reaches the indexer.
 
 ## 7. Authenticated pull — signed request + time-boxed challenge
 
-Public catalogs (`visibility: "public"`) can be fetched directly. **Protected catalogs**
-(`visibility: { networks: [...] }`, or any provider policy) require the consumer to prove who
-it is, and the provider to release the file only briefly. The recommended handshake:
+Public catalogs (`visibility.scope: "public"`) can be fetched directly. **Restricted catalogs**
+(`visibility.scope: "restricted"`) require the consumer to prove who it is, and the provider to
+release the file only briefly. The recommended handshake:
 
 ### 7.1 Step 1 — the crawler makes a signed pull request
 
@@ -329,33 +397,42 @@ GET /catalogs/CAT-EON-EXCLUSIVE-2026.json HTTP/1.1
 Host: techmart.example
 Signature: keyId="namma-yatri.example#key-001",
            algorithm="ed25519",
-           created=1753180800,
-           expires=1753180860,
+           created=1784714400,
+           expires=1784714460,
            headers="(request-target) host created digest",
            signature="<base64-signature>"
 ```
+
+`created` / `expires` are UNIX epoch seconds — here `1784714400` = `2026-07-22T10:00:00Z`, with
+a 60-second freshness window (`1784714460` = `2026-07-22T10:01:00Z`). `signature` is the
+base64 Ed25519 signature the provider recomputes to verify the request.
 
 ### 7.2 Step 2 — the provider verifies and issues a time-boxed link
 
 The provider:
 
-1. reads the `keyId`, looks the consumer up in **DeDi**, and fetches its public key;
+1. reads the `keyId`, looks the consumer up in **DeDi**, and fetches its public key **and its
+   `networkIds`**;
 2. verifies the request signature and that it is fresh (within `created`/`expires`);
-3. checks the consumer is entitled to this catalog's `visibility`;
-4. if all pass, returns a **presigned, expiring URL** — a link that is valid only for a short
-   window (e.g. **1–2 hours**) and carries its own embedded signature and expiry (the
-   "challenge").
+3. **entitlement:** confirms the consumer's `networkIds` intersects the catalog's
+   `visibility.networks` (here, the consumer must be a member of `eon-retail`);
+4. if all pass, returns a **presigned, expiring URL** — a link valid only for a short window
+   (e.g. **1–2 hours**) that carries its own embedded signature and expiry (the "challenge").
 
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
 
 {
-  "url": "https://cdn.techmart.example/catalogs/CAT-EON-EXCLUSIVE-2026.json?X-Expires=1753188000&X-Signature=<sig>",
+  "url": "https://cdn.techmart.example/catalogs/CAT-EON-EXCLUSIVE-2026.json?X-Expires=1784721600&X-Signature=<sig>",
   "expiresAt": "2026-07-22T12:00:00Z",
   "digest": "sha-256:c35db743c55396e65d8daa24a8bb7418c3bc8c073ffffcaf21869c9e371f43ad"
 }
 ```
+
+Here `X-Expires=1784721600` = `2026-07-22T12:00:00Z` — two hours after the request — matching
+`expiresAt`. The `digest` equals the part digest for `CAT-EON-EXCLUSIVE-2026.json` in the index
+(§4.2), so the crawler can verify the downloaded bytes.
 
 ### 7.3 Step 3 — the crawler downloads within the window, then verifies
 
@@ -481,6 +558,9 @@ To participate, a provider must:
 | **Catalog index** | A per-registry file listing catalogs as records, each with parts and part digests. |
 | **Catalog part** | An actual catalog data file, referenced (with a digest) by the index. |
 | **Digest** | A `sha-256:<hex>` content hash. Each layer announces the digest of the layer below it, forming a verifiable chain. |
+| **`networkId` (registry)** | The network a whole catalog registry is published under, in DeDi and mirrored in the manifest. Coarse discovery filter. |
+| **`visibility` `{ scope, networks }`** | Per-catalog access + membership. `scope` = `public` \| `restricted` (access); `networks` = the networks the catalog belongs to (and, when restricted, the allow-list). |
+| **`networkIds` (consumer)** | The networks a consumer node belongs to, on its DeDi record. Providers use it to authorize restricted pulls. |
 | **Consumer node** | A network participant that runs a crawler + indexer and holds its own registered key (e.g. a rider app). |
 | **Crawler** | The consumer-side component that discovers, verifies, and pulls catalog files, then forwards raw bytes to the indexer. It does not process catalog content. |
 | **Indexer** | The consumer-side component that parses and makes catalogs searchable. |
