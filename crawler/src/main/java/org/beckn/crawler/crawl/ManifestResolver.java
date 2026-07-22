@@ -1,7 +1,6 @@
 package org.beckn.crawler.crawl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.beckn.crawler.config.CrawlerProperties;
 import org.beckn.crawler.http.CrawlerHttpClient;
 import org.beckn.crawler.model.FeedModels.Manifest;
 import org.springframework.stereotype.Component;
@@ -32,31 +31,21 @@ public class ManifestResolver {
 
     private final CrawlerHttpClient http;
     private final ObjectMapper mapper;
-    private final String wellKnownPath;
 
-    public ManifestResolver(CrawlerHttpClient http, ObjectMapper mapper, CrawlerProperties props) {
+    public ManifestResolver(CrawlerHttpClient http, ObjectMapper mapper) {
         this.http = http;
         this.mapper = mapper;
-        this.wellKnownPath = props.wellKnownPath();
     }
 
-    /** Builds the well-known URL from the provider base (no assumptions beyond the configured path). */
-    public String manifestUrl(String providerBase) {
-        String base = providerBase.endsWith("/") ? providerBase.substring(0, providerBase.length() - 1) : providerBase;
-        String path = wellKnownPath.startsWith("/") ? wellKnownPath : "/" + wellKnownPath;
-        return base + path;
-    }
-
-    /** Fetch + parse the manifest; return one {@link Resolved} per {@code files[]} entry (all registries). */
-    public List<Resolved> resolve(String providerBase) throws IOException, InterruptedException {
-        String url = manifestUrl(providerBase);
-        CrawlerHttpClient.Response resp = http.get(url);
+    /** Fetch + parse the manifest at the given URL; one {@link Resolved} per {@code files[]} registry. */
+    public List<Resolved> resolve(String manifestUrl) throws IOException, InterruptedException {
+        CrawlerHttpClient.Response resp = http.get(manifestUrl);
         if (resp.status() != 200) {
-            throw new IOException("manifest GET " + url + " returned HTTP " + resp.status());
+            throw new IOException("manifest GET " + manifestUrl + " returned HTTP " + resp.status());
         }
         Manifest m = mapper.readValue(resp.body(), Manifest.class);
         if (m.files() == null || m.files().isEmpty()) {
-            throw new IOException("manifest " + url + " has no files[] entry");
+            throw new IOException("manifest " + manifestUrl + " has no files[] entry");
         }
         String name = m.name() != null && !m.name().isBlank() ? m.name() : m.domain();
         List<Resolved> resolved = new ArrayList<>();

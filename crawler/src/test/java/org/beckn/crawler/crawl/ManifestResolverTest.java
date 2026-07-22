@@ -2,7 +2,6 @@ package org.beckn.crawler.crawl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.crawler.http.CrawlerHttpClient;
-import org.beckn.crawler.support.TestConfigs;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,8 +14,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** Unit tests for manifest URL derivation + resolution (design doc §5.4 step 1). */
+/** Unit tests for manifest resolution from a full manifest URL (design doc §5.4 step 1). */
 class ManifestResolverTest {
+
+    private static final String MANIFEST = "https://prov.example/dedi.json";
 
     private CrawlerHttpClient http;
     private ManifestResolver resolver;
@@ -24,19 +25,7 @@ class ManifestResolverTest {
     @BeforeEach
     void setUp() {
         http = mock(CrawlerHttpClient.class);
-        resolver = new ManifestResolver(http, new ObjectMapper(), TestConfigs.props("http://push"));
-    }
-
-    @Test
-    void manifestUrl_appendsWellKnownPath() {
-        assertThat(resolver.manifestUrl("https://prov.example"))
-                .isEqualTo("https://prov.example/.well-known/dedi.json");
-    }
-
-    @Test
-    void manifestUrl_handlesTrailingSlashOnBase() {
-        assertThat(resolver.manifestUrl("https://prov.example/"))
-                .isEqualTo("https://prov.example/.well-known/dedi.json");
+        resolver = new ManifestResolver(http, new ObjectMapper());
     }
 
     @Test
@@ -50,10 +39,10 @@ class ManifestResolverTest {
                   ]
                 }
                 """;
-        when(http.get("https://prov.example/.well-known/dedi.json"))
+        when(http.get(MANIFEST))
                 .thenReturn(new CrawlerHttpClient.Response(200, manifest.getBytes(StandardCharsets.UTF_8), null));
 
-        List<ManifestResolver.Resolved> rs = resolver.resolve("https://prov.example");
+        List<ManifestResolver.Resolved> rs = resolver.resolve(MANIFEST);
 
         assertThat(rs).hasSize(1);
         ManifestResolver.Resolved r = rs.get(0);
@@ -77,10 +66,10 @@ class ManifestResolverTest {
                   ]
                 }
                 """;
-        when(http.get("https://prov.example/.well-known/dedi.json"))
+        when(http.get(MANIFEST))
                 .thenReturn(new CrawlerHttpClient.Response(200, manifest.getBytes(StandardCharsets.UTF_8), null));
 
-        List<ManifestResolver.Resolved> rs = resolver.resolve("https://prov.example");
+        List<ManifestResolver.Resolved> rs = resolver.resolve(MANIFEST);
 
         assertThat(rs).hasSize(2);
         assertThat(rs).extracting(ManifestResolver.Resolved::registry)
@@ -100,10 +89,10 @@ class ManifestResolverTest {
                   ]
                 }
                 """;
-        when(http.get("https://prov.example/.well-known/dedi.json"))
+        when(http.get(MANIFEST))
                 .thenReturn(new CrawlerHttpClient.Response(200, manifest.getBytes(StandardCharsets.UTF_8), null));
 
-        ManifestResolver.Resolved r = resolver.resolve("https://prov.example").get(0);
+        ManifestResolver.Resolved r = resolver.resolve(MANIFEST).get(0);
 
         assertThat(r.state()).isEqualTo("retired");
         assertThat(r.isLive()).isFalse();
@@ -111,10 +100,10 @@ class ManifestResolverTest {
 
     @Test
     void resolve_throwsOnNon200() throws Exception {
-        when(http.get("https://prov.example/.well-known/dedi.json"))
+        when(http.get(MANIFEST))
                 .thenReturn(new CrawlerHttpClient.Response(404, new byte[0], null));
 
-        assertThatThrownBy(() -> resolver.resolve("https://prov.example"))
+        assertThatThrownBy(() -> resolver.resolve(MANIFEST))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("404");
     }
@@ -122,10 +111,10 @@ class ManifestResolverTest {
     @Test
     void resolve_throwsWhenNoFilesEntry() throws Exception {
         String manifest = "{\"type\":\"dedi-manifest\",\"domain\":\"prov.example\",\"files\":[]}";
-        when(http.get("https://prov.example/.well-known/dedi.json"))
+        when(http.get(MANIFEST))
                 .thenReturn(new CrawlerHttpClient.Response(200, manifest.getBytes(StandardCharsets.UTF_8), null));
 
-        assertThatThrownBy(() -> resolver.resolve("https://prov.example"))
+        assertThatThrownBy(() -> resolver.resolve(MANIFEST))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("no files");
     }

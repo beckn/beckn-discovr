@@ -16,8 +16,10 @@ spring:
 
 # All crawler settings — nothing hardcoded; every value is overridable via env.
 crawler:
-  providers: ${CRAWLER_PROVIDERS}                 # comma-separated base URLs
-  well-known-path: ${CRAWLER_WELL_KNOWN_PATH:/.well-known/dedi.json}
+  # Full DeDi manifest URLs (comma-separated). Used when source=config; may be empty for source=db.
+  providers: ${CRAWLER_PROVIDERS:}
+  # Where the manifest-URL list comes from: "config" (the providers list) or "db" (crawler_source table).
+  source: ${CRAWLER_SOURCE:config}
   push-endpoint: ${CRAWLER_PUSH_ENDPOINT}
   # Manifest rarely changes (provider identity + index location) → long cadence, e.g. daily.
   manifest-refresh-interval: ${CRAWLER_MANIFEST_REFRESH_INTERVAL:1d}

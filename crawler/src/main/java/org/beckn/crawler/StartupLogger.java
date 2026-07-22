@@ -28,8 +28,8 @@ public class StartupLogger {
     @EventListener(ApplicationReadyEvent.class)
     public void logStartupConfig() {
         log.info(LogEvent.STARTUP_CONFIG,
+                value("source", props.source()),
                 value("providers", props.providers()),
-                value("manifestPath", props.wellKnownPath()),
                 value("pushEndpoint", props.pushEndpoint()),
                 value("manifestRefreshInterval", props.manifestRefreshInterval().toString()),
                 value("indexPollInterval", props.indexPollInterval().toString()),
