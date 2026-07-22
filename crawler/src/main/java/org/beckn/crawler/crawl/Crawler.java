@@ -214,9 +214,12 @@ public class Crawler {
             return;
         }
 
-        // Cheap check: unchanged index → nothing to do.
-        var storedDigest = state.findIndexDigest(reg.indexUrl());
-        if (storedDigest.isPresent() && storedDigest.get().equalsIgnoreCase(result.digest())) {
+        // Cheap check: skip only when the digest is unchanged AND the last pass fully succeeded.
+        // A 'partial'/'failed' index is re-diffed even on an unchanged digest, so its still-failed
+        // parts keep retrying (ACKed parts are then SKIP_UNCHANGED — only the failed part re-pushes).
+        var stored = state.findIndexState(reg.indexUrl());
+        if (stored.isPresent() && result.digest().equalsIgnoreCase(stored.get().digest())
+                && "success".equalsIgnoreCase(stored.get().syncStatus())) {
             log.info(LogEvent.INDEX_UNCHANGED, value("provider", name), value("registry", registry), value("pushed", 0));
             return;
         }
@@ -267,7 +270,8 @@ public class Crawler {
                     value("pushed", ackedParts), value("syncStatus", "success"), value("stateUpdated", true));
         } else {
             String status = ackedParts > 0 ? "partial" : "failed";
-            state.recordIndexOutcome(reg.indexUrl(), domain, status, failuresJson(failures));
+            state.recordIndexOutcome(reg.indexUrl(), result.digest(), index.nextUpdate(), domain,
+                    status, failuresJson(failures));
             log.warn(LogEvent.PROVIDER_RETRY, value("provider", name), value("registry", registry),
                     value("pushed", ackedParts), value("failed", failures.size()),
                     value("syncStatus", status), value("stateUpdated", false));
