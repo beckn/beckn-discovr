@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,13 +53,40 @@ class ManifestResolverTest {
         when(http.get("https://prov.example/.well-known/dedi.json"))
                 .thenReturn(new CrawlerHttpClient.Response(200, manifest.getBytes(StandardCharsets.UTF_8), null));
 
-        ManifestResolver.Resolved r = resolver.resolve("https://prov.example");
+        List<ManifestResolver.Resolved> rs = resolver.resolve("https://prov.example");
 
+        assertThat(rs).hasSize(1);
+        ManifestResolver.Resolved r = rs.get(0);
         assertThat(r.domain()).isEqualTo("prov.example");
+        assertThat(r.registry()).isEqualTo("beckn-catalogs");
         assertThat(r.indexUrl()).isEqualTo("https://prov.example/dedi/idx.json");
         assertThat(r.indexDigest()).isEqualTo("sha-256:abc");
         assertThat(r.state()).isEqualTo("live");
         assertThat(r.isLive()).isTrue();
+    }
+
+    @Test
+    void resolve_returnsEveryFilesEntry() throws Exception {
+        String manifest = """
+                {
+                  "type": "dedi-manifest",
+                  "domain": "prov.example",
+                  "files": [
+                    {"registry":"beckn-catalogs","url":"https://prov.example/dedi/catalogs.json","digest":"sha-256:aaa","state":"live"},
+                    {"registry":"beckn-offers","url":"https://prov.example/dedi/offers.json","digest":"sha-256:bbb","state":"live"}
+                  ]
+                }
+                """;
+        when(http.get("https://prov.example/.well-known/dedi.json"))
+                .thenReturn(new CrawlerHttpClient.Response(200, manifest.getBytes(StandardCharsets.UTF_8), null));
+
+        List<ManifestResolver.Resolved> rs = resolver.resolve("https://prov.example");
+
+        assertThat(rs).hasSize(2);
+        assertThat(rs).extracting(ManifestResolver.Resolved::registry)
+                .containsExactly("beckn-catalogs", "beckn-offers");
+        assertThat(rs).extracting(ManifestResolver.Resolved::indexUrl)
+                .containsExactly("https://prov.example/dedi/catalogs.json", "https://prov.example/dedi/offers.json");
     }
 
     @Test
@@ -75,7 +103,7 @@ class ManifestResolverTest {
         when(http.get("https://prov.example/.well-known/dedi.json"))
                 .thenReturn(new CrawlerHttpClient.Response(200, manifest.getBytes(StandardCharsets.UTF_8), null));
 
-        ManifestResolver.Resolved r = resolver.resolve("https://prov.example");
+        ManifestResolver.Resolved r = resolver.resolve("https://prov.example").get(0);
 
         assertThat(r.state()).isEqualTo("retired");
         assertThat(r.isLive()).isFalse();
