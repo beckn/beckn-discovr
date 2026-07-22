@@ -14,12 +14,14 @@ import java.time.Duration;
 import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
- * Drives the crawl cadence. Runs one pass immediately on startup, then every
- * {@code crawler.pollInterval} (the interval that powers the "modified after N minutes" scenario).
- * Fixed-delay means the next pass starts N after the previous one finishes — no overlap.
- *
- * <p>The interval is taken from the already-parsed {@link Duration} so config stays human-friendly
- * ({@code 2m}, {@code 30s}) — a raw string like "2m" is not a valid {@code @Scheduled} fixedDelay.
+ * Drives the two crawl cadences, both from config:
+ * <ul>
+ *   <li>manifest refresh every {@code crawler.manifestRefreshInterval} (long — provider identity
+ *       + index location rarely change)</li>
+ *   <li>index poll every {@code crawler.indexPollInterval} (short — catalog changes)</li>
+ * </ul>
+ * Both use fixed delay and run once immediately on startup (initial delay 0). The index poll
+ * lazily learns the manifest on a cache miss, so no startup ordering is hardcoded.
  *
  * <p>Enabled by default; tests set {@code crawler.scheduler.enabled=false} to drive passes
  * explicitly and keep assertions deterministic.
@@ -31,22 +33,32 @@ public class CrawlScheduler implements SchedulingConfigurer {
     private static final Logger log = LoggerFactory.getLogger(CrawlScheduler.class);
 
     private final Crawler crawler;
-    private final Duration pollInterval;
+    private final Duration manifestRefreshInterval;
+    private final Duration indexPollInterval;
 
     public CrawlScheduler(Crawler crawler, CrawlerProperties props) {
         this.crawler = crawler;
-        this.pollInterval = props.pollInterval();
+        this.manifestRefreshInterval = props.manifestRefreshInterval();
+        this.indexPollInterval = props.indexPollInterval();
     }
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar registrar) {
-        // Fixed delay = pollInterval, first run immediately (initialDelay = 0).
-        registrar.addFixedDelayTask(this::tick, pollInterval);
+        registrar.addFixedDelayTask(this::refreshManifests, manifestRefreshInterval);
+        registrar.addFixedDelayTask(this::pollIndex, indexPollInterval);
     }
 
-    void tick() {
+    void refreshManifests() {
         try {
-            crawler.runPass();
+            crawler.refreshManifests();
+        } catch (Exception e) {
+            log.error(LogEvent.MANIFEST_REFRESH_FAILED, value("error", e.toString()), e);
+        }
+    }
+
+    void pollIndex() {
+        try {
+            crawler.runIndexPass();
         } catch (Exception e) {
             log.error(LogEvent.PASS_FAILED, value("error", e.toString()), e);
         }

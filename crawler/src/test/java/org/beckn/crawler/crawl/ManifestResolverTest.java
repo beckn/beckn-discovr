@@ -45,7 +45,7 @@ class ManifestResolverTest {
                   "type": "dedi-manifest",
                   "domain": "prov.example",
                   "files": [
-                    {"registry":"beckn-catalogs","url":"https://prov.example/dedi/idx.json","digest":"sha-256:abc","state":"ACTIVE"}
+                    {"registry":"beckn-catalogs","url":"https://prov.example/dedi/idx.json","digest":"sha-256:abc","state":"live"}
                   ]
                 }
                 """;
@@ -57,6 +57,28 @@ class ManifestResolverTest {
         assertThat(r.domain()).isEqualTo("prov.example");
         assertThat(r.indexUrl()).isEqualTo("https://prov.example/dedi/idx.json");
         assertThat(r.indexDigest()).isEqualTo("sha-256:abc");
+        assertThat(r.state()).isEqualTo("live");
+        assertThat(r.isLive()).isTrue();
+    }
+
+    @Test
+    void resolve_carriesNonLiveState() throws Exception {
+        String manifest = """
+                {
+                  "type": "dedi-manifest",
+                  "domain": "prov.example",
+                  "files": [
+                    {"registry":"beckn-catalogs","url":"https://prov.example/dedi/idx.json","digest":"sha-256:abc","state":"retired"}
+                  ]
+                }
+                """;
+        when(http.get("https://prov.example/.well-known/dedi.json"))
+                .thenReturn(new CrawlerHttpClient.Response(200, manifest.getBytes(StandardCharsets.UTF_8), null));
+
+        ManifestResolver.Resolved r = resolver.resolve("https://prov.example");
+
+        assertThat(r.state()).isEqualTo("retired");
+        assertThat(r.isLive()).isFalse();
     }
 
     @Test

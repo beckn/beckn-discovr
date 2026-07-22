@@ -21,8 +21,17 @@ public record CrawlerProperties(
         @NotNull String wellKnownPath,
         /** Absolute URL of the discover /catalog/push endpoint. */
         @NotNull String pushEndpoint,
-        /** How often a crawl pass runs (drives the "modified after N minutes" scenario). */
-        @NotNull Duration pollInterval,
+        /**
+         * How often to re-read the manifest. The manifest rarely changes (provider identity +
+         * where the index lives + publisher key), so this is long — e.g. weekly. In the target
+         * architecture the manifest lives in a DeDi service, separate from the bucket.
+         */
+        @NotNull Duration manifestRefreshInterval,
+        /**
+         * How often to poll each provider's index for catalog changes. Short — e.g. per minute.
+         * The index (and catalog parts) live in the cloud bucket and change on every publish.
+         */
+        @NotNull Duration indexPollInterval,
         @NotNull Http http,
         /** Path to the append-only feedback log file. */
         @NotNull String feedbackLogPath) {

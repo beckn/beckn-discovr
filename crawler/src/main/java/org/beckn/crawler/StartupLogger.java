@@ -31,7 +31,8 @@ public class StartupLogger {
                 value("providers", props.providers()),
                 value("manifestPath", props.wellKnownPath()),
                 value("pushEndpoint", props.pushEndpoint()),
-                value("pollInterval", props.pollInterval().toString()),
+                value("manifestRefreshInterval", props.manifestRefreshInterval().toString()),
+                value("indexPollInterval", props.indexPollInterval().toString()),
                 value("httpTimeout", props.http().timeout().toString()),
                 value("maxPartBytes", props.http().maxPartBytes()),
                 value("feedbackLog", props.feedbackLogPath()));

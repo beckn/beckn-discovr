@@ -11,7 +11,13 @@ public final class LogEvent {
     // startup
     public static final String STARTUP_CONFIG      = "crawler.startup.config";
 
-    // pass lifecycle
+    // manifest refresh (long cadence — learns provider identity + index location)
+    public static final String MANIFEST_REFRESH_STARTED   = "crawler.manifest.refresh.started";
+    public static final String MANIFEST_REFRESH_COMPLETED = "crawler.manifest.refresh.completed";
+    public static final String MANIFEST_REFRESHED         = "crawler.manifest.refreshed";
+    public static final String MANIFEST_REFRESH_FAILED    = "crawler.manifest.refresh.failed";
+
+    // index pass lifecycle (short cadence — polls the index for catalog changes)
     public static final String PASS_STARTED        = "crawler.pass.started";
     public static final String PASS_COMPLETED      = "crawler.pass.completed";
     public static final String PASS_FAILED         = "crawler.pass.failed";
@@ -24,6 +30,7 @@ public final class LogEvent {
 
     // manifest / index
     public static final String MANIFEST_RESOLVED   = "crawler.manifest.resolved";
+    public static final String REGISTRY_NOT_LIVE   = "crawler.registry.not_live";
     public static final String INDEX_UNCHANGED     = "crawler.index.unchanged";
     public static final String INDEX_CHANGED       = "crawler.index.changed";
     public static final String INDEX_VERIFIED      = "crawler.index.verified";

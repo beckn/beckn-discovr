@@ -19,7 +19,10 @@ crawler:
   providers: ${CRAWLER_PROVIDERS}                 # comma-separated base URLs
   well-known-path: ${CRAWLER_WELL_KNOWN_PATH:/.well-known/dedi.json}
   push-endpoint: ${CRAWLER_PUSH_ENDPOINT}
-  poll-interval: ${CRAWLER_POLL_INTERVAL}         # e.g. 2m
+  # Manifest rarely changes (provider identity + index location) → long cadence, e.g. daily.
+  manifest-refresh-interval: ${CRAWLER_MANIFEST_REFRESH_INTERVAL:1d}
+  # Index (catalog changes) lives in the bucket → short cadence, e.g. per minute.
+  index-poll-interval: ${CRAWLER_INDEX_POLL_INTERVAL:1m}
   http:
     timeout: ${CRAWLER_HTTP_TIMEOUT:30s}
     max-part-bytes: ${CRAWLER_MAX_PART_BYTES:10485760}
