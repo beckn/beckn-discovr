@@ -62,6 +62,11 @@ public final class FeedModels {
             public boolean isRetired() {
                 return "RETIRED".equalsIgnoreCase(status);
             }
+
+            /** True only when the catalog status is exactly ACTIVE. */
+            public boolean isActive() {
+                return "ACTIVE".equalsIgnoreCase(status);
+            }
         }
 
         @JsonIgnoreProperties(ignoreUnknown = true)

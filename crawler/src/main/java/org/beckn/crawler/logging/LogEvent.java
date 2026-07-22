@@ -41,6 +41,7 @@ public final class LogEvent {
 
     // per-catalog decisions
     public static final String CATALOG_UNCHANGED   = "crawler.catalog.unchanged";
+    public static final String CATALOG_INACTIVE    = "crawler.catalog.skipped.inactive";
     public static final String CATALOG_NONPUBLIC   = "crawler.catalog.skipped.nonpublic";
     public static final String CATALOG_ROLLBACK    = "crawler.catalog.skipped.rollback";
     public static final String CATALOG_RETIRED     = "crawler.catalog.retired";
