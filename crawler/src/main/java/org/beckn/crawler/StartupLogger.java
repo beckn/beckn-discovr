@@ -8,6 +8,9 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static net.logstash.logback.argument.StructuredArguments.value;
 
 /**
@@ -27,14 +30,18 @@ public class StartupLogger {
 
     @EventListener(ApplicationReadyEvent.class)
     public void logStartupConfig() {
-        log.info(LogEvent.STARTUP_CONFIG,
-                value("source", props.source()),
-                value("providers", props.providers()),
-                value("pushEndpoint", props.pushEndpoint()),
-                value("manifestRefreshInterval", props.manifestRefreshInterval().toString()),
-                value("indexPollInterval", props.indexPollInterval().toString()),
-                value("httpTimeout", props.http().timeout().toString()),
-                value("maxPartBytes", props.http().maxPartBytes()),
-                value("feedbackLog", props.feedbackLogPath()));
+        List<Object> args = new ArrayList<>();
+        args.add(value("source", props.source()));
+        // Only relevant in config mode; in db mode the sources come from the crawler_source table.
+        if ("config".equalsIgnoreCase(props.source())) {
+            args.add(value("providers", props.providers()));
+        }
+        args.add(value("pushEndpoint", props.pushEndpoint()));
+        args.add(value("manifestRefreshInterval", props.manifestRefreshInterval().toString()));
+        args.add(value("indexPollInterval", props.indexPollInterval().toString()));
+        args.add(value("httpTimeout", props.http().timeout().toString()));
+        args.add(value("maxPartBytes", props.http().maxPartBytes()));
+        args.add(value("feedbackLog", props.feedbackLogPath()));
+        log.info(LogEvent.STARTUP_CONFIG, args.toArray());
     }
 }
