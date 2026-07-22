@@ -294,7 +294,7 @@ services:
       - CRAWLER_SOURCE=${CRAWLER_SOURCE:-db}
       # Full DeDi manifest URL(s), comma-separated. Defaults to the POC tech-mart bucket manifest.
       # (Used when CRAWLER_SOURCE=config; may be empty when CRAWLER_SOURCE=db.)
-      - CRAWLER_PROVIDERS=${CRAWLER_PROVIDERS:-https://raw.githubusercontent.com/ameersohel45/tech-mart/main/bucket/dedi.json}
+      - CRAWLER_PROVIDERS=${CRAWLER_PROVIDERS:-https://raw.githubusercontent.com/ameersohel45/tech-mart/main/.well-known/dedi.json}
       # Push into Discover Ingestion (internal port 8080). The service applies the
       # beckn.api-prefix (/beckn), so the full path is /beckn/catalog/push.
       - CRAWLER_PUSH_ENDPOINT=http://discovr-ingestion:8080/beckn/catalog/push
