@@ -7,17 +7,23 @@ import org.beckn.crawler.model.FeedModels.Manifest;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Step 1 (design doc §5.4): derive {@code <base>/.well-known/dedi.json}, fetch it, and expose
- * the provider domain + the index URL/digest it vouches for. The manifest is tiny and fetched
- * every pass.
+ * Step 1 (design doc §5.4): derive {@code <base>/.well-known/dedi.json}, fetch it, and expose the
+ * provider identity plus <b>every</b> registry it advertises in {@code files[]}. The manifest is
+ * tiny and re-read on the long (manifest-refresh) cadence.
+ *
+ * <p>A provider may list several registries (each a {@code files[]} entry with its own url/digest/
+ * state); each is crawled as an independent index, keyed by its own url in the state store.
  */
 @Component
 public class ManifestResolver {
 
-    /** What the manifest tells us: who the provider is and where/what the index should be. */
-    public record Resolved(String domain, String name, String indexUrl, String indexDigest, String state) {
+    /** One registry the manifest advertises: who the provider is + where/what that index should be. */
+    public record Resolved(String domain, String name, String registry,
+                           String indexUrl, String indexDigest, String state) {
         /** True only when the index registry is live (DeDi state vocabulary). */
         public boolean isLive() {
             return "live".equalsIgnoreCase(state);
@@ -41,8 +47,8 @@ public class ManifestResolver {
         return base + path;
     }
 
-    /** Fetch + parse the manifest; return the domain + the first {@code files[]} pointer (the index). */
-    public Resolved resolve(String providerBase) throws IOException, InterruptedException {
+    /** Fetch + parse the manifest; return one {@link Resolved} per {@code files[]} entry (all registries). */
+    public List<Resolved> resolve(String providerBase) throws IOException, InterruptedException {
         String url = manifestUrl(providerBase);
         CrawlerHttpClient.Response resp = http.get(url);
         if (resp.status() != 200) {
@@ -52,8 +58,11 @@ public class ManifestResolver {
         if (m.files() == null || m.files().isEmpty()) {
             throw new IOException("manifest " + url + " has no files[] entry");
         }
-        Manifest.FileRef f = m.files().get(0); // POC: one registry (beckn-catalogs) per provider
         String name = m.name() != null && !m.name().isBlank() ? m.name() : m.domain();
-        return new Resolved(m.domain(), name, f.url(), f.digest(), f.state());
+        List<Resolved> resolved = new ArrayList<>();
+        for (Manifest.FileRef f : m.files()) {
+            resolved.add(new Resolved(m.domain(), name, f.registry(), f.url(), f.digest(), f.state()));
+        }
+        return resolved;
     }
 }

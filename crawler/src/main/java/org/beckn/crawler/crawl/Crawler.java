@@ -46,8 +46,11 @@ public class Crawler {
     private final StateStore state;
     private final FeedbackLog feedback;
 
-    /** Cached manifest per provider base URL — refreshed on the long cadence, read on the short one. */
-    private final Map<String, ManifestResolver.Resolved> manifestCache = new ConcurrentHashMap<>();
+    /**
+     * Cached registries per provider base URL — one entry per manifest {@code files[]} registry.
+     * Refreshed on the long cadence, read on the short one.
+     */
+    private final Map<String, List<ManifestResolver.Resolved>> manifestCache = new ConcurrentHashMap<>();
 
     public Crawler(CrawlerProperties props, ManifestResolver manifestResolver, IndexPoller indexPoller,
                    Differ differ, Fetcher fetcher, Pusher pusher, StateStore state, FeedbackLog feedback) {
@@ -68,10 +71,12 @@ public class Crawler {
         log.info(LogEvent.MANIFEST_REFRESH_STARTED, value("providers", props.providers().size()));
         for (String provider : props.providers()) {
             try {
-                ManifestResolver.Resolved resolved = manifestResolver.resolve(provider);
-                manifestCache.put(provider, resolved);
-                log.info(LogEvent.MANIFEST_REFRESHED, value("provider", resolved.name()),
-                        value("indexUrl", resolved.indexUrl()));
+                List<ManifestResolver.Resolved> registries = manifestResolver.resolve(provider);
+                manifestCache.put(provider, registries);
+                for (ManifestResolver.Resolved r : registries) {
+                    log.info(LogEvent.MANIFEST_REFRESHED, value("provider", r.name()),
+                            value("registry", r.registry()), value("indexUrl", r.indexUrl()));
+                }
             } catch (Exception e) {
                 // Keep any previously cached manifest so index polling can carry on.
                 log.warn(LogEvent.MANIFEST_REFRESH_FAILED, value("provider", provider), value("error", e.toString()));
@@ -98,46 +103,66 @@ public class Crawler {
     }
 
     private void pollProvider(String provider) throws Exception {
-        // Use the cached manifest; lazily learn it once if we haven't yet (first boot before the
-        // long-cadence refresh has run). No hardcoded startup ordering needed.
-        ManifestResolver.Resolved manifest = manifestCache.get(provider);
-        if (manifest == null) {
-            manifest = manifestResolver.resolve(provider);
-            manifestCache.put(provider, manifest);
-            log.info(LogEvent.MANIFEST_REFRESHED, value("provider", manifest.name()),
-                    value("indexUrl", manifest.indexUrl()));
+        // Use the cached registries; lazily learn the manifest once if we haven't yet (first boot
+        // before the long-cadence refresh has run). No hardcoded startup ordering needed.
+        List<ManifestResolver.Resolved> registries = manifestCache.get(provider);
+        if (registries == null) {
+            registries = manifestResolver.resolve(provider);
+            manifestCache.put(provider, registries);
+            for (ManifestResolver.Resolved r : registries) {
+                log.info(LogEvent.MANIFEST_REFRESHED, value("provider", r.name()),
+                        value("registry", r.registry()), value("indexUrl", r.indexUrl()));
+            }
         }
 
-        String domain = manifest.domain();   // technical identity (bppId, integrity check)
-        String name = manifest.name();       // human-friendly label for logs
-        log.info(LogEvent.PROVIDER_CHECKING, value("provider", name));
+        // Poll every registry the manifest advertises (each files[] entry = its own index).
+        log.info(LogEvent.PROVIDER_CHECKING, value("provider", registries.get(0).name()),
+                value("registries", registries.size()));
+        for (ManifestResolver.Resolved registry : registries) {
+            pollIndex(registry);
+        }
+    }
+
+    /** Poll one registry's index: state gate → fetch → change-detect → diff → push. Never throws. */
+    private void pollIndex(ManifestResolver.Resolved reg) {
+        String domain = reg.domain();   // technical identity (bppId, integrity check)
+        String name = reg.name();       // human-friendly label for logs
+        String registry = reg.registry();
 
         // Registry-level gate: only crawl an index whose registry state is "live".
-        if (!manifest.isLive()) {
-            log.warn(LogEvent.REGISTRY_NOT_LIVE, value("provider", name), value("state", manifest.state()));
-            feedback.record(domain, null, "validate", "registry_not_live", "files[].state=" + manifest.state());
+        if (!reg.isLive()) {
+            log.warn(LogEvent.REGISTRY_NOT_LIVE, value("provider", name), value("registry", registry),
+                    value("state", reg.state()));
+            feedback.record(domain, null, "validate", "registry_not_live", "files[].state=" + reg.state());
             return;
         }
 
         // Fetch the index (per-minute) and compute its digest — the change signal.
         IndexPoller.Result result;
         try {
-            result = indexPoller.fetch(manifest);
+            result = indexPoller.fetch(reg);
         } catch (IndexPoller.IndexIntegrityException e) {
-            log.warn(LogEvent.INDEX_INTEGRITY_FAILED, value("provider", name), value("reason", e.getMessage()));
+            log.warn(LogEvent.INDEX_INTEGRITY_FAILED, value("provider", name), value("registry", registry),
+                    value("reason", e.getMessage()));
             feedback.record(domain, null, "validate", "index_integrity", e.getMessage());
+            return;
+        } catch (Exception e) {
+            log.warn(LogEvent.INDEX_INTEGRITY_FAILED, value("provider", name), value("registry", registry),
+                    value("error", e.toString()));
+            feedback.record(domain, null, "poll", "index_error", e.toString());
             return;
         }
 
         // Cheap check: unchanged index → nothing to do.
-        var storedDigest = state.findIndexDigest(manifest.indexUrl());
+        var storedDigest = state.findIndexDigest(reg.indexUrl());
         if (storedDigest.isPresent() && storedDigest.get().equalsIgnoreCase(result.digest())) {
-            log.info(LogEvent.INDEX_UNCHANGED, value("provider", name), value("pushed", 0));
+            log.info(LogEvent.INDEX_UNCHANGED, value("provider", name), value("registry", registry), value("pushed", 0));
             return;
         }
-        log.info(LogEvent.INDEX_CHANGED, value("provider", name));
+        log.info(LogEvent.INDEX_CHANGED, value("provider", name), value("registry", registry));
         Index index = result.index();
-        log.info(LogEvent.INDEX_VERIFIED, value("provider", name), value("records", index.records().size()));
+        log.info(LogEvent.INDEX_VERIFIED, value("provider", name), value("registry", registry),
+                value("records", index.records().size()));
 
         // Decide + act per catalog record.
         boolean retryNeeded = false;
@@ -167,12 +192,12 @@ public class Crawler {
 
         // Advance the index digest only if the whole pass succeeded — else re-detect + retry.
         if (retryNeeded) {
-            log.warn(LogEvent.PROVIDER_RETRY, value("provider", name), value("pushed", pushed),
-                    value("stateUpdated", false));
+            log.warn(LogEvent.PROVIDER_RETRY, value("provider", name), value("registry", registry),
+                    value("pushed", pushed), value("stateUpdated", false));
         } else {
-            state.upsertIndexState(manifest.indexUrl(), result.digest(), index.nextUpdate());
-            log.info(LogEvent.PROVIDER_DONE, value("provider", name), value("pushed", pushed),
-                    value("stateUpdated", true));
+            state.upsertIndexState(reg.indexUrl(), result.digest(), index.nextUpdate());
+            log.info(LogEvent.PROVIDER_DONE, value("provider", name), value("registry", registry),
+                    value("pushed", pushed), value("stateUpdated", true));
         }
     }
 

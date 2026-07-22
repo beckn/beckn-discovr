@@ -109,7 +109,7 @@ part → `parts[].digest` in index → recompute index → `files[].digest` in m
 |-----------|----------------|
 | `CrawlerProperties` | all settings, bound from `crawler.*` env |
 | `CrawlerHttpClient` | JDK HTTP GET/POST; byte cap, timeout, optional cache-buster |
-| `ManifestResolver` | derive `/dedi.json`, fetch it, expose provider name + index URL/digest |
+| `ManifestResolver` | derive `/dedi.json`, fetch it, expose provider name + **every** registry in `files[]` (url/digest/state) |
 | `IndexPoller` | fetch the index, verify its digest + publisher domain |
 | `Differ` | pure decision per catalog: PUSH / SKIP_UNCHANGED / SKIP_NON_PUBLIC / SKIP_ROLLBACK / RETIRE |
 | `Fetcher` | GET a catalog part and verify its digest |
