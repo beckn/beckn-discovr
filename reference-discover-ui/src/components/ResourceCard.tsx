@@ -69,7 +69,8 @@ export default function ResourceCard({ resource, catalog, offers = [] }: Props) 
 
         {price && <div className="resource-price">{price}</div>}
 
-        {d?.shortDesc && <p className="resource-short">{d.shortDesc}</p>}
+        {/* Always rendered so every collapsed card reserves the same space → uniform rows. */}
+        <p className="resource-short">{d?.shortDesc || ''}</p>
 
         <div className="resource-tags">
           <span className="chip chip--catalog" title={catalog.id}>
