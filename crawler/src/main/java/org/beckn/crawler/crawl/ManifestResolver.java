@@ -17,7 +17,12 @@ import java.io.IOException;
 public class ManifestResolver {
 
     /** What the manifest tells us: who the provider is and where/what the index should be. */
-    public record Resolved(String domain, String name, String indexUrl, String indexDigest) {}
+    public record Resolved(String domain, String name, String indexUrl, String indexDigest, String state) {
+        /** True only when the index registry is live (DeDi state vocabulary). */
+        public boolean isLive() {
+            return "live".equalsIgnoreCase(state);
+        }
+    }
 
     private final CrawlerHttpClient http;
     private final ObjectMapper mapper;
@@ -49,6 +54,6 @@ public class ManifestResolver {
         }
         Manifest.FileRef f = m.files().get(0); // POC: one registry (beckn-catalogs) per provider
         String name = m.name() != null && !m.name().isBlank() ? m.name() : m.domain();
-        return new Resolved(m.domain(), name, f.url(), f.digest());
+        return new Resolved(m.domain(), name, f.url(), f.digest(), f.state());
     }
 }

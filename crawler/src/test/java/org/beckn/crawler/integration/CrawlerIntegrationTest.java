@@ -70,7 +70,8 @@ class CrawlerIntegrationTest {
         reg.add("CRAWLER_DB_PASSWORD", POSTGRES::getPassword);
         reg.add("CRAWLER_PROVIDERS", () -> bucket.baseUrl());
         reg.add("CRAWLER_PUSH_ENDPOINT", () -> bucket.baseUrl() + "/catalog/push");
-        reg.add("CRAWLER_POLL_INTERVAL", () -> "1h");            // scheduler is off anyway
+        reg.add("CRAWLER_MANIFEST_REFRESH_INTERVAL", () -> "7d");  // scheduler is off anyway
+        reg.add("CRAWLER_INDEX_POLL_INTERVAL", () -> "1m");        // scheduler is off anyway
         reg.add("CRAWLER_FEEDBACK_LOG_PATH", () -> "build/it-feedback.log");
         reg.add("crawler.scheduler.enabled", () -> "false");      // drive passes manually
     }
@@ -85,7 +86,7 @@ class CrawlerIntegrationTest {
         String partUrl = bucket.baseUrl() + "/catalogs/CAT-1.json";
 
         // ── Scenario 1: fresh catalog → one push, state recorded ──────────────
-        crawler.runPass();
+        crawler.runIndexPass();
         assertThat(bucket.pushCount()).as("fresh → 1 push").isEqualTo(1);
         Optional<StateStore.PartState> after1 = state.findPart(partUrl);
         assertThat(after1).isPresent();
@@ -94,12 +95,12 @@ class CrawlerIntegrationTest {
         String digestAfter1 = after1.get().digest();
 
         // ── Scenario 2: unchanged → zero additional pushes ────────────────────
-        crawler.runPass();
+        crawler.runIndexPass();
         assertThat(bucket.pushCount()).as("unchanged → still 1 push").isEqualTo(1);
 
         // ── Scenario 3: modified → one more push, new digest/version stored ────
         bucket.modify(); // new content, version 2
-        crawler.runPass();
+        crawler.runIndexPass();
         assertThat(bucket.pushCount()).as("modified → 2 pushes").isEqualTo(2);
         StateStore.PartState after3 = state.findPart(partUrl).orElseThrow();
         assertThat(after3.version()).isEqualTo(2L);
@@ -107,7 +108,7 @@ class CrawlerIntegrationTest {
 
         // ── Integrity guard: tampered part (announced digest ≠ served bytes) ──
         bucket.corruptNextPart(); // version 3 bytes, but index announces a bogus digest
-        crawler.runPass();
+        crawler.runIndexPass();
         assertThat(bucket.pushCount()).as("tampered → NOT pushed").isEqualTo(2);
         // state must not advance — the good version 2 is preserved so it retries next pass
         assertThat(state.findPart(partUrl).orElseThrow().version()).isEqualTo(2L);
@@ -202,7 +203,7 @@ class CrawlerIntegrationTest {
                     + "\"type\":\"dedi-manifest\",\"domain\":\"prov.example\","
                     + "\"files\":[{\"registry\":\"beckn-catalogs\","
                     + "\"url\":\"" + baseUrl() + "/dedi/index.json\","
-                    + "\"digest\":\"" + indexDigest + "\",\"state\":\"ACTIVE\"}]}";
+                    + "\"digest\":\"" + indexDigest + "\",\"state\":\"live\"}]}";
             manifestBytes = manifest.getBytes(StandardCharsets.UTF_8);
         }
 

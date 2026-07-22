@@ -31,16 +31,31 @@ flowchart TD
 
 ---
 
-## 2. How one crawl pass works
+## 2. Two cadences
 
-Runs every `poll-interval` (e.g. `2m`). For each provider in config:
+The manifest and the index change at very different rates and (in the target architecture) live in
+different places — a **DeDi service** vs a **cloud bucket** — so they're crawled on two independent,
+config-driven schedules:
+
+| Cadence | Interval (config) | What it does |
+|---------|-------------------|--------------|
+| **Manifest refresh** | `manifest-refresh-interval` (e.g. `1d`) | re-read each provider's manifest → learn *who* the provider is, *where* its index lives (+ its key). Cached. |
+| **Index poll** | `index-poll-interval` (e.g. `1m`) | use the cached manifest to fetch the **index** directly, detect changes, push. |
+
+So the tiny manifest is read ~daily; the actual change feed (the index) is polled ~per minute
+*without* re-reading the manifest. (On first boot the index poll lazily reads the manifest once if
+the refresh hasn't run yet — no hardcoded startup ordering.)
+
+### One index poll
 
 ```mermaid
 flowchart TD
-    A["Resolve manifest<br/>(ManifestResolver)"] --> B{"index digest ==<br/>stored digest?"}
+    A["Use cached manifest<br/>(lazily resolve if first boot)"] --> S{"registry state == live?"}
+    S -->|"no"| X["skip + feedback log<br/>crawler.registry.not_live"]
+    S -->|"yes"| C["Fetch index (IndexPoller)<br/>compute its digest"]
+    C --> B{"index digest ==<br/>stored digest?"}
     B -->|"yes — nothing changed"| Z["skip · 0 pushes<br/>crawler.index.unchanged"]
-    B -->|"no"| C["Fetch + verify index<br/>(IndexPoller) — bytes must hash<br/>to manifest's digest"]
-    C --> D["Diff each catalog<br/>(Differ)"]
+    B -->|"no"| D["Diff each catalog<br/>(Differ)"]
     D --> E{"per catalog:<br/>part digest vs stored"}
     E -->|"unseen / differs"| F["Fetch + verify part<br/>(Fetcher)"]
     E -->|"same"| G["skip<br/>crawler.catalog.unchanged"]
@@ -51,6 +66,11 @@ flowchart TD
 ```
 
 Discover Acks `200` synchronously, then asynchronously persists to Postgres and indexes to Elasticsearch.
+
+> **Integrity note:** because the manifest is only read ~daily, its `files[].digest` is a stale
+> snapshot between refreshes and can't gate a per-minute index fetch. So the index poll detects
+> change by the **index's own** digest vs stored state, and verifies `publisher.domain`. Full
+> index-level integrity (its own JWS signature verified against the publisher key) is deferred (§2).
 
 ---
 
@@ -96,7 +116,7 @@ part → `parts[].digest` in index → recompute index → `files[].digest` in m
 | `Pusher` | wrap verified parts in a `catalog/publish` envelope, POST to `/beckn/catalog/push` |
 | `StateStore` | the crawler's memory (2 Postgres tables); upsert only after 200 |
 | `FeedbackLog` | append-only JSON audit of every skip/reject (the "why not ingested" trail) |
-| `CrawlScheduler` | drives the cadence (fixed delay = `poll-interval`) |
+| `CrawlScheduler` | drives both cadences (manifest refresh + index poll, fixed delay) |
 | `Crawler` | orchestrates one pass over all providers |
 
 ---
@@ -108,7 +128,8 @@ part → `parts[].digest` in index → recompute index → `files[].digest` in m
 | `CRAWLER_PROVIDERS` | comma-separated bucket base URL(s) | *(required)* |
 | `CRAWLER_WELL_KNOWN_PATH` | manifest path appended to each base | `/.well-known/dedi.json` |
 | `CRAWLER_PUSH_ENDPOINT` | Discover ingestion endpoint | *(required)* |
-| `CRAWLER_POLL_INTERVAL` | how often a pass runs | `2m` |
+| `CRAWLER_MANIFEST_REFRESH_INTERVAL` | how often to re-read the manifest (provider + index location) | `1d` |
+| `CRAWLER_INDEX_POLL_INTERVAL` | how often to poll the index for catalog changes | `1m` |
 | `CRAWLER_HTTP_TIMEOUT` | per-request timeout | `30s` |
 | `CRAWLER_MAX_PART_BYTES` | safety cap on a fetched part | `10485760` |
 | `CRAWLER_HTTP_CACHE_BUST` | append `?cb=` to bypass a CDN edge cache (e.g. GitHub raw) | `true` |

@@ -15,7 +15,8 @@ public final class TestConfigs {
                 List.of("https://prov.example"),
                 "/.well-known/dedi.json",
                 pushEndpoint,
-                Duration.ofMinutes(2),
+                Duration.ofDays(7),      // manifestRefreshInterval
+                Duration.ofMinutes(1),   // indexPollInterval
                 new CrawlerProperties.Http(Duration.ofSeconds(30), 10_485_760L, false),
                 "./feedback.log");
     }
