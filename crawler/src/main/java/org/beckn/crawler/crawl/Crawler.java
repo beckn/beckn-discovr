@@ -201,6 +201,10 @@ public class Crawler {
             String catalogId = d.record().details().catalogId();
             switch (d.action()) {
                 case SKIP_UNCHANGED -> log.info(LogEvent.CATALOG_UNCHANGED, value("catalogId", catalogId));
+                case SKIP_INACTIVE -> {
+                    log.info(LogEvent.CATALOG_INACTIVE, value("catalogId", catalogId), value("detail", d.detail()));
+                    feedback.record(domain, catalogId, "validate", "status_not_active", d.detail());
+                }
                 case SKIP_NON_PUBLIC -> {
                     log.info(LogEvent.CATALOG_NONPUBLIC, value("catalogId", catalogId), value("detail", d.detail()));
                     feedback.record(domain, catalogId, "validate", "non_public", d.detail());

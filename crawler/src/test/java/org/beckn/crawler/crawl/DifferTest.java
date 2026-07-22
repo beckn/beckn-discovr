@@ -102,6 +102,27 @@ class DifferTest {
     }
 
     @Test
+    void nonActiveStatus_isSkipInactive() {
+        // Any status that is neither ACTIVE nor RETIRED (e.g. DRAFT) is skipped.
+        Index idx = indexOf(record("C1", 1, "DRAFT", "public", part("u1", "sha-256:x")));
+
+        assertThat(differ.diff(idx)).singleElement()
+                .satisfies(d -> {
+                    assertThat(d.action()).isEqualTo(Differ.Action.SKIP_INACTIVE);
+                    assertThat(d.detail()).contains("DRAFT");
+                });
+    }
+
+    @Test
+    void activeStatus_isPushed() {
+        when(state.findPart("u1")).thenReturn(Optional.empty());
+        Index idx = indexOf(record("C1", 1, "ACTIVE", "public", part("u1", "sha-256:x")));
+
+        assertThat(differ.diff(idx)).singleElement()
+                .satisfies(d -> assertThat(d.action()).isEqualTo(Differ.Action.PUSH));
+    }
+
+    @Test
     void nonPublicVisibility_isSkipNonPublic() {
         // visibility is an object (network-scoped) rather than the literal "public"
         Object scoped = java.util.Map.of("networks", List.of("net-1"));

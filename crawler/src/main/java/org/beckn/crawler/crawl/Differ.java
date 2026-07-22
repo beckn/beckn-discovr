@@ -14,7 +14,7 @@ import java.util.List;
 @Component
 public class Differ {
 
-    public enum Action { PUSH, RETIRE, SKIP_UNCHANGED, SKIP_NON_PUBLIC, SKIP_ROLLBACK }
+    public enum Action { PUSH, RETIRE, SKIP_UNCHANGED, SKIP_NON_PUBLIC, SKIP_ROLLBACK, SKIP_INACTIVE }
 
     /** A decision for one catalog record. {@code changedParts} is populated only for PUSH. */
     public record Decision(Index.Record record, Action action, List<Index.Part> changedParts, String detail) {}
@@ -38,6 +38,11 @@ public class Differ {
 
         if (d.isRetired()) {
             return new Decision(record, Action.RETIRE, List.of(), "status=RETIRED");
+        }
+        // Strict status gate: only ACTIVE catalogs are ingested. Anything that is neither ACTIVE
+        // nor RETIRED (DRAFT, INACTIVE, unknown, blank) is skipped.
+        if (!d.isActive()) {
+            return new Decision(record, Action.SKIP_INACTIVE, List.of(), "status=" + d.status());
         }
         if (!d.isPublic()) {
             return new Decision(record, Action.SKIP_NON_PUBLIC, List.of(), "visibility!=public");
