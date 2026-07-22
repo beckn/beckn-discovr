@@ -7,20 +7,29 @@ research note — into one document; nothing from either is dropped.
 ## Overview & reading guide
 
 **How to read this:**
-- **Understand the system** → §1 Context & principles, §2 Data model, §3 Flows.
-- **Build to it** (publisher or crawler) → §4 Interface & contract.
-- **Question the decisions** (why the change feed, why not Git) → §6 Rationale & alternatives.
 
-**What's inside:** 1 Context & principles · 2 Data model · 3 Flows · 4 Interface & contract ·
-5 Summary · 6 Rationale & alternatives · 7 Open questions · Appendix A — Tooling.
+- **Understand the system** — read sections 1 (Context & principles), 2 (Data model), 3 (Flows).
+- **Build to it** (publisher or crawler) — read section 4 (Interface & contract).
+- **Question the decisions** (why the change feed, why not Git) — read section 6 (Rationale & alternatives).
+
+**What's inside:**
+
+- Section 1 — Context & principles
+- Section 2 — Data model
+- Section 3 — Flows
+- Section 4 — Interface & contract
+- Section 5 — Summary
+- Section 6 — Rationale & alternatives
+- Section 7 — Open questions
+- Appendix A — Tooling
 
 **Status / assumption:** the DeDi portal and search behaviour described here is our working
-assumption of how DeDi flows will operate, to be validated with the DeDi team (see §7).
+assumption of how DeDi flows will operate, to be validated with the DeDi team (see section 7).
 
-**Field-name note:** the file examples in §4 are reproduced from the research note (illustrative,
-not normative) and keep its original names. §1–§3 are authoritative where they differ —
-`subscriberId` → `participantId` (= domain), and access is expressed as `networkIds` (absent =
-public) + an auth-method entry.
+**Field-name note:** the file examples in section 4 are reproduced from the research note (illustrative,
+not normative) and keep its original names. Sections 1–3 are authoritative where they differ:
+`subscriberId` becomes `participantId` (= domain), and access is expressed as `networkIds`
+(absent = public) plus an auth-method entry.
 
 ---
 
@@ -82,7 +91,7 @@ flowchart TD
   P["Participant<br/>(domain = participantId)"]
   M["manifest — /.well-known/dedi.json<br/>keys + file pointers"]
   IDX["index — becknCatalogs.dedi.json<br/>version (cursor) + catalogs[]"]
-  CAT["per catalog entry<br/>networkIds? · status · baseline + changes[]"]
+  CAT["per catalog entry<br/>networkIds?, status, baseline + changes[]"]
   B["baseline<br/>(full Beckn catalog JSON)"]
   CH["change segments<br/>(id-keyed upserts + removals)"]
   D["DeDi directory<br/>participant record: keys + index URI + network membership"]
@@ -114,6 +123,7 @@ flowchart TD
 A publisher does three things once, and one thing on every update.
 
 **Once, at onboarding:**
+
 1. Put the catalog files and the index (`becknCatalogs.dedi.json`) on any storage it already has
    — an object store, a CDN, a static site.
 2. Put `dedi.json` at the fixed path on its domain: `techmart.com/.well-known/dedi.json`. This
@@ -131,10 +141,10 @@ sequenceDiagram
   participant W as Domain root (/.well-known/dedi.json)
   participant D as DeDi portal
   Note over P,D: once, at onboarding
-  P->>S: 1 · save catalog files + index
-  P->>W: 2 · host dedi.json
-  P->>D: 3 · register the domain
-  D->>W: 4 · reads dedi.json, creates records
+  P->>S: 1. save catalog files + index
+  P->>W: 2. host dedi.json
+  P->>D: 3. register the domain
+  D->>W: 4. reads dedi.json, creates records
   Note over P,S: every update after that
   loop each publish
     P->>S: save changed files, re-sign index
@@ -153,7 +163,7 @@ A crawler (a Discovery Service, or any consumer node doing its own reading) work
    consumers through the unchanged `/discover` API.
 
 If a catalog (or the index itself) is restricted, the crawler authenticates for the download —
-same method either way (§3.4).
+same method either way (section 3.4).
 
 ```mermaid
 sequenceDiagram
@@ -162,9 +172,9 @@ sequenceDiagram
   participant D as DeDi search
   participant S as Publisher storage
   loop each crawl pass
-    C->>D: 1 · find participants + index URIs
-    C->>S: 2 · fetch index, verify signature
-    C->>S: 3 · fetch changed catalogs (auth if restricted), verify digests
+    C->>D: 1. find participants + index URIs
+    C->>S: 2. fetch index, verify signature
+    C->>S: 3. fetch changed catalogs (auth if restricted), verify digests
   end
   U->>C: discover
   C-->>U: results, from what it has crawled
@@ -177,8 +187,8 @@ files — one per publish, each holding just the added/updated resources and the
 ones. All are immutable files with digests in the index. A crawler remembers the last version it
 applied:
 
-- Slightly behind → fetch only the changes files after its version.
-- New, or too far behind → fetch the baseline, then the changes after it.
+- Slightly behind: fetch only the changes files after its version.
+- New, or too far behind: fetch the baseline, then the changes after it.
 - If the pending changes add up to a large share of the baseline (say a quarter), fetch the
   baseline instead — it's cheaper.
 
@@ -208,15 +218,15 @@ file it takes is verified against the digests in the one signed index it read.
 **Tools publishers have today.** The changes file is a diff between two versions of a JSON file —
 off-the-shelf tools compute exactly this (`jd`, `jsondiffpatch`, both able to match array items
 by id). Publishers who keep their catalog in git get the history for free and script the rest.
-The provider publish tool does all of this automatically (§4.7); Appendix A lists the off-the-shelf
+The provider publish tool does all of this automatically (section 4.7); Appendix A lists the off-the-shelf
 building blocks.
 
 ## 3.4 Visibility and access — who may read a catalog
 
 Both live in the index, per catalog:
 
-- **Visibility:** a catalog may list `networkIds` it is meant for. No `networkIds` present →
-  **public by default**.
+- **Visibility:** a catalog may list the `networkIds` it is meant for. If no `networkIds` are
+  present, the catalog is **public by default**.
 - **Auth method:** the same entry names how a restricted catalog's download must be
   authenticated.
 
@@ -254,7 +264,7 @@ both.
 
 The concrete surface an implementer builds to: the three published files, the DeDi integration,
 and the verification rules. The file examples are reproduced from the research note (illustrative,
-not normative); per §1–§3, `subscriberId` becomes `participantId` (= domain) and access is
+not normative); per sections 1–3, `subscriberId` becomes `participantId` (= domain) and access is
 expressed as `networkIds` (absent = public) + an auth-method entry.
 
 ## 4.1 The manifest — `techmart.com/.well-known/dedi.json`
@@ -293,7 +303,6 @@ it. A retired catalog stays as a tombstone entry.
       "catalogId": "bpp.techmart.com/electronics-2026",
       "catalogType": "REGULAR",
       "status": "ACTIVE",
-      "visibility": "public",
       "updatedAt": "2026-07-22T09:00:00Z",
       "schemaTypes": ["https://schema.beckn.org/retail/schema/1.1.0/context.jsonld"],
       "baseline": {
@@ -311,6 +320,21 @@ it. A retired catalog stays as a tombstone entry.
       ]
     },
     {
+      "catalogId": "bpp.techmart.com/eon-exclusive-2026",
+      "catalogType": "REGULAR",
+      "status": "ACTIVE",
+      "networkIds": ["eon-retail"],
+      "authMethods": ["beckn-signed-challenge"],
+      "updatedAt": "2026-07-14T08:00:00Z",
+      "schemaTypes": ["https://schema.beckn.org/retail/schema/1.1.0/context.jsonld"],
+      "baseline": {
+        "version": 12,
+        "url": "https://cdn.techmart.com/beckn/eon-exclusive-2026.v12.json",
+        "digest": "…"
+      },
+      "changes": []
+    },
+    {
       "catalogId": "bpp.techmart.com/electronics-2025",
       "status": "RETIRED",
       "retiredAt": "2026-01-31T00:00:00Z"
@@ -323,6 +347,9 @@ A crawler whose cursor is 41 fetches only `v42.changes.json`. A crawler at 38 �
 fetches the v40 baseline plus v41 and v42. If the accumulated changes exceed a set fraction of the
 baseline size, it fetches the baseline instead (the apt cutover rule). Every file it touches is
 verified against its digest here, and the index itself against the signed key.
+
+Here `electronics-2026` is **public** (no `networkIds`), while `eon-exclusive-2026` is
+**restricted** to `eon-retail` and names its auth method (`authMethods`).
 
 ## 4.3 A change segment — `electronics-2026.v42.changes.json`
 
@@ -359,7 +386,7 @@ to learn what changed inside it.
 - **Search (each crawl).** A crawler asks DeDi search for participants and their catalog records;
   the result yields each participant's index URI.
 - **Registry lookup (restricted downloads).** A publisher's gate resolves a requester's key and
-  network membership from the registry to authorize a restricted download (§3.4).
+  network membership from the registry to authorize a restricted download (section 3.4).
 
 ## 4.6 Verification rules
 
@@ -378,19 +405,19 @@ A publisher cannot compute diffs, digests, signatures, or run compaction by hand
 therefore assumes a **provider-side publish tool** — an ONIX plugin / provider adapter — that does
 all of it. The publisher's only manual step stays "save the catalog"; the tool does the rest.
 
-| Command | Input → Output |
+| Command | What it does |
 |---------|----------------|
-| **init / register** | first time → generate keys, write `dedi.json`, register the domain on the DeDi portal |
-| **publish** | new catalog version → diff vs current state → write a `changes` segment, hash it, add it to the index, bump `version`, re-sign the index |
-| **diff / segment** | two catalog versions → id-keyed `upserts` + `removals` (via `jd` / `jsondiffpatch`) |
-| **digest** | any file → content hash, written into the index |
-| **sign** | canonically serialize the index → sign with the registered key |
-| **compact** | when `changes` grow (by size or on a schedule) → write a fresh `baseline`, repoint the index, restart the `changes` list |
-| **retention / GC** | after the grace period → delete superseded baselines and segments |
-| **validate** | before going live → digests match, `version` is monotonic, the chain is consistent |
+| **init / register** | first time: generate keys, write `dedi.json`, register the domain on the DeDi portal |
+| **publish** | on a new catalog version: diff vs current state, write a `changes` segment, hash it, add it to the index, bump `version`, re-sign the index |
+| **diff / segment** | from two catalog versions: id-keyed `upserts` + `removals` (via `jd` / `jsondiffpatch`) |
+| **digest** | hash any file; write the content hash into the index |
+| **sign** | canonically serialize the index, then sign with the registered key |
+| **compact** | when `changes` grow (by size or on a schedule): write a fresh `baseline`, repoint the index, restart the `changes` list |
+| **retention / GC** | after the grace period: delete superseded baselines and segments |
+| **validate** | before going live: check digests match, `version` is monotonic, the chain is consistent |
 
-So the day-to-day publish is one call; the plugin runs diff → segment → digest → index → sign, and
-compaction on a schedule.
+So the day-to-day publish is one call; the plugin runs the pipeline (diff, segment, digest, index,
+sign) plus compaction on a schedule.
 
 ---
 
@@ -401,7 +428,7 @@ compaction on a schedule.
 2. **Publish:** three one-time steps (host files, host `dedi.json`, register the domain on the
    DeDi portal); after that, publishing = save files + re-sign index. DeDi crawls the fixed path
    itself.
-3. **Discover:** DeDi search → index → changed files only; verification against the registered
+3. **Discover:** DeDi search, then index, then changed files only; verification against the registered
    key and the index digests at every step.
 4. **Incremental:** baseline + immutable changes files inside the existing index; compaction
    folds changes into a fresh baseline on size or schedule; crawlers need no special compaction
