@@ -30,10 +30,18 @@ public class StateStore {
 
     // ── index_crawl_state ──────────────────────────────────────────────────────
 
-    public Optional<String> findIndexDigest(String indexUrl) {
-        return jdbc.sql("SELECT index_digest FROM index_crawl_state WHERE index_url = ?")
+    /** The change-detection state of one index: its last-processed digest and how that pass ended. */
+    public record IndexSyncState(String digest, String syncStatus) {}
+
+    /**
+     * Read an index's digest + sync_status together. The poll skips an index only when BOTH the
+     * digest matches AND the last pass was 'success' — a 'partial'/'failed' index is re-diffed even
+     * with an unchanged digest, so still-failed parts keep retrying (see Crawler.pollIndex).
+     */
+    public Optional<IndexSyncState> findIndexState(String indexUrl) {
+        return jdbc.sql("SELECT index_digest, sync_status FROM index_crawl_state WHERE index_url = ?")
                 .param(indexUrl)
-                .query(String.class)
+                .query((rs, n) -> new IndexSyncState(rs.getString("index_digest"), rs.getString("sync_status")))
                 .optional();
     }
 
@@ -62,27 +70,34 @@ public class StateStore {
     }
 
     /**
-     * PARTIAL/FAILED path: at least one part failed to push. Records the outcome for the UI but
-     * deliberately does NOT touch index_digest — so the next poll re-detects the index as changed and
-     * retries. Because catalog_part_state holds each ACKed part's digest, Differ re-pushes ONLY the
-     * still-failed parts. On a brand-new index (no row yet) index_digest is inserted NULL, which also
-     * keeps it "changed" for the retry.
+     * PARTIAL/FAILED path: at least one part failed to push. Advances index_digest to the CURRENT
+     * digest (same as success) so it reflects the index version we processed, but stamps
+     * sync_status='partial'|'failed' + error_detail. Retry is NOT driven by a stale digest here —
+     * it is driven by sync_status: the poll re-diffs whenever sync_status != 'success' (even if the
+     * digest matches), and Differ re-pushes ONLY the still-failed parts (ACKed parts are stored in
+     * catalog_part_state and skipped as unchanged). Fixing a part changes its bytes → its digest →
+     * the index digest, so a content fix is also picked up naturally.
      *
      * @param status       "partial" or "failed"
      * @param errorDetail  JSON array of failed parts: [{catalogId, partUrl, httpStatus, detail}, ...]
      */
-    public void recordIndexOutcome(String indexUrl, String providerDomain, String status, String errorDetail) {
+    public void recordIndexOutcome(String indexUrl, String indexDigest, String nextUpdate,
+                                   String providerDomain, String status, String errorDetail) {
         jdbc.sql("""
-                INSERT INTO index_crawl_state (index_url, index_digest, provider_domain,
+                INSERT INTO index_crawl_state (index_url, index_digest, next_update, provider_domain,
                                                sync_status, error_detail, last_seen_at)
-                VALUES (?, NULL, ?, ?, ?, now())
+                VALUES (?, ?, ?, ?, ?, ?, now())
                 ON CONFLICT (index_url) DO UPDATE
-                   SET provider_domain = EXCLUDED.provider_domain,
+                   SET index_digest    = EXCLUDED.index_digest,
+                       next_update     = EXCLUDED.next_update,
+                       provider_domain = EXCLUDED.provider_domain,
                        sync_status     = EXCLUDED.sync_status,
                        error_detail    = EXCLUDED.error_detail,
                        last_seen_at    = now()
                 """)
                 .param(indexUrl)
+                .param(indexDigest)
+                .param(nextUpdate == null ? null : OffsetDateTime.parse(nextUpdate))
                 .param(providerDomain)
                 .param(status)
                 .param(errorDetail)
