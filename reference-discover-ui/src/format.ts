@@ -1,19 +1,11 @@
-import type { Address, Catalog, Offer, Price, Resource } from './types'
+import type { Address, Catalog, Offer, Resource } from './types'
 
-const CURRENCY_SYMBOL: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' }
-
-/** Render a price defensively across the shapes a publisher might use. Undefined if absent. */
-export function fmtPrice(p?: Price): string | undefined {
-  if (p == null) return undefined
-  if (typeof p === 'number') return p.toLocaleString()
-  if (typeof p === 'string') return p.trim() || undefined
-  const raw = p.value ?? p.amount
-  if (raw == null || raw === '') return undefined
-  const num = typeof raw === 'number' ? raw.toLocaleString() : String(raw)
-  const code = p.currency ?? p.currencyCode
-  if (!code) return num
-  const sym = CURRENCY_SYMBOL[code.toUpperCase()]
-  return sym ? `${sym}${num}` : `${code} ${num}`
+/** First usable image for a descriptor: canonical thumbnailImage, else first mediaFile uri. */
+export function imageOf(d?: { thumbnailImage?: string; mediaFile?: { uri?: string }[] }): string | undefined {
+  if (!d) return undefined
+  if (d.thumbnailImage && d.thumbnailImage.trim()) return d.thumbnailImage
+  if (Array.isArray(d.mediaFile)) return d.mediaFile.find((m) => m?.uri)?.uri
+  return undefined
 }
 
 /** "2026-03-04T00:00:00Z" → "4 Mar 2026" (undefined-safe, always returns a string or undefined). */

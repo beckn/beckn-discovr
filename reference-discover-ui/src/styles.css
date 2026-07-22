@@ -502,15 +502,6 @@ h4,
   opacity: 0.7;
 }
 
-.resource-price {
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: var(--fw-bold);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-
 .resource-short {
   margin: 1px 0 0;
   font-size: var(--text-sm);
@@ -714,17 +705,17 @@ h4,
   gap: 8px;
 }
 
-.mini-offer-price {
-  font-weight: var(--fw-bold);
-  font-variant-numeric: tabular-nums;
-  color: var(--amber);
-  white-space: nowrap;
-}
-
 .mini-offer-desc {
   font-size: var(--text-xs);
   color: #8a6a3a;
   line-height: 1.4;
+}
+
+.mini-offer-applies {
+  font-size: var(--text-2xs);
+  color: #7a4a00;
+  font-weight: var(--fw-semibold);
+  margin-top: 3px;
 }
 
 .mini-offer-valid {
