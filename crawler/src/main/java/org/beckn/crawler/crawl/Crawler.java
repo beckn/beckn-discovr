@@ -1,5 +1,8 @@
 package org.beckn.crawler.crawl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.beckn.crawler.feedback.FeedbackLog;
 import org.beckn.crawler.logging.LogEvent;
 import org.beckn.crawler.model.FeedModels.Index;
@@ -46,6 +49,7 @@ public class Crawler {
     private final Pusher pusher;
     private final StateStore state;
     private final FeedbackLog feedback;
+    private final ObjectMapper mapper;
 
     /**
      * Cached registries per manifest URL — one entry per manifest {@code files[]} registry.
@@ -54,7 +58,8 @@ public class Crawler {
     private final Map<String, List<ManifestResolver.Resolved>> manifestCache = new ConcurrentHashMap<>();
 
     public Crawler(SourceRegistry sourceRegistry, ManifestResolver manifestResolver, IndexPoller indexPoller,
-                   Differ differ, Fetcher fetcher, Pusher pusher, StateStore state, FeedbackLog feedback) {
+                   Differ differ, Fetcher fetcher, Pusher pusher, StateStore state, FeedbackLog feedback,
+                   ObjectMapper mapper) {
         this.sourceRegistry = sourceRegistry;
         this.manifestResolver = manifestResolver;
         this.indexPoller = indexPoller;
@@ -63,6 +68,7 @@ public class Crawler {
         this.pusher = pusher;
         this.state = state;
         this.feedback = feedback;
+        this.mapper = mapper;
     }
 
     // ── Long cadence: refresh the manifest (provider identity + index location) ──────────────
@@ -219,9 +225,10 @@ public class Crawler {
         log.info(LogEvent.INDEX_VERIFIED, value("provider", name), value("registry", registry),
                 value("records", index.records().size()));
 
-        // Decide + act per catalog record.
-        boolean retryNeeded = false;
-        int pushed = 0;
+        // Decide + act per catalog record. Each PUSH record pushes its parts INDIVIDUALLY
+        // (one HTTP call per part), so outcomes are collected at the part grain across all records.
+        int ackedParts = 0;
+        List<PartOutcome> failures = new ArrayList<>();
         for (Differ.Decision d : differ.diff(index)) {
             String catalogId = d.record().details().catalogId();
             switch (d.action()) {
@@ -243,64 +250,104 @@ public class Crawler {
                     feedback.record(domain, catalogId, "validate", "retired_skipped", d.detail());
                 }
                 case PUSH -> {
-                    if (pushCatalog(domain, d)) pushed++;
-                    else retryNeeded = true;
+                    for (PartOutcome o : pushCatalog(domain, d)) {
+                        if (o.acked()) ackedParts++;
+                        else failures.add(o);
+                    }
                 }
             }
         }
 
-        // Advance the index digest only if the whole pass succeeded — else re-detect + retry.
-        if (retryNeeded) {
-            log.warn(LogEvent.PROVIDER_RETRY, value("provider", name), value("registry", registry),
-                    value("pushed", pushed), value("stateUpdated", false));
-        } else {
+        // Roll the part outcomes up to an index-level status, and advance the index digest ONLY on a
+        // clean pass. On partial/failed we record the outcome but leave index_digest untouched, so the
+        // next poll re-detects the index as changed and Differ re-pushes only the still-failed parts.
+        if (failures.isEmpty()) {
             state.upsertIndexState(reg.indexUrl(), result.digest(), index.nextUpdate(), domain);
             log.info(LogEvent.PROVIDER_DONE, value("provider", name), value("registry", registry),
-                    value("pushed", pushed), value("stateUpdated", true));
+                    value("pushed", ackedParts), value("syncStatus", "success"), value("stateUpdated", true));
+        } else {
+            String status = ackedParts > 0 ? "partial" : "failed";
+            state.recordIndexOutcome(reg.indexUrl(), domain, status, failuresJson(failures));
+            log.warn(LogEvent.PROVIDER_RETRY, value("provider", name), value("registry", registry),
+                    value("pushed", ackedParts), value("failed", failures.size()),
+                    value("syncStatus", status), value("stateUpdated", false));
         }
     }
 
-    /** Fetch+verify all changed parts, push once, persist part state on 200. Returns success. */
-    private boolean pushCatalog(String domain, Differ.Decision d) {
+    /** Outcome of pushing ONE catalog part. {@code httpStatus} is null when the failure was pre-HTTP. */
+    private record PartOutcome(String catalogId, String partUrl, boolean acked, Integer httpStatus, String detail) {}
+
+    /** Serialize failed parts to the error_detail JSON array: [{catalogId, partUrl, httpStatus, detail}, ...]. */
+    private String failuresJson(List<PartOutcome> failures) {
+        ArrayNode arr = mapper.createArrayNode();
+        for (PartOutcome o : failures) {
+            ObjectNode n = arr.addObject();
+            n.put("catalogId", o.catalogId());
+            n.put("partUrl", o.partUrl());
+            if (o.httpStatus() != null) n.put("httpStatus", o.httpStatus());
+            n.put("detail", o.detail());
+        }
+        try {
+            return mapper.writeValueAsString(arr);
+        } catch (Exception e) {
+            // Serialization of our own small nodes should never fail; degrade to a readable fallback.
+            return "[{\"detail\":\"error_detail serialization failed: " + e.getMessage() + "\"}]";
+        }
+    }
+
+    /**
+     * Push each changed part of a catalog as its OWN HTTP call (message.catalogs = [that part]), so
+     * the publish pipeline's default MERGE accumulates the parts into one catalog by id, and a
+     * per-part failure isolates to that part. State is persisted per part immediately on its 200 Ack
+     * (proven digests only), so a failed part is retried on the next poll while ACKed parts are skipped
+     * as unchanged. Returns one {@link PartOutcome} per changed part.
+     */
+    private List<PartOutcome> pushCatalog(String domain, Differ.Decision d) {
         String catalogId = d.record().details().catalogId();
         long version = d.record().details().version();
         log.info(LogEvent.CATALOG_CHANGED, value("catalogId", catalogId), value("parts", d.changedParts().size()));
 
-        List<byte[]> bodies = new ArrayList<>();
+        List<PartOutcome> outcomes = new ArrayList<>();
+        for (var part : d.changedParts()) {
+            outcomes.add(pushPart(domain, catalogId, version, part));
+        }
+        return outcomes;
+    }
+
+    /** Fetch+verify ONE part, push it in a single-part envelope, and persist its state on 200. */
+    private PartOutcome pushPart(String domain, String catalogId, long version, Index.Part part) {
+        byte[] body;
         try {
-            for (var part : d.changedParts()) {
-                bodies.add(fetcher.fetchVerified(part.url(), part.digest()));
-                log.info(LogEvent.PART_FETCHED, value("catalogId", catalogId), value("url", part.url()));
-            }
+            body = fetcher.fetchVerified(part.url(), part.digest());
+            log.info(LogEvent.PART_FETCHED, value("catalogId", catalogId), value("url", part.url()));
         } catch (Fetcher.DigestMismatchException e) {
             log.warn(LogEvent.CATALOG_DIGEST_MISMATCH, value("catalogId", catalogId), value("reason", e.getMessage()));
             feedback.record(domain, catalogId, "verify", "digest_mismatch", e.getMessage());
-            return false;
+            return new PartOutcome(catalogId, part.url(), false, null, "digest_mismatch: " + e.getMessage());
         } catch (Exception e) {
             log.warn(LogEvent.CATALOG_FETCH_FAILED, value("catalogId", catalogId), value("error", e.toString()));
             feedback.record(domain, catalogId, "fetch", "fetch_error", e.toString());
-            return false;
+            return new PartOutcome(catalogId, part.url(), false, null, "fetch_error: " + e);
         }
 
         Pusher.Result result;
         try {
-            result = pusher.push(domain, bodies);
+            result = pusher.push(domain, List.of(body)); // one part per call
         } catch (Exception e) {
             log.warn(LogEvent.CATALOG_PUSH_REJECTED, value("catalogId", catalogId), value("error", e.toString()));
             feedback.record(domain, catalogId, "push", "push_error", e.toString());
-            return false;
+            return new PartOutcome(catalogId, part.url(), false, null, "push_error: " + e);
         }
         if (!result.ack()) {
             log.warn(LogEvent.CATALOG_PUSH_REJECTED, value("catalogId", catalogId), value("detail", result.detail()));
             feedback.record(domain, catalogId, "push", "push_nack", result.detail());
-            return false;
+            return new PartOutcome(catalogId, part.url(), false, result.status(), result.detail());
         }
 
-        for (var part : d.changedParts()) {
-            state.upsertPart(part.url(), catalogId, version, part.digest(), part.lastModified(), domain);
-        }
+        // 200 Ack = accepted for async processing (not yet persisted). Proven-enqueued → advance part state.
+        state.upsertPart(part.url(), catalogId, version, part.digest(), part.lastModified(), domain);
         log.info(LogEvent.CATALOG_PUSHED, value("catalogId", catalogId), value("version", version),
-                value("parts", d.changedParts().size()), value("status", result.status()));
-        return true;
+                value("url", part.url()), value("status", result.status()));
+        return new PartOutcome(catalogId, part.url(), true, result.status(), null);
     }
 }
