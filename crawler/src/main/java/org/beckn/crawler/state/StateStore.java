@@ -38,18 +38,36 @@ public class StateStore {
     }
 
     /** Upsert after all records for the index are handled (index_digest = last accepted digest). */
-    public void upsertIndexState(String indexUrl, String indexDigest, String nextUpdate) {
+    public void upsertIndexState(String indexUrl, String indexDigest, String nextUpdate, String providerDomain) {
         jdbc.sql("""
-                INSERT INTO index_crawl_state (index_url, index_digest, next_update, last_seen_at)
-                VALUES (?, ?, ?, now())
+                INSERT INTO index_crawl_state (index_url, index_digest, next_update, provider_domain, last_seen_at)
+                VALUES (?, ?, ?, ?, now())
                 ON CONFLICT (index_url) DO UPDATE
-                   SET index_digest = EXCLUDED.index_digest,
-                       next_update  = EXCLUDED.next_update,
-                       last_seen_at = now()
+                   SET index_digest    = EXCLUDED.index_digest,
+                       next_update     = EXCLUDED.next_update,
+                       provider_domain = EXCLUDED.provider_domain,
+                       last_seen_at    = now()
                 """)
                 .param(indexUrl)
                 .param(indexDigest)
                 .param(nextUpdate == null ? null : OffsetDateTime.parse(nextUpdate))
+                .param(providerDomain)
+                .update();
+    }
+
+    /**
+     * Record the provider identity (from the manifest) back onto its source row, so the UI can
+     * join provider → crawl state and show the real name. No-op for config sources (no matching row).
+     */
+    public void updateSourceIdentity(String dediUrl, String providerDomain, String providerName) {
+        jdbc.sql("""
+                UPDATE crawler_source
+                   SET provider_domain = ?, provider_name = ?
+                 WHERE dedi_url = ?
+                """)
+                .param(providerDomain)
+                .param(providerName)
+                .param(dediUrl)
                 .update();
     }
 
@@ -72,15 +90,17 @@ public class StateStore {
     }
 
     /** Upsert AFTER that part's push returns 200 (digest is a proven digest, never merely announced). */
-    public void upsertPart(String partUrl, String catalogId, long version, String digest, String sourceUpdatedAt) {
+    public void upsertPart(String partUrl, String catalogId, long version, String digest,
+                           String sourceUpdatedAt, String providerDomain) {
         jdbc.sql("""
-                INSERT INTO catalog_part_state (part_url, catalog_id, version, digest, source_updated_at, last_seen_at)
-                VALUES (?, ?, ?, ?, ?, now())
+                INSERT INTO catalog_part_state (part_url, catalog_id, version, digest, source_updated_at, provider_domain, last_seen_at)
+                VALUES (?, ?, ?, ?, ?, ?, now())
                 ON CONFLICT (part_url) DO UPDATE
                    SET catalog_id        = EXCLUDED.catalog_id,
                        version           = EXCLUDED.version,
                        digest            = EXCLUDED.digest,
                        source_updated_at = EXCLUDED.source_updated_at,
+                       provider_domain   = EXCLUDED.provider_domain,
                        last_seen_at      = now()
                 """)
                 .param(partUrl)
@@ -88,6 +108,7 @@ public class StateStore {
                 .param(version)
                 .param(digest)
                 .param(sourceUpdatedAt == null ? null : OffsetDateTime.parse(sourceUpdatedAt))
+                .param(providerDomain)
                 .update();
     }
 }

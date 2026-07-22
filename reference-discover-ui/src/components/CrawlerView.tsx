@@ -106,7 +106,10 @@ export default function CrawlerView() {
               <tbody>
                 {sources.map((s) => (
                   <tr key={s.id}>
-                    <td className="prov-name">{s.displayName || '—'}</td>
+                    <td className="prov-name">
+                      {s.displayName || '—'}
+                      {s.providerDomain && <span className="prov-domain">{s.providerDomain}</span>}
+                    </td>
                     <td className="prov-url">
                       <a href={s.dediUrl} target="_blank" rel="noreferrer" title={s.dediUrl}>
                         {s.dediUrl}

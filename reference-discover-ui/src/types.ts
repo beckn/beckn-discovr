@@ -85,6 +85,7 @@ export interface SourceRow {
   id: string
   dediUrl: string
   displayName?: string | null
+  providerDomain?: string | null
   createdAt?: string
   catalogs: number
   lastSynced: string | null

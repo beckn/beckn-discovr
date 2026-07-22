@@ -177,23 +177,35 @@ crawler:
   feedbackLogPath: "./feedback.log"
 ```
 
-### 5.3 State store (PostgreSQL — two tables)
-The crawler's memory of "what I saw last time." It answers two distinct questions, so it is
-modelled as two tables rather than one polymorphic table — each column then means exactly one
-thing. Both are URL-keyed (URLs are globally unique and are what every check keys on). Rows are
-upserted **only after** the corresponding push succeeds, so a crash mid-pass re-does that catalog
-rather than skipping it.
+### 5.3 State store (PostgreSQL — three tables)
+Two tables are the crawler's memory of "what I saw last time" (the crawl state); a third,
+`crawler_source`, is the **registry of which providers to crawl** (populated by the UI). The two
+crawl-state tables are URL-keyed and upserted **only after** the corresponding push succeeds, so a
+crash mid-pass re-does that catalog rather than skipping it.
 
 ```sql
--- "Did anything change for this provider?"  (one row per index = one per provider for the POC)
-CREATE TABLE index_crawl_state (
-  index_url     TEXT PRIMARY KEY,   -- from manifest.files[].url
-  manifest_etag TEXT,               -- optional ETag on /.well-known/dedi.json
-  index_etag    TEXT,               -- optional ETag on the index
-  index_digest  TEXT,               -- last accepted index digest (compared to manifest.files[].digest)
-  next_update   TIMESTAMPTZ,        -- provider's re-crawl hint
-  last_seen_at  TIMESTAMPTZ
+-- V2: which providers to crawl (source list). Read every poll when crawler.source=db.
+CREATE TABLE crawler_source (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  dedi_url        TEXT NOT NULL UNIQUE,  -- full manifest URL the UI registered
+  display_name    TEXT,                  -- user-entered label
+  status          BOOLEAN NOT NULL DEFAULT true,  -- only true rows are crawled
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  provider_domain TEXT,                  -- V3: resolved from manifest "domain" after first crawl
+  provider_name   TEXT                   -- V3: resolved from manifest "name"  after first crawl
 );
+
+-- "Did anything change for this provider?"  (one row per index)
+CREATE TABLE index_crawl_state (
+  index_url       TEXT PRIMARY KEY,   -- from manifest.files[].url
+  manifest_etag   TEXT,               -- optional ETag on the manifest (unused)
+  index_etag      TEXT,               -- optional ETag on the index (unused)
+  index_digest    TEXT,               -- last accepted index digest (compared to manifest.files[].digest)
+  next_update     TIMESTAMPTZ,        -- provider's re-crawl hint
+  provider_domain TEXT,               -- V3: manifest "domain" (bppId) — links this index to its provider
+  last_seen_at    TIMESTAMPTZ
+);
+CREATE INDEX ix_index_crawl_state_provider ON index_crawl_state (provider_domain);
 
 -- "Did this catalog change, and is it a rollback?"  (one row per catalog part)
 CREATE TABLE catalog_part_state (
@@ -202,14 +214,19 @@ CREATE TABLE catalog_part_state (
   version           BIGINT,             -- owning catalog's details.version (rollback guard)
   digest            TEXT,               -- last verified part digest
   source_updated_at TIMESTAMPTZ,        -- parts[].lastModified
+  provider_domain   TEXT,               -- V3: manifest "domain" (bppId) — links this catalog to its provider
   last_seen_at      TIMESTAMPTZ
 );
 CREATE INDEX ix_catalog_part_state_catalog_id ON catalog_part_state (catalog_id);
+CREATE INDEX ix_catalog_part_state_provider   ON catalog_part_state (provider_domain);
 ```
 
-`catalog_id` is populated now (it's free — the crawler has it while writing the row) and lets the
-crawler find all part rows for a catalog when a catalog drops a part or goes RETIRED. `part_url`
-stays the primary key; `catalog_id` is an indexed attribute.
+`catalog_id` lets the crawler find all part rows for a catalog when a catalog drops a part or goes
+RETIRED. **`provider_domain`** (added in V3) is the provider's DeDi identity (the manifest `domain`
+= bppId); the crawler stamps it on every crawl-state row and writes it (plus `provider_name`) back
+onto `crawler_source` after resolving the manifest — so a source can be joined to its index and
+catalogs by an exact key rather than by URL/host guessing. It is the realized form of the deferred
+`subscriber_id` idea below.
 
 **Where each column comes from (provenance).** Every column is copied from a specific place —
 either a field inside a DeDi file or an HTTP response header. Nothing is invented.
@@ -221,12 +238,16 @@ either a field inside a DeDi file or an HTTP response header. Nothing is invente
 | `index_crawl_state.index_etag` | HTTP `ETag` header on `GET <index url>` | after a successful pass |
 | `index_crawl_state.index_digest` | manifest `files[].digest` (once the fetched index's bytes match it) | after all records handled |
 | `index_crawl_state.next_update` | manifest / index `next_update` | after a successful pass |
+| `index_crawl_state.provider_domain` | manifest `domain` (bppId) | after all records handled |
 | `index_crawl_state.last_seen_at` | crawler clock | every pass that reaches the index |
+| `crawler_source.dedi_url` | the UI registration | on register |
+| `crawler_source.provider_domain` / `provider_name` | manifest `domain` / `name` | after the first successful resolve |
 | `catalog_part_state.part_url` | index `records[].details.parts[].url` | when the part is first pushed |
 | `catalog_part_state.catalog_id` | index `records[].details.catalogId` | when the part is pushed |
 | `catalog_part_state.version` | index `records[].details.version` | when the part is pushed |
 | `catalog_part_state.digest` | index `records[].details.parts[].digest` (once the part's bytes match it) | after that part's push returns 200 |
 | `catalog_part_state.source_updated_at` | index `records[].details.parts[].lastModified` | when the part is pushed |
+| `catalog_part_state.provider_domain` | manifest `domain` (bppId) | when the part is pushed |
 | `catalog_part_state.last_seen_at` | crawler clock | every pass that inspects the part |
 
 Note the two digest columns are written **only after** the bytes have been verified against them
@@ -241,11 +262,14 @@ Reads driving each check:
 
 Writes use `INSERT ... ON CONFLICT (<pk>) DO UPDATE`.
 
-**Deferred column (add with DeDi, not now).**
-- `subscriber_id` on `index_crawl_state` — the provider/subscriber `domain` (= `bppId`;
-  **not** the catalog's `provider.id`). Only earns its place with the DeDi de-registration +
-  per-provider grouping flow (OQ-4); nothing in the POC reads it. `catalog_id` is included now
-  (see above) because it is free to populate and needed for catalog-level cleanup.
+**Provider link (implemented as `provider_domain`).**
+- `provider_domain` on both crawl-state tables **and** on `crawler_source` — the provider/subscriber
+  `domain` (= `bppId`; **not** the catalog's `provider.id`), read from the manifest. This is what
+  earlier drafts called the deferred `subscriber_id`; it is now populated (V3) because the UI's
+  per-provider dashboard needs to join a registered source to its crawled index + catalogs by an
+  exact key. The crawler stamps it on crawl-state rows and writes it (with `provider_name`) back onto
+  the `crawler_source` row after resolving the manifest. Sources crawled from **config** (no
+  `crawler_source` row) still get `provider_domain` on their crawl-state rows.
 
 ### 5.4 One crawl pass
 ```

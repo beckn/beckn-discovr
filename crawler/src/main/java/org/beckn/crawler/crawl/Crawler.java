@@ -75,6 +75,7 @@ public class Crawler {
             try {
                 List<ManifestResolver.Resolved> registries = manifestResolver.resolve(src.manifestUrl());
                 manifestCache.put(src.manifestUrl(), registries);
+                recordSourceIdentity(src, registries);
                 for (ManifestResolver.Resolved r : registries) {
                     String label = label(src, r);
                     log.info(LogEvent.MANIFEST_REFRESHED, value("provider", label),
@@ -94,6 +95,18 @@ public class Crawler {
     /** Log label for a source's registry: the source's displayName if set, else the manifest name. */
     private static String label(CrawlerSource src, ManifestResolver.Resolved reg) {
         return src.displayName() != null && !src.displayName().isBlank() ? src.displayName() : reg.name();
+    }
+
+    /**
+     * Record the manifest's provider identity (domain + name) back onto the source row, so the UI can
+     * join provider → crawl state by domain and show the real name. All of a manifest's registries
+     * share the one manifest domain/name, so the first entry is representative. No-op for config
+     * sources (no crawler_source row) and when there are no registries.
+     */
+    private void recordSourceIdentity(CrawlerSource src, List<ManifestResolver.Resolved> registries) {
+        if (registries.isEmpty()) return;
+        ManifestResolver.Resolved first = registries.get(0);
+        state.updateSourceIdentity(src.manifestUrl(), first.domain(), first.name());
     }
 
     /**
@@ -150,6 +163,7 @@ public class Crawler {
         if (registries == null) {
             registries = manifestResolver.resolve(src.manifestUrl());
             manifestCache.put(src.manifestUrl(), registries);
+            recordSourceIdentity(src, registries);
             for (ManifestResolver.Resolved r : registries) {
                 log.info(LogEvent.MANIFEST_REFRESHED, value("provider", label(src, r)),
                         value("registry", r.registry()), value("indexUrl", r.indexUrl()));
@@ -240,7 +254,7 @@ public class Crawler {
             log.warn(LogEvent.PROVIDER_RETRY, value("provider", name), value("registry", registry),
                     value("pushed", pushed), value("stateUpdated", false));
         } else {
-            state.upsertIndexState(reg.indexUrl(), result.digest(), index.nextUpdate());
+            state.upsertIndexState(reg.indexUrl(), result.digest(), index.nextUpdate(), domain);
             log.info(LogEvent.PROVIDER_DONE, value("provider", name), value("registry", registry),
                     value("pushed", pushed), value("stateUpdated", true));
         }
@@ -283,7 +297,7 @@ public class Crawler {
         }
 
         for (var part : d.changedParts()) {
-            state.upsertPart(part.url(), catalogId, version, part.digest(), part.lastModified());
+            state.upsertPart(part.url(), catalogId, version, part.digest(), part.lastModified(), domain);
         }
         log.info(LogEvent.CATALOG_PUSHED, value("catalogId", catalogId), value("version", version),
                 value("parts", d.changedParts().size()), value("status", result.status()));
