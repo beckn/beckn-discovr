@@ -208,8 +208,8 @@ file it takes is verified against the digests in the one signed index it read.
 **Tools publishers have today.** The changes file is a diff between two versions of a JSON file —
 off-the-shelf tools compute exactly this (`jd`, `jsondiffpatch`, both able to match array items
 by id). Publishers who keep their catalog in git get the history for free and script the rest.
-The eventual provider adapter should do all of this automatically; Appendix A lists the full
-tooling survey.
+The provider publish tool does all of this automatically (§4.7); Appendix A lists the off-the-shelf
+building blocks.
 
 ## 3.4 Visibility and access — who may read a catalog
 
@@ -371,6 +371,26 @@ to learn what changed inside it.
   kept.
 - **Reconstruction (optional).** After applying change segments to the baseline in version order,
   a crawler may confirm the result matches the current baseline's declared digest.
+
+## 4.7 Provider tooling (ONIX publish plugin)
+
+A publisher cannot compute diffs, digests, signatures, or run compaction by hand. The design
+therefore assumes a **provider-side publish tool** — an ONIX plugin / provider adapter — that does
+all of it. The publisher's only manual step stays "save the catalog"; the tool does the rest.
+
+| Command | Input → Output |
+|---------|----------------|
+| **init / register** | first time → generate keys, write `dedi.json`, register the domain on the DeDi portal |
+| **publish** | new catalog version → diff vs current state → write a `changes` segment, hash it, add it to the index, bump `version`, re-sign the index |
+| **diff / segment** | two catalog versions → id-keyed `upserts` + `removals` (via `jd` / `jsondiffpatch`) |
+| **digest** | any file → content hash, written into the index |
+| **sign** | canonically serialize the index → sign with the registered key |
+| **compact** | when `changes` grow (by size or on a schedule) → write a fresh `baseline`, repoint the index, restart the `changes` list |
+| **retention / GC** | after the grace period → delete superseded baselines and segments |
+| **validate** | before going live → digests match, `version` is monotonic, the chain is consistent |
+
+So the day-to-day publish is one call; the plugin runs diff → segment → digest → index → sign, and
+compaction on a schedule.
 
 ---
 
