@@ -37,21 +37,55 @@ public class StateStore {
                 .optional();
     }
 
-    /** Upsert after all records for the index are handled (index_digest = last accepted digest). */
+    /**
+     * SUCCESS path: every pushed part ACKed. Advances index_digest (= last accepted digest) and
+     * stamps sync_status='success' / clears error_detail. Call this ONLY when the whole pass succeeded.
+     */
     public void upsertIndexState(String indexUrl, String indexDigest, String nextUpdate, String providerDomain) {
         jdbc.sql("""
-                INSERT INTO index_crawl_state (index_url, index_digest, next_update, provider_domain, last_seen_at)
-                VALUES (?, ?, ?, ?, now())
+                INSERT INTO index_crawl_state (index_url, index_digest, next_update, provider_domain,
+                                               sync_status, error_detail, last_seen_at)
+                VALUES (?, ?, ?, ?, 'success', NULL, now())
                 ON CONFLICT (index_url) DO UPDATE
                    SET index_digest    = EXCLUDED.index_digest,
                        next_update     = EXCLUDED.next_update,
                        provider_domain = EXCLUDED.provider_domain,
+                       sync_status     = 'success',
+                       error_detail    = NULL,
                        last_seen_at    = now()
                 """)
                 .param(indexUrl)
                 .param(indexDigest)
                 .param(nextUpdate == null ? null : OffsetDateTime.parse(nextUpdate))
                 .param(providerDomain)
+                .update();
+    }
+
+    /**
+     * PARTIAL/FAILED path: at least one part failed to push. Records the outcome for the UI but
+     * deliberately does NOT touch index_digest — so the next poll re-detects the index as changed and
+     * retries. Because catalog_part_state holds each ACKed part's digest, Differ re-pushes ONLY the
+     * still-failed parts. On a brand-new index (no row yet) index_digest is inserted NULL, which also
+     * keeps it "changed" for the retry.
+     *
+     * @param status       "partial" or "failed"
+     * @param errorDetail  JSON array of failed parts: [{catalogId, partUrl, httpStatus, detail}, ...]
+     */
+    public void recordIndexOutcome(String indexUrl, String providerDomain, String status, String errorDetail) {
+        jdbc.sql("""
+                INSERT INTO index_crawl_state (index_url, index_digest, provider_domain,
+                                               sync_status, error_detail, last_seen_at)
+                VALUES (?, NULL, ?, ?, ?, now())
+                ON CONFLICT (index_url) DO UPDATE
+                   SET provider_domain = EXCLUDED.provider_domain,
+                       sync_status     = EXCLUDED.sync_status,
+                       error_detail    = EXCLUDED.error_detail,
+                       last_seen_at    = now()
+                """)
+                .param(indexUrl)
+                .param(providerDomain)
+                .param(status)
+                .param(errorDetail)
                 .update();
     }
 
