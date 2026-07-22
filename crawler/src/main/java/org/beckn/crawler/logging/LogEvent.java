@@ -16,6 +16,9 @@ public final class LogEvent {
     public static final String MANIFEST_REFRESH_COMPLETED = "crawler.manifest.refresh.completed";
     public static final String MANIFEST_REFRESHED         = "crawler.manifest.refreshed";
     public static final String MANIFEST_REFRESH_FAILED    = "crawler.manifest.refresh.failed";
+    // integrity checkpoint at manifest read (startup + daily): does the live index match the digest?
+    public static final String MANIFEST_INDEX_VERIFIED    = "crawler.manifest.index.verified";
+    public static final String MANIFEST_INDEX_MISMATCH    = "crawler.manifest.index.mismatch";
 
     // index pass lifecycle (short cadence — polls the index for catalog changes)
     public static final String PASS_STARTED        = "crawler.pass.started";

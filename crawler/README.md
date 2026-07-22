@@ -67,10 +67,13 @@ flowchart TD
 
 Discover Acks `200` synchronously, then asynchronously persists to Postgres and indexes to Elasticsearch.
 
-> **Integrity note:** because the manifest is only read ~daily, its `files[].digest` is a stale
-> snapshot between refreshes and can't gate a per-minute index fetch. So the index poll detects
-> change by the **index's own** digest vs stored state, and verifies `publisher.domain`. Full
-> index-level integrity (its own JWS signature verified against the publisher key) is deferred (§2).
+> **Integrity note:** the manifest's `files[].digest` can't gate the per-minute poll (it's a stale
+> daily snapshot — the index legitimately moves ahead of it between refreshes). So the poll detects
+> change by the **index's own** digest vs stored state, and verifies `publisher.domain`. But that
+> digest *is* used as an **integrity checkpoint at manifest-read time (startup + daily)**: the
+> refresh fetches the live index and confirms `sha256(index) == manifest digest`
+> (`crawler.manifest.index.verified` / `…​mismatch`). Full continuous index-level integrity — its
+> own JWS signature verified against the publisher key — is deferred (§2).
 
 ---
 

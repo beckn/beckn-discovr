@@ -76,6 +76,7 @@ public class Crawler {
                 for (ManifestResolver.Resolved r : registries) {
                     log.info(LogEvent.MANIFEST_REFRESHED, value("provider", r.name()),
                             value("registry", r.registry()), value("indexUrl", r.indexUrl()));
+                    verifyIndexAgainstManifest(r);
                 }
             } catch (Exception e) {
                 // Keep any previously cached manifest so index polling can carry on.
@@ -84,6 +85,35 @@ public class Crawler {
             }
         }
         log.info(LogEvent.MANIFEST_REFRESH_COMPLETED);
+    }
+
+    /**
+     * Integrity checkpoint at manifest-read time (startup + daily): fetch the live index and confirm
+     * it hashes to the digest the manifest promised. When the manifest is read, the publisher's
+     * manifest and index should be consistent, so a mismatch flags tampering or a publisher that
+     * didn't keep the chain in sync. Soft — logged + recorded, does not gate the per-minute poll
+     * (which can't use this stale digest and relies on part-level verification + the deferred
+     * index signature).
+     */
+    private void verifyIndexAgainstManifest(ManifestResolver.Resolved reg) {
+        if (!reg.isLive() || reg.indexDigest() == null || reg.indexDigest().isBlank()) return;
+        try {
+            IndexPoller.Result r = indexPoller.fetch(reg);
+            if (r.digest().equalsIgnoreCase(reg.indexDigest())) {
+                log.info(LogEvent.MANIFEST_INDEX_VERIFIED, value("provider", reg.name()),
+                        value("registry", reg.registry()));
+            } else {
+                log.warn(LogEvent.MANIFEST_INDEX_MISMATCH, value("provider", reg.name()),
+                        value("registry", reg.registry()), value("manifestDigest", reg.indexDigest()),
+                        value("indexDigest", r.digest()));
+                feedback.record(reg.domain(), null, "validate", "manifest_index_digest_mismatch",
+                        "manifest=" + reg.indexDigest() + " index=" + r.digest());
+            }
+        } catch (Exception e) {
+            log.warn(LogEvent.MANIFEST_INDEX_MISMATCH, value("provider", reg.name()),
+                    value("registry", reg.registry()), value("error", e.toString()));
+            feedback.record(reg.domain(), null, "validate", "manifest_index_check_error", e.toString());
+        }
     }
 
     // ── Short cadence: poll each provider's index for catalog changes ────────────────────────
