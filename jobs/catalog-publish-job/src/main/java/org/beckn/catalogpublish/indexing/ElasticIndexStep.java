@@ -57,6 +57,7 @@ public class ElasticIndexStep {
     private final CatalogPublishMetrics publishMetrics;
     private final ObjectMapper mapper;
     private final int batchSize;
+    private final String defaultSchemaType;
     private final Optional<EmbeddingClient> embeddingClient;
 
     public ElasticIndexStep(CatalogDocumentAssembler assembler,
@@ -74,6 +75,7 @@ public class ElasticIndexStep {
         this.publishMetrics = publishMetrics;
         this.mapper = mapper;
         this.batchSize = props.catalog().elasticsearch().bulkBatchSize();
+        this.defaultSchemaType = props.catalog().elasticsearch().defaultSchemaType();
         this.embeddingClient = embeddingClient;
     }
 
@@ -120,8 +122,15 @@ public class ElasticIndexStep {
             }
             String schemaType = item.getType();
             if (schemaType == null || schemaType.isBlank()) {
-                log.warn("event={} reason=schema-type-missing itemId={}", LogEvent.ES_FAILED, item.getId());
-                continue;
+                if (defaultSchemaType == null || defaultSchemaType.isBlank()) {
+                    log.warn("event={} reason=schema-type-missing itemId={}", LogEvent.ES_FAILED, item.getId());
+                    continue;
+                }
+                // No @type on the resource → fall back to the configured default schema type so it
+                // is indexed under <indexPrefix>-<defaultSchemaType> instead of being skipped.
+                schemaType = defaultSchemaType;
+                log.info("event={} reason=schema-type-defaulted itemId={} defaultSchemaType={}",
+                        LogEvent.ES_INDEXED, item.getId(), schemaType);
             }
             List<String> networkIds = item.getNetworkIds();
             Map<String, Object> doc = assembler.assemble(item, payloadNode, schemaType, networkIds);
