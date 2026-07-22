@@ -303,6 +303,10 @@ services:
       - CRAWLER_MAX_PART_BYTES=${CRAWLER_MAX_PART_BYTES:-10485760}
       # Bypass GitHub raw's CDN cache (max-age 300s) so changes are picked up immediately.
       - CRAWLER_HTTP_CACHE_BUST=${CRAWLER_HTTP_CACHE_BUST:-true}
+      # Force IPv4 (some container networks have broken IPv6 egress → the JDK HttpClient hangs
+      # trying AAAA and times out) and evict idle keep-alive sockets before the next poll so a
+      # CDN/NAT-dropped connection is never reused (avoids "request timed out" on idle polls).
+      - JAVA_OPTS=-Xmx384m -Xms128m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.net.preferIPv4Stack=true -Djdk.httpclient.keepalive.timeout=30
       - CRAWLER_FEEDBACK_LOG_PATH=/app/logs/feedback.log
     depends_on:
       postgres-discovery:
