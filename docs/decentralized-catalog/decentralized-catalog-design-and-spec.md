@@ -27,9 +27,8 @@ research note — into one document; nothing from either is dropped.
 assumption of how DeDi flows will operate, to be validated with the DeDi team (see section 7).
 
 **Field-name note:** the file examples in section 4 are reproduced from the research note (illustrative,
-not normative) and keep its original names. Sections 1–3 are authoritative where they differ:
-`subscriberId` becomes `participantId` (= domain), and access is expressed as `networkIds`
-(absent = public) plus an auth-method entry.
+not normative). Identity is the **domain** (no separate `subscriberId`), and access is expressed as
+`networkIds` (absent = public) plus an auth-method entry.
 
 ---
 
@@ -126,7 +125,7 @@ A publisher does three things once, and one thing on every update.
 
 1. Put the catalog files and the index (`becknCatalogs.dedi.json`) on any storage it already has
    — an object store, a CDN, a static site.
-2. Put `dedi.json` at the fixed path on its domain: `techmart.com/.well-known/dedi.json`. This
+2. Put `dedi.json` at the fixed path on its domain: `mart.nfh.com/.well-known/dedi.json`. This
    file names its keys and points to the index.
 3. Go to the DeDi portal and enter the domain. DeDi crawls `dedi.json` from the fixed path,
    creates the participant's records, and the index URI becomes available to the network.
@@ -232,7 +231,7 @@ Both live in the index, per catalog:
 
 The first proposed method follows Beckn Auth: a **signed challenge**. The challenge is built from
 a few fixed variables the crawler can work out on its own — current timestamp, its own
-participantId, the file URL — so no round trip is needed to obtain it. The crawler signs the
+networkId, the file URL — so no round trip is needed to obtain it. The crawler signs the
 challenge with its network-registered key and sends the signature in the `Authorization` header
 of the download request. The publisher's gate verifies the signature against the requester's key
 in the registry and checks the requester belongs to a permitted network. The concrete method
@@ -265,23 +264,22 @@ both.
 
 The concrete surface an implementer builds to: the three published files, the DeDi integration,
 and the verification rules. The file examples are reproduced from the research note (illustrative,
-not normative); per sections 1–3, `subscriberId` becomes `participantId` (= domain) and access is
+not normative); identity is the **domain** (no separate `subscriberId`) and access is
 expressed as `networkIds` (absent = public) + an auth-method entry.
 
-## 4.1 The manifest — `techmart.com/.well-known/dedi.json`
+## 4.1 The manifest — `mart.nfh.com/.well-known/dedi.json`
 
 Written once at onboarding; one pointer per use case the domain publishes (catalogs today, rego
 policies tomorrow). Never touched by the publish pipeline.
 
 ```json
 {
-  "subscriberId": "bpp.techmart.com",
   "keys": [
-    { "id": "bpp.techmart.com|key-001", "publicKey": "…" }
+    { "id": "mart.nfh.com|key-001", "publicKey": "…" }
   ],
   "files": [
     { "name": "becknCatalogs",
-      "url": "https://cdn.techmart.com/beckn/becknCatalogs.dedi.json" }
+      "url": "https://cdn.mart.nfh.com/beckn/becknCatalogs.dedi.json" }
   ],
   "updatedAt": "2026-01-05T00:00:00Z"
 }
@@ -297,11 +295,11 @@ the recipe before fetching the index):
 "files": [
   {
     "name": "becknCatalogs",
-    "url": "https://cdn.techmart.com/beckn/becknCatalogs.dedi.json",
-    "networkIds": ["eon-retail"],
+    "url": "https://cdn.mart.nfh.com/beckn/becknCatalogs.dedi.json",
+    "networkIds": ["eon.com"],
     "authMethods": [
       { "method": "signed-challenge", "algorithm": "ed25519", "header": "Authorization",
-        "challenge": ["timestamp", "participantId", "fileUrl"], "freshnessSeconds": 300 }
+        "challenge": ["timestamp", "networkId", "fileUrl"], "freshnessSeconds": 300 }
     ]
   }
 ]
@@ -319,51 +317,50 @@ it. A retired catalog stays as a tombstone entry.
 
 ```json
 {
-  "subscriberId": "bpp.techmart.com",
   "version": 42,
   "updatedAt": "2026-07-22T09:00:00Z",
   "validUntil": "2026-07-29T09:00:00Z",
   "catalogs": [
     {
-      "catalogId": "bpp.techmart.com/electronics-2026",
+      "catalogId": "mart.nfh.com/electronics-2026",
       "catalogType": "REGULAR",
       "status": "ACTIVE",
       "updatedAt": "2026-07-22T09:00:00Z",
       "schemaTypes": ["https://schema.beckn.org/retail/schema/1.1.0/context.jsonld"],
       "baseline": {
         "version": 40,
-        "url": "https://cdn.techmart.com/beckn/electronics-2026.v40.json",
+        "url": "https://cdn.mart.nfh.com/beckn/electronics-2026.v40.json",
         "digest": "…"
       },
       "changes": [
         { "version": 41,
-          "url": "https://cdn.techmart.com/beckn/electronics-2026.v41.changes.json",
+          "url": "https://cdn.mart.nfh.com/beckn/electronics-2026.v41.changes.json",
           "digest": "…" },
         { "version": 42,
-          "url": "https://cdn.techmart.com/beckn/electronics-2026.v42.changes.json",
+          "url": "https://cdn.mart.nfh.com/beckn/electronics-2026.v42.changes.json",
           "digest": "…" }
       ]
     },
     {
-      "catalogId": "bpp.techmart.com/eon-exclusive-2026",
+      "catalogId": "mart.nfh.com/eon-exclusive-2026",
       "catalogType": "REGULAR",
       "status": "ACTIVE",
-      "networkIds": ["eon-retail"],
+      "networkIds": ["eon.com"],
       "authMethods": [
         { "method": "signed-challenge", "algorithm": "ed25519", "header": "Authorization",
-          "challenge": ["timestamp", "participantId", "fileUrl"], "freshnessSeconds": 300 }
+          "challenge": ["timestamp", "networkId", "fileUrl"], "freshnessSeconds": 300 }
       ],
       "updatedAt": "2026-07-14T08:00:00Z",
       "schemaTypes": ["https://schema.beckn.org/retail/schema/1.1.0/context.jsonld"],
       "baseline": {
         "version": 12,
-        "url": "https://cdn.techmart.com/beckn/eon-exclusive-2026.v12.json",
+        "url": "https://cdn.mart.nfh.com/beckn/eon-exclusive-2026.v12.json",
         "digest": "…"
       },
       "changes": []
     },
     {
-      "catalogId": "bpp.techmart.com/electronics-2025",
+      "catalogId": "mart.nfh.com/electronics-2025",
       "status": "RETIRED",
       "retiredAt": "2026-01-31T00:00:00Z"
     }
@@ -377,7 +374,7 @@ baseline size, it fetches the baseline instead (the apt cutover rule). Every fil
 verified against its digest here, and the index itself against the signed key.
 
 Here `electronics-2026` is **public** (no `networkIds`), while `eon-exclusive-2026` is
-**restricted** to `eon-retail` and names its auth method (`authMethods`).
+**restricted** to `eon.com` and names its auth method (`authMethods`).
 
 ## 4.3 A change segment — `electronics-2026.v42.changes.json`
 
@@ -387,14 +384,14 @@ catalog-level fields. Every section is optional; include only what changed.
 
 ```json
 {
-  "catalogId": "bpp.techmart.com/electronics-2026",
+  "catalogId": "mart.nfh.com/electronics-2026",
   "fromVersion": 41,
   "toVersion": 42,
 
   "resources": {
     "upserts": [
       {
-        "id": "bpp.techmart.com/item-laptop-xps-15",
+        "id": "mart.nfh.com/item-laptop-xps-15",
         "descriptor": { "name": "Dell XPS 15", "shortDesc": "15-inch developer laptop" },
         "resourceAttributes": {
           "@context": "https://schema.beckn.org/retail/schema/1.1.0/context.jsonld",
@@ -403,19 +400,19 @@ catalog-level fields. Every section is optional; include only what changed.
         }
       }
     ],
-    "removals": ["bpp.techmart.com/item-laptop-xps-13"]
+    "removals": ["mart.nfh.com/item-laptop-xps-13"]
   },
 
   "offers": {
     "upserts": [
       {
-        "id": "bpp.techmart.com/offer-diwali-10",
+        "id": "mart.nfh.com/offer-diwali-10",
         "descriptor": { "name": "Diwali 10% off" },
-        "resourceIds": ["bpp.techmart.com/item-laptop-xps-15"],
+        "resourceIds": ["mart.nfh.com/item-laptop-xps-15"],
         "validity": { "startDate": "2026-10-20T00:00:00Z", "endDate": "2026-11-05T23:59:59Z" }
       }
     ],
-    "removals": ["bpp.techmart.com/offer-summer-5"]
+    "removals": ["mart.nfh.com/offer-summer-5"]
   },
 
   "catalog": {
@@ -506,7 +503,7 @@ first defined method is the **signed challenge** (per Beckn Auth).
 ```json
 "authMethods": [
   { "method": "signed-challenge", "algorithm": "ed25519", "header": "Authorization",
-    "challenge": ["timestamp", "participantId", "fileUrl"], "freshnessSeconds": 300 }
+    "challenge": ["timestamp", "networkId", "fileUrl"], "freshnessSeconds": 300 }
 ]
 ```
 
@@ -520,21 +517,21 @@ first defined method is the **signed challenge** (per Beckn Auth).
 
 **Crawler side** — build → sign → send:
 1. Build the challenge by joining the `challenge` variables in order: the **current timestamp**, its
-   **own `participantId`**, and the **file URL** being requested (all values it already has — no
+   **own `networkId`**, and the **file URL** being requested (all values it already has — no
    round trip).
 2. Sign that string with its **registered private key** using `algorithm`.
 3. Send the download `GET` with the signature in `header`.
 
 ```http
 GET /beckn/eon-exclusive-2026.v12.json HTTP/1.1
-Host: cdn.techmart.com
-Authorization: signed-challenge keyId="namma-yatri.com|key-001", algorithm="ed25519",
+Host: cdn.mart.nfh.com
+Authorization: signed-challenge keyId="consumer.nfh.com|key-001", algorithm="ed25519",
                ts="2026-07-23T10:00:00Z", signature="<base64-signature-over-challenge>"
 ```
 
 **Publisher gate side** — rebuild → verify → authorize:
 1. Rebuild the same challenge from the identical variables (it sees the timestamp, the caller's
-   claimed `participantId`, and the URL).
+   claimed `networkId`, and the URL).
 2. Resolve the caller's **public key** and **network membership** from the registry.
 3. Verify the signature; reject if older than `freshnessSeconds` (replay protection).
 4. Check the caller belongs to one of the catalog's `networkIds` (entitlement).
