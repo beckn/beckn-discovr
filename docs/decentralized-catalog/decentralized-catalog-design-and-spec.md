@@ -183,8 +183,8 @@ sequenceDiagram
 ## 3.3 Incremental updates — baselines, changes, compaction
 
 Each catalog in the index carries a **baseline** (the latest full file) and a list of **changes**
-files — one per publish, each holding just the added/updated resources and the ids of removed
-ones. All are immutable files with digests in the index. A crawler remembers the last version it
+files — one per publish, each holding just the added/updated resources and offers and the ids of
+removed ones (see §4.3). All are immutable files with digests in the index. A crawler remembers the last version it
 applied:
 
 - Slightly behind: fetch only the changes files after its version.
@@ -353,24 +353,72 @@ Here `electronics-2026` is **public** (no `networkIds`), while `eon-exclusive-20
 
 ## 4.3 A change segment — `electronics-2026.v42.changes.json`
 
-Immutable once published. Upserts carry whole resources keyed by id (never array positions);
-removals are ids.
+Immutable once published. A catalog has two independent collections — **`resources`** and
+**`offers`** — so the segment carries a section for each, plus an optional `catalog` section for
+catalog-level fields. Every section is optional; include only what changed.
 
 ```json
 {
   "catalogId": "bpp.techmart.com/electronics-2026",
   "fromVersion": 41,
   "toVersion": 42,
-  "upserts": [
-    {
-      "id": "bpp.techmart.com/item-laptop-xps-15",
-      "descriptor": { "name": "Dell XPS 15", "shortDesc": "15-inch developer laptop" },
-      "resourceAttributes": { }
-    }
-  ],
-  "removals": ["bpp.techmart.com/item-laptop-xps-13"]
+
+  "resources": {
+    "upserts": [
+      {
+        "id": "bpp.techmart.com/item-laptop-xps-15",
+        "descriptor": { "name": "Dell XPS 15", "shortDesc": "15-inch developer laptop" },
+        "resourceAttributes": {
+          "@context": "https://schema.beckn.org/retail/schema/1.1.0/context.jsonld",
+          "@type": "Product",
+          "brand": "Dell"
+        }
+      }
+    ],
+    "removals": ["bpp.techmart.com/item-laptop-xps-13"]
+  },
+
+  "offers": {
+    "upserts": [
+      {
+        "id": "bpp.techmart.com/offer-diwali-10",
+        "descriptor": { "name": "Diwali 10% off" },
+        "resourceIds": ["bpp.techmart.com/item-laptop-xps-15"],
+        "validity": { "startDate": "2026-10-20T00:00:00Z", "endDate": "2026-11-05T23:59:59Z" }
+      }
+    ],
+    "removals": ["bpp.techmart.com/offer-summer-5"]
+  },
+
+  "catalog": {
+    "descriptor": { "name": "TechMart Electronics 2026" },
+    "validity": { "startDate": "2026-01-01T00:00:00Z", "endDate": "2026-12-31T23:59:59Z" },
+    "isActive": true
+  }
 }
 ```
+
+**Upserts carry the whole object, not a field patch.** An upsert is "insert-or-replace the entire
+Resource/Offer with this id" — a **complete, schema-valid** object per beckn.yaml. The Beckn
+`Catalog` schema is `additionalProperties: false`, so a partial like `"brand": "…"` on its own
+cannot be applied — it would make the reconstructed catalog invalid. To change or drop one
+attribute, re-send the full object with that attribute changed, omitted, or `null`.
+
+**Removals are ids, per collection** — a removed resource goes in `resources.removals`, a removed
+offer in `offers.removals`.
+
+### What each removal scenario looks like
+
+| Removed | Where | How |
+|---------|-------|-----|
+| **The whole catalog** | the **index** (§4.2), not a change segment | the catalog's index entry becomes a tombstone — `"status": "RETIRED"`, `"retiredAt": "…"`, no baseline/changes |
+| **A resource** | change segment | `"resources": { "removals": ["<resource-id>"] }` |
+| **One attribute** of a resource | change segment | no dedicated syntax — re-send the whole resource in `resources.upserts` with that attribute omitted (or `null`) |
+| **An offer** | change segment | `"offers": { "removals": ["<offer-id>"] }` |
+
+**Apply rule.** The crawler/indexer replaces-by-id for upserts, deletes-by-id for removals, and
+overwrites the `catalog` fields. The result must still be a **valid `Catalog`** — `id` +
+`descriptor` + `provider`, and at least one of `resources` / `offers`.
 
 ## 4.4 The catalog baseline — `electronics-2026.v40.json`
 
