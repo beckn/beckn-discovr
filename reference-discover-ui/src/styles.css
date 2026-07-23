@@ -879,13 +879,15 @@ h4,
   font-size: var(--text-sm);
 }
 
-/* Column widths so everything fits without a horizontal scroller (URL truncates). */
-.providers th:nth-child(1) { width: 22%; }
-.providers th:nth-child(2) { width: 30%; }
-.providers th:nth-child(3) { width: 11%; }
-.providers th:nth-child(4) { width: 15%; }
-.providers th:nth-child(5) { width: 14%; }
-.providers th:nth-child(6) { width: 8%; }
+/* Column widths so all 7 columns fit without a horizontal scroller (URL truncates).
+   Must sum to 100% including the actions column, else fixed layout clips the tail. */
+.providers th:nth-child(1) { width: 20%; }  /* Provider */
+.providers th:nth-child(2) { width: 25%; }  /* dedi.json */
+.providers th:nth-child(3) { width: 9%; }   /* Catalogs */
+.providers th:nth-child(4) { width: 14%; }  /* Source updated */
+.providers th:nth-child(5) { width: 13%; }  /* Last synced */
+.providers th:nth-child(6) { width: 12%; }  /* Status */
+.providers th:nth-child(7) { width: 7%; }   /* actions */
 
 .providers th {
   text-align: left;
@@ -980,6 +982,84 @@ h4,
 
 .sync-dot.pending {
   background: #d0932a;
+}
+
+/* ── Sync status badge (index_crawl_state.sync_status) ─────────────────────── */
+.prov-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+/* Small "N issues ▾" toggle under the Failed/Partial badge; expands the full-width row below. */
+.issues-toggle {
+  display: inline-block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: var(--text-2xs);
+  font-weight: var(--fw-medium);
+  color: #b42318;
+}
+
+.issues-toggle:hover {
+  text-decoration: underline;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--text-2xs);
+  font-weight: var(--fw-semibold);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.status-badge.success {
+  color: #0f7a3d;
+  background: rgba(18, 161, 80, 0.12);
+}
+
+.status-badge.partial {
+  color: var(--amber);
+  background: rgba(208, 147, 42, 0.16);
+}
+
+.status-badge.failed {
+  color: #b42318;
+  background: rgba(180, 35, 24, 0.1);
+}
+
+.status-badge.pending {
+  color: var(--muted);
+  background: var(--accent-soft);
+}
+
+/* Full-width failure detail row, expanded under a provider when "N issues" is clicked. */
+.prov-error-row > td {
+  padding: 10px 14px 12px;
+  background: rgba(180, 35, 24, 0.04);
+  border-top: none;
+}
+
+.prov-errors {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  line-height: var(--lh-snug);
+}
+
+.prov-errors li {
+  margin-bottom: 3px;
+}
+
+.prov-errors code {
+  font-family: var(--font-mono);
+  color: var(--ink);
 }
 
 @media (max-width: 640px) {

@@ -112,4 +112,16 @@ export interface SourceRow {
   catalogs: number
   lastSynced: string | null
   sourceUpdated: string | null
+  // Rollup of the index pass (index_crawl_state): 'success' | 'partial' | 'failed', or null when the
+  // provider hasn't been crawled yet. errorDetail is the failure JSON array (see below) on non-success.
+  syncStatus?: 'success' | 'partial' | 'failed' | null
+  errorDetail?: string | null
+}
+
+// One entry of index_crawl_state.error_detail (a JSON array). Attributes a failure to catalog → part.
+export interface SyncFailure {
+  catalogId?: string
+  partUrl?: string
+  httpStatus?: number
+  detail?: string
 }

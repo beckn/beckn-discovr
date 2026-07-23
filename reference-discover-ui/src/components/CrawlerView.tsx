@@ -1,7 +1,32 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import type { SourceRow } from '../types'
+import { Fragment, useEffect, useState, type FormEvent } from 'react'
+import type { SourceRow, SyncFailure } from '../types'
 import { listSources, registerSource, removeSource } from '../api'
 import { fmtDate, relativeTime } from '../format'
+
+// Map a sync status to its badge label + modifier class. null = never crawled yet.
+const STATUS_META: Record<string, { label: string; cls: string }> = {
+  success: { label: 'Synced', cls: 'success' },
+  partial: { label: 'Partial', cls: 'partial' },
+  failed: { label: 'Failed', cls: 'failed' },
+}
+
+/** Parse index_crawl_state.error_detail (a JSON array) defensively; [] on anything unexpected. */
+function parseFailures(errorDetail?: string | null): SyncFailure[] {
+  if (!errorDetail) return []
+  try {
+    const arr = JSON.parse(errorDetail)
+    return Array.isArray(arr) ? (arr as SyncFailure[]) : []
+  } catch {
+    return []
+  }
+}
+
+/** Just the coloured status badge. A null status = never crawled yet → Pending. */
+function StatusBadge({ status }: { status?: string | null }) {
+  const meta = status ? STATUS_META[status] : undefined
+  if (!meta) return <span className="status-badge pending">Pending</span>
+  return <span className={`status-badge ${meta.cls}`}>{meta.label}</span>
+}
 
 export default function CrawlerView() {
   const [sources, setSources] = useState<SourceRow[]>([])
@@ -10,6 +35,15 @@ export default function CrawlerView() {
   const [name, setName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | undefined>()
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   async function refresh() {
     const { sources, error } = await listSources()
@@ -101,34 +135,68 @@ export default function CrawlerView() {
                   <th className="num">Catalogs</th>
                   <th>Source updated</th>
                   <th>Last synced</th>
+                  <th>Status</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {sources.map((s) => (
-                  <tr key={s.id}>
-                    <td className="prov-name">
-                      {s.displayName || '—'}
-                      {s.providerDomain && <span className="prov-domain">{s.providerDomain}</span>}
-                    </td>
-                    <td className="prov-url">
-                      <a href={s.dediUrl} target="_blank" rel="noreferrer" title={s.dediUrl}>
-                        {s.dediUrl}
-                      </a>
-                    </td>
-                    <td className="num">{s.catalogs}</td>
-                    <td>{s.sourceUpdated ? fmtDate(s.sourceUpdated) : '—'}</td>
-                    <td>
-                      <span className={`sync-dot ${s.lastSynced ? 'ok' : 'pending'}`} />
-                      {s.lastSynced ? relativeTime(s.lastSynced) : 'pending…'}
-                    </td>
-                    <td className="prov-actions">
-                      <button className="linkbtn-danger" onClick={() => remove(s.id)}>
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {sources.map((s) => {
+                  const failures = parseFailures(s.errorDetail)
+                  const open = expanded.has(s.id)
+                  return (
+                    <Fragment key={s.id}>
+                      <tr>
+                        <td className="prov-name">
+                          {s.displayName || '—'}
+                          {s.providerDomain && <span className="prov-domain">{s.providerDomain}</span>}
+                        </td>
+                        <td className="prov-url">
+                          <a href={s.dediUrl} target="_blank" rel="noreferrer" title={s.dediUrl}>
+                            {s.dediUrl}
+                          </a>
+                        </td>
+                        <td className="num">{s.catalogs}</td>
+                        <td>{s.sourceUpdated ? fmtDate(s.sourceUpdated) : '—'}</td>
+                        <td>
+                          <span className={`sync-dot ${s.lastSynced ? 'ok' : 'pending'}`} />
+                          {s.lastSynced ? relativeTime(s.lastSynced) : 'pending…'}
+                        </td>
+                        <td className="prov-status">
+                          <StatusBadge status={s.syncStatus} />
+                          {failures.length > 0 && (
+                            <button
+                              className="issues-toggle"
+                              onClick={() => toggle(s.id)}
+                              aria-expanded={open}
+                            >
+                              {failures.length} issue{failures.length === 1 ? '' : 's'} {open ? '▴' : '▾'}
+                            </button>
+                          )}
+                        </td>
+                        <td className="prov-actions">
+                          <button className="linkbtn-danger" onClick={() => remove(s.id)}>
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                      {open && failures.length > 0 && (
+                        <tr className="prov-error-row">
+                          <td colSpan={7}>
+                            <ul className="prov-errors">
+                              {failures.map((f, i) => (
+                                <li key={i}>
+                                  <code>{f.catalogId || '—'}</code>
+                                  {f.httpStatus ? ` · HTTP ${f.httpStatus}` : ''} —{' '}
+                                  {f.detail || 'unknown error'}
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>

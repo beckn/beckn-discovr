@@ -149,7 +149,12 @@ async function listSources() {
            s.created_at,
            GREATEST(MAX(i.last_seen_at), MAX(c.last_seen_at))                AS last_synced,
            MAX(c.source_updated_at)                                          AS source_updated,
-           COUNT(DISTINCT c.catalog_id)                                     AS catalogs
+           COUNT(DISTINCT c.catalog_id)                                     AS catalogs,
+           -- Roll the index sync outcome up to the provider. MIN over the statuses gives the
+           -- worst case (failed < partial < success alphabetically); error_detail is the (non-null)
+           -- failure JSON when any index isn't clean. Exact for the one-index-per-provider POC.
+           MIN(i.sync_status)                                               AS sync_status,
+           MIN(i.error_detail)                                              AS error_detail
       FROM crawler_source s
       LEFT JOIN index_crawl_state  i
              ON s.provider_domain IS NOT NULL AND i.provider_domain = s.provider_domain
@@ -169,6 +174,8 @@ async function listSources() {
     catalogs: Number(r.catalogs) || 0,
     lastSynced: r.last_synced ? new Date(r.last_synced).toISOString() : null,
     sourceUpdated: r.source_updated ? new Date(r.source_updated).toISOString() : null,
+    syncStatus: r.sync_status ?? null,
+    errorDetail: r.error_detail ?? null,
   }))
 }
 
