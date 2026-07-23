@@ -287,6 +287,30 @@ policies tomorrow). Never touched by the publish pipeline.
 }
 ```
 
+**Restricting the index itself.** A catalog file's access is declared inside the index (section 4.2),
+but the index can also be private — and its recipe cannot live inside the file a crawler is not yet
+allowed to read. So a restricted index carries its `networkIds` + `authMethods` on the **manifest's
+`files` entry that points to it** (which DeDi crawls and returns from search, so the crawler learns
+the recipe before fetching the index):
+
+```json
+"files": [
+  {
+    "name": "becknCatalogs",
+    "url": "https://cdn.techmart.com/beckn/becknCatalogs.dedi.json",
+    "networkIds": ["eon-retail"],
+    "authMethods": [
+      { "method": "signed-challenge", "algorithm": "ed25519", "header": "Authorization",
+        "challenge": ["timestamp", "participantId", "fileUrl"], "freshnessSeconds": 300 }
+    ]
+  }
+]
+```
+
+The `authMethods` shape is identical to a catalog's (section 4.8); only the host object differs —
+here `fileUrl` in the challenge is the **index URL**. Absent `networkIds`/`authMethods` → the index
+is public, as above.
+
 ## 4.2 The index — `becknCatalogs.dedi.json`
 
 Re-signed on every publish; `version` is the monotonic sequence a crawler uses as its cursor. Each
@@ -436,7 +460,9 @@ to learn what changed inside it.
   `/.well-known/dedi.json` from the fixed path, creates the participant's records, and the index
   URI becomes available to the network. No per-publish call is ever made to DeDi.
 - **Search (each crawl).** A crawler asks DeDi search for participants and their catalog records;
-  the result yields each participant's index URI.
+  the result yields each participant's index URI. When the index is private, the same record also
+  carries the index's `networkIds` + `authMethods` (from the manifest's `files` entry, section 4.1),
+  so the crawler knows how to authenticate before fetching the index.
 - **Registry lookup (restricted downloads).** A publisher's gate resolves a requester's key and
   network membership from the registry to authorize a restricted download (section 3.4).
 
@@ -516,9 +542,21 @@ Authorization: signed-challenge keyId="namma-yatri.com|key-001", algorithm="ed25
 
 **Other methods.** `authMethods` is a list, so alternatives can be added as more entries (e.g.
 `{ "method": "signed-url" }`, `{ "method": "mtls" }`, `{ "method": "token", "scheme": "Bearer" }`);
-a crawler picks the first one it supports. The **index itself can be restricted** the same way — its
-DeDi entry carries `authMethods`, and a crawler authenticates to fetch it exactly as for a catalog
-file.
+a crawler picks the first one it supports.
+
+**Where the recipe sits — auth rides on the pointer.** The `authMethods` entry always lives in the
+layer that *points to* the protected file, never in the file itself — otherwise a crawler would have
+to read the recipe out of the very file it is not yet allowed to read.
+
+| Restricted thing | Pointed to by | `authMethods` sits on | `fileUrl` in the challenge |
+|------------------|---------------|-----------------------|----------------------------|
+| A catalog file | the index | the catalog entry in the **index** (section 4.2) | the catalog file URL |
+| The index file | DeDi / the manifest | the `files` entry in the **manifest**, mirrored into the DeDi record (section 4.1) | the **index URL** |
+
+So the **index itself can be restricted** with the identical mechanism: the crawler reads the
+recipe from its DeDi record, builds the same signed challenge with the index URL as `fileUrl`, and
+authenticates to fetch the index exactly as it would for a catalog file. Only the *location of the
+recipe* moves up one level — the sign/verify mechanism is unchanged.
 
 > The field names here (`method`, `challenge`, `freshnessSeconds`, …) are a concrete proposal to be
 > aligned with the canonical Beckn Auth definition; the *mechanism* — sign a self-derived challenge,
