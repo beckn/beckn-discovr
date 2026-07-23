@@ -235,7 +235,8 @@ a few fixed variables the crawler can work out on its own — current timestamp,
 participantId, the file URL — so no round trip is needed to obtain it. The crawler signs the
 challenge with its network-registered key and sends the signature in the `Authorization` header
 of the download request. The publisher's gate verifies the signature against the requester's key
-in the registry and checks the requester belongs to a permitted network.
+in the registry and checks the requester belongs to a permitted network. The concrete method
+definition (the `authMethods` entry, the challenge recipe, the request header) is in §4.8.
 
 ```mermaid
 sequenceDiagram
@@ -324,7 +325,10 @@ it. A retired catalog stays as a tombstone entry.
       "catalogType": "REGULAR",
       "status": "ACTIVE",
       "networkIds": ["eon-retail"],
-      "authMethods": ["beckn-signed-challenge"],
+      "authMethods": [
+        { "method": "signed-challenge", "algorithm": "ed25519", "header": "Authorization",
+          "challenge": ["timestamp", "participantId", "fileUrl"], "freshnessSeconds": 300 }
+      ],
       "updatedAt": "2026-07-14T08:00:00Z",
       "schemaTypes": ["https://schema.beckn.org/retail/schema/1.1.0/context.jsonld"],
       "baseline": {
@@ -466,6 +470,59 @@ all of it. The publisher's only manual step stays "save the catalog"; the tool d
 
 So the day-to-day publish is one call; the plugin runs the pipeline (diff, segment, digest, index,
 sign) plus compaction on a schedule.
+
+## 4.8 Auth methods (restricted downloads)
+
+A restricted catalog's index entry lists one or more `authMethods`. Each entry is **self-describing**
+— the crawler learns the exact recipe from the index alone, no out-of-band knowledge needed. The
+first defined method is the **signed challenge** (per Beckn Auth).
+
+```json
+"authMethods": [
+  { "method": "signed-challenge", "algorithm": "ed25519", "header": "Authorization",
+    "challenge": ["timestamp", "participantId", "fileUrl"], "freshnessSeconds": 300 }
+]
+```
+
+| Field | Meaning |
+|-------|---------|
+| `method` | Method id. `signed-challenge` = the Beckn Auth signed challenge. |
+| `algorithm` | Signature algorithm the crawler must use (e.g. `ed25519`). |
+| `header` | HTTP header the signature is sent in (e.g. `Authorization`). |
+| `challenge` | The **ordered** variables the crawler concatenates to build the challenge string. |
+| `freshnessSeconds` | How long a signed challenge is accepted — the replay window. |
+
+**Crawler side** — build → sign → send:
+1. Build the challenge by joining the `challenge` variables in order: the **current timestamp**, its
+   **own `participantId`**, and the **file URL** being requested (all values it already has — no
+   round trip).
+2. Sign that string with its **registered private key** using `algorithm`.
+3. Send the download `GET` with the signature in `header`.
+
+```http
+GET /beckn/eon-exclusive-2026.v12.json HTTP/1.1
+Host: cdn.techmart.com
+Authorization: signed-challenge keyId="namma-yatri.com|key-001", algorithm="ed25519",
+               ts="2026-07-23T10:00:00Z", signature="<base64-signature-over-challenge>"
+```
+
+**Publisher gate side** — rebuild → verify → authorize:
+1. Rebuild the same challenge from the identical variables (it sees the timestamp, the caller's
+   claimed `participantId`, and the URL).
+2. Resolve the caller's **public key** and **network membership** from the registry.
+3. Verify the signature; reject if older than `freshnessSeconds` (replay protection).
+4. Check the caller belongs to one of the catalog's `networkIds` (entitlement).
+5. Serve the file, or deny.
+
+**Other methods.** `authMethods` is a list, so alternatives can be added as more entries (e.g.
+`{ "method": "signed-url" }`, `{ "method": "mtls" }`, `{ "method": "token", "scheme": "Bearer" }`);
+a crawler picks the first one it supports. The **index itself can be restricted** the same way — its
+DeDi entry carries `authMethods`, and a crawler authenticates to fetch it exactly as for a catalog
+file.
+
+> The field names here (`method`, `challenge`, `freshnessSeconds`, …) are a concrete proposal to be
+> aligned with the canonical Beckn Auth definition; the *mechanism* — sign a self-derived challenge,
+> verify against the registry plus network membership — is the design intent.
 
 ---
 
