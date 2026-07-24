@@ -1,0 +1,25 @@
+{
+  "dedi_version": "0.1",
+  "type": "dedi-manifest",
+  "domain": "https://github.com/ameersohel45/tech-mart",
+  "name": "FreshMart Pvt Ltd",
+  "keys": [
+    { "kid": "key-001", "kty": "OKP", "crv": "Ed25519", "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo" }
+  ],
+  "updated_at": "2026-07-21T00:00:00Z",
+  "next_update": "2026-08-04T00:00:00Z",
+  "files": [
+    {
+      "registry": "beckn-catalogs",
+      "url": "https://magician-aspirin-sympathy.ngrok-free.dev/bucket/beckn-catalogs.dedi.json",
+      "digest": "sha-256:a6d6f305294559ad840dc8e74dd35d51c57ce20b4fb82f90d696392ff78d91e3",
+      "schema": "https://schema.nfh.global/dedi/BecknCatalogIndexRecord/1.0.0/schema.json",
+      "state": "live"
+    }
+  ],
+  "proof": {
+    "verification_method": "key-001",
+    "canonicalization": "JCS",
+    "jws": "UNSIGNED_LOCAL_TEST_DATA_NO_CRYPTOGRAPHIC_SIGNATURE"
+  }
+}

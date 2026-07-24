@@ -1,0 +1,50 @@
+{
+  "dedi_version": "0.1",
+  "type": "dedi-file",
+  "source_url": "https://magician-aspirin-sympathy.ngrok-free.dev/bucket/beckn-catalogs.dedi.json",
+  "next_update": "2026-08-04T00:00:00Z",
+  "publisher": {
+    "domain": "https://github.com/ameersohel45/tech-mart",
+    "key": {
+      "kid": "key-001",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+    }
+  },
+  "namespace": "https://github.com/ameersohel45/tech-mart",
+  "registry": {
+    "name": "beckn-catalogs",
+    "schema": "https://schema.nfh.global/dedi/BecknCatalogIndexRecord/1.0.0/schema.json",
+    "state": "live",
+    "updated_at": "2026-07-21T00:00:00Z"
+  },
+  "records": [
+    {
+      "record_name": "CAT-GROCERY-FRESHMART-100",
+      "details": {
+        "catalogId": "CAT-GROCERY-FRESHMART-100",
+        "version": 1,
+        "catalogType": "REGULAR",
+        "status": "ACTIVE",
+        "visibility": "public",
+        "updatedAt": "2026-07-22T00:00:00Z",
+        "schemaTypes": [
+          "https://schema.beckn.io/GroceryResource/v2.1/context.jsonld"
+        ],
+        "parts": [
+          {
+            "url": "https://magician-aspirin-sympathy.ngrok-free.dev/bucket/CAT-GROCERY-FRESHMART-100.json",
+            "digest": "sha-256:e30bc5b6e9a1764beb2187a9944ad02ea6673e35cbeaabca2f9415b1c6fe22f8",
+            "lastModified": "2026-07-22T00:00:00Z"
+          }
+        ]
+      }
+    }
+  ],
+  "proof": {
+    "verification_method": "key-001",
+    "canonicalization": "JCS",
+    "jws": "UNSIGNED_LOCAL_TEST_DATA_NO_CRYPTOGRAPHIC_SIGNATURE"
+  }
+}

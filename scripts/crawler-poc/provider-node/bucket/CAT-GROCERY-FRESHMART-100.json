@@ -1,0 +1,787 @@
+{
+  "id": "CAT-GROCERY-FRESHMART-100",
+  "descriptor": {
+    "name": "FreshMart Grocery Catalog",
+    "shortDesc": "Daily essentials-tea & beverages"
+  },
+  "provider": {
+    "id": "PROV-FRESHMART-05",
+    "descriptor": {
+      "name": "FreshMart Pvt Ltd"
+    },
+    "availableAt": [
+      {
+        "geo": {
+          "type": "Point",
+          "coordinates": [
+            77.6401,
+            12.9116
+          ]
+        },
+        "address": {
+          "streetAddress": "27th Main Rd, Sector 2, HSR Layout",
+          "addressLocality": "Bengaluru",
+          "addressRegion": "Karnataka",
+          "postalCode": "560102",
+          "addressCountry": "IN"
+        }
+      }
+    ]
+  },
+  "resources": [
+    {
+      "id": "RES-GROCERY-TATA-TEA-PREMIUM-250GRAMS",
+      "descriptor": {
+        "name": "Tata Tea Premium",
+        "shortDesc": "Rich and aromatic black tea, 500g",
+        "longDesc": "Tata Tea Premium is a fine blend of handpicked tea leaves, crafted for a rich, refreshing cup every time. Its balanced strength and uplifting aroma make it the perfect everyday chai. Enjoy a satisfying, full-bodied brew whether taken with milk and sugar or as a light infusion.",
+        "mediaFile": [
+          {
+            "uri": "https://m.media-amazon.com/images/I/61oqaq-N2jL._SL1200_.jpg",
+            "mimeType": "image/jpeg",
+            "label": "Product image"
+          }
+        ]
+      },
+      "resourceAttributes": {
+        "@context": "https://schema.beckn.io/GroceryResource/v2.1/context.jsonld",
+        "@type": "GroceryResource",
+        "identity": {
+          "brand": "Tata Tea",
+          "originCountry": "IN"
+        },
+        "physical": {
+          "weight": {
+            "unitQuantity": 250,
+            "unitText": "G"
+          }
+        },
+        "food": {
+          "classification": [
+            "VEG"
+          ]
+        },
+        "packagedGoodsDeclaration": {
+          "manufacturerOrPacker": {
+            "type": "MANUFACTURER",
+            "name": "Tata Consumer Products Limited",
+            "id": "TCP-KA-3001",
+            "address": "Tata Consumer Products, 34 Sankey Road, Bengaluru, Karnataka, 560052, IN"
+          },
+          "commonOrGenericName": "Black Tea",
+          "netQuantity": {
+            "unitQuantity": 250,
+            "unitText": "G"
+          },
+          "manufacturePackingImportDate": {
+            "month": 1,
+            "year": 2026
+          }
+        },
+        "foodRegulatoryDeclaration": {
+          "registrations": [
+            {
+              "scheme": "FSSAI",
+              "id": "10012345000101",
+              "role": "MANUFACTURER"
+            }
+          ],
+          "additives": [
+            {
+              "type": "FREE_FROM",
+              "value": "Artificial colours"
+            },
+            {
+              "type": "FREE_FROM",
+              "value": "Preservatives"
+            }
+          ]
+        },
+        "nutrition": [
+          {
+            "nutrient": "Energy",
+            "value": {
+              "unitQuantity": 3,
+              "unitText": "KCAL"
+            }
+          },
+          {
+            "nutrient": "Protein",
+            "value": {
+              "unitQuantity": 0.3,
+              "unitText": "G"
+            }
+          },
+          {
+            "nutrient": "Caffeine",
+            "value": {
+              "unitQuantity": 25,
+              "unitText": "MG"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "RES-GROCERY-RED-LABEL-TEA-500GRAMS",
+      "descriptor": {
+        "name": "Brooke Bond Red Label Tea",
+        "shortDesc": "Strong and refreshing black tea, 500g",
+        "longDesc": "Brooke Bond Red Label is a blend of the finest tea leaves, delivering a strong, invigorating cup with a bright colour and inviting aroma. A trusted everyday tea across India, it brews a rich, satisfying chai that brings families together, cup after cup.",
+        "mediaFile": [
+          {
+            "uri": "https://m.media-amazon.com/images/I/51+iVkS0ZVL._SL1000_.jpg",
+            "mimeType": "image/jpeg",
+            "label": "Product image"
+          }
+        ]
+      },
+      "resourceAttributes": {
+        "@context": "https://schema.beckn.io/GroceryResource/v2.1/context.jsonld",
+        "@type": "GroceryResource",
+        "identity": {
+          "brand": "Red Label",
+          "originCountry": "IN"
+        },
+        "physical": {
+          "weight": {
+            "unitQuantity": 500,
+            "unitText": "G"
+          }
+        },
+        "food": {
+          "classification": [
+            "VEG"
+          ]
+        },
+        "packagedGoodsDeclaration": {
+          "manufacturerOrPacker": {
+            "type": "MANUFACTURER",
+            "name": "Hindustan Unilever Limited",
+            "id": "HUL-KA-1001",
+            "address": "HUL House, 165-166 Backbay Reclamation, Mumbai, Maharashtra, 400020, IN"
+          },
+          "commonOrGenericName": "Black Tea",
+          "netQuantity": {
+            "unitQuantity": 500,
+            "unitText": "G"
+          },
+          "manufacturePackingImportDate": {
+            "month": 1,
+            "year": 2026
+          }
+        },
+        "foodRegulatoryDeclaration": {
+          "registrations": [
+            {
+              "scheme": "FSSAI",
+              "id": "10013022000755",
+              "role": "MANUFACTURER"
+            }
+          ],
+          "additives": [
+            {
+              "type": "FREE_FROM",
+              "value": "Artificial colours"
+            },
+            {
+              "type": "FREE_FROM",
+              "value": "Preservatives"
+            }
+          ]
+        },
+        "nutrition": [
+          {
+            "nutrient": "Energy",
+            "value": {
+              "unitQuantity": 2,
+              "unitText": "KCAL"
+            }
+          },
+          {
+            "nutrient": "Protein",
+            "value": {
+              "unitQuantity": 0.2,
+              "unitText": "G"
+            }
+          },
+          {
+            "nutrient": "Caffeine",
+            "value": {
+              "unitQuantity": 30,
+              "unitText": "MG"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "RES-GROCERY-TAJ-MAHAL-TEA-250GRAMS",
+      "descriptor": {
+        "name": "Taj Mahal Tea",
+        "shortDesc": "Rich and flavourful black tea, 250g",
+        "longDesc": "Taj Mahal Tea powder is an exquisite blend approved by expert tea tasters after sampling thousands of brews. It yields a golden-orange infusion with a rich taste and an uplifting aroma, delivering a truly indulgent cup for connoisseurs who appreciate a fine, flavourful chai.",
+        "mediaFile": [
+          {
+            "uri": "https://m.media-amazon.com/images/I/616hLIzc7yL._SL1000_.jpg",
+            "mimeType": "image/jpeg",
+            "label": "Product image"
+          }
+        ]
+      },
+      "resourceAttributes": {
+        "@context": "https://schema.beckn.io/GroceryResource/v2.1/context.jsonld",
+        "@type": "GroceryResource",
+        "identity": {
+          "brand": "Taj Mahal",
+          "originCountry": "IN"
+        },
+        "physical": {
+          "weight": {
+            "unitQuantity": 250,
+            "unitText": "G"
+          }
+        },
+        "food": {
+          "classification": [
+            "VEG"
+          ]
+        },
+        "packagedGoodsDeclaration": {
+          "manufacturerOrPacker": {
+            "type": "MANUFACTURER",
+            "name": "Hindustan Unilever Limited",
+            "id": "HUL-KA-1002",
+            "address": "HUL House, 165-166 Backbay Reclamation, Mumbai, Maharashtra, 400020, IN"
+          },
+          "commonOrGenericName": "Black Tea",
+          "netQuantity": {
+            "unitQuantity": 250,
+            "unitText": "G"
+          },
+          "manufacturePackingImportDate": {
+            "month": 1,
+            "year": 2026
+          }
+        },
+        "foodRegulatoryDeclaration": {
+          "registrations": [
+            {
+              "scheme": "FSSAI",
+              "id": "10013022000766",
+              "role": "MANUFACTURER"
+            }
+          ],
+          "additives": [
+            {
+              "type": "FREE_FROM",
+              "value": "Artificial colours"
+            },
+            {
+              "type": "FREE_FROM",
+              "value": "Preservatives"
+            }
+          ]
+        },
+        "nutrition": [
+          {
+            "nutrient": "Energy",
+            "value": {
+              "unitQuantity": 3,
+              "unitText": "KCAL"
+            }
+          },
+          {
+            "nutrient": "Protein",
+            "value": {
+              "unitQuantity": 0.3,
+              "unitText": "G"
+            }
+          },
+          {
+            "nutrient": "Caffeine",
+            "value": {
+              "unitQuantity": 28,
+              "unitText": "MG"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "RES-GROCERY-WAGH-BAKRI-TEA-250GRAMS",
+      "descriptor": {
+        "name": "Wagh Bakri Premium Leaf Tea",
+        "shortDesc": "Bold and aromatic Assam leaf tea, 250g",
+        "longDesc": "Wagh Bakri Premium Leaf Tea is crafted from carefully selected Assam leaves, curated by master tea tasters for a bold, kadak taste and a warm golden hue. Every batch delivers a rich aroma and a refreshing, full-bodied cup that makes each chai break memorable.",
+        "mediaFile": [
+          {
+            "uri": "https://m.media-amazon.com/images/I/6104+7ycnYL._SL1000_.jpg",
+            "mimeType": "image/jpeg",
+            "label": "Product image"
+          }
+        ]
+      },
+      "resourceAttributes": {
+        "@context": "https://schema.beckn.io/GroceryResource/v2.1/context.jsonld",
+        "@type": "GroceryResource",
+        "identity": {
+          "brand": "Wagh Bakri",
+          "originCountry": "IN"
+        },
+        "physical": {
+          "weight": {
+            "unitQuantity": 250,
+            "unitText": "G"
+          }
+        },
+        "food": {
+          "classification": [
+            "VEG"
+          ]
+        },
+        "packagedGoodsDeclaration": {
+          "manufacturerOrPacker": {
+            "type": "MANUFACTURER",
+            "name": "Gujarat Tea Processors & Packers Limited",
+            "id": "GTPP-GJ-4001",
+            "address": "Gujarat Tea Processors & Packers Ltd, Wagh Bakri House, Ahmedabad, Gujarat, 380009, IN"
+          },
+          "commonOrGenericName": "Black Tea",
+          "netQuantity": {
+            "unitQuantity": 250,
+            "unitText": "G"
+          },
+          "manufacturePackingImportDate": {
+            "month": 1,
+            "year": 2026
+          }
+        },
+        "foodRegulatoryDeclaration": {
+          "registrations": [
+            {
+              "scheme": "FSSAI",
+              "id": "10714003000123",
+              "role": "MANUFACTURER"
+            }
+          ],
+          "additives": [
+            {
+              "type": "FREE_FROM",
+              "value": "Artificial colours"
+            },
+            {
+              "type": "FREE_FROM",
+              "value": "Preservatives"
+            }
+          ]
+        },
+        "nutrition": [
+          {
+            "nutrient": "Energy",
+            "value": {
+              "unitQuantity": 3,
+              "unitText": "KCAL"
+            }
+          },
+          {
+            "nutrient": "Protein",
+            "value": {
+              "unitQuantity": 0.3,
+              "unitText": "G"
+            }
+          },
+          {
+            "nutrient": "Caffeine",
+            "value": {
+              "unitQuantity": 27,
+              "unitText": "MG"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "offers": [
+    {
+      "id": "OFFER-TATA-TEA-PREMIUM-250G-001",
+      "descriptor": {
+        "name": "Tata Tea Premium 250g",
+        "shortDesc": "MRP for Tata Tea Premium 250g"
+      },
+      "resourceIds": [
+        "RES-GROCERY-TATA-TEA-PREMIUM-250GRAMS"
+      ],
+      "provider": {
+        "id": "PROV-FRESHMART-KORAMANGALA-05",
+        "descriptor": {
+          "name": "FreshMart Koramangala"
+        },
+        "availableAt": [
+          {
+            "geo": {
+              "type": "Point",
+              "coordinates": [
+                77.6245,
+                12.9352
+              ]
+            },
+            "address": {
+              "streetAddress": "80 Feet Rd, 4th Block, Koramangala",
+              "addressLocality": "Bengaluru",
+              "addressRegion": "Karnataka",
+              "postalCode": "560034",
+              "addressCountry": "IN"
+            }
+          }
+        ]
+      },
+      "validity": {
+        "startDate": "2026-04-01T00:00:00Z",
+        "endDate": "2026-06-30T23:59:59Z"
+      },
+      "considerations": [
+        {
+          "id": "CONSIDERATION-TATA-TEA-001",
+          "status": {
+            "name": "ACTIVE"
+          },
+          "considerationAttributes": {
+            "@context": "https://schema.beckn.io/RetailConsideration/v2.1/context.jsonld",
+            "@type": "RetailConsideration",
+            "currency": "INR",
+            "breakup": [
+              {
+                "title": "Tata Tea Premium 250g (MRP)",
+                "amount": 155,
+                "type": "BASE_PRICE"
+              }
+            ],
+            "totalAmount": 155
+          }
+        }
+      ],
+      "offerAttributes": {
+        "@context": "https://schema.beckn.io/RetailOffer/v2.1/context.jsonld",
+        "@type": "RetailOffer",
+        "policies": {
+          "returns": {
+            "allowed": true,
+            "window": "P7D",
+            "method": "SELLER_PICKUP"
+          }
+        },
+        "paymentConstraints": {
+          "codAvailable": true
+        },
+        "serviceability": {
+          "distanceConstraint": {
+            "maxDistance": 10,
+            "unit": "KM"
+          },
+          "timing": [
+            {
+              "daysOfWeek": [
+                "MON",
+                "TUE",
+                "WED",
+                "THU",
+                "FRI",
+                "SAT"
+              ],
+              "timeRange": {
+                "start": "08:00",
+                "end": "21:00"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "OFFER-RED-LABEL-500G-001",
+      "descriptor": {
+        "name": "Brooke Bond Red Label Tea 500g",
+        "shortDesc": "MRP for Brooke Bond Red Label Tea 500g"
+      },
+      "resourceIds": [
+        "RES-GROCERY-RED-LABEL-TEA-500GRAMS"
+      ],
+      "provider": {
+        "id": "PROV-FRESHMART-KORAMANGALA-05",
+        "descriptor": {
+          "name": "FreshMart Koramangala"
+        },
+        "availableAt": [
+          {
+            "geo": {
+              "type": "Point",
+              "coordinates": [
+                77.6245,
+                12.9352
+              ]
+            },
+            "address": {
+              "streetAddress": "80 Feet Rd, 4th Block, Koramangala",
+              "addressLocality": "Bengaluru",
+              "addressRegion": "Karnataka",
+              "postalCode": "560034",
+              "addressCountry": "IN"
+            }
+          }
+        ]
+      },
+      "validity": {
+        "startDate": "2026-04-01T00:00:00Z",
+        "endDate": "2026-06-30T23:59:59Z"
+      },
+      "considerations": [
+        {
+          "id": "CONSIDERATION-RED-LABEL-001",
+          "status": {
+            "name": "ACTIVE"
+          },
+          "considerationAttributes": {
+            "@context": "https://schema.beckn.io/RetailConsideration/v2.1/context.jsonld",
+            "@type": "RetailConsideration",
+            "currency": "INR",
+            "breakup": [
+              {
+                "title": "Brooke Bond Red Label Tea 500g (MRP)",
+                "amount": 275,
+                "type": "BASE_PRICE"
+              }
+            ],
+            "totalAmount": 275
+          }
+        }
+      ],
+      "offerAttributes": {
+        "@context": "https://schema.beckn.io/RetailOffer/v2.1/context.jsonld",
+        "@type": "RetailOffer",
+        "policies": {
+          "returns": {
+            "allowed": true,
+            "window": "P7D",
+            "method": "SELLER_PICKUP"
+          }
+        },
+        "paymentConstraints": {
+          "codAvailable": true
+        },
+        "serviceability": {
+          "distanceConstraint": {
+            "maxDistance": 10,
+            "unit": "KM"
+          },
+          "timing": [
+            {
+              "daysOfWeek": [
+                "MON",
+                "TUE",
+                "WED",
+                "THU",
+                "FRI",
+                "SAT"
+              ],
+              "timeRange": {
+                "start": "08:00",
+                "end": "21:00"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "OFFER-TAJ-MAHAL-250G-001",
+      "descriptor": {
+        "name": "Taj Mahal Tea 250g",
+        "shortDesc": "MRP for Taj Mahal Tea 250g"
+      },
+      "resourceIds": [
+        "RES-GROCERY-TAJ-MAHAL-TEA-250GRAMS"
+      ],
+      "provider": {
+        "id": "PROV-FRESHMART-KORAMANGALA-05",
+        "descriptor": {
+          "name": "FreshMart Koramangala"
+        },
+        "availableAt": [
+          {
+            "geo": {
+              "type": "Point",
+              "coordinates": [
+                77.6245,
+                12.9352
+              ]
+            },
+            "address": {
+              "streetAddress": "80 Feet Rd, 4th Block, Koramangala",
+              "addressLocality": "Bengaluru",
+              "addressRegion": "Karnataka",
+              "postalCode": "560034",
+              "addressCountry": "IN"
+            }
+          }
+        ]
+      },
+      "validity": {
+        "startDate": "2026-04-01T00:00:00Z",
+        "endDate": "2026-06-30T23:59:59Z"
+      },
+      "considerations": [
+        {
+          "id": "CONSIDERATION-TAJ-MAHAL-001",
+          "status": {
+            "name": "ACTIVE"
+          },
+          "considerationAttributes": {
+            "@context": "https://schema.beckn.io/RetailConsideration/v2.1/context.jsonld",
+            "@type": "RetailConsideration",
+            "currency": "INR",
+            "breakup": [
+              {
+                "title": "Taj Mahal Tea 250g (MRP)",
+                "amount": 190,
+                "type": "BASE_PRICE"
+              }
+            ],
+            "totalAmount": 190
+          }
+        }
+      ],
+      "offerAttributes": {
+        "@context": "https://schema.beckn.io/RetailOffer/v2.1/context.jsonld",
+        "@type": "RetailOffer",
+        "policies": {
+          "returns": {
+            "allowed": true,
+            "window": "P7D",
+            "method": "SELLER_PICKUP"
+          }
+        },
+        "paymentConstraints": {
+          "codAvailable": true
+        },
+        "serviceability": {
+          "distanceConstraint": {
+            "maxDistance": 10,
+            "unit": "KM"
+          },
+          "timing": [
+            {
+              "daysOfWeek": [
+                "MON",
+                "TUE",
+                "WED",
+                "THU",
+                "FRI",
+                "SAT"
+              ],
+              "timeRange": {
+                "start": "08:00",
+                "end": "21:00"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "OFFER-WAGH-BAKRI-250G-001",
+      "descriptor": {
+        "name": "Wagh Bakri Premium Leaf Tea 250g",
+        "shortDesc": "MRP for Wagh Bakri Premium Leaf Tea 250g"
+      },
+      "resourceIds": [
+        "RES-GROCERY-WAGH-BAKRI-TEA-250GRAMS"
+      ],
+      "provider": {
+        "id": "PROV-FRESHMART-KORAMANGALA-05",
+        "descriptor": {
+          "name": "FreshMart Koramangala"
+        },
+        "availableAt": [
+          {
+            "geo": {
+              "type": "Point",
+              "coordinates": [
+                77.6245,
+                12.9352
+              ]
+            },
+            "address": {
+              "streetAddress": "80 Feet Rd, 4th Block, Koramangala",
+              "addressLocality": "Bengaluru",
+              "addressRegion": "Karnataka",
+              "postalCode": "560034",
+              "addressCountry": "IN"
+            }
+          }
+        ]
+      },
+      "validity": {
+        "startDate": "2026-04-01T00:00:00Z",
+        "endDate": "2026-06-30T23:59:59Z"
+      },
+      "considerations": [
+        {
+          "id": "CONSIDERATION-WAGH-BAKRI-001",
+          "status": {
+            "name": "ACTIVE"
+          },
+          "considerationAttributes": {
+            "@context": "https://schema.beckn.io/RetailConsideration/v2.1/context.jsonld",
+            "@type": "RetailConsideration",
+            "currency": "INR",
+            "breakup": [
+              {
+                "title": "Wagh Bakri Premium Leaf Tea 250g (MRP)",
+                "amount": 150,
+                "type": "BASE_PRICE"
+              }
+            ],
+            "totalAmount": 150
+          }
+        }
+      ],
+      "offerAttributes": {
+        "@context": "https://schema.beckn.io/RetailOffer/v2.1/context.jsonld",
+        "@type": "RetailOffer",
+        "policies": {
+          "returns": {
+            "allowed": true,
+            "window": "P7D",
+            "method": "SELLER_PICKUP"
+          }
+        },
+        "paymentConstraints": {
+          "codAvailable": true
+        },
+        "serviceability": {
+          "distanceConstraint": {
+            "maxDistance": 10,
+            "unit": "KM"
+          },
+          "timing": [
+            {
+              "daysOfWeek": [
+                "MON",
+                "TUE",
+                "WED",
+                "THU",
+                "FRI",
+                "SAT"
+              ],
+              "timeRange": {
+                "start": "08:00",
+                "end": "21:00"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
