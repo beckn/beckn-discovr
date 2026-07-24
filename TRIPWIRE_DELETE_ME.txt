@@ -1,0 +1,7 @@
+This file is a gitleaks tripwire for verifying the secrets-scan workflow.
+It contains a fake, non-functional credential that matches the AWS key pattern.
+
+aws_access_key_id = "AKIAZ3K7QWERTYUIOP12"
+aws_secret_access_key = "kThisIsAFakeSecretForGitleaksTripwireTest01"
+
+DO NOT MERGE. Delete this branch after verification.
