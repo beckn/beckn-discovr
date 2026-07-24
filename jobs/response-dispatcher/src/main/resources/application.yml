@@ -59,10 +59,10 @@ registry:
 signing:
   enabled: false
   key-id-suffix: ""
-  # Option 1: Raw 32-byte seed (beckn-onix compatible)
-  private-key: ""
-  # Option 2: PKCS#8 format (standard)
-  # private-key: -----BEGIN PRIVATE KEY-----MC4CAQAwBQYDK2VwBCIEIPTQYeuz5P+r94q65GGR5UORNasPhorx3QxbSngspcyD-----END PRIVATE KEY-----
+  # Provide the key via the SIGNING_PRIVATE_KEY env var — never hardcode it here.
+  #   Option 1: Raw 32-byte seed (beckn-onix compatible)
+  #   Option 2: PKCS#8 PEM (the standard "BEGIN/END PRIVATE KEY" block)
+  private-key: ${SIGNING_PRIVATE_KEY:}
   expiry-seconds: 4000
   subscriber-id: ""
 
