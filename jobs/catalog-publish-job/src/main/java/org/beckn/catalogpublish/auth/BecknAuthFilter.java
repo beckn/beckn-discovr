@@ -97,7 +97,7 @@ public class BecknAuthFilter extends OncePerRequestFilter {
             var parsed = becknAuth.verifySignature(authHeader, rawBody);
             log.info(LogEvent.AUTH_VERIFY_DONE,
                     value("path", sanitizedPath),
-                    value("subscriberId", parsed.parsedHeader().subscriberId()));
+                    value("subscriberId", ErrorSanitizer.sanitize(parsed.parsedHeader().subscriberId())));
         } catch (BecknAuthException e) {
             // SDK misclassifies some verification failures (e.g. illegal Base64) as INTERNAL_ERROR / 500.
             // Remap to SEC_SIGNATURE_INVALID / 401 when the cause is clearly a verification failure.
@@ -154,6 +154,8 @@ public class BecknAuthFilter extends OncePerRequestFilter {
 
         response.setStatus(httpStatus);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        // Defense-in-depth: JSON body with an untrusted echoed messageId — stop browsers MIME-sniffing it as HTML.
+        response.setHeader("X-Content-Type-Options", "nosniff");
         response.getWriter().write(objectMapper.writeValueAsString(outer));
     }
 
