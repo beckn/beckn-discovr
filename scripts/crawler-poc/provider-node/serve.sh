@@ -65,8 +65,8 @@ start() {
 
   echo ""
   echo "  serving  : $ROOT"
-  echo "  local    : http://127.0.0.1:$PORT/.well-known/dedi.json"
-  echo "  public   : $url/.well-known/dedi.json"
+  echo "  local    : http://127.0.0.1:$PORT/catalog/catalog-index.json"
+  echo "  public   : $url/catalog/catalog-index.json"
   echo ""
   echo "  sync catalog to this URL:"
   echo "    NGROK_URL=$url node publish-ngrok.js"
