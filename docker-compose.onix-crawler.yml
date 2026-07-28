@@ -280,11 +280,10 @@ services:
     container_name: onix-crawler
     ports:
     - 8091:8081
+    # All crawler config is loaded from the onix config file (./onix-config/config.yaml);
+    # CONFIG_FILE just names which file to load — no CRAWLER_* env here.
     environment:
     - CONFIG_FILE=/app/onix-config/config.yaml
-    - CRAWLER_DB_DSN=postgres://catalog_user:catalog123@postgres-discovery:5432/catalog_db?sslmode=disable
-    - CRAWLER_PUSH_ENDPOINT=http://discovr-ingestion:8080/beckn/catalog/push
-    - CRAWLER_INDEX_URLS=${CRAWLER_INDEX_URLS:-http://catalog-source.invalid/none}
     volumes:
     - ./onix-config:/app/onix-config:ro
     depends_on:

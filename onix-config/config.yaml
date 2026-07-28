@@ -19,8 +19,9 @@ pluginManager:
 
 # Crawl-only module. schemaValidator is intentionally omitted (optional in the
 # crawl handler) — the ingestion service validates /push downstream, so we skip
-# the beckn.yaml fetch inside the crawler. DB DSN, push endpoint, and index URL
-# come from env in the compose service (env overrides any value here).
+# the beckn.yaml fetch inside the crawler. ALL crawler config lives HERE in the
+# onix config file (the plugin reads this config map); the compose no longer
+# supplies any CRAWLER_* env — only CONFIG_FILE, which names this file.
 modules:
   - name: crawl
     path: /crawl
@@ -36,6 +37,13 @@ modules:
         crawler:
           id: catalogcrawler
           config:
+            # Connection / deploy (in-network service names; local test creds).
+            CRAWLER_DB_DSN: "postgres://catalog_user:catalog123@postgres-discovery:5432/catalog_db?sslmode=disable"
+            CRAWLER_PUSH_ENDPOINT: "http://discovr-ingestion:8080/beckn/catalog/push"
+            # Non-resolving placeholder so the scheduled pass is a no-op; drive real
+            # crawls via POST /crawl {"indexUrl":"..."} (e.g. an ngrok toolkit URL).
+            CRAWLER_INDEX_URLS: "http://catalog-source.invalid/none"
+            # Tunables.
             CRAWLER_NETWORK_IDS: ""
             CRAWLER_INDEX_INTERVAL: "1m"
             CRAWLER_CATALOG_INTERVAL: "15s"
