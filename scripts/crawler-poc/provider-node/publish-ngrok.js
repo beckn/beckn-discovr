@@ -1,43 +1,44 @@
 #!/usr/bin/env node
 /**
- * publish-ngrok.js — point the DeDi chain at your ngrok (or any) host, then recompute digests.
+ * publish-ngrok.js — point the catalog index at your ngrok (or any) host, then recompute
+ * each file entry's digest + size. Baseline + change-files model, INDEX-ONLY (no DeDi
+ * manifest / pointer file): the onix crawler is pointed straight at the catalog index URL.
  *
- * Use this instead of publish.js when you want to serve the whole catalog from your local
- * machine through an ngrok tunnel, so the crawler stays on your host instead of jumping to
- * GitHub raw.
- *
- * Run from the repo root, after editing any catalog JSON (or after your ngrok URL changes):
- *   NGROK_URL=https://your-id.ngrok-free.app node publish-ngrok.js
- *   node publish-ngrok.js                         # uses BASE_URL below if NGROK_URL is unset
+ * Run from this folder, after editing any catalog/change JSON (or when the ngrok URL changes):
+ *   NGROK_URL=https://your-id.ngrok-free.dev node publish-ngrok.js
+ *   node publish-ngrok.js                         # uses BASE_URL default below if NGROK_URL unset
  *
  * What it does, every run:
- *   1. Rewrites every INTERNAL file reference (anything that resolves to a local file under
- *      bucket/ or .well-known/) to  <BASE_URL>/<path>  — leaves external URLs (schema.*,
- *      image CDNs, the github.com identity/namespace) untouched.
- *   2. Recomputes the whole digest chain over the ACTUAL file bytes:
- *        catalog file  -> index  parts[].digest
- *        index file    -> manifest files[].digest
- *      (hashing the real bytes, trailing newline included — exactly what a static server serves).
+ *   1. Rewrites every INTERNAL url in catalog/catalog-index.json — the catalog's `baseline.url`
+ *      and each `changes[].url` that resolves to a local file under catalog/ — to
+ *      <BASE_URL>/<path>. External URLs (schema.*, image CDNs) are left untouched.
+ *   2. Recomputes, over the ACTUAL file bytes each static server serves, per entry:
+ *        digest = "sha-256:<hex>"   (baseline + every change file)
+ *        size   = byte length       (drives the crawler's baseline-vs-changes cutover)
  *
- * It does NOT touch git. Nothing is committed or pushed. Local edits only.
+ * It does NOT touch git. Local edits only. The crawler verifies each file by its own digest,
+ * so there is no index-level or manifest digest to maintain here.
  */
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
 const ROOT = __dirname;
-const MANIFEST = path.join(ROOT, ".well-known", "dedi.json");
+const INDEX = path.join(ROOT, "catalog", "catalog-index.json");
 
 // Your ngrok host. Env var wins; edit this default to your reserved domain if you have one.
 const BASE_URL = (process.env.NGROK_URL || "https://magician-aspirin-sympathy.ngrok-free.dev").replace(/\/+$/, "");
 
-// sha-256 of the exact file bytes (trailing newline included).
+// sha-256 of the exact file bytes (whatever the static server serves).
 function sha256Of(file) {
   return "sha-256:" + crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
+function sizeOf(file) {
+  return fs.statSync(file).size;
+}
 
-// If a URL points at a file we host locally (path contains a `bucket` or `.well-known`
-// segment and that file exists under ROOT), return its repo-relative segments; else null.
+// If a URL resolves to a file we host locally (its path has a `catalog` segment and that
+// file exists under ROOT), return its repo-relative segments; else null.
 function internalRel(url) {
   let segs;
   try {
@@ -45,99 +46,63 @@ function internalRel(url) {
   } catch {
     return null;
   }
-  const i = segs.findIndex((s) => s === "bucket" || s === ".well-known");
+  const i = segs.indexOf("catalog");
   if (i === -1) return null;
   const rel = segs.slice(i);
   return fs.existsSync(path.join(ROOT, ...rel)) ? rel : null;
 }
-
-// Resolve any internal URL to its local file path (null if not internal).
 function urlToLocal(url) {
   const rel = internalRel(url);
   return rel ? path.join(ROOT, ...rel) : null;
 }
-
-// Normalize an internal URL to the current BASE_URL.
 function toBaseUrl(rel) {
   return `${BASE_URL}/${rel.join("/")}`;
 }
 
-// ---- Pass 1: rewrite internal URLs in every JSON file we host ----
-function jsonFiles() {
-  const out = [MANIFEST];
-  const bucket = path.join(ROOT, "bucket");
-  if (fs.existsSync(bucket)) {
-    for (const f of fs.readdirSync(bucket)) {
-      if (f.endsWith(".json")) out.push(path.join(bucket, f));
-    }
-  }
-  return out;
-}
+const index = JSON.parse(fs.readFileSync(INDEX, "utf8"));
 
+// ---- Pass 1: rewrite internal urls (baseline + changes) to the current BASE_URL ----
 let rewrites = 0;
-for (const file of jsonFiles()) {
-  const before = fs.readFileSync(file, "utf8");
-  const after = before.replace(/https?:\/\/[^\s"'\\<>]+/g, (url) => {
-    const rel = internalRel(url);
-    if (!rel) return url;
-    const next = toBaseUrl(rel);
-    if (next !== url) rewrites++;
-    return next;
-  });
-  if (after !== before) {
-    fs.writeFileSync(file, after);
-    console.log(`  rewrote URLs in ${path.relative(ROOT, file)}`);
+function rewriteEntry(entry) {
+  if (!entry || !entry.url) return;
+  const rel = internalRel(entry.url);
+  if (!rel) return; // external (schema, CDN) — leave it
+  const next = toBaseUrl(rel);
+  if (next !== entry.url) {
+    entry.url = next;
+    rewrites++;
   }
 }
+for (const cat of index.catalogs || []) {
+  rewriteEntry(cat.baseline);
+  for (const ch of cat.changes || []) rewriteEntry(ch);
+}
+
+// ---- Pass 2: recompute digest + size over the actual (rewritten-target) local bytes ----
+let updated = 0;
+function refreshEntry(entry, label) {
+  if (!entry || !entry.url) return;
+  const local = urlToLocal(entry.url);
+  if (!local) {
+    console.error(`ERROR: entry url is not local: ${entry.url}`);
+    process.exit(1);
+  }
+  const d = sha256Of(local);
+  const s = sizeOf(local);
+  if (entry.digest !== d || entry.size !== s) {
+    entry.digest = d;
+    entry.size = s;
+    updated++;
+    console.log(`  ${label} [${path.basename(local)}] -> ${d} (${s} bytes)`);
+  }
+}
+for (const cat of index.catalogs || []) {
+  refreshEntry(cat.baseline, `baseline v${cat.baseline && cat.baseline.version}`);
+  for (const ch of cat.changes || []) refreshEntry(ch, `change v${ch.version}`);
+}
+
+fs.writeFileSync(INDEX, JSON.stringify(index, null, 2) + "\n");
+
 console.log(`URL rewrite: ${rewrites} reference(s) pointed at ${BASE_URL}`);
-
-// ---- Pass 2: recompute the digest chain (bottom-up), over the rewritten bytes ----
-// Replace one occurrence of `oldD` with `newD` in `file`. Returns true if it changed.
-function swapDigest(file, oldD, newD) {
-  if (oldD === newD) return false;
-  const txt = fs.readFileSync(file, "utf8");
-  if (!txt.includes(oldD)) {
-    console.error(`ERROR: digest ${oldD} not found in ${path.relative(ROOT, file)}`);
-    process.exit(1);
-  }
-  fs.writeFileSync(file, txt.replace(oldD, newD)); // first match only
-  return true;
-}
-
-const manifest = JSON.parse(fs.readFileSync(MANIFEST, "utf8"));
-let changed = false;
-
-for (const fref of manifest.files || []) {
-  const indexPath = urlToLocal(fref.url);
-  if (!indexPath) {
-    console.error(`ERROR: manifest file url is not local: ${fref.url}`);
-    process.exit(1);
-  }
-  const index = JSON.parse(fs.readFileSync(indexPath, "utf8"));
-
-  // catalog file bytes -> index parts[].digest
-  for (const rec of index.records || []) {
-    for (const part of rec.details.parts || []) {
-      const catPath = urlToLocal(part.url);
-      if (!catPath) {
-        console.error(`ERROR: part url is not local: ${part.url}`);
-        process.exit(1);
-      }
-      const next = sha256Of(catPath);
-      if (swapDigest(indexPath, part.digest, next)) {
-        changed = true;
-        console.log(`  index part [${path.basename(catPath)}] -> ${next}`);
-      }
-    }
-  }
-
-  // index file bytes (now updated) -> manifest files[].digest
-  const nextIndex = sha256Of(indexPath);
-  if (swapDigest(MANIFEST, fref.digest, nextIndex)) {
-    changed = true;
-    console.log(`  manifest [${path.basename(indexPath)}] -> ${nextIndex}`);
-  }
-}
-
-console.log("digest chain " + (changed ? "updated." : "already up to date."));
-console.log(`serve the repo root and expose it: ngrok http <port>  (base = ${BASE_URL})`);
+console.log(`digest/size: ${updated} entry(ies) refreshed`);
+console.log(`serve this folder; crawler index URL = ${BASE_URL}/catalog/catalog-index.json`);

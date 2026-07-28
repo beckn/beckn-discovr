@@ -33,7 +33,7 @@
       "id": "RES-GROCERY-TATA-TEA-PREMIUM-250GRAMS",
       "descriptor": {
         "name": "Tata Tea Premium",
-        "shortDesc": "Rich and aromatic black tea, 500g",
+        "shortDesc": "Rich and aromatic black tea, 250g",
         "longDesc": "Tata Tea Premium is a fine blend of handpicked tea leaves, crafted for a rich, refreshing cup every time. Its balanced strength and uplifting aroma make it the perfect everyday chai. Enjoy a satisfying, full-bodied brew whether taken with milk and sugar or as a light infusion.",
         "mediaFile": [
           {
@@ -219,7 +219,7 @@
       "id": "RES-GROCERY-TAJ-MAHAL-TEA-250GRAMS",
       "descriptor": {
         "name": "Taj Mahal Tea",
-        "shortDesc": "Rich and flavourful black tea, 250g",
+        "shortDesc": "Rich and flavourful black tea, 500g",
         "longDesc": "Taj Mahal Tea powder is an exquisite blend approved by expert tea tasters after sampling thousands of brews. It yields a golden-orange infusion with a rich taste and an uplifting aroma, delivering a truly indulgent cup for connoisseurs who appreciate a fine, flavourful chai.",
         "mediaFile": [
           {
