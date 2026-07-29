@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 @Primary
@@ -50,6 +51,16 @@ public class JpaItemStore implements ItemStore {
             results.addAll(repo.findAllByIdIn(chunk));
         }
         return results;
+    }
+
+    @Override
+    public List<Item> findAllByCatalogId(String catalogId) {
+        return repo.findAllByCatalogId(catalogId);
+    }
+
+    @Override
+    public Optional<Item> findFirstByCatalogId(String catalogId) {
+        return repo.findFirstByCatalogId(catalogId);
     }
 
     @Override
