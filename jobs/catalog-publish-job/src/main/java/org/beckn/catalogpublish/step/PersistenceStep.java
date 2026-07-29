@@ -143,8 +143,15 @@ public class PersistenceStep {
             String resourceId = pair.resourceId();
             JsonNode resourceNode = pair.resourceNode();
             try {
-                // Catalg sends a fully resolved payload — always replace, never merge.
+                // Resource body is always replaced — Catalg sends a fully resolved resource.
                 JsonNode payload = payloadBuilder.buildDenormalizedPayloadFromSlice(baseSlice, resourceNode, offerIndex, resourceId);
+                // Offers are not: in MERGE, an offer this publish never mentioned stays attached.
+                // Restated offers are excluded, so narrowing resourceIds still detaches them.
+                Item existing = existingById.get(resourceId);
+                if (!isFullReplace && existing != null
+                        && hasUnrestatedOffer(existing, incomingOfferById.keySet())) {
+                    mergeService.carryForwardUnrestatedOffers(payload, existing.getPayload(), incomingOfferById.keySet());
+                }
                 String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
                 String type = Optional.ofNullable(FieldExtractor.extractResourceAttributesType(resourceNode))
                         .orElse(FieldExtractor.extractResourceType(resourceNode));
@@ -290,6 +297,22 @@ public class PersistenceStep {
             }
         }
         return "MERGE";
+    }
+
+    /**
+     * Fast pre-check for MERGE offer carry-forward: true when the stored row holds at least one
+     * offer this publish never mentioned.
+     *
+     * <p>Reads the already-loaded {@code offer_ids} column instead of parsing the stored payload
+     * JSON, which keeps the common case free of work — a publisher sending the catalog's full
+     * offer list (the Catalg path) restates every stored id, so the parse is skipped entirely.
+     * {@code offer_ids} is derived from the payload on every write, so the two stay in step.
+     */
+    private static boolean hasUnrestatedOffer(Item existing, Set<String> restatedOfferIds) {
+        for (String storedOfferId : existing.getOfferIds()) {
+            if (!restatedOfferIds.contains(storedOfferId)) return true;
+        }
+        return false;
     }
 
     /**

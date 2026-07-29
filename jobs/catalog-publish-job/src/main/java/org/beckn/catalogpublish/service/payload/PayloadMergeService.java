@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class PayloadMergeService {
@@ -82,6 +83,51 @@ public class PayloadMergeService {
         } catch (Exception e) {
             throw new PayloadMergeException("Failed to merge offer into payload: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * MERGE-mode offer preservation. Carries offers from the stored payload forward into a
+     * freshly built one when the incoming publish never mentioned them.
+     *
+     * <p>A freshly built denormalized payload contains only the offers the incoming publish
+     * attached to this resource, so a publisher updating just a resource (no {@code offers}
+     * array at all) would otherwise wipe every offer the resource already had — and since
+     * discover drops resources that end up with no offers, that silently delists them.
+     *
+     * <p>The decision hinges on {@code restatedOfferIds} — every offer id appearing anywhere
+     * in this publish, not merely those attached to this resource:
+     * <ul>
+     * <li><b>Offer id absent from the publish</b> — the publisher was not talking about
+     * offers; carry the stored offer forward.</li>
+     * <li><b>Offer id present in the publish</b> — its {@code resourceIds} declare the
+     * complete, current resource list. Not carried forward, so an offer restated without
+     * this resource is correctly detached. Preserving it here would make offers impossible
+     * to unlink in MERGE mode.</li>
+     * </ul>
+     *
+     * <p>Offers already present in {@code payload} are never duplicated. Carried-forward
+     * nodes come from a tree parsed here, so no incoming node is aliased or mutated.
+     *
+     * <p><b>Mutates {@code payload} in-place</b> and returns the same reference.
+     * MERGE-only — FULL replace is authoritative and must keep clearing omitted offers.
+     */
+    public JsonNode carryForwardUnrestatedOffers(JsonNode payload, String storedPayloadJson,
+            Set<String> restatedOfferIds) {
+        JsonNode storedOffers = parseOrEmpty(storedPayloadJson)
+                .path(BecknFields.CATALOGS).path(0).path(BecknFields.OFFERS);
+        if (!storedOffers.isArray() || storedOffers.isEmpty())
+            return payload; // nothing stored to carry — leave payload untouched
+
+        Map<String, Integer> index = buildOfferIndex(payload);
+        ArrayNode offers = getOffersArray(payload);
+        for (JsonNode stored : storedOffers) {
+            String id = stored.path(BecknFields.ID).asText(null);
+            if (id == null || restatedOfferIds.contains(id) || index.containsKey(id))
+                continue;
+            index.put(id, offers.size());
+            offers.add(stored);
+        }
+        return payload;
     }
 
     /**
