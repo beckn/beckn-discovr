@@ -123,6 +123,40 @@ class CatalogMetadataPropagationIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
+     * An offer-only publish names the catalog as a bare reference — {@code {"id": …}} with no
+     * descriptor or provider — only to say which catalog the offers belong to. Propagating that
+     * would erase the real catalog metadata from every row, so it must be left alone.
+     */
+    @Test
+    void mergeMode_offerOnlyPublish_doesNotWipeCatalogMetadata() {
+        orchestrator.processPublish(META_BASELINE);
+        String res2Before = itemRepository.findById(new ItemId("res-2", "cat-meta"))
+                .orElseThrow().getPayload();
+
+        // Offer-only publish: catalog carried as a reference, no descriptor, no provider.
+        String offerOnly = """
+                {
+                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                               "messageId":"m2","transactionId":"t2"},
+                  "message": {"catalogs": [{
+                    "id": "cat-meta",
+                    "resources": [],
+                    "offers": [
+                      {"id": "offer-2", "descriptor": {"name": "Flash Sale"},
+                       "resourceIds": ["res-1"]}
+                    ]}]}
+                }""";
+        orchestrator.processPublish(offerOnly);
+
+        assertThat(itemRepository.findById(new ItemId("res-2", "cat-meta")).orElseThrow().getPayload())
+                .as("an offer-only publish says nothing about catalog metadata — res-2 stays as it was")
+                .isEqualTo(res2Before);
+        assertThat(itemRepository.findById(new ItemId("res-1", "cat-meta")).orElseThrow().getPayload())
+                .as("res-1 keeps its catalog metadata and gains the new offer")
+                .contains("Catalog Original", "Provider Original", "Flash Sale");
+    }
+
+    /**
      * Catalog-metadata propagation is scoped to the publishing catalog: a rename on cat-meta
      * must not touch rows of another catalog, even one sharing a resource id.
      */

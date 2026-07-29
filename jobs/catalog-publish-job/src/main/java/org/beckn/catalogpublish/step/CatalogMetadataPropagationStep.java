@@ -2,6 +2,7 @@ package org.beckn.catalogpublish.step;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.beckn.catalogpublish.common.BecknFields;
 import org.beckn.catalogpublish.logging.LogEvent;
 import org.beckn.catalogpublish.metrics.CatalogPublishMetrics;
 import org.beckn.catalogpublish.model.Item;
@@ -77,6 +78,18 @@ public class CatalogMetadataPropagationStep {
     public List<RefreshedItem> propagate(String catalogId, ObjectNode baseSlice,
             Collection<Item> alreadyLoaded, Set<String> alreadyHandled) {
 
+        // An offer-only publish carries the catalog as a bare reference — {"id": …} and nothing
+        // else — purely to say which catalog the offers belong to. That is not a claim that the
+        // catalog has lost its descriptor, provider and validity, so propagating it would erase
+        // real metadata from every row. Only propagate once the publish has actually described the
+        // catalog; from then on its slice is authoritative, omissions included, exactly as it
+        // already is for the resources the publish lists.
+        if (!describesCatalog(baseSlice)) {
+            log.debug("event={} catalogId={} reason=catalog-node-is-a-reference",
+                    LogEvent.CATALOG_META_SKIPPED, catalogId);
+            return List.of();
+        }
+
         // Sample one stored row to see what metadata the catalog currently holds. Prefer a row the
         // publish already loaded (free); only query when nothing it listed exists yet.
         Item sample = alreadyLoaded.stream().findFirst()
@@ -121,5 +134,14 @@ public class CatalogMetadataPropagationStep {
                     LogEvent.CATALOG_META_PROPAGATED, catalogId, refreshed.size());
         }
         return List.copyOf(refreshed);
+    }
+
+    /**
+     * Whether the publish describes the catalog rather than merely naming it. Keys on the two fields
+     * that identify a catalog to a consumer — {@code descriptor} and {@code provider} — so a node
+     * holding only ids and routing fields is read as a reference and left to affect nothing.
+     */
+    private static boolean describesCatalog(ObjectNode baseSlice) {
+        return baseSlice.hasNonNull(BecknFields.DESCRIPTOR) || baseSlice.hasNonNull(BecknFields.PROVIDER);
     }
 }
