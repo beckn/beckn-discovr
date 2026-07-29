@@ -39,6 +39,9 @@ public class CatalogPublishMetrics {
     private final Counter persistUpdated;
     private final Counter mergeCount;
 
+    // Catalog metadata propagation (Phase 3.5)
+    private final Counter catalogMetaPropagated;
+
     // Enqueue-to-Kafka (push/on_pull ingestion topic) send failures
     private final Counter enqueueFailure;
 
@@ -106,6 +109,10 @@ public class CatalogPublishMetrics {
                 .description("Existing resources updated during persist")
                 .register(registry);
 
+        catalogMetaPropagated = Counter.builder("discovr.publish.catalog.meta.propagated")
+                .description("Resources rewritten to pick up changed catalog metadata (Phase 3.5)")
+                .register(registry);
+
         enqueueFailure = Counter.builder("discovr.publish.enqueue.failure")
                 .description("Failures publishing a push/on_pull payload to the ingestion Kafka topic")
                 .register(registry);
@@ -155,6 +162,11 @@ public class CatalogPublishMetrics {
 
     public void recordPersistUpdated(int count) {
         persistUpdated.increment(count);
+    }
+
+    /** Resources rewritten because the publish changed catalog-level metadata (Phase 3.5). */
+    public void recordCatalogMetadataPropagated(int count) {
+        catalogMetaPropagated.increment(count);
     }
 
     /** A push/on_pull payload failed to publish to the ingestion Kafka topic. */
