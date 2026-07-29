@@ -182,7 +182,7 @@ class ElasticIndexStepParallelEmbeddingTest {
         var textSearch = new org.beckn.catalogpublish.config.AppProperties.TextSearch(embModel);
         var esConfig = new org.beckn.catalogpublish.config.AppProperties.Elasticsearch(
                 true, "http://localhost:9200", "beckn-catalog", "beckn-catalog",
-                "fail-topic", "dlq-topic", batchSize, 3, 1000L, 4, 100, 5, null);
+                "fail-topic", "dlq-topic", batchSize, 3, 1000L, 4, 100, 5, null, null);
         var indexing = new org.beckn.catalogpublish.config.AppProperties.Indexing(8192);
         var catalog = new org.beckn.catalogpublish.config.AppProperties.Catalog(
                 10_000_000L, true,
