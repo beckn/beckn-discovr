@@ -35,7 +35,7 @@ modules:
         responseHeaderTimeout: 5s
       plugins:
         crawler:
-          id: catalogcrawler
+          id: crawler
           config:
             # Connection / deploy (in-network service names; local test creds).
             CRAWLER_DB_DSN: "postgres://catalog_user:catalog123@postgres-discovery:5432/catalog_db?sslmode=disable"
