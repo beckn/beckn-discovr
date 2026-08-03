@@ -45,6 +45,9 @@ public class PersistenceStep {
 
     private static final Logger log = LoggerFactory.getLogger(PersistenceStep.class);
 
+    /** An item about to be written, paired with the payload it was built from. */
+    private record ResourceWithNode(Item item, JsonNode payloadNode) {}
+
     private final ItemStore itemStore;
     private final ItemLocationCollectionStore locationStore;
     private final ProviderOfferStore providerOfferStore;
@@ -53,6 +56,7 @@ public class PersistenceStep {
     private final GeometryExtractor geometryExtractor;
     private final ObjectMapper objectMapper;
     private final OfferResolutionStep offerResolutionStep;
+    private final CatalogMetadataPropagationStep metadataPropagationStep;
     private final CatalogPublishMetrics metrics;
 
     public PersistenceStep(ItemStore itemStore,
@@ -63,6 +67,7 @@ public class PersistenceStep {
             GeometryExtractor geometryExtractor,
             ObjectMapper objectMapper,
             OfferResolutionStep offerResolutionStep,
+            CatalogMetadataPropagationStep metadataPropagationStep,
             CatalogPublishMetrics metrics) {
         this.itemStore = itemStore;
         this.locationStore = locationStore;
@@ -72,6 +77,7 @@ public class PersistenceStep {
         this.geometryExtractor = geometryExtractor;
         this.objectMapper = objectMapper;
         this.offerResolutionStep = offerResolutionStep;
+        this.metadataPropagationStep = metadataPropagationStep;
         this.metrics = metrics;
     }
 
@@ -135,8 +141,13 @@ public class PersistenceStep {
                 : itemStore.findAllByIdInAndCatalogId(allResourceIds, catalogId).stream()
                         .collect(Collectors.toMap(Item::getId, Function.identity()));
 
-        record ResourceWithNode(Item item, JsonNode payloadNode) {}
         List<ResourceWithNode> built = new ArrayList<>();
+
+        // Rows known to already exist, so the insert/update metrics can tell the two apart.
+        // Phases 2, 3 and 3.5 all rebuild rows they loaded from the DB, so each records its key here.
+        Set<String> preExistingKeys = existingById.values().stream()
+                .map(PersistenceStep::rowKey)
+                .collect(Collectors.toCollection(HashSet::new));
 
         // Phase 1: process explicitly listed resources (new or upsert).
         for (IdAndNode pair : pairs) {
@@ -195,6 +206,7 @@ public class PersistenceStep {
                         }
                     }
                     if (changed) {
+                        preExistingKeys.add(rowKey(linkedItem));
                         String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
                         built.add(new ResourceWithNode(
                                 Item.from(linkedItem.getId(), payload.toString(), offerIds,
@@ -223,6 +235,26 @@ public class PersistenceStep {
 
             var resolved = offerResolutionStep.resolveCrossBppOffers(incomingOfferById, handledIds, ctx);
             for (var r : resolved) {
+                // Cross-catalog targets were loaded from the DB, so they are updates, not inserts.
+                preExistingKeys.add(rowKey(r.item()));
+                built.add(new ResourceWithNode(r.item(), r.payloadNode()));
+            }
+        }
+
+        // Phase 3.5: catalog metadata propagation — carry a changed catalog descriptor/provider/
+        // validity to this catalog's resources that the publish did not list, so every row of the
+        // catalog keeps the same identity. MERGE only; FULL already deleted the prior rows.
+        if (!isFullReplace) {
+            // Only this catalog's rows count as handled — Phase 3 may have queued items of others.
+            Set<String> handledIds = new HashSet<>(allResourceIds);
+            built.stream()
+                    .filter(rwn -> catalogId.equals(rwn.item().getCatalogId()))
+                    .forEach(rwn -> handledIds.add(rwn.item().getId()));
+
+            for (var r : metadataPropagationStep.propagate(
+                    catalogId, baseSlice, existingById.values(), handledIds)) {
+                // Refreshed rows were loaded from the DB, so they are updates, not inserts.
+                preExistingKeys.add(rowKey(r.item()));
                 built.add(new ResourceWithNode(r.item(), r.payloadNode()));
             }
         }
@@ -239,7 +271,7 @@ public class PersistenceStep {
         built.forEach(p -> payloadNodeById.put(p.item().getId(), p.payloadNode()));
 
         int insertCount = (int) built.stream()
-                .filter(iwn -> !existingById.containsKey(iwn.item().getId()))
+                .filter(iwn -> !preExistingKeys.contains(rowKey(iwn.item())))
                 .count();
         int updateCount = built.size() - insertCount;
 
@@ -313,6 +345,11 @@ public class PersistenceStep {
             if (!restatedOfferIds.contains(storedOfferId)) return true;
         }
         return false;
+    }
+
+    /** Identity of a row in the {@code item} table — the PK is (id, catalog_id), not id alone. */
+    private static String rowKey(Item item) {
+        return item.getCatalogId() + '|' + item.getId();
     }
 
     /**

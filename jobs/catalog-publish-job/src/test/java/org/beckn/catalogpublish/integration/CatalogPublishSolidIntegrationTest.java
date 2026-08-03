@@ -160,7 +160,10 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
                     try {
                         JsonNode r = objectMapper.readTree(v);
                         JsonNode res = r.path("message").path("results");
-                        return res.size() == 1 && res.get(0).path("resourceCount").asInt() == 1
+                        // 3, not 1: the patch fixture also renames the catalog descriptor, so
+                        // Phase 3.5 refreshes the two resources it does not list to keep every
+                        // row of the catalog on the same metadata.
+                        return res.size() == 1 && res.get(0).path("resourceCount").asInt() == 3
                                 && "catalog-ev-charging-001".equals(res.get(0).path("catalogId").asText());
                     } catch (Exception e) { return false; }
                 });
@@ -169,7 +172,15 @@ class CatalogPublishSolidIntegrationTest extends BaseIntegrationTest {
         JsonNode results = response.path("message").path("results");
         assertThat(results.size()).isEqualTo(1);
         assertThat(results.get(0).path("catalogId").asText()).isEqualTo("catalog-ev-charging-001");
-        assertThat(results.get(0).path("resourceCount").asInt()).isEqualTo(1);
+        assertThat(results.get(0).path("resourceCount").asInt())
+                .as("1 patched resource + 2 refreshed by catalog-metadata propagation")
+                .isEqualTo(3);
+
+        // The two resources the patch never listed must carry the new catalog name.
+        assertThat(itemRepository.findById(new ItemId("ev-charger-ccs2-002", "catalog-ev-charging-001"))
+                .orElseThrow().getPayload())
+                .contains("EV Charging Services Network\"")
+                .doesNotContain("EV Charging Services Network1");
     }
 
     // --- Multi-catalog: array of catalogs → all catalogs, items, and geo updated; solid assertions ---
