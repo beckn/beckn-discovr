@@ -45,6 +45,9 @@ public class PersistenceStep {
 
     private static final Logger log = LoggerFactory.getLogger(PersistenceStep.class);
 
+    /** An item about to be written, paired with the payload it was built from. */
+    private record ResourceWithNode(Item item, JsonNode payloadNode) {}
+
     private final ItemStore itemStore;
     private final ItemLocationCollectionStore locationStore;
     private final ProviderOfferStore providerOfferStore;
@@ -53,6 +56,7 @@ public class PersistenceStep {
     private final GeometryExtractor geometryExtractor;
     private final ObjectMapper objectMapper;
     private final OfferResolutionStep offerResolutionStep;
+    private final CatalogMetadataPropagationStep metadataPropagationStep;
     private final CatalogPublishMetrics metrics;
 
     public PersistenceStep(ItemStore itemStore,
@@ -63,6 +67,7 @@ public class PersistenceStep {
             GeometryExtractor geometryExtractor,
             ObjectMapper objectMapper,
             OfferResolutionStep offerResolutionStep,
+            CatalogMetadataPropagationStep metadataPropagationStep,
             CatalogPublishMetrics metrics) {
         this.itemStore = itemStore;
         this.locationStore = locationStore;
@@ -72,6 +77,7 @@ public class PersistenceStep {
         this.geometryExtractor = geometryExtractor;
         this.objectMapper = objectMapper;
         this.offerResolutionStep = offerResolutionStep;
+        this.metadataPropagationStep = metadataPropagationStep;
         this.metrics = metrics;
     }
 
@@ -135,16 +141,28 @@ public class PersistenceStep {
                 : itemStore.findAllByIdInAndCatalogId(allResourceIds, catalogId).stream()
                         .collect(Collectors.toMap(Item::getId, Function.identity()));
 
-        record ResourceWithNode(Item item, JsonNode payloadNode) {}
         List<ResourceWithNode> built = new ArrayList<>();
+
+        // Rows known to already exist, so the insert/update metrics can tell the two apart.
+        // Phases 2, 3 and 3.5 all rebuild rows they loaded from the DB, so each records its key here.
+        Set<String> preExistingKeys = existingById.values().stream()
+                .map(PersistenceStep::rowKey)
+                .collect(Collectors.toCollection(HashSet::new));
 
         // Phase 1: process explicitly listed resources (new or upsert).
         for (IdAndNode pair : pairs) {
             String resourceId = pair.resourceId();
             JsonNode resourceNode = pair.resourceNode();
             try {
-                // Catalg sends a fully resolved payload — always replace, never merge.
+                // Resource body is always replaced — Catalg sends a fully resolved resource.
                 JsonNode payload = payloadBuilder.buildDenormalizedPayloadFromSlice(baseSlice, resourceNode, offerIndex, resourceId);
+                // Offers are not: in MERGE, an offer this publish never mentioned stays attached.
+                // Restated offers are excluded, so narrowing resourceIds still detaches them.
+                Item existing = existingById.get(resourceId);
+                if (!isFullReplace && existing != null
+                        && hasUnrestatedOffer(existing, incomingOfferById.keySet())) {
+                    mergeService.carryForwardUnrestatedOffers(payload, existing.getPayload(), incomingOfferById.keySet());
+                }
                 String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
                 String type = Optional.ofNullable(FieldExtractor.extractResourceAttributesType(resourceNode))
                         .orElse(FieldExtractor.extractResourceType(resourceNode));
@@ -175,28 +193,42 @@ public class PersistenceStep {
                 if (!catalogId.equals(linkedItem.getCatalogId())) continue;
 
                 try {
-                    JsonNode payload = mergeService.parseOrEmpty(linkedItem.getPayload());
+                    JsonNode stale = mergeService.parseOrEmpty(linkedItem.getPayload());
                     boolean changed = false;
                     Map<String, Integer> payloadOfferIndex = null;
                     for (String linkedOfferId : linkedItem.getOfferIds()) {
                         JsonNode incomingOffer = incomingOfferById.get(linkedOfferId);
                         if (incomingOffer != null) {
                             if (payloadOfferIndex == null)
-                                payloadOfferIndex = mergeService.buildOfferIndex(payload);
-                            mergeService.mergeOfferIntoPayload(payload, incomingOffer, linkedOfferId, payloadOfferIndex);
+                                payloadOfferIndex = mergeService.buildOfferIndex(stale);
+                            mergeService.mergeOfferIntoPayload(stale, incomingOffer, linkedOfferId, payloadOfferIndex);
                             changed = true;
                         }
                     }
                     if (changed) {
-                        String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
-                        built.add(new ResourceWithNode(
-                                Item.from(linkedItem.getId(), payload.toString(), offerIds,
-                                        linkedItem.getCatalogId(),
-                                        linkedItem.getType(), linkedItem.getContextUrl(),
-                                        linkedItem.getNetworkIds().toArray(new String[0])),
-                                payload));
-                        log.debug("event={} itemId={} offers={}", LogEvent.PERSIST_COMPLETED,
-                                linkedItem.getId(), linkedItem.getOfferIds());
+                        // Rebuild with this publish's catalog metadata too — otherwise a MERGE that
+                        // both renames the catalog and restates an offer on an unlisted resource
+                        // would leave that resource with the new offer but the old catalog identity.
+                        // Skip when the catalog node is a bare reference (offer-only publish) — same
+                        // guard as Phase 3.5, so an offer-only publish can't wipe stored metadata.
+                        JsonNode payload = payloadBuilder.describesCatalog(baseSlice)
+                                ? payloadBuilder.applyCatalogMetadata(stale, baseSlice)
+                                : stale;
+                        if (payload == null) {
+                            log.warn("event={} itemId={} catalogId={} reason=no-stored-resources",
+                                    LogEvent.PERSIST_FAILED, linkedItem.getId(), catalogId);
+                        } else {
+                            preExistingKeys.add(rowKey(linkedItem));
+                            String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
+                            built.add(new ResourceWithNode(
+                                    Item.from(linkedItem.getId(), payload.toString(), offerIds,
+                                            linkedItem.getCatalogId(),
+                                            linkedItem.getType(), linkedItem.getContextUrl(),
+                                            linkedItem.getNetworkIds().toArray(new String[0])),
+                                    payload));
+                            log.debug("event={} itemId={} offers={}", LogEvent.PERSIST_COMPLETED,
+                                    linkedItem.getId(), linkedItem.getOfferIds());
+                        }
                     }
                 } catch (Exception e) {
                     String sanitized = ErrorSanitizer.sanitize(e);
@@ -216,6 +248,26 @@ public class PersistenceStep {
 
             var resolved = offerResolutionStep.resolveCrossBppOffers(incomingOfferById, handledIds, ctx);
             for (var r : resolved) {
+                // Cross-catalog targets were loaded from the DB, so they are updates, not inserts.
+                preExistingKeys.add(rowKey(r.item()));
+                built.add(new ResourceWithNode(r.item(), r.payloadNode()));
+            }
+        }
+
+        // Phase 3.5: catalog metadata propagation — carry a changed catalog descriptor/provider/
+        // validity to this catalog's resources that the publish did not list, so every row of the
+        // catalog keeps the same identity. MERGE only; FULL already deleted the prior rows.
+        if (!isFullReplace) {
+            // Only this catalog's rows count as handled — Phase 3 may have queued items of others.
+            Set<String> handledIds = new HashSet<>(allResourceIds);
+            built.stream()
+                    .filter(rwn -> catalogId.equals(rwn.item().getCatalogId()))
+                    .forEach(rwn -> handledIds.add(rwn.item().getId()));
+
+            for (var r : metadataPropagationStep.propagate(
+                    catalogId, baseSlice, existingById.values(), handledIds)) {
+                // Refreshed rows were loaded from the DB, so they are updates, not inserts.
+                preExistingKeys.add(rowKey(r.item()));
                 built.add(new ResourceWithNode(r.item(), r.payloadNode()));
             }
         }
@@ -232,7 +284,7 @@ public class PersistenceStep {
         built.forEach(p -> payloadNodeById.put(p.item().getId(), p.payloadNode()));
 
         int insertCount = (int) built.stream()
-                .filter(iwn -> !existingById.containsKey(iwn.item().getId()))
+                .filter(iwn -> !preExistingKeys.contains(rowKey(iwn.item())))
                 .count();
         int updateCount = built.size() - insertCount;
 
@@ -290,6 +342,27 @@ public class PersistenceStep {
             }
         }
         return "MERGE";
+    }
+
+    /**
+     * Fast pre-check for MERGE offer carry-forward: true when the stored row holds at least one
+     * offer this publish never mentioned.
+     *
+     * <p>Reads the already-loaded {@code offer_ids} column instead of parsing the stored payload
+     * JSON, which keeps the common case free of work — a publisher sending the catalog's full
+     * offer list (the Catalg path) restates every stored id, so the parse is skipped entirely.
+     * {@code offer_ids} is derived from the payload on every write, so the two stay in step.
+     */
+    private static boolean hasUnrestatedOffer(Item existing, Set<String> restatedOfferIds) {
+        for (String storedOfferId : existing.getOfferIds()) {
+            if (!restatedOfferIds.contains(storedOfferId)) return true;
+        }
+        return false;
+    }
+
+    /** Identity of a row in the {@code item} table — the PK is (id, catalog_id), not id alone. */
+    private static String rowKey(Item item) {
+        return item.getCatalogId() + '|' + item.getId();
     }
 
     /**

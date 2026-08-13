@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ItemJpaRepository extends JpaRepository<Item, ItemId> {
 
@@ -23,6 +24,15 @@ public interface ItemJpaRepository extends JpaRepository<Item, ItemId> {
 
     /** Cross-catalog lookup by resource ID only. Spring Data auto-derives the query. */
     List<Item> findAllByIdIn(List<String> ids);
+
+    /** All items of a catalog. Used by Phase 3.5 to propagate a catalog-metadata change. */
+    List<Item> findAllByCatalogId(String catalogId);
+
+    /**
+     * One arbitrary item of a catalog, used only as a sample to compare stored catalog metadata
+     * against the incoming publish. LIMIT 1 on an indexed column — cheap.
+     */
+    Optional<Item> findFirstByCatalogId(String catalogId);
 
     /** Deletes all items for the given catalog. Used by FULL replace mode. Returns count of deleted rows. */
     @Modifying
