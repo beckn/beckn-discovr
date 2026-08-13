@@ -33,7 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -61,16 +64,18 @@ class ElasticIndexStepParallelEmbeddingTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // lenient — the schema-type-defaulted-blank test exercises none of these (the resource
+        // is skipped before assembly/indexing), which would otherwise trip strict-stubs.
         // BulkIndexService returns no failures
-        when(bulkIndexService.index(anyString(), any())).thenReturn(
+        org.mockito.Mockito.lenient().when(bulkIndexService.index(anyString(), any())).thenReturn(
                 new BulkIndexResult(List.of(), List.of()));
 
         // EsIndexerMetrics.startBulkTimer() returns a mock Timer.Sample
         io.micrometer.core.instrument.Timer.Sample sample = mock(io.micrometer.core.instrument.Timer.Sample.class);
-        when(indexerMetrics.startBulkTimer()).thenReturn(sample);
+        org.mockito.Mockito.lenient().when(indexerMetrics.startBulkTimer()).thenReturn(sample);
 
         // CatalogDocumentAssembler returns a minimal doc with resource_id populated
-        when(assembler.assemble(any(Item.class), any(JsonNode.class), anyString(), any()))
+        org.mockito.Mockito.lenient().when(assembler.assemble(any(Item.class), any(JsonNode.class), anyString(), any()))
                 .thenAnswer(inv -> {
                     Item item = inv.getArgument(0);
                     Map<String, Object> doc = new java.util.LinkedHashMap<>();
@@ -156,33 +161,75 @@ class ElasticIndexStepParallelEmbeddingTest {
                 .index(anyString(), any());
     }
 
+    @Test
+    void doIndex_resourceWithNoType_defaultSchemaTypeSet_indexesUnderDefault() throws Exception {
+        step = new ElasticIndexStep(
+                assembler, bulkIndexService, failurePublisher,
+                indexerMetrics, publishMetrics, MAPPER,
+                buildAppProps(10, "Attributes"),
+                Optional.empty());
+
+        CatalogBatch batch = buildBatchWithType(1, null);
+        CatalogPersistedEvent event = new CatalogPersistedEvent(this, batch);
+
+        step.onCatalogPersisted(event);
+
+        verify(assembler).assemble(any(Item.class), any(JsonNode.class), eq("Attributes"), any());
+        verify(bulkIndexService).index(eq("Attributes"), any());
+    }
+
+    @Test
+    void doIndex_resourceWithNoType_defaultSchemaTypeBlank_skipsResource() throws Exception {
+        step = new ElasticIndexStep(
+                assembler, bulkIndexService, failurePublisher,
+                indexerMetrics, publishMetrics, MAPPER,
+                buildAppProps(10, null),
+                Optional.empty());
+
+        CatalogBatch batch = buildBatchWithType(1, null);
+        CatalogPersistedEvent event = new CatalogPersistedEvent(this, batch);
+
+        step.onCatalogPersisted(event);
+
+        verify(assembler, never()).assemble(any(), any(), any(), any());
+        verify(bulkIndexService, never()).index(any(), any());
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static CatalogBatch buildBatch(int itemCount) throws Exception {
+        return buildBatchWithType(itemCount, "TestType");
+    }
+
+    private static CatalogBatch buildBatchWithType(int itemCount, String type) throws Exception {
         List<Item> items = new ArrayList<>();
         Map<String, JsonNode> payloadNodes = new java.util.LinkedHashMap<>();
 
         for (int i = 0; i < itemCount; i++) {
             String id = "item-" + i;
             Item item = Item.from(id, "{}", new String[0], "cat-1",
-                    "TestType", "https://schema.org", new String[]{"test-net"});
+                    type, "https://schema.org", new String[]{"test-net"});
             items.add(item);
             payloadNodes.put(id, MAPPER.readTree("{\"id\":\"" + id + "\"}"));
         }
 
         CatalogContext context = new CatalogContext(List.of("test-net"), null);
         return new CatalogBatch(
-                "cat-1", context, "TestType", CatalogOperation.PUBLISH,
+                "cat-1", context, type, CatalogOperation.PUBLISH,
                 items, List.of(), payloadNodes, false);
     }
 
     private static org.beckn.catalogpublish.config.AppProperties buildAppProps(int batchSize) {
+        return buildAppProps(batchSize, null);
+    }
+
+    private static org.beckn.catalogpublish.config.AppProperties buildAppProps(int batchSize, String defaultSchemaType) {
         var embModel = new org.beckn.catalogpublish.config.AppProperties.EmbeddingModel(
                 true, "test-model", "http://localhost:11434", "", 5000, 1, 100L);
         var textSearch = new org.beckn.catalogpublish.config.AppProperties.TextSearch(embModel);
         var esConfig = new org.beckn.catalogpublish.config.AppProperties.Elasticsearch(
                 true, "http://localhost:9200", "beckn-catalog", "beckn-catalog",
-                "fail-topic", "dlq-topic", batchSize, 3, 1000L, 4, 100, 5, null, null);
+                "fail-topic", "dlq-topic", batchSize, 3, 1000L, 4, 100, 5, defaultSchemaType, null);
         var indexing = new org.beckn.catalogpublish.config.AppProperties.Indexing(8192);
         var catalog = new org.beckn.catalogpublish.config.AppProperties.Catalog(
                 10_000_000L, true,

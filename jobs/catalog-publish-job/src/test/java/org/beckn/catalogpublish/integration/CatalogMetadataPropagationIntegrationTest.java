@@ -157,6 +157,47 @@ class CatalogMetadataPropagationIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
+     * MERGE mode: a publish that both renames the catalog AND restates an offer already stored on
+     * a resource it does not list. That resource is rewritten by Phase 2 (offer propagation), not
+     * Phase 3.5 — it must still pick up the new catalog metadata rather than being left with the
+     * new offer but the old catalog identity.
+     */
+    @Test
+    void mergeMode_offerRestatedOnUnlistedResource_alsoGetsNewCatalogMetadata() {
+        orchestrator.processPublish(META_BASELINE);
+
+        // Round 2: renames the catalog, lists only res-1, but restates offer-1 (attached to the
+        // unlisted res-2) with updated content — Phase 2 territory, not Phase 3.5.
+        String round2 = """
+                {
+                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                               "messageId":"m2","transactionId":"t2"},
+                  "message": {"catalogs": [{
+                    "id": "cat-meta",
+                    "descriptor": {"name": "Catalog Renamed"},
+                    "provider": {"id": "prov-1", "descriptor": {"name": "Provider Renamed"}},
+                    "resources": [
+                      {"id": "res-1", "descriptor": {"name": "Resource One Updated"}}
+                    ],
+                    "offers": [
+                      {"id": "offer-1", "descriptor": {"name": "Fifteen Percent Off"},
+                       "resourceIds": ["res-2"]}
+                    ]}]}
+                }""";
+        orchestrator.processPublish(round2);
+
+        var res2 = itemRepository.findById(new ItemId("res-2", "cat-meta")).orElseThrow();
+        assertThat(res2.getPayload())
+                .as("res-2 was rewritten by Phase 2's offer merge — it must also carry the new "
+                        + "catalog identity, not just the new offer")
+                .contains("Catalog Renamed", "Provider Renamed", "Fifteen Percent Off")
+                .doesNotContain("Catalog Original", "Provider Original");
+        assertThat(res2.getPayload())
+                .as("Phase 2 refreshes catalog metadata and offers only — res-2 keeps its own resource body")
+                .contains("Resource Two");
+    }
+
+    /**
      * Catalog-metadata propagation is scoped to the publishing catalog: a rename on cat-meta
      * must not touch rows of another catalog, even one sharing a resource id.
      */
