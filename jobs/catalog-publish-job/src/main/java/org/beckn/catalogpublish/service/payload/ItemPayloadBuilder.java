@@ -79,6 +79,17 @@ public class ItemPayloadBuilder {
     }
 
     /**
+     * Whether a catalog-metadata slice describes the catalog rather than merely naming it. Keys
+     * on the two fields that identify a catalog to a consumer — {@code descriptor} and
+     * {@code provider} — so a node holding only ids and routing fields (e.g. an offer-only
+     * publish's bare {@code {"id": …}} reference) is read as a reference, not a claim that the
+     * catalog has lost its metadata.
+     */
+    public boolean describesCatalog(ObjectNode baseSlice) {
+        return baseSlice.hasNonNull(BecknFields.DESCRIPTOR) || baseSlice.hasNonNull(BecknFields.PROVIDER);
+    }
+
+    /**
      * Rebuilds a stored payload with fresh catalog metadata, keeping its own resource and
      * offers untouched. Used to propagate a catalog-property change to a resource the publish
      * did not list.

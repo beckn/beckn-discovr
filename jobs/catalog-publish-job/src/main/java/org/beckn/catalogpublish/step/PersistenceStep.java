@@ -193,29 +193,42 @@ public class PersistenceStep {
                 if (!catalogId.equals(linkedItem.getCatalogId())) continue;
 
                 try {
-                    JsonNode payload = mergeService.parseOrEmpty(linkedItem.getPayload());
+                    JsonNode stale = mergeService.parseOrEmpty(linkedItem.getPayload());
                     boolean changed = false;
                     Map<String, Integer> payloadOfferIndex = null;
                     for (String linkedOfferId : linkedItem.getOfferIds()) {
                         JsonNode incomingOffer = incomingOfferById.get(linkedOfferId);
                         if (incomingOffer != null) {
                             if (payloadOfferIndex == null)
-                                payloadOfferIndex = mergeService.buildOfferIndex(payload);
-                            mergeService.mergeOfferIntoPayload(payload, incomingOffer, linkedOfferId, payloadOfferIndex);
+                                payloadOfferIndex = mergeService.buildOfferIndex(stale);
+                            mergeService.mergeOfferIntoPayload(stale, incomingOffer, linkedOfferId, payloadOfferIndex);
                             changed = true;
                         }
                     }
                     if (changed) {
-                        preExistingKeys.add(rowKey(linkedItem));
-                        String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
-                        built.add(new ResourceWithNode(
-                                Item.from(linkedItem.getId(), payload.toString(), offerIds,
-                                        linkedItem.getCatalogId(),
-                                        linkedItem.getType(), linkedItem.getContextUrl(),
-                                        linkedItem.getNetworkIds().toArray(new String[0])),
-                                payload));
-                        log.debug("event={} itemId={} offers={}", LogEvent.PERSIST_COMPLETED,
-                                linkedItem.getId(), linkedItem.getOfferIds());
+                        // Rebuild with this publish's catalog metadata too — otherwise a MERGE that
+                        // both renames the catalog and restates an offer on an unlisted resource
+                        // would leave that resource with the new offer but the old catalog identity.
+                        // Skip when the catalog node is a bare reference (offer-only publish) — same
+                        // guard as Phase 3.5, so an offer-only publish can't wipe stored metadata.
+                        JsonNode payload = payloadBuilder.describesCatalog(baseSlice)
+                                ? payloadBuilder.applyCatalogMetadata(stale, baseSlice)
+                                : stale;
+                        if (payload == null) {
+                            log.warn("event={} itemId={} catalogId={} reason=no-stored-resources",
+                                    LogEvent.PERSIST_FAILED, linkedItem.getId(), catalogId);
+                        } else {
+                            preExistingKeys.add(rowKey(linkedItem));
+                            String[] offerIds = payloadBuilder.extractOfferIdsFromPayload(payload);
+                            built.add(new ResourceWithNode(
+                                    Item.from(linkedItem.getId(), payload.toString(), offerIds,
+                                            linkedItem.getCatalogId(),
+                                            linkedItem.getType(), linkedItem.getContextUrl(),
+                                            linkedItem.getNetworkIds().toArray(new String[0])),
+                                    payload));
+                            log.debug("event={} itemId={} offers={}", LogEvent.PERSIST_COMPLETED,
+                                    linkedItem.getId(), linkedItem.getOfferIds());
+                        }
                     }
                 } catch (Exception e) {
                     String sanitized = ErrorSanitizer.sanitize(e);
