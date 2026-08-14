@@ -190,6 +190,148 @@ class FullReplaceIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
+     * Baseline for the offer-preservation tests: cat-1 holds res-1 and res-2, both
+     * linked to offer-1.
+     */
+    private static final String OFFER_BASELINE = """
+            {
+              "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                           "messageId":"m1","transactionId":"t1"},
+              "message": {"catalogs": [{"id": "cat-1",
+                "resources": [
+                  {"id": "res-1", "descriptor": {"name": "Resource One"}},
+                  {"id": "res-2", "descriptor": {"name": "Resource Two"}}
+                ],
+                "offers": [
+                  {"id": "offer-1", "descriptor": {"name": "Ten Percent Off"},
+                   "resourceIds": ["res-1", "res-2"]}
+                ]}]}
+            }""";
+
+    /**
+     * MERGE mode: a push that updates a resource and says nothing at all about offers
+     * must NOT drop the offers already linked to that resource.
+     *
+     * <p>Regression test for the offer-wipe bug: {@code buildDenormalizedPayloadFromSlice}
+     * rebuilds {@code catalogs[0].offers} purely from the incoming payload, so an absent
+     * {@code offers} array silently cleared every stored offer — and since discover hides
+     * resources with no offers, a routine price update delisted the resource.
+     *
+     * <p>Silence means "not discussing offers", not "delete all offers".
+     */
+    @Test
+    void mergeMode_pushWithNoOffersSection_preservesExistingOffers() {
+        orchestrator.processPublish(OFFER_BASELINE);
+        assertThat(itemRepository.findById(new ItemId("res-2", "cat-1")).orElseThrow()
+                .getOfferIds()).containsExactly("offer-1");
+
+        // Round 2: MERGE — only res-2, and no "offers" key anywhere in the message
+        String round2 = """
+                {
+                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                               "messageId":"m2","transactionId":"t2"},
+                  "message": {"catalogs": [{"id": "cat-1",
+                    "resources": [
+                      {"id": "res-2", "descriptor": {"name": "Resource Two Updated"}}
+                    ]}]}
+                }""";
+        orchestrator.processPublish(round2);
+
+        var res2 = itemRepository.findById(new ItemId("res-2", "cat-1")).orElseThrow();
+        assertThat(res2.getPayload()).contains("Resource Two Updated");
+        assertThat(res2.getOfferIds())
+                .as("offer must survive a resource-only push")
+                .containsExactly("offer-1");
+        assertThat(res2.getPayload())
+                .as("offer body must survive, not just the offer_ids column")
+                .contains("Ten Percent Off");
+
+        // res-1 was not in the payload at all — untouched
+        assertThat(itemRepository.findById(new ItemId("res-1", "cat-1")).orElseThrow()
+                .getOfferIds()).containsExactly("offer-1");
+    }
+
+    /**
+     * MERGE mode: restating an offer with narrower {@code resourceIds} must detach it from
+     * the resources it no longer lists.
+     *
+     * <p>This is the counterpart to {@link #mergeMode_pushWithNoOffersSection_preservesExistingOffers}
+     * and guards the pre-existing behaviour: mentioning an offer declares its complete
+     * current resource list, so omission from that list is a deliberate unlink. Preserving
+     * offers in this case too would make offers impossible to detach in MERGE mode.
+     */
+    @Test
+    void mergeMode_offerRestatedWithoutResource_detachesIt() {
+        orchestrator.processPublish(OFFER_BASELINE);
+
+        // Round 2: offer-1 restated, but now listing res-2 only
+        String round2 = """
+                {
+                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                               "messageId":"m2","transactionId":"t2"},
+                  "message": {"catalogs": [{"id": "cat-1",
+                    "resources": [
+                      {"id": "res-1", "descriptor": {"name": "Resource One"}},
+                      {"id": "res-2", "descriptor": {"name": "Resource Two"}}
+                    ],
+                    "offers": [
+                      {"id": "offer-1", "descriptor": {"name": "Ten Percent Off"},
+                       "resourceIds": ["res-2"]}
+                    ]}]}
+                }""";
+        orchestrator.processPublish(round2);
+
+        assertThat(itemRepository.findById(new ItemId("res-1", "cat-1")).orElseThrow().getOfferIds())
+                .as("restating an offer without res-1 must unlink it")
+                .isEmpty();
+        assertThat(itemRepository.findById(new ItemId("res-2", "cat-1")).orElseThrow().getOfferIds())
+                .containsExactly("offer-1");
+    }
+
+    /**
+     * MERGE mode: republishing the same catalog unchanged is idempotent for offers —
+     * no duplicate entries in {@code offers[]} or {@code offer_ids}.
+     */
+    @Test
+    void mergeMode_offerRestatedIdentically_isIdempotent() {
+        orchestrator.processPublish(OFFER_BASELINE);
+        orchestrator.processPublish(OFFER_BASELINE);
+
+        assertThat(itemRepository.count()).isEqualTo(2);
+        assertThat(itemRepository.findById(new ItemId("res-1", "cat-1")).orElseThrow().getOfferIds())
+                .containsExactly("offer-1");
+        assertThat(itemRepository.findById(new ItemId("res-2", "cat-1")).orElseThrow().getOfferIds())
+                .containsExactly("offer-1");
+    }
+
+    /**
+     * FULL replace with no offers clears them — offer preservation is a MERGE-only concern.
+     * FULL means "this payload is the whole truth for the catalog".
+     */
+    @Test
+    void fullReplace_withNoOffersSection_clearsOffers() {
+        orchestrator.processPublish(OFFER_BASELINE);
+
+        String round2 = """
+                {
+                  "context": {"bppId":"bpp-1","bppUri":"http://bpp1.example.com",
+                               "messageId":"m2","transactionId":"t2"},
+                  "message": {
+                    "publishDirectives": [{"catalogId":"cat-1","catalogType":"regular","updateMode":"FULL"}],
+                    "catalogs": [{"id": "cat-1",
+                      "resources": [
+                        {"id": "res-2", "descriptor": {"name": "Resource Two Only"}}
+                      ]}]}
+                }""";
+        orchestrator.processPublish(round2);
+
+        assertThat(itemRepository.count()).isEqualTo(1);
+        assertThat(itemRepository.findById(new ItemId("res-2", "cat-1")).orElseThrow().getOfferIds())
+                .as("FULL replace is authoritative — offers not in the payload are dropped")
+                .isEmpty();
+    }
+
+    /**
      * Location isolation: FULL replace on catalog-A must not delete locations of items
      * with the same id in catalog-B.
      *

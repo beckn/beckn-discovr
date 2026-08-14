@@ -64,6 +64,10 @@ public final class LogEvent {
     public static final String OFFER_RESOLVE_COMPLETED = "offer.resolve.completed";
     public static final String OFFER_RESOLVE_SKIPPED   = "offer.resolve.skipped";
 
+    // Phase 3.5: catalog metadata propagation to resources absent from the publish
+    public static final String CATALOG_META_PROPAGATED = "catalog.meta.propagated";
+    public static final String CATALOG_META_SKIPPED    = "catalog.meta.skipped";
+
     // FULL replace
     public static final String FULL_REPLACE_DELETED    = "full.replace.deleted";
     public static final String FULL_REPLACE_ES_DELETED = "full.replace.es.deleted";
