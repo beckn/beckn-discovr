@@ -62,7 +62,7 @@ signing:
   # Option 1: Raw 32-byte seed (beckn-onix compatible)
   private-key: ""
   # Option 2: PKCS#8 format (standard)
-  # private-key: -----BEGIN PRIVATE KEY-----***REMOVED-PRIVATE-KEY***-----END PRIVATE KEY-----
+  # private-key: -----BEGIN PRIVATE KEY-----<base64-pkcs8-key>-----END PRIVATE KEY-----
   expiry-seconds: 4000
   subscriber-id: ""
 
