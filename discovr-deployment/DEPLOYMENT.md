@@ -1,10 +1,5 @@
 # Beckn Discovr — Deployment & Configuration Reference
 
-> This directory previously lived in the starter kit as a temporary home, since this
-> service's source code wasn't open-sourced yet. Now that `catalog-discover-job`,
-> `catalog-publish-job`, and `response-dispatcher` are public in this repo, the deployment
-> stack, config, and this guide live here alongside the source they deploy.
-
 This document is for a DevOps/cloud engineer standing up the **Beckn Discovr** stack — a
 catalog discovery service fronted by the **Onix adapter** — as a single docker-compose
 deployment on a VM. It covers the full topology, every container, and every configuration
@@ -17,63 +12,28 @@ no registry authentication is required to pull them.
 
 ## 1. Architecture
 
-```
-                              Internet
-                                 │
-                     ┌───────────────────────┐
-                     │  Nginx Proxy Manager   │  (ports 80/443, admin UI on 81)
-                     │  (jc21/nginx-proxy-    │
-                     │   manager)             │
-                     └───────────┬───────────┘
-                                 │ forwards /beckn/* to onix-discover:8080
-                                 ▼
-                     ┌───────────────────────┐
-                     │      onix-discover     │  Beckn protocol gateway
-                     │  (fidedocker/          │  — signature verification, schema
-                     │   onix-crawler:1.0.0)  │    validation, signing, routing
-                     │                        │  — 4 modules in one process:
-                     │  /receiver/            │    discoverReceiver, discoverReceiverOnPull,
-                     │  /receiver-on-pull/    │    discoverCaller, crawl
-                     │  /caller/              │
-                     │  /crawl                │
-                     └───┬───────────────┬────┘
-                         │               │
-              validated  │               │  signs + forwards
-              discover   │               │  on_discover to
-              requests   │               │  context.bapUri
-                         ▼               │
-              ┌─────────────────────┐    │
-              │ catalog-discover-job │    │
-              │ (fidedocker/         │    │
-              │  catalog-discover-   │    │
-              │  job:v1.6.0)         │    │
-              │ — runs the query,    │    │
-              │   publishes result   │    │
-              │   to Kafka           │    │
-              └──────────┬──────────┘    │
-                         │ Kafka topic     │
-                         │ discovr.discover│
-                         │ .out.responses  │
-                         ▼                 │
-              ┌─────────────────────┐    │
-              │ response-dispatcher  │────┘  POST /caller (STATIC_CALLBACK_URL)
-              │ (fidedocker/         │
-              │  response-dispatcher:│
-              │  v1.6.0)             │
-              │ — consumes Kafka,     │
-              │   posts on_discover   │
-              │   to onix-discover    │
-              └─────────────────────┘
+```mermaid
+flowchart TB
+    Internet(["Internet<br/>BAP / Catalg"])
+    NPM["Nginx Proxy Manager<br/>ports 80/443, admin UI :81"]
+    Onix["onix-discover<br/>Beckn protocol gateway — signature verification,<br/>schema validation, signing, routing<br/>modules: receiver / receiver-on-pull / caller / crawl"]
+    Discover["catalog-discover-job<br/>runs the query,<br/>publishes result to Kafka"]
+    Kafka[["Kafka topic<br/>discovr.discover.out.responses"]]
+    Dispatcher["response-dispatcher<br/>consumes Kafka,<br/>posts on_discover to onix-discover"]
+    Publish["catalog-publish<br/>indexes catalog/push + catalog/on_pull<br/>into Elasticsearch + Postgres"]
 
-              ┌─────────────────────┐
-              │  catalog-publish     │  Receives catalog/push and catalog/on_pull
-              │  (fidedocker/        │  from BPPs/Catalgs, indexes into ES + Postgres.
-              │   catalog-publish-   │  Also the target of onix-discover's `crawl`
-              │   job:v1.6.0)        │  module's CRAWLER_PUSH_ENDPOINT.
-              └─────────────────────┘
+    Internet -->|discover / catalog push| NPM
+    NPM -->|forwards /beckn/* to :8080| Onix
+    Onix -->|validated discover request| Discover
+    Onix -->|validated catalog/push, catalog/on_pull| Publish
+    Onix -.->|crawl module: pulls peer catalogs,<br/>pushes verified results| Publish
+    Discover --> Kafka
+    Kafka --> Dispatcher
+    Dispatcher -->|"POST /caller on_discover (STATIC_CALLBACK_URL)"| Onix
+    Onix -->|signs + forwards on_discover to context.bapUri| Internet
+```
 
 Infra (all internal-only, 127.0.0.1-bound): Postgres+PostGIS, Elasticsearch, Kafka, Redis.
-```
 
 **Two request flows through `onix-discover`:**
 
