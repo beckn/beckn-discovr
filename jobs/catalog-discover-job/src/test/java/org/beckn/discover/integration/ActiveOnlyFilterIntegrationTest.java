@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.postgresql.util.PGobject;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,7 +23,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <b>in-query</b>, composing independently with the #309 networkId scoping. The ES twin of the
  * predicate is unit-tested in {@code EsActiveValidityFilterBuilderTest}; the SQL predicate itself
  * in {@code QueryBuilderActiveValidityTest}. Validity windows use wide bounds (2020 / 2999) so the
- * outcome is independent of wall-clock "now".</p>
+ * outcome is independent of wall-clock "now". All queries carry a fixed {@link #FIXED_NOW} (noon
+ * UTC) rather than the real wall clock — the wide date bounds don't care, but the startTime/
+ * endTime time-of-day fallback tests need a controlled reference instant to assert specific
+ * in/out-of-window outcomes deterministically.</p>
  */
 class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
 
@@ -32,6 +36,9 @@ class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
     private static final String GEO_PATH = "$.catalogs[*].resources[*].availableAt[*].geo";
     private static final double LON = 77.5946;
     private static final double LAT = 12.9716;
+
+    /** Noon UTC — arbitrary but fixed, so startTime/endTime window tests are deterministic. */
+    private static final Instant FIXED_NOW = Instant.parse("2026-07-13T12:00:00Z");
 
     /**
      * Seeds one item = one single-resource catalog carrying the given tag.
@@ -88,6 +95,14 @@ class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
     // (not evaluable to an instant ⇒ never dropped by validity=true, never selected by validity=false).
     private static final String BARE_TIME      = "\"validity\":{\"startTime\":\"09:00:00\",\"endTime\":\"17:00:00\"},";
     private static final String MALFORMED      = "\"validity\":{\"startDate\":\"not-a-date\"},";
+    // startTime/endTime windows, all evaluated against FIXED_NOW = 12:00:00 UTC.
+    private static final String TIME_SAME_DAY_COVERING     = "\"validity\":{\"startTime\":\"09:00:00\",\"endTime\":\"21:00:00\"},";
+    private static final String TIME_SAME_DAY_NOT_COVERING = "\"validity\":{\"startTime\":\"13:00:00\",\"endTime\":\"18:00:00\"},";
+    private static final String TIME_WRAP_COVERING         = "\"validity\":{\"startTime\":\"10:00:00\",\"endTime\":\"08:00:00\"},"; // spans midnight, covers noon via the 10:00->24:00 segment
+    private static final String TIME_WRAP_NOT_COVERING     = "\"validity\":{\"startTime\":\"20:00:00\",\"endTime\":\"06:00:00\"},"; // spans midnight, noon falls in neither segment
+    // Both startDate (future, not-yet-valid) AND a covering startTime/endTime — proves date wins.
+    private static final String DATE_WINS_OVER_TIME =
+            "\"validity\":{\"startDate\":\"2099-01-01T00:00:00Z\",\"startTime\":\"09:00:00\",\"endTime\":\"21:00:00\"},";
 
     private QueryRequest jsonPathQuery(String tag, boolean activeOnly, String network) {
         DiscoverRequest req = new DiscoverRequest();
@@ -97,7 +112,7 @@ class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
         req.setContext(ctx);
         req.setFilters("$.catalogs[*].resources[*] ? (@.resourceAttributes.tag == \"" + tag + "\")");
         // Map the legacy single flag onto the value-match API: activeOnly ⇒ active=TRUE + validity=TRUE.
-        return QueryRequest.from(req, activeOnly ? Boolean.TRUE : null, activeOnly ? Boolean.TRUE : null);
+        return QueryRequest.from(req, activeOnly ? Boolean.TRUE : null, activeOnly ? Boolean.TRUE : null, FIXED_NOW);
     }
 
     private QueryRequest jsonPathAndSpatialQuery(String tag, boolean activeOnly) {
@@ -109,11 +124,12 @@ class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
         sc.setOperation("s_dwithin");
         sc.setGeometry(geo);
         sc.setDistanceMeters(50000.0);
-        // rebuild carrying the spatial constraint + the value-match flags (activeOnly ⇒ active=TRUE + validity=TRUE)
+        // rebuild carrying the spatial constraint + the value-match flags (activeOnly ⇒ active=TRUE + validity=TRUE),
+        // propagating base.now() so the combined query shares the same reference instant as the base.
         return new QueryRequest(base.transactionId(), base.messageId(), base.filters(),
                 List.of(sc), null, base.schemaTypes(), base.schemaContextUrls(),
                 base.rawSchemaContextUrls(), base.networkId(),
-                activeOnly ? Boolean.TRUE : null, activeOnly ? Boolean.TRUE : null);
+                activeOnly ? Boolean.TRUE : null, activeOnly ? Boolean.TRUE : null, base.now());
     }
 
     // ── J: full semantics matrix ──────────────────────────────────────────────
@@ -221,7 +237,7 @@ class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
         ctx.setNetworkId(network);
         req.setContext(ctx);
         req.setFilters("$.catalogs[*].resources[*] ? (@.resourceAttributes.tag == \"" + tag + "\")");
-        return QueryRequest.from(req, active, validity);
+        return QueryRequest.from(req, active, validity, FIXED_NOW);
     }
 
     @Test
@@ -364,5 +380,51 @@ class ActiveOnlyFilterIntegrationTest extends BaseIntegrationTest {
         List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
                 jsonPathQuery("badshape", DEFAULT_TEST_NETWORK, null, Boolean.FALSE));
         assertThat(catalogs).isEmpty();
+    }
+
+    // ── startTime/endTime fallback: priority + UTC wrap-around (all vs FIXED_NOW = 12:00 UTC) ────
+
+    private void seedTimeOfDay() {
+        String net = DEFAULT_TEST_NETWORK;
+        seed("tod", "t-sc", "time-same-day-covering",     net, "", TIME_SAME_DAY_COVERING);
+        seed("tod", "t-snc", "time-same-day-not-covering", net, "", TIME_SAME_DAY_NOT_COVERING);
+        seed("tod", "t-wc", "time-wrap-covering",          net, "", TIME_WRAP_COVERING);
+        seed("tod", "t-wnc", "time-wrap-not-covering",     net, "", TIME_WRAP_NOT_COVERING);
+        seed("tod", "t-dw", "date-wins-over-time",         net, "", DATE_WINS_OVER_TIME);
+    }
+
+    @Test
+    @DisplayName("validity=true keeps same-day and wrap-around windows that cover noon; drops the ones that don't")
+    void timeOfDay_validityTrue_keepsCoveringWindows() throws Exception {
+        seedTimeOfDay();
+        List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("tod", DEFAULT_TEST_NETWORK, null, Boolean.TRUE));
+        assertThat(catalogs).extracting(Catalog::getId)
+                .containsExactlyInAnyOrder("time-same-day-covering", "time-wrap-covering");
+    }
+
+    @Test
+    @DisplayName("validity=false selects the windows that do NOT cover noon (same-day and wrap-around)")
+    void timeOfDay_validityFalse_selectsNonCoveringWindows() throws Exception {
+        seedTimeOfDay();
+        List<Catalog> catalogs = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("tod", DEFAULT_TEST_NETWORK, null, Boolean.FALSE));
+        assertThat(catalogs).extracting(Catalog::getId)
+                .containsExactlyInAnyOrder("time-same-day-not-covering", "time-wrap-not-covering");
+    }
+
+    @Test
+    @DisplayName("startDate/endDate — if present — always wins over startTime/endTime, even when the time window covers now")
+    void dateFields_alwaysWinOverTimeFields() throws Exception {
+        seedTimeOfDay();
+        // date-wins-over-time has a future startDate (2099) but a startTime/endTime window that covers
+        // noon. If time were consulted it would read as "valid"; the date branch must win instead.
+        List<Catalog> validTrue = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("tod", DEFAULT_TEST_NETWORK, null, Boolean.TRUE));
+        assertThat(validTrue).extracting(Catalog::getId).doesNotContain("date-wins-over-time");
+
+        List<Catalog> validFalse = pgQueryEngine.executeFilterQuery(
+                jsonPathQuery("tod", DEFAULT_TEST_NETWORK, null, Boolean.FALSE));
+        assertThat(validFalse).extracting(Catalog::getId).contains("date-wins-over-time");
     }
 }
