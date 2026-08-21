@@ -2,8 +2,6 @@ package org.beckn.auth.crypto;
 
 import org.beckn.auth.exception.BecknAuthException;
 import org.beckn.auth.logging.LoggerFactory;
-import org.bouncycastle.asn1.edec.EdECObjectIdentifiers;
-import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

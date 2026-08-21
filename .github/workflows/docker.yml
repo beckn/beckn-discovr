@@ -35,6 +35,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# checkov:skip=CKV_GHA_7:deps_base_tag selects the prebuilt deps-base image tag; intentional and required
+# Least-privilege default; jobs widen as needed (e.g. id-token: write for OIDC).
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     name: Build & Push — ${{ matrix.name }}
@@ -99,7 +104,18 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
 
+      # Docker Hardened Images (DHI) base images are pulled from dhi.io during
+      # the build. Read-only (pull) credentials are enough — CI never pushes to
+      # dhi.io. Requires the DHI_USERNAME / DHI_TOKEN repo secrets.
+      - name: Log in to dhi.io (pull DHI base images)
+        uses: docker/login-action@v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_USERNAME }}
+          password: ${{ secrets.DHI_TOKEN }}
+
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -109,4 +125,50 @@ jobs:
           build-args: ${{ steps.deps_base.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # ── Image-layer CVE scan (REPORT-ONLY) ───────────────────────────────
+      # Scans the exact image just pushed (by digest). Findings are advisory:
+      # published to the run's Job Summary + a downloadable artifact for a human
+      # to act on. A CVE here NEVER fails the release build (exit-code 0). The
+      # DHI base is ~0-CVE, so this surfaces app-layer (jar) vulnerabilities.
+      - name: Install Trivy CLI
+        env:
+          TRIVY_VERSION: '0.70.0'
+        run: |
+          set -euo pipefail
+          curl -sfL -o /tmp/trivy.tar.gz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar -xzf /tmp/trivy.tar.gz -C /tmp trivy
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Trivy image scan (report-only)
+        env:
+          IMAGE_REF: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}@${{ steps.build.outputs.digest }}
+        run: |
+          set +e
+          echo "Scanning $IMAGE_REF"
+          trivy image "$IMAGE_REF" \
+            --severity CRITICAL,HIGH,MEDIUM \
+            --ignore-unfixed \
+            --exit-code 0 \
+            --format table > trivy-image.txt
+          {
+            echo "## 🛡️ Trivy image scan — ${{ matrix.name }}:${{ steps.resolve.outputs.version }}"
+            echo ""
+            echo "Report-only — a CVE here does not fail the release. Digest: \`${{ steps.build.outputs.digest }}\`"
+            echo ""
+            echo '```'
+            if [ -s trivy-image.txt ]; then cat trivy-image.txt; else echo "(no fixable CRITICAL/HIGH/MEDIUM vulnerabilities)"; fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Upload image scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-${{ matrix.name }}
+          path: trivy-image.txt
+          if-no-files-found: ignore
 

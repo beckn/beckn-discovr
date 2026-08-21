@@ -44,39 +44,6 @@ services:
       retries: 5
       start_period: 30s
 
-  # Ollama — local LLM server for generating vector embeddings
-  # No host port binding — only accessible within beckn-network
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   container_name: ollama
-  #   volumes:
-  #     - ollama_data:/root/.ollama
-  #   networks:
-  #     - beckn-network
-  #   healthcheck:
-  #     test: ["CMD", "ollama", "list"]
-  #     interval: 10s
-  #     timeout: 10s
-  #     retries: 10
-  #     start_period: 20s
-
-  # Pulls required models once after Ollama is healthy — skips if already cached
-  # OLLAMA_NOPRINTER=1 disables the TUI progress display so it works without a TTY
-  # ollama-init:
-  #   image: ollama/ollama:latest
-  #   container_name: ollama-init
-  #   entrypoint: ["/bin/bash", "-c"]
-  #   command: "ollama pull nomic-embed-text 2>&1 | cat && ollama pull llama3.2:1b 2>&1 | cat"
-  #   environment:
-  #     - OLLAMA_HOST=http://ollama:11434
-  #     - OLLAMA_NOPRINTER=1
-  #   depends_on:
-  #     ollama:
-  #       condition: service_healthy
-  #   networks:
-  #     - beckn-network
-  #   restart: "no"
-
   # on-discovery-api removed — catalog push is now handled by catalog-publish service (POST /catalog/push)
 
   # ── Discovr Ingestion ──────────────────────────────────────────────────────
@@ -175,8 +142,6 @@ services:
         condition: service_healthy
       postgres-discovery:
         condition: service_healthy
-      # ollama-init:
-      #   condition: service_completed_successfully
     networks:
       - beckn-network
     restart: unless-stopped
@@ -292,17 +257,12 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
-      # ollama-init:
-      #   condition: service_completed_successfully
     networks:
       - beckn-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080'"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+    # No healthcheck — the DHI distroless runtime has no shell/bash/curl.
+    # Liveness/readiness is handled by the orchestrator (k8s httpGet probes);
+    # local compose dependents gate on service_started instead.
 
   # ── Discovr Dispatcher ──────────────────────────────────────────────────
   # Delivers on_discover callbacks to Buyers (BAPs); failures go to DLT topic.
@@ -343,113 +303,20 @@ services:
       - OTEL_LOGS_EXPORTER=none
     depends_on:
       catalog-discover-job:
-        condition: service_healthy
+        # service_started (not service_healthy): the discover-job's distroless
+        # runtime has no in-container healthcheck; gate on container start.
+        condition: service_started
     networks:
       - beckn-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-  # ── NP Signer + Buyer Signer ────────────────────────────────────────────
-  # Two signing services are needed because each DeDi registry record holds
-  # only one base URL, and there are two distinct callback destinations:
-  #
-  #   NP Signer (port 3031) — Network Participant who hosts this Discovr instance
-  #     Registry record → base URL points to Discovr Ingestion (discovr-ingestion:8085)
-  #     Used when: managing subscriptions (catalog/subscription CRUD)
-  #     Catalg Delivery resolves this record → sends catalog/push to Discovr Ingestion
-  #
-  #   Buyer Signer (port 3032) — Buyer app within the NP's network
-  #     Registry record → base URL points to Buyer Callbacks (buyer-callbacks:8097)
-  #     Used when: sending discover or catalog/pull requests
-  #     Discovr Dispatcher + Catalg Delivery resolve this → deliver on_discover / on_pull
-  #
-  # In Postman: use port 3031 for subscription, port 3032 for discover/pull.
-
-  # ── NP Signer — Network Participant signs subscription CRUD requests
-  # Actor: NP who hosts this Discovr instance. Subscribes to Catalg so that
-  # catalog/push deliveries flow into Discovr Ingestion.
-  np-signer:
-    image: node:20-alpine
-    container_name: np-signer
-    working_dir: /app
-    volumes:
-      - ./dev-kit:/app
-    command: sh -c "npm install --silent && node scripts/get-signature.js"
-    ports:
-      - "3031:3031"
-    environment:
-      - SUBSCRIBER_ID=${BAP_SUBSCRIBER_ID:-}
-      - RECORD_ID=${BAP_RECORD_ID:-}
-      - PRIVATE_KEY=${BAP_PRIVATE_KEY:-}
-      - PORT=3031
-    networks:
-      - beckn-network
-    restart: unless-stopped
-
-  # ── Buyer Signer — Buyer app signs discover and pull requests
-  # Actor: Buyer (BAP) within the NP's network. Calls discover API to find catalogs.
-  # on_discover and on_pull callbacks are delivered to buyer-callbacks (port 8097).
-  buyer-signer:
-    image: node:20-alpine
-    container_name: buyer-signer
-    working_dir: /app
-    volumes:
-      - ./dev-kit:/app
-    command: sh -c "npm install --silent && node scripts/get-signature.js"
-    ports:
-      - "3032:3032"
-    environment:
-      - SUBSCRIBER_ID=${BAP2_SUBSCRIBER_ID:-}
-      - RECORD_ID=${BAP2_RECORD_ID:-}
-      - PRIVATE_KEY=${BAP2_PRIVATE_KEY:-}
-      - PORT=3032
-    networks:
-      - beckn-network
-    restart: unless-stopped
-
-  # ── Buyer Callbacks — receives on_discover and on_pull callbacks for local testing
-  # Actor: Buyer (BAP). Lightweight HTTP server that prints received callbacks to stdout.
-  # In production this would be the Buyer's actual application server.
-  buyer-callbacks:
-    image: python:3-alpine
-    container_name: buyer-callbacks
-    ports:
-      - "8097:8097"
-    volumes:
-      - ./dev-kit/scripts/receive-discover-callbacks.sh:/scripts/receive-discover-callbacks.sh:ro
-    command: sh /scripts/receive-discover-callbacks.sh
-    networks:
-      - beckn-network
-    restart: unless-stopped
-
-  # Beckn Demo UI
-  # beckn-demo-ui:
-  #   build:
-  #     context: ./reference-apps/beckn-demo-ui
-  #     dockerfile: Dockerfile
-  #     args:
-  #       VITE_CATALOG_API_URL: http://localhost:8085
-  #       VITE_DISCOVER_API_URL: http://localhost:8082
-  #   image: beckn/beckn-demo-ui:1.0
-  #   container_name: beckn-demo-ui
-  #   ports:
-  #     - "5173:80"
-  #   networks:
-  #     - beckn-network
-  #   restart: unless-stopped
+    # No healthcheck — the DHI distroless runtime has no shell/curl.
+    # Liveness/readiness is handled by the orchestrator (k8s httpGet probes).
 
 volumes:
   postgres_discovery_data:
     driver: local
   elasticsearch_data:
     driver: local
-  # ollama_data:
-  #   driver: local
 
 networks:
   beckn-network:
