@@ -13,6 +13,8 @@ public final class ErrorSanitizer {
     private static final Pattern SECRET_PATTERN = Pattern.compile("(?i)secret=\\S+");
     private static final Pattern JDBC_PATTERN = Pattern.compile("jdbc:[^\\s]+");
     private static final Pattern TOKEN_PATTERN = Pattern.compile("(?i)(bearer|token)=\\S+");
+    // Collapse CR/LF (and other control chars) so untrusted values can't forge log entries — CWE-117.
+    private static final Pattern CONTROL_PATTERN = Pattern.compile("[\\r\\n\\t\\x00-\\x1F]+");
 
     public static String sanitize(Throwable t) {
         if (t == null)
@@ -38,6 +40,7 @@ public final class ErrorSanitizer {
         msg = SECRET_PATTERN.matcher(msg).replaceAll("secret=***");
         msg = TOKEN_PATTERN.matcher(msg).replaceAll("$1=***");
         msg = JDBC_PATTERN.matcher(msg).replaceAll("jdbc:***");
+        msg = CONTROL_PATTERN.matcher(msg).replaceAll(" ");
         return msg;
     }
 

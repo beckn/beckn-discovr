@@ -65,38 +65,43 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Resolve DEPS_BASE build arg
         id: deps_base
+        # Route workflow-context data through env vars (never inline ${{ }} in run:) — CWE-94 shell injection.
+        env:
+          DEPS_BASE_TAG: ${{ inputs.deps_base_tag || '1.0' }}
+          BUILD_ARGS: ${{ matrix.build_args }}
         run: |
-          TAG="${{ inputs.deps_base_tag || '1.0' }}"
-          echo "value=${{ matrix.build_args }}:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "value=${BUILD_ARGS}:${DEPS_BASE_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Resolve version tag and tags
         id: resolve
+        # Route workflow-context data through env vars (never inline ${{ }} in run:) — CWE-94 shell injection.
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          IMAGE_NAME: ${{ matrix.name }}
         run: |
-          TAG="${{ github.ref_name }}"
-          
           # Since we only use universal tags (v*), version is the tag name
-          VERSION="$TAG"
+          VERSION="$REF_NAME"
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           # Build image tags (version + latest)
           {
             echo "tags<<EOF"
-            echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:${VERSION}"
-            echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}:latest"
+            echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${IMAGE_NAME}:${VERSION}"
+            echo "asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${IMAGE_NAME}:latest"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Authenticate to Google Cloud (OIDC)
         id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
@@ -108,7 +113,7 @@ jobs:
       # the build. Read-only (pull) credentials are enough — CI never pushes to
       # dhi.io. Requires the DHI_USERNAME / DHI_TOKEN repo secrets.
       - name: Log in to dhi.io (pull DHI base images)
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: dhi.io
           username: ${{ secrets.DHI_USERNAME }}
@@ -116,7 +121,7 @@ jobs:
 
       - name: Build and push Docker image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file:    ${{ matrix.dockerfile }}
@@ -143,8 +148,12 @@ jobs:
           trivy --version
 
       - name: Trivy image scan (report-only)
+        # Route workflow-context data through env vars (never inline ${{ }} in run:) — CWE-94 shell injection.
         env:
           IMAGE_REF: asia-south1-docker.pkg.dev/beckn-one-infra-services/beckn-discovr/${{ matrix.name }}@${{ steps.build.outputs.digest }}
+          IMAGE_NAME: ${{ matrix.name }}
+          IMAGE_VERSION: ${{ steps.resolve.outputs.version }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set +e
           echo "Scanning $IMAGE_REF"
@@ -154,9 +163,9 @@ jobs:
             --exit-code 0 \
             --format table > trivy-image.txt
           {
-            echo "## 🛡️ Trivy image scan — ${{ matrix.name }}:${{ steps.resolve.outputs.version }}"
+            echo "## 🛡️ Trivy image scan — ${IMAGE_NAME}:${IMAGE_VERSION}"
             echo ""
-            echo "Report-only — a CVE here does not fail the release. Digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "Report-only — a CVE here does not fail the release. Digest: \`${IMAGE_DIGEST}\`"
             echo ""
             echo '```'
             if [ -s trivy-image.txt ]; then cat trivy-image.txt; else echo "(no fixable CRITICAL/HIGH/MEDIUM vulnerabilities)"; fi
@@ -166,7 +175,7 @@ jobs:
 
       - name: Upload image scan report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: trivy-image-${{ matrix.name }}
           path: trivy-image.txt
