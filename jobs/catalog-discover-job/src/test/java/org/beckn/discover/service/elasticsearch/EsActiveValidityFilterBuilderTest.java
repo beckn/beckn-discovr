@@ -19,6 +19,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Unit tests for {@link EsActiveValidityFilterBuilder} — the ES twin of the PostgreSQL
  * active/validity value-match predicates. Asserts the emitted query DSL rather than running a
  * cluster, so the null-safe value-match spec semantics are locked deterministically.
+ *
+ * <p>These tests lock the emitted DSL <em>shape</em> — the same static query is emitted
+ * regardless of what any given document's data looks like, since date-vs-time priority and
+ * wrap-around are evaluated per document at query time (inside the bool structure / Painless
+ * script), not baked into different generated DSL per scenario. Behavior against real seeded
+ * documents is proven in {@code EsActiveValidityIntegrationTest}.</p>
  */
 class EsActiveValidityFilterBuilderTest {
 
@@ -98,10 +104,12 @@ class EsActiveValidityFilterBuilderTest {
         // out-of-window uses strict gt/lt range ops
         assertThat(json).contains("\"gt\":");
         assertThat(json).contains("\"lt\":");
-        // ...and NOT the inclusive within-window ops or the absent-safe exists branch
+        // ...and NOT the inclusive within-window ops
         assertThat(json).doesNotContain("\"lte\":");
         assertThat(json).doesNotContain("\"gte\":");
-        assertThat(json).doesNotContain("exists");
+        // "exists" DOES now appear — it gates the startTime/endTime fallback branch (must_not
+        // hasDateField, filter hasBothTimeFields) introduced alongside the date-only gt/lt clause.
+        assertThat(json).contains("exists");
     }
 
     @Test
@@ -112,5 +120,43 @@ class EsActiveValidityFilterBuilderTest {
         String json = toJson(q.get());
         assertThat(json).contains("catalog_is_active");
         assertThat(json).contains("catalog_validity.startDate");
+    }
+
+    // ── startTime/endTime fallback (priority + wrap-around shape) ────────────────
+
+    @Test
+    @DisplayName("validity=true → DSL includes a painless script query referencing startTime/endTime")
+    void validityTrue_includesTimeOfDayScript() {
+        Optional<Query> q = EsActiveValidityFilterBuilder.build(request(null, Boolean.TRUE), NOW);
+        assertThat(q).isPresent();
+        String json = toJson(q.get());
+        assertThat(json).contains("script");
+        assertThat(json).contains("painless");
+        assertThat(json).contains("catalog_validity.startTime");
+        assertThat(json).contains("catalog_validity.endTime");
+        assertThat(json).contains("wantValid");
+        assertThat(json).contains("nowTime");
+    }
+
+    @Test
+    @DisplayName("validity=false → DSL includes the same script shape (wantValid carries the direction)")
+    void validityFalse_includesTimeOfDayScript() {
+        Optional<Query> q = EsActiveValidityFilterBuilder.build(request(null, Boolean.FALSE), NOW);
+        assertThat(q).isPresent();
+        String json = toJson(q.get());
+        assertThat(json).contains("script");
+        assertThat(json).contains("catalog_validity.startTime");
+        assertThat(json).contains("catalog_validity.endTime");
+        assertThat(json).contains("wantValid");
+    }
+
+    @Test
+    @DisplayName("validity clause structurally gates branches via must_not/minimum_should_match")
+    void validity_branchesAreGated() {
+        Optional<Query> q = EsActiveValidityFilterBuilder.build(request(null, Boolean.TRUE), NOW);
+        assertThat(q).isPresent();
+        String json = toJson(q.get());
+        assertThat(json).contains("must_not");
+        assertThat(json).contains("minimum_should_match");
     }
 }

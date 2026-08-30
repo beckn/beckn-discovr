@@ -178,6 +178,22 @@ public abstract class BaseIntegrationTest {
                     RETURN NULL;
                 END;
                 $$""");
+        // Exception-safe time-of-day parse used by the ?validity filter's startTime/endTime
+        // fallback, applied only when a catalog's validity has no startDate/endDate (prod:
+        // publish-job migration V7).
+        jdbcTemplate.execute("""
+                CREATE OR REPLACE FUNCTION try_to_time(txt text)
+                RETURNS time
+                LANGUAGE plpgsql
+                IMMUTABLE
+                PARALLEL SAFE
+                AS $$
+                BEGIN
+                    RETURN txt::time;
+                EXCEPTION WHEN others THEN
+                    RETURN NULL;
+                END;
+                $$""");
     }
 
     private void loadSampleData() throws IOException {

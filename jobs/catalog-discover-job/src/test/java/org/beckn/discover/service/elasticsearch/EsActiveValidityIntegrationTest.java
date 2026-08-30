@@ -50,6 +50,10 @@ class EsActiveValidityIntegrationTest {
     private static final String INDEX = "beckn-catalog-active-test";
     private static final String ALIAS = "beckn-catalog";
     private static final Instant NOW = Instant.parse("2026-07-02T00:00:00Z");
+    // Separate fixed instant for the startTime/endTime fallback tests: NOW above is exactly
+    // midnight, which is a degenerate reference point for wrap-around testing (any window with a
+    // non-midnight endTime trivially satisfies "now <= endTime" at 00:00:00). Noon avoids that.
+    private static final Instant TOD_NOW = Instant.parse("2026-07-02T12:00:00Z");
 
     private static final DockerImageName ES_IMAGE = DockerImageName
             .parse("docker.elastic.co/elasticsearch/elasticsearch:8.15.0")
@@ -86,6 +90,12 @@ class EsActiveValidityIntegrationTest {
                 activeOnly ? Boolean.TRUE : null, activeOnly ? Boolean.TRUE : null, NOW);
     }
 
+    /** startTime/endTime fallback query — text term "gadget" isolates these docs from the widget-search tests above. */
+    private static QueryRequest todQuery(Boolean validMatch) {
+        return new QueryRequest("tx", "msg", null, List.of(), "gadget",
+                List.of(), List.of(), List.of(), null, null, validMatch, TOD_NOW);
+    }
+
     @Test
     @DisplayName("activeOnly=false returns all matching catalogs (existing behaviour)")
     void activeOnlyFalse_returnsAll() throws Exception {
@@ -102,6 +112,34 @@ class EsActiveValidityIntegrationTest {
                 .containsExactlyInAnyOrder("cat-active", "cat-nofields");
         assertThat(catalogs).extracting(Catalog::getId)
                 .doesNotContain("cat-inactive", "cat-expired");
+    }
+
+    // ── startTime/endTime fallback: priority + UTC wrap-around (all vs TOD_NOW = 12:00 UTC) ─────
+
+    @Test
+    @DisplayName("validity=true keeps same-day and wrap-around windows that cover noon; drops the ones that don't")
+    void timeOfDay_validityTrue_keepsCoveringWindows() throws Exception {
+        List<Catalog> catalogs = engine.search("gadget", todQuery(Boolean.TRUE));
+        assertThat(catalogs).extracting(Catalog::getId)
+                .containsExactlyInAnyOrder("time-same-day-covering", "time-wrap-covering");
+    }
+
+    @Test
+    @DisplayName("validity=false selects the windows that do NOT cover noon (same-day and wrap-around)")
+    void timeOfDay_validityFalse_selectsNonCoveringWindows() throws Exception {
+        List<Catalog> catalogs = engine.search("gadget", todQuery(Boolean.FALSE));
+        assertThat(catalogs).extracting(Catalog::getId)
+                .containsExactlyInAnyOrder("time-same-day-not-covering", "time-wrap-not-covering");
+    }
+
+    @Test
+    @DisplayName("startDate — if present — always wins over startTime/endTime, even when the time window covers now")
+    void dateFields_alwaysWinOverTimeFields() throws Exception {
+        List<Catalog> validTrue = engine.search("gadget", todQuery(Boolean.TRUE));
+        assertThat(validTrue).extracting(Catalog::getId).doesNotContain("date-wins-over-time");
+
+        List<Catalog> validFalse = engine.search("gadget", todQuery(Boolean.FALSE));
+        assertThat(validFalse).extracting(Catalog::getId).contains("date-wins-over-time");
     }
 
     // ── ES infra ────────────────────────────────────────────────────────────────
@@ -121,7 +159,9 @@ class EsActiveValidityIntegrationTest {
                       "catalog_validity": {
                         "properties": {
                           "startDate": { "type": "date" },
-                          "endDate":   { "type": "date" }
+                          "endDate":   { "type": "date" },
+                          "startTime": { "type": "keyword" },
+                          "endTime":   { "type": "keyword" }
                         }
                       }
                     }
@@ -157,7 +197,29 @@ class EsActiveValidityIntegrationTest {
                 doc("cat-expired", "r-expired", Map.of(),
                         Map.of("startDate", "2019-01-01T00:00:00Z", "endDate", "2020-12-31T23:59:59Z")),
                 // neither field present → keep (default active, no window)
-                doc("cat-nofields", "r-nofields", Map.of(), null));
+                doc("cat-nofields", "r-nofields", Map.of(), null),
+                // startTime/endTime fallback scenarios, evaluated at TOD_NOW = 12:00 UTC noon. Text is
+                // "gadget" (not "widget") so these never surface in the widget-search assertions above.
+                todDoc("time-same-day-covering", "t-sc", Map.of("startTime", "09:00:00", "endTime", "21:00:00")),
+                todDoc("time-same-day-not-covering", "t-snc", Map.of("startTime", "13:00:00", "endTime", "18:00:00")),
+                todDoc("time-wrap-covering", "t-wc", Map.of("startTime", "10:00:00", "endTime", "08:00:00")),
+                todDoc("time-wrap-not-covering", "t-wnc", Map.of("startTime", "20:00:00", "endTime", "06:00:00")),
+                // future startDate (not-yet-valid) + a startTime/endTime window that covers noon —
+                // proves the date field wins over the time-of-day fallback.
+                todDoc("date-wins-over-time", "t-dw", Map.of(
+                        "startDate", "2099-01-01T00:00:00Z", "startTime", "09:00:00", "endTime", "21:00:00")));
+    }
+
+    private static Map<String, Object> todDoc(String catalogId, String resourceId, Map<String, Object> validity) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("catalog_id", catalogId);
+        m.put("catalog_name", catalogId + " catalog");
+        m.put("network_id", "ondc-test");
+        m.put("resource_id", resourceId);
+        m.put("resource_name", "Gadget " + resourceId);
+        m.put("full_text_blob", "premium gadget device " + resourceId);
+        m.put("catalog_validity", validity);
+        return m;
     }
 
     private static Map<String, Object> doc(String catalogId, String resourceId,
