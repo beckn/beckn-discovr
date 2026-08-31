@@ -39,6 +39,41 @@ http:
 pluginManager:
   root: ./plugins
 
+# Catalog crawler — application-level background job (beckn-onix main /
+# fidedocker/onix-adapter:1.9.0, pkg/plugin/implementation/catalogcrawler),
+# started once at boot, independent of any module/request. Migrations are
+# self-applied, idempotent, and run on every startup (no Flyway) — verified
+# safe against this VM's existing crawler_catalog/crawler_index/crawler_queue
+# tables via a scratch-DB dry run before promoting to prod: schema unchanged,
+# same tables reused, no manual migration needed. registry here is the
+# crawler's own key/metadata-lookup dependency, separate from
+# discoverReceiver/discoverCaller's own `plugins.registry` blocks below.
+plugins:
+  registry:
+    id: dediregistry
+    config:
+      timeout: "10"
+      retry_max: "3"
+      retry_wait_min: "100ms"
+      retry_wait_max: "500ms"
+  crawler:
+    id: catalogcrawler
+    config:
+      dbDsn: "postgres://discover_user:discover_password@postgres:5432/discover_db?sslmode=disable"
+      discoveryPushUrl: "http://catalog-publish:8080/beckn/catalog/push"
+      participantId: "fabric.nfh.global"
+      bppUri: "https://34.93.165.42.sslip.io/beckn/"
+      networks: "beckn.one/testnet,nfh.global/testnet,nfh.nfo.qtech.repushti.com/gdsnfo"
+      indexIntervalSeconds: "300"
+      catalogIntervalSeconds: "60"
+      fetchTimeoutSeconds: "30"
+      maxFetchBytes: "10485760"
+      maxDecompressedBytes: "104857600"
+      maxPushBytes: "10485760"
+      maxAttempts: "5"
+      # allowPrivateHosts intentionally omitted (defaults false) -- the
+      # SSRF-guard bypass, test-only, must stay unset here.
+
 modules:
   # ───────────────────────────────────────────────────────────────
   # discoverReceiver — public endpoint
@@ -323,55 +358,12 @@ modules:
         - storePayload        # cache outbound request by messageId (paired with receiver's storePayload)
         - validateAckSign     # verify synchronous ACK from upstream (NFH-004 §3.4)
 
-  # ───────────────────────────────────────────────────────────────
-  # crawl — decentralized-catalog crawler (ported from stage)
-  # Acts as a BAP pulling manifests/catalogs from provider DeDi index URLs,
-  # then pushing the verified result into this VM stack's own catalog-publish
-  # via CRAWLER_PUSH_ENDPOINT. No Kong/NPM exposure — /crawl stays internal.
-  # ───────────────────────────────────────────────────────────────
+  # ─── crawl — on-demand trigger + status for the background crawler above.
+  # Internal only: no host port / no NPM proxy rule exposes /crawl externally.
+  # authDisabled:true is required for /crawl/status (real auth isn't
+  # implemented upstream yet); /crawl/trigger has no auth either way.
   - name: crawl
-    path: /crawl
+    path: /crawl/
     handler:
-      type: crawl
-      role: bap
-      httpClientConfig:
-        maxIdleConns: 1000
-        maxIdleConnsPerHost: 200
-        idleConnTimeout: 300s
-        responseHeaderTimeout: 5s
-      plugins:
-        # REQUIRED — trust anchor the crawler resolves the verifying key from
-        # ({index nodeId, signature keyId}) to check catalog self-signatures.
-        registry:
-          id: dediregistry
-          config:
-            timeout: "10"
-            retry_max: "3"
-            retry_wait_min: "100ms"
-            retry_wait_max: "500ms"
-        crawler:
-          id: crawler
-          config:
-            CRAWLER_ENABLED: "true"
-            # This VM's own Postgres (same instance catalog-discover-job / catalog-publish use).
-            CRAWLER_DB_DSN: "postgres://discover_user:discover_password@postgres:5432/discover_db?sslmode=disable"
-            # Internal route to catalog-publish's /beckn/catalog/push (container-name DNS,
-            # same network as the rest of this compose stack).
-            CRAWLER_PUSH_ENDPOINT: "http://catalog-publish:8080/beckn/catalog/push"
-            # This VM's public BPP identity — matches DISCOVERY_BPP_URI on catalog-discover-job.
-            CRAWLER_BPP_URI: "https://34.93.165.42.sslip.io/beckn/"
-            # Ignored once CRAWLER_REGISTRY_URL is set — left as a non-resolving
-            # placeholder only so the field isn't empty if registry discovery is
-            # ever disabled.
-            CRAWLER_INDEX_URLS: "http://catalog-source.invalid/none"
-            CRAWLER_NETWORK_IDS: "beckn.one/testnet,nfh.global/testnet"
-            CRAWLER_REGISTRY_URL: "https://fabric.nfh.global/registry/dedi"
-            CRAWLER_INDEX_INTERVAL: "5m"
-            CRAWLER_CATALOG_INTERVAL: "1m"
-            CRAWLER_FETCH_TIMEOUT: "30s"
-            CRAWLER_MAX_ARTIFACT_BYTES: "10485760"
-            CRAWLER_MAX_DECOMPRESSED_BYTES: "104857600"
-            CRAWLER_MAX_PUSH_BYTES: "10485760"
-            CRAWLER_MAX_ATTEMPTS: "5"
-            CRAWLER_MERGE_ONLY: "true"
-            CRAWLER_LOG_LEVEL: "info"
+      type: catalogCrawl
+      authDisabled: true

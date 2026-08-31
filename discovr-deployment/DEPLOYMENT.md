@@ -44,9 +44,11 @@ Infra (all internal-only, 127.0.0.1-bound): Postgres+PostGIS, Elasticsearch, Kaf
 - **Outbound (internal)** — `response-dispatcher` posts the query result to
   `discoverCaller`, which signs it and forwards to the requesting BAP's
   `context.bapUri` (read from the request body — no BAP URLs are hardcoded).
-- **Crawl (internal, optional)** — the `crawl` module independently pulls catalog
-  manifests from other network participants' DeDi index URLs and pushes verified
-  results into `catalog-publish`. Disabled by leaving `CRAWLER_ENABLED: "false"`.
+- **Crawl (internal, optional)** — the `catalogcrawler` plugin runs as an application-level
+  background job started once at boot (independent of any module/request). It independently
+  pulls catalog manifests from other network participants' DeDi index URLs and pushes verified
+  results into `catalog-publish`. The `crawl` module is just an on-demand trigger/status
+  endpoint for that background job — it holds no crawler config of its own.
 
 ---
 
@@ -57,8 +59,8 @@ Infra (all internal-only, 127.0.0.1-bound): Postgres+PostGIS, Elasticsearch, Kaf
 | `catalog-publish` | `fidedocker/catalog-publish-job:v1.6.0` | Spring Boot. Ingests + indexes catalogs. |
 | `catalog-discover-job` | `fidedocker/catalog-discover-job:v1.6.0` | Spring Boot. Runs discover queries. |
 | `response-dispatcher` | `fidedocker/response-dispatcher:v1.6.0` | Spring Boot. Delivers `on_discover` callbacks. |
-| `onix-discover` | `fidedocker/onix-crawler:1.0.0` | Go (Beckn-ONIX). **Not** the plain `fidedocker/onix-adapter` — this build carries the crawler plugin (module type `crawl`), which the stock adapter release doesn't have. |
-| `postgres` | `postgis/postgis:15-3.3` | Shared by catalog-discover-job, catalog-publish, and the crawl module's own state tables. |
+| `onix-discover` | `fidedocker/onix-adapter:1.9.0` | Go (Beckn-ONIX). This is an official public release — starting with 1.9.0, the stock `onix-adapter` image includes the `catalogcrawler` plugin, so a custom crawler build is no longer needed. |
+| `postgres` | `postgis/postgis:15-3.3` | Shared by catalog-discover-job, catalog-publish, and the crawler's own state tables. |
 | `elasticsearch` | `docker.elastic.co/elasticsearch/elasticsearch:9.3.1` | Single-node, security disabled — internal-only. |
 | `discovery-kafka` | `bitnamilegacy/kafka:3.9.0` | Single-broker KRaft mode. |
 | `redis` | `redis:7-alpine` | Backs onix-discover's `cache` plugin (key/signature caching, payload correlation). |
@@ -191,7 +193,7 @@ The only public-facing application container (everything else sits behind it). C
 entirely in the mounted `onix-discover/discover-adapter.yaml` — see §6 for the full
 breakdown. The compose-level settings are:
 
-- `image: fidedocker/onix-crawler:1.0.0` — the crawler-capable build (see §2).
+- `image: fidedocker/onix-adapter:1.9.0` — official public release with the `catalogcrawler` plugin built in (see §2).
 - `platform: linux/amd64`.
 - `command: ["./server", "--config=/app/config/discover-adapter.yaml"]` — overrides the image's default CMD (which reads `$CONFIG_FILE`) to point at the mounted config directly.
 - `depends_on: redis (healthy)`.
@@ -207,14 +209,16 @@ rewrite-rule setup once the containers are up.
 
 ## 6. `onix-discover/discover-adapter.yaml` — full config reference
 
-Four modules run in a single onix-discover process:
+A top-level `plugins.crawler` (`catalogcrawler`) block runs as an application-level
+background job, started once at boot, independent of any module or request — see §6.11.
+Four modules then run in the same onix-discover process:
 
 | Module | Path | Role | Purpose |
 |---|---|---|---|
 | `discoverReceiver` | `/receiver/` | `bpp` | Public inbound: validates signature + schema, routes `discover`/`catalog/push` to the internal services. |
 | `discoverReceiverOnPull` | `/receiver-on-pull/` | `bpp` | Identical to `discoverReceiver` except `validateSchema` is omitted — `catalog/on_pull` payloads carry `publishDirectives` that don't fit the strict Beckn v2.0 OpenAPI schema. |
 | `discoverCaller` | `/caller/` | `bpp` | Internal: signs outbound `on_discover` and routes to the requesting BAP via `context.bapUri`. |
-| `crawl` | `/crawl` | `bap` | Internal, no public exposure: independently pulls catalog manifests from other participants' DeDi index URLs and pushes verified results into `catalog-publish`. |
+| `crawl` | `/crawl/` | — | Internal, no public exposure: on-demand trigger/status endpoint for the background crawler job above. Holds no crawler config of its own. |
 
 ### 6.1 Top-level
 
@@ -363,50 +367,56 @@ Populates request context (transaction/message IDs) for logging correlation, per
 `signAck`/`validateAckSign` are recognized by the handler's internal step-initialization
 logic when present in `steps:` — there is no separate `responseSteps:` key.
 
-### 6.11 Crawl module — `catalogcrawler`
+### 6.11 Catalog crawler — `catalogcrawler`
+
+As of `fidedocker/onix-adapter:1.9.0`, the crawler is a top-level, application-level
+background job (`pkg/plugin/implementation/catalogcrawler`) — started once at boot,
+independent of any module or request. It maintains its own state tables
+(`crawler_catalog`, `crawler_index`, `crawler_queue`) in the same Postgres instance the
+rest of the stack uses; migrations are self-applied and idempotent on every startup (no
+Flyway), so no manual migration step is needed.
 
 ```yaml
-- name: crawl
-  path: /crawl
-  handler:
-    type: crawl
-    role: bap
-    plugins:
-      registry:
-        id: dediregistry
-        config: { timeout: "10", retry_max: "3", retry_wait_min: "100ms", retry_wait_max: "500ms" }
-      crawler:
-        id: crawler
-        config:
-          CRAWLER_ENABLED: "true"
-          CRAWLER_DB_DSN: "postgres://discover_user:<password>@postgres:5432/discover_db?sslmode=disable"
-          CRAWLER_PUSH_ENDPOINT: "http://catalog-publish:8080/beckn/catalog/push"
-          CRAWLER_BPP_URI: "<this deployment's public BPP URI — matches DISCOVERY_BPP_URI>"
-          CRAWLER_INDEX_URLS: "http://catalog-source.invalid/none"   # placeholder; ignored once CRAWLER_REGISTRY_URL is set
-          CRAWLER_NETWORK_IDS: "network.a,network.b"                 # networks to discover peers on via the registry
-          CRAWLER_REGISTRY_URL: "https://<your-dedi-registry>/registry/dedi"
-          CRAWLER_INDEX_INTERVAL: "5m"
-          CRAWLER_CATALOG_INTERVAL: "1m"
-          CRAWLER_FETCH_TIMEOUT: "30s"
-          CRAWLER_MAX_ARTIFACT_BYTES: "10485760"
-          CRAWLER_MAX_DECOMPRESSED_BYTES: "104857600"
-          CRAWLER_MAX_PUSH_BYTES: "10485760"
-          CRAWLER_MAX_ATTEMPTS: "5"
-          CRAWLER_MERGE_ONLY: "true"
-          CRAWLER_LOG_LEVEL: "info"
+plugins:
+  registry:
+    id: dediregistry
+    config:
+      timeout: "10"
+      retry_max: "3"
+      retry_wait_min: "100ms"
+      retry_wait_max: "500ms"
+  crawler:
+    id: catalogcrawler
+    config:
+      dbDsn: "postgres://discover_user:<password>@postgres:5432/discover_db?sslmode=disable"
+      discoveryPushUrl: "http://catalog-publish:8080/beckn/catalog/push"
+      participantId: "<this deployment's DeDi-registered subscriberId>"
+      bppUri: "<this deployment's public BPP URI — matches DISCOVERY_BPP_URI>"
+      networks: "network.a,network.b"           # networks to discover peers on via the registry
+      indexIntervalSeconds: "300"
+      catalogIntervalSeconds: "60"
+      fetchTimeoutSeconds: "30"
+      maxFetchBytes: "10485760"
+      maxDecompressedBytes: "104857600"
+      maxPushBytes: "10485760"
+      maxAttempts: "5"
+      # allowPrivateHosts intentionally omitted (defaults false) — the SSRF-guard
+      # bypass, test-only, must stay unset in any real deployment.
 ```
 
-- `CRAWLER_DB_DSN` — the crawler maintains its own state tables (crawl cursor, queued
-  syncs) in the same Postgres instance the rest of the stack uses; no separate database
-  needed.
-- `CRAWLER_PUSH_ENDPOINT` — internal container-DNS route to `catalog-publish`'s
+- `dbDsn` — the crawler's own Postgres connection; no separate database needed.
+- `discoveryPushUrl` — internal container-DNS route to `catalog-publish`'s
   `/beckn/catalog/push`, bypassing the public ingress entirely.
-- `CRAWLER_NETWORK_IDS` — once `CRAWLER_REGISTRY_URL` is set, the crawler discovers peer
-  catalog index URLs by querying the DeDi registry for each network ID listed here; only
-  records the registry marks `state=="live"` with a non-empty `catalog_index_urls[]` are
-  crawled. `CRAWLER_INDEX_URLS` becomes a no-op placeholder once registry discovery is
-  active — leave it as the non-resolving default.
-- Set `CRAWLER_ENABLED: "false"` to disable crawling entirely without removing the module.
+- `networks` — the crawler discovers peer catalog index URLs by querying the DeDi
+  registry for each network ID listed here; only records the registry marks
+  `state=="live"` with a non-empty `catalog_index_urls[]` are crawled.
+- There is no `CRAWLER_ENABLED` flag anymore — the crawler always runs once this
+  `plugins.crawler` block is present. To disable crawling, remove the block entirely.
+- The `crawl` module (`/crawl/`, handler `type: catalogCrawl`) is a separate, thin
+  on-demand trigger/status endpoint for this background job — it carries no crawler
+  config of its own. `authDisabled: true` is required for `/crawl/status` (real auth
+  isn't implemented upstream yet); `/crawl/trigger` has no auth either way. Neither is
+  exposed via NPM — keep both internal-only.
 
 ---
 
@@ -489,9 +499,9 @@ in DeDi before signature verification/signing will work.
   particularly under emulated (non-native-architecture) container runtimes. Add
   `-Djava.net.preferIPv4Stack=true` to that service's `JAVA_OPTS`. If it persists, check
   outbound connectivity/firewall rules specifically for the JVM process, not just `curl`.
-- **`onix-discover` fails with `invalid module: crawl`**: the image doesn't have the
-  crawler plugin compiled in — confirm you're running `fidedocker/onix-crawler:1.0.0`, not
-  `fidedocker/onix-adapter`.
+- **`onix-discover` fails with `invalid module: crawl` or `unknown handler type: catalogCrawl`**:
+  the image predates the built-in crawler plugin — confirm you're running
+  `fidedocker/onix-adapter:1.9.0` or later.
 - **Signature verification fails for all inbound requests**: check that `subscriberId`
   is identical across every module's handler config, every `keyManager.config`, and
   `DISCOVERY_BPP_ID` on `catalog-discover-job` — and that the DeDi record for that

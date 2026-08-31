@@ -409,11 +409,12 @@ services:
   #                       routes /catalog/push   → catalog-publish
   # caller    (internal): signs outbound on_discover responses + routes to context.bapUri
   onix-discover:
-    # Custom crawler-plugin build (beckn-onix:feat/catalog-crawler-phase1) — public
-    # fidedocker/onix-adapter releases don't have the crawler plugin. First official,
-    # non-POC build: validated on stage (crawl + on_discover bppId/bppUri confirmed
-    # end-to-end after a full re-crawl) before promoting here.
-    image: fidedocker/onix-crawler:1.0.0@sha256:ae53de07802701db7f6dc3e622a9312e2e241b0ef5154f00481e9a3b22db7221
+    # fidedocker/onix-adapter:1.9.0 is now an official public release that
+    # includes the catalogcrawler plugin (verified: beckn-onix's v1.9.0 tag has
+    # commit f75f6f1 as an ancestor, and the built image's binary carries the
+    # catalogCrawl handler strings) -- no longer need a custom GCR build.
+    # Digest-pinned multi-arch index digest.
+    image: fidedocker/onix-adapter:1.9.0@sha256:d49cff8f47fa0422fa1fdb2c34d42454672d20651129108c2f5ae117e34d5e74
     container_name: onix-discover
     platform: linux/amd64
     expose:
