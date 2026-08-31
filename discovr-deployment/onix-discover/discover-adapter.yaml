@@ -63,7 +63,7 @@ plugins:
       discoveryPushUrl: "http://catalog-publish:8080/beckn/catalog/push"
       participantId: "fabric.nfh.global"
       bppUri: "https://34.93.165.42.sslip.io/beckn/"
-      networks: "beckn.one/testnet,nfh.global/testnet,nfh.nfo.qtech.repushti.com/gdsnfo"
+      networks: "beckn.one/testnet,nfh.global/testnet"
       indexIntervalSeconds: "300"
       catalogIntervalSeconds: "60"
       fetchTimeoutSeconds: "30"
