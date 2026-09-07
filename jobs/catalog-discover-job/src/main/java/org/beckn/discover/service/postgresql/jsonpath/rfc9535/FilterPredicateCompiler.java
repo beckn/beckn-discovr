@@ -104,7 +104,18 @@ final class FilterPredicateCompiler {
         String castExtraction = "(" + fieldExtraction + ")::" + literal.sqlCast();
         params.add(literal.boundValue());
 
-        return new Sql(castExtraction + " " + op + " ?", params);
+        return new Sql(castExtraction + " " + toSqlOperator(op) + " ?", params);
+    }
+
+    /**
+     * Translates an RFC 9535 comparison operator token into valid Postgres SQL syntax.
+     *
+     * <p>RFC 9535 uses {@code ==} for equality, which Postgres does not accept ({@code =} is
+     * required instead). Every other comparison operator ({@code != < <= > >=}) is already
+     * identical between RFC 9535 and Postgres SQL syntax, so this is the only remapping needed.</p>
+     */
+    private static String toSqlOperator(String rfc9535Operator) {
+        return "==".equals(rfc9535Operator) ? "=" : rfc9535Operator;
     }
 
     private Sql compileExistence(List<String> path) {
@@ -130,6 +141,14 @@ final class FilterPredicateCompiler {
         while (i < rawPath.length()) {
             char c = rawPath.charAt(i);
             if (c == '.') {
+                // Descendant segment ('..') is denylisted at the FuncSegment level by
+                // UnsupportedConstructDetector, but it can also appear inside a filter
+                // predicate's own path (e.g. ?(@..name == "x")) — must be caught here too,
+                // rather than silently mis-parsed as two empty-named path components.
+                if (i + 1 < rawPath.length() && rawPath.charAt(i + 1) == '.') {
+                    throw new UnsupportedConstructException(UnsupportedConstructException.UnsupportedConstruct.DESCENDANT_SEGMENT,
+                            "Descendant segment ('..') is not supported: " + rawPath);
+                }
                 int start = ++i;
                 while (i < rawPath.length() && rawPath.charAt(i) != '.' && rawPath.charAt(i) != '[') {
                     i++;
@@ -220,10 +239,31 @@ final class FilterPredicateCompiler {
                 while (i < len && !isTokenBoundary(content.charAt(i)) && !Character.isWhitespace(content.charAt(i))) {
                     i++;
                 }
-                result.add(new Token(TokenType.LITERAL, content.substring(start, i)));
+                String bareWord = content.substring(start, i);
+                rejectIfFunctionCall(bareWord, content, i);
+                result.add(new Token(TokenType.LITERAL, bareWord));
             }
         }
         return result;
+    }
+
+    private static final Pattern FUNCTION_NAME = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]*$");
+
+    /**
+     * RFC 9535's normative syntax for function extensions is a function call embedded inside a
+     * filter predicate — e.g. {@code ?(count(@.offers) > 2)} — not just the Jayway-style {@code
+     * .count()} path segment {@link UnsupportedConstructDetector} already catches. A bare word
+     * immediately followed by {@code (} can only be a function call here (no other supported
+     * term has that shape), so this is an unambiguous, denylisted construct — it must never fall
+     * through to a generic {@link InvalidRfc9535SyntaxException} "unexpected token" failure.
+     */
+    private static void rejectIfFunctionCall(String bareWord, String content, int position) {
+        if (position < content.length() && content.charAt(position) == '('
+                && FUNCTION_NAME.matcher(bareWord).matches()) {
+            var construct = UnsupportedConstructDetector.classifyFunctionName(bareWord);
+            throw new UnsupportedConstructException(construct,
+                    "Function call ('" + bareWord + "(...)') is not supported inside a filter predicate");
+        }
     }
 
     private static boolean isTokenBoundary(char c) {

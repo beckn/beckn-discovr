@@ -57,16 +57,25 @@ public class UnsupportedConstructDetector {
         if (!matcher.find()) {
             return Optional.empty();
         }
-        String name = matcher.group(1).toLowerCase();
-        return switch (name) {
-            case "count" -> Optional.of(UnsupportedConstruct.COUNT_FUNCTION);
-            case "value" -> Optional.of(UnsupportedConstruct.VALUE_FUNCTION);
-            case "match", "search" -> Optional.of(UnsupportedConstruct.REGEX_FUNCTION);
+        return Optional.of(classifyFunctionName(matcher.group(1)));
+    }
+
+    /**
+     * Maps a bare RFC 9535/Jayway-extension function name (already lower-cased or not) onto the
+     * denylisted construct it falls under. Shared with {@link FilterPredicateCompiler}, which
+     * must apply the exact same classification to a function call embedded inside a filter
+     * predicate's {@code ?(...)} content — never a separate, possibly-diverging mapping.
+     */
+    static UnsupportedConstruct classifyFunctionName(String name) {
+        return switch (name.toLowerCase()) {
+            case "count" -> UnsupportedConstruct.COUNT_FUNCTION;
+            case "value" -> UnsupportedConstruct.VALUE_FUNCTION;
+            case "match", "search" -> UnsupportedConstruct.REGEX_FUNCTION;
             // Any other RFC 9535/Jayway-extension function (length, keys, avg, sum, ...) is
             // outside this pass's supported subset (see "Decided scope"); closest denylisted
             // bucket by shape is VALUE_FUNCTION (both compute a scalar from a node, not a
             // boolean/filterable predicate this compiler can express in typed jsonb SQL).
-            default -> Optional.of(UnsupportedConstruct.VALUE_FUNCTION);
+            default -> UnsupportedConstruct.VALUE_FUNCTION;
         };
     }
 }

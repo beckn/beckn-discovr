@@ -295,9 +295,14 @@ The AST walked here is `snack4-jsonpath`'s public `JsonPath.getSegments(): List<
 | Comparison `== != < <= > >=` | `= != < <= > >=` with an inferred type cast (`::numeric`, `::text`, `::timestamptz`) on the extracted value, value bound as a `?` parameter | typed cast chosen from the RHS literal's shape; the literal itself is always a bound parameter |
 | **Descendant `..`** | — | **DENYLIST → NACK** (no generic recursive-descent primitive in plain `jsonb` operators — see spike + DECISION above) |
 | **Slice-with-step `[a:b:s]`** | — | **DENYLIST → NACK** |
-| **`count()` as count** | — | **DENYLIST → NACK** |
-| **`value()`** | — | **DENYLIST → NACK** |
-| **`match()` / `search()`** | — | **DENYLIST → NACK** (I-Regexp vs available SQL regex semantics mismatch) |
+| **`count()` as count** | — | **DENYLIST → NACK** (`COUNT_FUNCTION`) |
+| **`value()`** | — | **DENYLIST → NACK** (`VALUE_FUNCTION`) |
+| **`match()` / `search()`** | — | **DENYLIST → NACK** (`REGEX_FUNCTION`; I-Regexp vs available SQL regex semantics mismatch) |
+| **`length()`** (and any other RFC 9535/Jayway-extension function this pass doesn't implement — `keys()`, `avg()`, `sum()`, ...) | — | **DENYLIST → NACK**, bucketed under `VALUE_FUNCTION` (closest by shape: computes a scalar from a node, not a boolean/filterable predicate this compiler expresses in typed `jsonb` SQL). Made explicit here after a bug-fix pass found this table previously silent on `length()` specifically. |
+
+**Denylist detection must cover both syntactic forms a function extension can take, not just one:**
+1. Jayway-style path segment, e.g. `.count()` as its own `Segment` — caught by `UnsupportedConstructDetector` walking the segment list (`FuncSegment` instances).
+2. RFC 9535's normative form: a function call embedded **inside** a filter predicate's `?(...)` content, e.g. `?(count(@.offers) > 2)` — this is invisible to the segment-level walk (the whole `?(...)` is one `FILTER` segment; its internal content is only parsed by `FilterPredicateCompiler`'s own tokenizer). A bug-fix pass found form 2 was not detected at all and fell through to a generic `SCH_INVALID_JSONPATH` — misclassifying a valid-but-unsupported construct as a syntax error. `FilterPredicateCompiler`'s tokenizer now recognizes a bare identifier immediately followed by `(` as a function-call term and throws `UnsupportedConstructException` with the same construct mapping as (1) (shared via `UnsupportedConstructDetector.classifyFunctionName`), at any nesting depth inside the predicate (top-level, inside `&&`/`||`/`!`, inside parens). The same pass also found descendant segments (`..`) can appear inside a filter predicate's own path (e.g. `?(@..name == "x")`) and were silently mis-parsed as empty-named path components rather than denylisted; `FilterPredicateCompiler` now detects `..` in its path parser too.
 
 ### Error handling
 

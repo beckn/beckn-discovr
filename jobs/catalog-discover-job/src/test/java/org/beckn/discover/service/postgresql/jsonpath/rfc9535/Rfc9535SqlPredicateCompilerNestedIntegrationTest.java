@@ -140,6 +140,17 @@ class Rfc9535SqlPredicateCompilerNestedIntegrationTest extends BaseIntegrationTe
         assertThat(rowMatches(predicate)).isTrue();
     }
 
+    @Test
+    @DisplayName("equality filter '==' executes against real Postgres without a SQL syntax error "
+            + "and matches only the offer with the queried id")
+    void equalityFilter_executesAgainstPostgresAndMatchesExactOffer() {
+        String expression = "$.catalogs[0].resources[*].offers[?(@.id == \"offer-future\")]";
+        CompiledPredicate predicate = compile(expression);
+
+        assertThat(rowMatches(predicate)).as("Postgres accepts the compiled '=' comparison").isTrue();
+        assertThat(matchedOfferIds(predicate)).containsExactly("offer-future");
+    }
+
     private CompiledPredicate compile(String expression) {
         return compiler.toSqlPredicate(JsonPath.parse(expression).getSegments());
     }

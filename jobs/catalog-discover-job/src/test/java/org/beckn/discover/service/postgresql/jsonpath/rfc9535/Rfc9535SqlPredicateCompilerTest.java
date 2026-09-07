@@ -59,6 +59,15 @@ class Rfc9535SqlPredicateCompilerTest {
     }
 
     @Test
+    @DisplayName("equality operator '==' compiles to valid Postgres '=' syntax, never the literal '=='")
+    void equalityOperator_compilesToPostgresEquals() {
+        CompiledPredicate predicate = compile("$.offers[?(@.id == 'offer-1')]");
+
+        assertThat(predicate.whereFragment()).contains("::text = ?");
+        assertThat(predicate.whereFragment()).doesNotContain("==");
+    }
+
+    @Test
     @DisplayName("logical && combination compiles both comparisons AND'd together, still parameterized")
     void logicalAndCombination() {
         CompiledPredicate predicate = compile("$.offers[?(@.price < 100 && @.currency == 'INR')]");
@@ -195,6 +204,29 @@ class Rfc9535SqlPredicateCompilerTest {
         assertThat(compile("$.resources[0].offers[?(@.price < 100)]")).isNotNull();
         assertThat(compile("$.resources[1:3].offers[?(@.price < 100)]")).isNotNull();
         assertThat(compile("$.resources[last].offers[?(@.price < 100)]")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("function call embedded inside a filter predicate ('?(count(@) > 0)') is flagged "
+            + "with the specific unsupported construct, never a generic invalid-syntax failure — "
+            + "regression for the bug where these fell through to SCH_INVALID_JSONPATH")
+    void inlineFunctionCallInFilterPredicate_flaggedWithSpecificConstruct() {
+        assertThatThrownBy(() -> compile("$.catalogs[0].offers[?(count(@) > 0)]"))
+                .isInstanceOf(UnsupportedConstructException.class)
+                .satisfies(e -> assertThat(((UnsupportedConstructException) e).construct())
+                        .isEqualTo(UnsupportedConstructException.UnsupportedConstruct.COUNT_FUNCTION));
+
+        assertThatThrownBy(() -> compile(
+                "$.catalogs[0].offers[?(value(@.descriptor.name) == \"Rich Offer 1\")]"))
+                .isInstanceOf(UnsupportedConstructException.class)
+                .satisfies(e -> assertThat(((UnsupportedConstructException) e).construct())
+                        .isEqualTo(UnsupportedConstructException.UnsupportedConstruct.VALUE_FUNCTION));
+
+        assertThatThrownBy(() -> compile(
+                "$.catalogs[0].offers[?(match(@.descriptor.name, \".*Rich.*\"))]"))
+                .isInstanceOf(UnsupportedConstructException.class)
+                .satisfies(e -> assertThat(((UnsupportedConstructException) e).construct())
+                        .isEqualTo(UnsupportedConstructException.UnsupportedConstruct.REGEX_FUNCTION));
     }
 
     private CompiledPredicate compile(String expression) {
