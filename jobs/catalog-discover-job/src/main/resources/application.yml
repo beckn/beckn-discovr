@@ -43,6 +43,14 @@ discovery:
   # Leave unset/blank to preserve existing behavior (no stamping).
   bpp-id: ${DISCOVERY_BPP_ID:}
   bpp-uri: ${DISCOVERY_BPP_URI:}
+  filter-grammar:
+    # Master switch. When false, skip RFC 9535 parse entirely and behave exactly as before
+    # this feature (legacy Postgres jsonpath probe only) — an instant kill-switch.
+    rfc9535-enabled: true
+    # When true, the legacy Postgres-jsonpath fallback is attempted after an RFC 9535 parse
+    # failure or unsupported-construct rejection. Set false once the migration audit confirms
+    # no client still sends legacy syntax.
+    legacy-fallback-enabled: true
   auth:
     enabled: ${SIGNATURE_AUTH_ENABLED:false}
     registry-base-url: ${SIGNATURE_REGISTRY_BASE_URL:}

@@ -24,6 +24,16 @@ public final class ErrorMessages {
             "Request validation failed. Check your request body against the Beckn schema";
     public static final String SCH_REQUIRED_FIELD_MISSING = "A required field is missing in the request. Check the API documentation for required fields";
     public static final String SCH_INVALID_JSONPATH = "The JSONPath filter expression is invalid. Verify the expression syntax and try again";
+    public static final String SCH_UNSUPPORTED_JSONPATH_DESCENDANT =
+            "The filter expression uses a JSONPath feature that is not yet supported (descendant segment). Rewrite the expression without it";
+    public static final String SCH_UNSUPPORTED_JSONPATH_SLICE_STEP =
+            "The filter expression uses a JSONPath feature that is not yet supported (array slice with step). Rewrite the expression without it";
+    public static final String SCH_UNSUPPORTED_JSONPATH_COUNT_FUNCTION =
+            "The filter expression uses a JSONPath feature that is not yet supported (count() function). Rewrite the expression without it";
+    public static final String SCH_UNSUPPORTED_JSONPATH_VALUE_FUNCTION =
+            "The filter expression uses a JSONPath feature that is not yet supported (value() function). Rewrite the expression without it";
+    public static final String SCH_UNSUPPORTED_JSONPATH_REGEX_FUNCTION =
+            "The filter expression uses a JSONPath feature that is not yet supported (match()/search() function). Rewrite the expression without it";
 
     // ── Context Field Errors (pair with ErrorCodes.CTX_*) ───────────────────
     public static final String CTX_INVALID_FIELD = "A field in the request has an invalid value. Check the field format and allowed values";

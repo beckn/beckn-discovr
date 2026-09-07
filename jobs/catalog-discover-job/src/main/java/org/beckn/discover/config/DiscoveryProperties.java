@@ -35,6 +35,15 @@ public class DiscoveryProperties {
     @Valid private Spatial spatial = new Spatial();
     @Valid private Elasticsearch elasticsearch = new Elasticsearch();
     @Valid private Chain chain = new Chain();
+    @Valid private FilterGrammar filterGrammar = new FilterGrammar();
+
+    public FilterGrammar getFilterGrammar() {
+        return filterGrammar;
+    }
+
+    public void setFilterGrammar(FilterGrammar filterGrammar) {
+        this.filterGrammar = filterGrammar;
+    }
 
     public Chain getChain() {
         return chain;
@@ -608,6 +617,41 @@ public class DiscoveryProperties {
 
         public void setRetryDelayMs(long retryDelayMs) {
             this.retryDelayMs = retryDelayMs;
+        }
+    }
+
+    /**
+     * Migration switches for the RFC 9535 JSONPath grammar (see
+     * docs/design/DESIGN-rfc9535-jsonpath-grammar.md).
+     */
+    public static class FilterGrammar {
+        /**
+         * Master switch. When {@code false}, skip RFC 9535 parsing entirely and behave exactly
+         * as before this feature (legacy Postgres jsonpath probe only) — an instant kill-switch.
+         */
+        private boolean rfc9535Enabled = true;
+
+        /**
+         * When {@code true}, the legacy Postgres-jsonpath fallback is attempted after an RFC
+         * 9535 parse failure or unsupported-construct rejection. Set {@code false} once the
+         * migration audit confirms no client still sends legacy syntax.
+         */
+        private boolean legacyFallbackEnabled = true;
+
+        public boolean isRfc9535Enabled() {
+            return rfc9535Enabled;
+        }
+
+        public void setRfc9535Enabled(boolean rfc9535Enabled) {
+            this.rfc9535Enabled = rfc9535Enabled;
+        }
+
+        public boolean isLegacyFallbackEnabled() {
+            return legacyFallbackEnabled;
+        }
+
+        public void setLegacyFallbackEnabled(boolean legacyFallbackEnabled) {
+            this.legacyFallbackEnabled = legacyFallbackEnabled;
         }
     }
 

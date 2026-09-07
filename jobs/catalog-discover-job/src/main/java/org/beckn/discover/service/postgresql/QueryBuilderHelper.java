@@ -226,19 +226,40 @@ public final class QueryBuilderHelper {
      */
     public static final class QueryTemplate {
         private final String selectFrom;
+        private final List<Object> selectParams = new ArrayList<>();
         private final List<String> conditions = new ArrayList<>();
         private final List<Object> parameters = new ArrayList<>();
+        private final List<String> projectionColumns = new ArrayList<>();
+        private final List<Object> projectionParams = new ArrayList<>();
         private String idAllowlist = null;   // null = no allowlist filter; otherwise IDs joined by ID_ALLOWLIST_SEPARATOR
 
         QueryTemplate(String selectFrom, Object... selectParams) {
             this.selectFrom = selectFrom;
-            Collections.addAll(this.parameters, selectParams);
+            Collections.addAll(this.selectParams, selectParams);
         }
 
         /** Adds a WHERE/AND condition with bound parameters. */
         public QueryTemplate condition(String clause, Object... params) {
             conditions.add(clause);
             Collections.addAll(parameters, params);
+            return this;
+        }
+
+        /**
+         * Adds an arbitrary expression to the SELECT list, aliased for later retrieval from the
+         * JDBC row (e.g. an RFC 9535-compiled offers-projection correlated subquery — see
+         * {@code Rfc9535SqlPredicateCompiler}). Generalizes what {@link #BASE_SELECT_WITH_FILTER_RESULT}
+         * hardcodes only for the legacy jsonpath shape.
+         *
+         * <p>{@code expr} is a full SQL expression (e.g. a correlated scalar subquery); its bound
+         * parameters are appended in the same order they appear in {@code expr}'s own {@code ?}
+         * placeholders. The column is appended into the SELECT clause right before the base
+         * {@code FROM} keyword, so its parameters bind in the correct left-to-right position
+         * relative to any base-select params and ahead of WHERE-clause condition params.</p>
+         */
+        public QueryTemplate projectionColumn(String alias, String expr, Object... params) {
+            projectionColumns.add("(" + expr + ") AS " + alias);
+            Collections.addAll(projectionParams, params);
             return this;
         }
 
@@ -387,13 +408,21 @@ public final class QueryBuilderHelper {
         /** Builds the final {@link QuerySpec} with WHERE, ORDER BY, and LIMIT. */
         public QuerySpec build(int limit) {
             StringBuilder sql = new StringBuilder(selectFrom);
+            if (!projectionColumns.isEmpty()) {
+                int fromIndex = sql.indexOf(" FROM ");
+                if (fromIndex < 0) {
+                    throw new IllegalStateException("selectFrom must contain ' FROM ' to add a projection column");
+                }
+                sql.insert(fromIndex, ", " + String.join(", ", projectionColumns));
+            }
 
-            // Existing conditions come first so their parameter positions match the
-            // order they were added via .condition(). The allowlist condition is
-            // appended last and its bind value is appended last — keeping SQL
-            // placeholder order in lockstep with the params list.
+            // Param order must match SQL text order: base-select params (in the original
+            // selectFrom constant), then projection-column params (appended just before FROM),
+            // then WHERE-clause condition params, then the allowlist condition's own param.
             List<String> allConditions = new ArrayList<>(conditions);
-            List<Object> allParams    = new ArrayList<>(parameters);
+            List<Object> allParams    = new ArrayList<>(selectParams);
+            allParams.addAll(projectionParams);
+            allParams.addAll(parameters);
 
             if (idAllowlist != null) {
                 allConditions.add(ID_IN_ALLOWLIST);
