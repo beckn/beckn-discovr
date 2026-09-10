@@ -36,6 +36,9 @@ class Rfc9535SqlPredicateCompilerNestedIntegrationTest extends BaseIntegrationTe
     @Autowired
     private JdbcClient jdbcClient;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @BeforeEach
     void seedNestedFixture() {
         // catalogs[0].resources[*] each carry their own offers[] — the real Discovr payload
@@ -183,8 +186,7 @@ class Rfc9535SqlPredicateCompilerNestedIntegrationTest extends BaseIntegrationTe
 
     private JsonNode toJsonNode(Object pgJsonb) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            return mapper.readTree(pgJsonb.toString());
+            return objectMapper.readTree(pgJsonb.toString());
         } catch (Exception e) {
             throw new IllegalStateException("Failed to parse jsonb result", e);
         }
