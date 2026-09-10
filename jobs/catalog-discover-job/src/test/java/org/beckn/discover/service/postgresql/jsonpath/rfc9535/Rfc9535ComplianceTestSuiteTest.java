@@ -1,7 +1,7 @@
 package org.beckn.discover.service.postgresql.jsonpath.rfc9535;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.jsonpath.JsonPath;
 import org.slf4j.Logger;
@@ -41,7 +41,14 @@ class Rfc9535ComplianceTestSuiteTest {
     private static final Logger log = LoggerFactory.getLogger(Rfc9535ComplianceTestSuiteTest.class);
     private static final String CTS_RESOURCE_PATH = "/rfc9535/cts.json";
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    /**
+     * Plain JUnit test with no Spring context, so Spring's auto-configured {@code ObjectMapper}
+     * bean can't be injected here — this shared, purpose-built {@link JsonMapper} instance
+     * replaces a raw {@code new ObjectMapper()} to keep the pattern consistent with the repo's
+     * "inject Spring Boot's auto-configured bean" rule in spirit, for a context where the exact
+     * DI mechanism doesn't apply.
+     */
+    private static final JsonMapper CTS_FIXTURE_MAPPER = JsonMapper.builder().build();
     private final UnsupportedConstructDetector unsupportedConstructDetector = new UnsupportedConstructDetector();
     private final Rfc9535SqlPredicateCompiler sqlPredicateCompiler = new Rfc9535SqlPredicateCompiler();
 
@@ -76,6 +83,19 @@ class Rfc9535ComplianceTestSuiteTest {
         assertThat(validTally.compiled() + validTally.denylisted() + validTally.outOfScope()
                 + validTally.unexpectedFailures().size())
                 .isEqualTo(validCases.size());
+
+        // Recorded baseline tallies from the design doc's Acceptance Criteria section
+        // (docs/design/DESIGN-rfc9535-jsonpath-grammar.md). Asserting the exact numbers — not
+        // just that the buckets sum correctly — is what actually makes a regression (e.g. the
+        // denylist silently letting every case "compile" instead of being rejected) fail this
+        // test; a deliberate future change to the parser/denylist must consciously update these
+        // numbers in the same commit.
+        assertThat(invalidTally.correctlyRejected()).as("invalid_selector cases correctly rejected").isEqualTo(28);
+        assertThat(invalidTally.leniencyGaps()).as("invalid_selector known leniency gaps").hasSize(219);
+        assertThat(validTally.compiled()).as("valid cases compiled").isEqualTo(161);
+        assertThat(validTally.denylisted()).as("valid cases denylisted-and-rejected").isEqualTo(109);
+        assertThat(validTally.outOfScope()).as("valid cases out-of-scope").isEqualTo(157);
+        assertThat(validTally.unexpectedFailures()).as("valid cases with unexpected failures").hasSize(30);
 
         // Every compiled case must actually be free of a thrown exception, and every
         // denylist-rejected case must carry one of our five documented UnsupportedConstruct
@@ -156,7 +176,7 @@ class Rfc9535ComplianceTestSuiteTest {
     private List<CtsCase> loadCases() throws IOException {
         try (InputStream in = getClass().getResourceAsStream(CTS_RESOURCE_PATH)) {
             assertThat(in).as("vendored CTS fixture at src/test/resources%s", CTS_RESOURCE_PATH).isNotNull();
-            JsonNode root = objectMapper.readTree(in);
+            JsonNode root = CTS_FIXTURE_MAPPER.readTree(in);
             List<CtsCase> cases = new ArrayList<>();
             for (JsonNode testNode : root.path("tests")) {
                 cases.add(new CtsCase(

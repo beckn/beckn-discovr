@@ -3,9 +3,12 @@ package org.beckn.discover.service.postgresql.jsonpath.rfc9535;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.beckn.discover.service.postgresql.jsonpath.rfc9535.UnsupportedConstructException.UnsupportedConstruct;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * Unit tests for {@link FilterPredicateCompiler}'s own tokenizer/parser — specifically the
@@ -122,6 +125,48 @@ class FilterPredicateCompilerTest {
     void moderateNesting_stillCompiles() {
         String reasonable = "((((@.price < 100))))";
         assertThat(compile(reasonable).fragment()).contains("::numeric <");
+    }
+
+    // ── Tokenizer forward-progress guard (infinite-loop DoS fix) ─────────────
+
+    @Test
+    @DisplayName("a lone '=' (not part of '==') is rejected with a clean "
+            + "InvalidRfc9535SyntaxException instead of hanging the tokenizer forever")
+    void loneEqualsSign_rejectedCleanlyNotHung() {
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () ->
+                assertThatThrownBy(() -> compile("@.a = 1"))
+                        .isInstanceOf(InvalidRfc9535SyntaxException.class)
+                        .hasMessageContaining("Unexpected character"));
+    }
+
+    @Test
+    @DisplayName("a lone '&' (not part of '&&') is rejected with a clean "
+            + "InvalidRfc9535SyntaxException instead of hanging the tokenizer forever")
+    void loneAmpersand_rejectedCleanlyNotHung() {
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () ->
+                assertThatThrownBy(() -> compile("@.a & 1"))
+                        .isInstanceOf(InvalidRfc9535SyntaxException.class)
+                        .hasMessageContaining("Unexpected character"));
+    }
+
+    @Test
+    @DisplayName("a lone '|' (not part of '||') is rejected with a clean "
+            + "InvalidRfc9535SyntaxException instead of hanging the tokenizer forever")
+    void lonePipe_rejectedCleanlyNotHung() {
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () ->
+                assertThatThrownBy(() -> compile("@.a | 1"))
+                        .isInstanceOf(InvalidRfc9535SyntaxException.class)
+                        .hasMessageContaining("Unexpected character"));
+    }
+
+    // ── Existence check on non-scalar targets ────────────────────────────────
+
+    @Test
+    @DisplayName("existence predicate on a field uses structural '#>' extraction, not text '#>>', "
+            + "so it correctly matches non-scalar (array/object) targets too")
+    void existencePredicate_usesStructuralExtractionForNonScalarTargets() {
+        assertThat(compile("@.offers").fragment())
+                .isEqualTo("(e0 #> ?::text[]) IS NOT NULL");
     }
 
     private static FilterPredicateCompiler.Sql compile(String filterContent) {

@@ -150,7 +150,12 @@ final class FilterPredicateCompiler {
     private Sql compileExistence(List<String> path) {
         List<Object> params = new ArrayList<>();
         params.add(path.toArray(String[]::new));
-        return new Sql("(" + elementAlias + " #>> ?::text[]) IS NOT NULL", params);
+        // '#>' (structural extraction) is used rather than '#>>' (text extraction) because '#>>'
+        // returns NULL for any non-scalar target (an object or array), which would incorrectly
+        // evaluate an existence check to false for a field whose value is itself an object or
+        // array even though the node genuinely exists. RFC 9535 existence semantics require true
+        // whenever the node exists, regardless of its type.
+        return new Sql("(" + elementAlias + " #> ?::text[]) IS NOT NULL", params);
     }
 
     private static Sql combine(Sql left, Sql right, String operator) {
@@ -267,6 +272,17 @@ final class FilterPredicateCompiler {
                 int start = i;
                 while (i < len && !isTokenBoundary(content.charAt(i)) && !Character.isWhitespace(content.charAt(i))) {
                     i++;
+                }
+                if (i == start) {
+                    // The current character is itself an unhandled boundary character (e.g. a
+                    // lone '=', '&', or '|' not part of a recognized two-char operator) — every
+                    // consuming branch above has already been tried and none matched. Without
+                    // this guard the bareword loop would consume zero characters, emit an empty
+                    // LITERAL token, and leave i unchanged, causing the outer tokenizer loop to
+                    // re-enter at the same index forever (unbounded CPU DoS on the request
+                    // thread). Reject immediately instead of silently misparsing.
+                    throw new InvalidRfc9535SyntaxException(
+                            "Unexpected character '" + c + "' in filter predicate", null);
                 }
                 String bareWord = content.substring(start, i);
                 rejectIfFunctionCall(bareWord, content, i);
