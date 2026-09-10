@@ -12,11 +12,13 @@ import org.noear.snack4.jsonpath.JsonPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.NonTransientDataAccessException;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
+import java.sql.SQLException;
 import java.time.Duration;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
@@ -155,9 +157,10 @@ public class Rfc9535FilterCompiler {
     }
 
     /**
-     * Tries the legacy Postgres-jsonpath probe. A {@link NonTransientDataAccessException} means
-     * the legacy grammar rejects it too, so the original RFC 9535-side failure is the one that's
-     * surfaced. A transient DB error propagates uncaught so Caffeine never caches this outcome.
+     * Tries the legacy Postgres-jsonpath probe. A genuine parse rejection means the legacy grammar
+     * rejects it too, so the original RFC 9535-side failure is the one that's surfaced. A
+     * statement-timeout cancellation (see {@link #isQueryCanceled}) propagates uncaught so Caffeine
+     * never caches this outcome.
      */
     private Verdict fallbackOrFail(String expression, RuntimeException rfc9535Failure) {
         if (discoveryProperties.getFilterGrammar().isLegacyFallbackEnabled() && probeLegacy(expression)) {
@@ -191,6 +194,23 @@ public class Rfc9535FilterCompiler {
     }
 
     /**
+     * Postgres SQLSTATE for {@code query_canceled} — raised both for a {@code statement_timeout}
+     * expiry and for a JDBC-driver-issued {@code Statement.cancel()} (which is exactly how
+     * {@link java.sql.Statement#setQueryTimeout} is enforced). Spring's exception translation does
+     * <b>not</b> reliably sort this outcome into the Transient side of the
+     * {@code DataAccessException} hierarchy — on a real Postgres instance it surfaces as
+     * {@code DataAccessResourceFailureException}, which extends
+     * {@code NonTransientDataAccessResourceException} (a {@code NonTransientDataAccessException}
+     * subtype), the opposite branch from what the class name suggests. The SQLSTATE on the
+     * underlying {@link SQLException} is checked directly, in addition to (not instead of) the
+     * ordinary {@link TransientDataAccessException} check — a genuine parse failure is the only
+     * outcome that should ever be cached as a rejection; every other outcome (a timeout
+     * cancellation, or any other transient infrastructure failure such as a lost connection or an
+     * exhausted pool) must propagate uncaught.
+     */
+    private static final String SQLSTATE_QUERY_CANCELED = "57014";
+
+    /**
      * Parse-only probe against Postgres — no table access. Mirrors the pre-existing behavior.
      *
      * <p>The timeout is enforced via the JDBC driver's own {@link java.sql.Statement#setQueryTimeout}
@@ -213,10 +233,28 @@ public class Rfc9535FilterCompiler {
         try {
             probeTemplate.queryForList("SELECT CAST(? AS jsonpath)", processed);
             return true;
-        } catch (NonTransientDataAccessException e) {
+        } catch (DataAccessException e) {
+            if (isQueryCanceled(e) || e instanceof TransientDataAccessException) {
+                throw e; // timeout cancellation or other transient DB failure — never cached
+            }
             return false; // genuine parse failure
         }
-        // TransientDataAccessException (DB down / pool exhausted / probe timeout) propagates.
+    }
+
+    /**
+     * Walks the exception's cause chain looking for the underlying {@link SQLException} and
+     * checks whether its SQLSTATE is {@value #SQLSTATE_QUERY_CANCELED} (Postgres
+     * {@code query_canceled}) — the signal that this outcome was a statement-timeout/driver
+     * cancellation, not a genuine jsonpath syntax rejection.
+     */
+    private static boolean isQueryCanceled(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sqlException
+                    && SQLSTATE_QUERY_CANCELED.equals(sqlException.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String constructMessage(UnsupportedConstructException.UnsupportedConstruct construct) {

@@ -125,8 +125,9 @@ class Rfc9535SqlPredicateCompilerNestedIntegrationTest extends BaseIntegrationTe
     @Test
     @DisplayName("hostile member name inside a nested filter is bound, not concatenated, and still matches correctly")
     void nestedChain_hostileMemberName_isBoundAndMatchesCorrectly() {
-        // Re-seed with a hostile attribute name nested under offers, reachable only via the
-        // resources[*] mid-path EXISTS level exercised by this test class.
+        // Re-seed with a hostile attribute name nested under offers, reachable via the
+        // catalogs[0].resources[*] mid-path EXISTS levels exercised by this test class (matching
+        // the same catalogs[0]-wrapped fixture shape as every other test in this class).
         String hostileName = "a'{},b";
         String payload = """
                 {"catalogs":[{"id":"%s","resources":[{"id":"res-1","offers":[
@@ -136,7 +137,27 @@ class Rfc9535SqlPredicateCompilerNestedIntegrationTest extends BaseIntegrationTe
         jdbcTemplate.update("UPDATE item SET payload = CAST(? AS jsonb) WHERE id = ? AND catalog_id = ?",
                 payload, ITEM_ID, CATALOG_ID);
 
-        String expression = "$.resources[*].offers[?(@[\"" + hostileName + "\"] == 42)]";
+        String expression = "$.catalogs[0].resources[*].offers[?(@[\"" + hostileName + "\"] == 42)]";
+        CompiledPredicate predicate = compile(expression);
+
+        assertThat(predicate.whereFragment()).doesNotContain(hostileName);
+        assertThat(rowMatches(predicate)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a different hostile member name combination, at 3 levels of nesting, is also bound "
+            + "and matches correctly — confirms the fix generalizes beyond one exact string")
+    void threeLevelNestedChain_differentHostileMemberName_isBoundAndMatchesCorrectly() {
+        String hostileName = "p:q'{},r";
+        String payload = """
+                {"catalogs":[{"id":"%s","resources":[{"id":"res-1","offers":[
+                  {"id":"offer-hostile","%s": 1}
+                ]}]}]}
+                """.formatted(CATALOG_ID, hostileName);
+        jdbcTemplate.update("UPDATE item SET payload = CAST(? AS jsonb) WHERE id = ? AND catalog_id = ?",
+                payload, ITEM_ID, CATALOG_ID);
+
+        String expression = "$.catalogs[*].resources[*].offers[?(@[\"" + hostileName + "\"] == 1)]";
         CompiledPredicate predicate = compile(expression);
 
         assertThat(predicate.whereFragment()).doesNotContain(hostileName);
