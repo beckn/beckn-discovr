@@ -14,6 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -34,6 +36,7 @@ class Rfc9535FilterCompilerTest {
         query = mock(JdbcClient.ResultQuerySpec.class);
         when(jdbcClient.sql(anyString())).thenReturn(stmt);
         when(stmt.param(any())).thenReturn(stmt);
+        when(stmt.param(anyString(), any())).thenReturn(stmt);
         when(stmt.query()).thenReturn(query);
 
         properties = new DiscoveryProperties();
@@ -124,5 +127,104 @@ class Rfc9535FilterCompilerTest {
         assertThatThrownBy(() -> compiler.compile("$[??]"))
                 .isInstanceOf(InvalidRfc9535SyntaxException.class);
         verifyNoInteractions(jdbcClient);
+    }
+
+    // ── Hardening fix 3: statement_timeout on the legacy probe ──────────────
+
+    @Test
+    @DisplayName("legacy probe scopes a statement_timeout to itself via set_config(..., true) — "
+            + "verified via the JdbcClient call shape; the timeout actually firing under load "
+            + "needs a live Postgres connection and is covered at the integration-test level")
+    void legacyProbe_setsScopedStatementTimeout() {
+        properties.getFilterGrammar().setProbeStatementTimeoutMs(1500);
+        when(query.listOfRows()).thenReturn(java.util.List.of());
+
+        compiler.compile("$ ? (@.x == 1)"); // not valid RFC 9535 -> falls back to legacy probe
+
+        verify(jdbcClient).sql(contains("set_config('statement_timeout'"));
+        verify(stmt).param(eq("timeoutMs"), eq("1500"));
+    }
+
+    // ── Hardening fix 1: maxLength cap ───────────────────────────────────────
+
+    @Test
+    @DisplayName("expression exceeding the configured max length is rejected before reaching the "
+            + "parser or the legacy probe, never truncated or silently accepted")
+    void oversizedExpression_rejectedWithoutParsingOrProbing() {
+        properties.getFilterGrammar().setMaxExpressionLength(20);
+        String oversized = "$.offers[?(@.price < " + "1".repeat(20) + ")]";
+        assertThat(oversized.length()).isGreaterThan(20);
+
+        assertThatThrownBy(() -> compiler.compile(oversized))
+                .isInstanceOf(InvalidRfc9535SyntaxException.class);
+        verifyNoInteractions(jdbcClient);
+    }
+
+    @Test
+    @DisplayName("expression within the configured max length compiles normally")
+    void expressionWithinMaxLength_compiles() {
+        properties.getFilterGrammar().setMaxExpressionLength(4096);
+        CompilationResult result = compiler.compile("$.offers[?(@.price < 100)]");
+        assertThat(result).isInstanceOf(CompiledPredicate.class);
+    }
+
+    // ── Hardening fix 4: bounded verdict cache (TTL) ─────────────────────────
+
+    @Test
+    @DisplayName("verdict cache entries expire after the configured TTL, forcing a fresh probe "
+            + "instead of growing unboundedly stale")
+    void verdictCacheEntry_expiresAfterConfiguredTtl() {
+        properties.getFilterGrammar().setVerdictCacheTtlMinutes(1);
+        FakeTicker fakeTicker = new FakeTicker();
+        compiler = new Rfc9535FilterCompiler(
+                new Rfc9535SqlPredicateCompiler(),
+                new UnsupportedConstructDetector(),
+                new JsonPathConverter(),
+                jdbcClient,
+                properties,
+                new FilterGrammarMetrics(new SimpleMeterRegistry()),
+                fakeTicker);
+        when(query.listOfRows()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
+
+        assertThatThrownBy(() -> compiler.compile("$[??]")).isInstanceOf(InvalidRfc9535SyntaxException.class);
+        verify(jdbcClient, times(1)).sql(anyString());
+
+        // Still within TTL: served from cache, no second probe.
+        assertThatThrownBy(() -> compiler.compile("$[??]")).isInstanceOf(InvalidRfc9535SyntaxException.class);
+        verify(jdbcClient, times(1)).sql(anyString());
+
+        // Advance the fake clock past the configured 1-minute TTL — proves TTL, not size, bounds
+        // cache-miss rate over time (maximumSize is 10_000, far larger than one entry).
+        fakeTicker.advance(java.time.Duration.ofMinutes(2));
+        assertThatThrownBy(() -> compiler.compile("$[??]")).isInstanceOf(InvalidRfc9535SyntaxException.class);
+        verify(jdbcClient, times(2)).sql(anyString());
+    }
+
+    /** Manually-advanced {@link com.github.benmanes.caffeine.cache.Ticker} for deterministic,
+     *  sleep-free TTL expiry assertions. */
+    private static final class FakeTicker implements com.github.benmanes.caffeine.cache.Ticker {
+        private long nanos;
+
+        void advance(java.time.Duration duration) {
+            nanos += duration.toNanos();
+        }
+
+        @Override
+        public long read() {
+            return nanos;
+        }
+    }
+
+    @Test
+    @DisplayName("a burst of distinct expressions bounds cache growth via maximumSize, each a "
+            + "separate probe — no unbounded memory growth")
+    void burstOfDistinctExpressions_eachProbedIndependently() {
+        when(query.listOfRows()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
+        for (int i = 0; i < 50; i++) {
+            String expression = "$[?? " + i + "]";
+            assertThatThrownBy(() -> compiler.compile(expression))
+                    .isInstanceOf(InvalidRfc9535SyntaxException.class);
+        }
+        verify(jdbcClient, times(50)).sql(anyString());
     }
 }

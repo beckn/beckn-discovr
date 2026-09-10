@@ -2,6 +2,7 @@ package org.beckn.discover.service.postgresql.jsonpath.rfc9535;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Ticker;
 import org.beckn.discover.common.ErrorCodes;
 import org.beckn.discover.common.ErrorMessages;
 import org.beckn.discover.config.DiscoveryProperties;
@@ -13,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.NonTransientDataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+
+import java.time.Duration;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
@@ -47,10 +50,14 @@ public class Rfc9535FilterCompiler {
     private final DiscoveryProperties discoveryProperties;
     private final FilterGrammarMetrics metrics;
 
-    /** expression → compiled verdict (success or a cacheable, non-transient failure). */
-    private final Cache<String, Verdict> verdictCache = Caffeine.newBuilder()
-            .maximumSize(10_000)
-            .build();
+    /**
+     * expression → compiled verdict (success or a cacheable, non-transient failure).
+     *
+     * <p>{@code expireAfterWrite} bounds the rate of cache *misses* (and therefore legacy-probe
+     * round-trips) a flood of distinct expressions can force — {@code maximumSize} alone only
+     * bounds memory, not the miss rate over time.</p>
+     */
+    private final Cache<String, Verdict> verdictCache;
 
     public Rfc9535FilterCompiler(Rfc9535SqlPredicateCompiler sqlPredicateCompiler,
                                   UnsupportedConstructDetector unsupportedConstructDetector,
@@ -58,12 +65,33 @@ public class Rfc9535FilterCompiler {
                                   JdbcClient jdbcClient,
                                   DiscoveryProperties discoveryProperties,
                                   FilterGrammarMetrics metrics) {
+        this(sqlPredicateCompiler, unsupportedConstructDetector, jsonPathConverter, jdbcClient,
+                discoveryProperties, metrics, Ticker.systemTicker());
+    }
+
+    /**
+     * Test-only seam: lets {@code verdictCache}'s TTL be driven by a fake {@link Ticker} instead
+     * of wall-clock time, so cache-expiry behavior can be asserted deterministically without
+     * {@code Thread.sleep()}.
+     */
+    Rfc9535FilterCompiler(Rfc9535SqlPredicateCompiler sqlPredicateCompiler,
+                          UnsupportedConstructDetector unsupportedConstructDetector,
+                          JsonPathConverter jsonPathConverter,
+                          JdbcClient jdbcClient,
+                          DiscoveryProperties discoveryProperties,
+                          FilterGrammarMetrics metrics,
+                          Ticker ticker) {
         this.sqlPredicateCompiler = sqlPredicateCompiler;
         this.unsupportedConstructDetector = unsupportedConstructDetector;
         this.jsonPathConverter = jsonPathConverter;
         this.jdbcClient = jdbcClient;
         this.discoveryProperties = discoveryProperties;
         this.metrics = metrics;
+        this.verdictCache = Caffeine.newBuilder()
+                .maximumSize(10_000)
+                .expireAfterWrite(Duration.ofMinutes(discoveryProperties.getFilterGrammar().getVerdictCacheTtlMinutes()))
+                .ticker(ticker)
+                .build();
     }
 
     /**
@@ -75,6 +103,7 @@ public class Rfc9535FilterCompiler {
      *                                        legacy syntax either
      */
     public CompilationResult compile(String expression) {
+        rejectIfOversized(expression);
         Verdict verdict = verdictCache.get(expression, discoveryProperties.getFilterGrammar().isRfc9535Enabled()
                 ? this::doCompile
                 : this::legacyOnly);
@@ -82,6 +111,22 @@ public class Rfc9535FilterCompiler {
             return success.result();
         }
         throw ((Verdict.Failure) verdict).exception();
+    }
+
+    /**
+     * Rejects an oversized expression before it reaches the RFC 9535 parser, the legacy Postgres
+     * probe, or the verdict cache (as a cache key). Checked eagerly, outside the cache, so a
+     * flood of distinct oversized strings cannot itself grow the cache.
+     */
+    private void rejectIfOversized(String expression) {
+        int maxLength = discoveryProperties.getFilterGrammar().getMaxExpressionLength();
+        if (expression.length() > maxLength) {
+            metrics.recordRejected("EXPRESSION_TOO_LONG");
+            log.warn(LogEvent.FILTER_GRAMMAR_REJECTED,
+                    value("expressionLength", expression.length()), value("maxLength", maxLength));
+            throw new InvalidRfc9535SyntaxException(
+                    "Filter expression exceeds max supported length (" + maxLength + " characters)", null);
+        }
     }
 
     private Verdict doCompile(String expression) {
@@ -142,10 +187,25 @@ public class Rfc9535FilterCompiler {
         return probeProcessed(jsonPathConverter.processFilter(expression));
     }
 
-    /** Parse-only probe against Postgres — no table access. Mirrors the pre-existing behavior. */
+    /**
+     * Parse-only probe against Postgres — no table access. Mirrors the pre-existing behavior.
+     *
+     * <p>{@code set_config('statement_timeout', ..., true)} scopes the timeout to this single
+     * statement only (the {@code true} "is_local" argument, Postgres's equivalent of
+     * {@code SET LOCAL} without needing an explicit transaction block — a bare {@code CAST(? AS
+     * jsonpath)} runs in its own implicit autocommit transaction, so a plain {@code SET
+     * statement_timeout} would otherwise leak onto the pooled connection's next unrelated use).
+     * Bounds how long this trivial syntax probe can hold a connection — HikariCP's
+     * {@code connection-timeout} only bounds pool acquisition, not query execution.</p>
+     */
     private boolean probeProcessed(String processed) {
+        int timeoutMs = discoveryProperties.getFilterGrammar().getProbeStatementTimeoutMs();
         try {
-            jdbcClient.sql("SELECT CAST(? AS jsonpath)").param(processed).query().listOfRows();
+            jdbcClient.sql("SELECT set_config('statement_timeout', :timeoutMs, true), CAST(:expression AS jsonpath)")
+                    .param("timeoutMs", String.valueOf(timeoutMs))
+                    .param("expression", processed)
+                    .query()
+                    .listOfRows();
             return true;
         } catch (NonTransientDataAccessException e) {
             return false; // genuine parse failure

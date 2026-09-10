@@ -34,6 +34,7 @@ public final class Rfc9535TestFixtures {
         JdbcClient.ResultQuerySpec resultQuerySpec = mock(JdbcClient.ResultQuerySpec.class);
         when(jdbcClient.sql(anyString())).thenReturn(statementSpec);
         when(statementSpec.param(any())).thenReturn(statementSpec);
+        when(statementSpec.param(anyString(), any())).thenReturn(statementSpec);
         when(statementSpec.query()).thenReturn(resultQuerySpec);
         when(resultQuerySpec.listOfRows()).thenReturn(java.util.List.of());
 

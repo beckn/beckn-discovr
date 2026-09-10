@@ -21,6 +21,16 @@ import java.util.regex.Pattern;
  */
 final class FilterPredicateCompiler {
 
+    /**
+     * Nesting-depth cap on the recursive-descent parser (parens and {@code !} chains), mirroring
+     * {@code Rfc9535SqlPredicateCompiler.MAX_PATH_DEPTH}. Without this, a filter predicate with a
+     * few thousand nested parens (e.g. {@code ?(((((...)))))}) can exhaust the JVM stack via an
+     * uncaught {@link StackOverflowError} — which extends {@link Error}, not {@link Exception},
+     * so it is never caught by the global NACK handler. This throws a clean, cacheable
+     * {@link InvalidRfc9535SyntaxException} well before the JVM stack limit is at risk.
+     */
+    private static final int MAX_NESTING_DEPTH = 20;
+
     /** One typed SQL boolean fragment plus its bound parameters, in left-to-right order. */
     record Sql(String fragment, List<Object> parameters) {
     }
@@ -28,6 +38,7 @@ final class FilterPredicateCompiler {
     private final String elementAlias;
     private final List<Token> tokens;
     private int position;
+    private int nestingDepth;
 
     FilterPredicateCompiler(String elementAlias, String filterContent) {
         this.elementAlias = elementAlias;
@@ -67,8 +78,13 @@ final class FilterPredicateCompiler {
     private Sql parseUnary() {
         if (peekIs(TokenType.NOT)) {
             position++;
-            Sql inner = parseUnary();
-            return new Sql("NOT (" + inner.fragment() + ")", inner.parameters());
+            enterNestingLevel();
+            try {
+                Sql inner = parseUnary();
+                return new Sql("NOT (" + inner.fragment() + ")", inner.parameters());
+            } finally {
+                nestingDepth--;
+            }
         }
         return parseAtom();
     }
@@ -76,11 +92,24 @@ final class FilterPredicateCompiler {
     private Sql parseAtom() {
         if (peekIs(TokenType.LPAREN)) {
             position++;
-            Sql inner = parseOr();
-            expect(TokenType.RPAREN);
-            return new Sql("(" + inner.fragment() + ")", inner.parameters());
+            enterNestingLevel();
+            try {
+                Sql inner = parseOr();
+                expect(TokenType.RPAREN);
+                return new Sql("(" + inner.fragment() + ")", inner.parameters());
+            } finally {
+                nestingDepth--;
+            }
         }
         return parseComparisonOrExistence();
+    }
+
+    /** Increments the nesting-depth counter, rejecting the predicate once it exceeds the cap. */
+    private void enterNestingLevel() {
+        if (++nestingDepth > MAX_NESTING_DEPTH) {
+            throw new InvalidRfc9535SyntaxException(
+                    "Filter predicate exceeds max supported nesting depth (" + MAX_NESTING_DEPTH + ")", null);
+        }
     }
 
     private Sql parseComparisonOrExistence() {

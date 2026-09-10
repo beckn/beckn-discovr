@@ -638,6 +638,34 @@ public class DiscoveryProperties {
          */
         private boolean legacyFallbackEnabled = true;
 
+        /**
+         * Hard cap on {@code intent.filters.expression} length, in characters, checked before the
+         * expression reaches either the RFC 9535 parser or the legacy Postgres jsonpath probe. A
+         * violation is treated as invalid input ({@code SCH_INVALID_JSONPATH}), not a new error
+         * class. Bounds the worst case for parser recursion, the legacy probe round-trip, and
+         * verdict-cache key size alike.
+         */
+        @Min(value = 1, message = "discovery.filter-grammar.max-expression-length must be at least 1")
+        private int maxExpressionLength = 4096;
+
+        /**
+         * {@code statement_timeout} (milliseconds) applied to the legacy-fallback Postgres probe
+         * (a parse-only {@code CAST(? AS jsonpath)}) via {@code set_config(..., true)} scoped to
+         * that single statement. Deliberately tight — this is a trivial syntax probe, not a real
+         * query.
+         */
+        @Min(value = 1, message = "discovery.filter-grammar.probe-statement-timeout-ms must be at least 1")
+        private int probeStatementTimeoutMs = 2000;
+
+        /**
+         * TTL for the compiled-verdict Caffeine cache, in addition to its existing
+         * {@code maximumSize} bound. Bounds the rate of cache misses (and therefore legacy-probe
+         * round-trips) a flood of distinct expressions can force, since size alone only bounds
+         * memory, not miss rate over time.
+         */
+        @Min(value = 1, message = "discovery.filter-grammar.verdict-cache-ttl-minutes must be at least 1")
+        private int verdictCacheTtlMinutes = 10;
+
         public boolean isRfc9535Enabled() {
             return rfc9535Enabled;
         }
@@ -652,6 +680,30 @@ public class DiscoveryProperties {
 
         public void setLegacyFallbackEnabled(boolean legacyFallbackEnabled) {
             this.legacyFallbackEnabled = legacyFallbackEnabled;
+        }
+
+        public int getMaxExpressionLength() {
+            return maxExpressionLength;
+        }
+
+        public void setMaxExpressionLength(int maxExpressionLength) {
+            this.maxExpressionLength = maxExpressionLength;
+        }
+
+        public int getProbeStatementTimeoutMs() {
+            return probeStatementTimeoutMs;
+        }
+
+        public void setProbeStatementTimeoutMs(int probeStatementTimeoutMs) {
+            this.probeStatementTimeoutMs = probeStatementTimeoutMs;
+        }
+
+        public int getVerdictCacheTtlMinutes() {
+            return verdictCacheTtlMinutes;
+        }
+
+        public void setVerdictCacheTtlMinutes(int verdictCacheTtlMinutes) {
+            this.verdictCacheTtlMinutes = verdictCacheTtlMinutes;
         }
     }
 

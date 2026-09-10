@@ -55,6 +55,7 @@ class IntentQueryValidatorTest {
         query = mock(JdbcClient.ResultQuerySpec.class);
         when(jdbcClient.sql(anyString())).thenReturn(stmt);
         when(stmt.param(any())).thenReturn(stmt);
+        when(stmt.param(anyString(), any())).thenReturn(stmt);
         when(stmt.query()).thenReturn(query);
 
         Rfc9535FilterCompiler filterCompiler = new Rfc9535FilterCompiler(

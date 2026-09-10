@@ -92,6 +92,38 @@ class FilterPredicateCompilerTest {
         assertThat(compile("!(@.price < 100)").fragment()).startsWith("NOT (");
     }
 
+    // ── Hardening fix 2: recursion-depth guard ───────────────────────────────
+
+    @Test
+    @DisplayName("deeply-nested parens produce a clean InvalidRfc9535SyntaxException, never a "
+            + "StackOverflowError past the max nesting depth")
+    void deeplyNestedParens_rejectedCleanly() {
+        String pathologicallyNested = "(".repeat(5000) + "@.price < 100" + ")".repeat(5000);
+
+        assertThatThrownBy(() -> compile(pathologicallyNested))
+                .isInstanceOf(InvalidRfc9535SyntaxException.class)
+                .hasMessageContaining("nesting depth");
+    }
+
+    @Test
+    @DisplayName("deeply-chained NOT operators produce a clean InvalidRfc9535SyntaxException, "
+            + "never a StackOverflowError")
+    void deeplyChainedNot_rejectedCleanly() {
+        String pathologicalNot = "!".repeat(5000) + "(@.price < 100)";
+
+        assertThatThrownBy(() -> compile(pathologicalNot))
+                .isInstanceOf(InvalidRfc9535SyntaxException.class)
+                .hasMessageContaining("nesting depth");
+    }
+
+    @Test
+    @DisplayName("nesting within the supported depth still compiles normally — the guard doesn't "
+            + "reject reasonable, real-world predicates")
+    void moderateNesting_stillCompiles() {
+        String reasonable = "((((@.price < 100))))";
+        assertThat(compile(reasonable).fragment()).contains("::numeric <");
+    }
+
     private static FilterPredicateCompiler.Sql compile(String filterContent) {
         return new FilterPredicateCompiler("e0", filterContent).compile();
     }
