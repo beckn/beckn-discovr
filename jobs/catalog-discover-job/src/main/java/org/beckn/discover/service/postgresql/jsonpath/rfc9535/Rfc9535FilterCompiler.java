@@ -11,6 +11,7 @@ import org.beckn.discover.service.postgresql.jsonpath.JsonPathConverter;
 import org.noear.snack4.jsonpath.JsonPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.NonTransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -60,6 +61,7 @@ public class Rfc9535FilterCompiler {
      */
     private final Cache<String, Verdict> verdictCache;
 
+    @Autowired
     public Rfc9535FilterCompiler(Rfc9535SqlPredicateCompiler sqlPredicateCompiler,
                                   UnsupportedConstructDetector unsupportedConstructDetector,
                                   JsonPathConverter jsonPathConverter,
