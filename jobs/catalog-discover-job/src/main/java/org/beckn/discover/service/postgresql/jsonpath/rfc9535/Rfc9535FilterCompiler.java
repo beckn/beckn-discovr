@@ -12,9 +12,10 @@ import org.noear.snack4.jsonpath.JsonPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.NonTransientDataAccessException;
-import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import javax.sql.DataSource;
 import java.time.Duration;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
@@ -46,7 +47,7 @@ public class Rfc9535FilterCompiler {
     private final Rfc9535SqlPredicateCompiler sqlPredicateCompiler;
     private final UnsupportedConstructDetector unsupportedConstructDetector;
     private final JsonPathConverter jsonPathConverter;
-    private final JdbcClient jdbcClient;
+    private final DataSource dataSource;
     private final DiscoveryProperties discoveryProperties;
     private final FilterGrammarMetrics metrics;
 
@@ -62,10 +63,10 @@ public class Rfc9535FilterCompiler {
     public Rfc9535FilterCompiler(Rfc9535SqlPredicateCompiler sqlPredicateCompiler,
                                   UnsupportedConstructDetector unsupportedConstructDetector,
                                   JsonPathConverter jsonPathConverter,
-                                  JdbcClient jdbcClient,
+                                  DataSource dataSource,
                                   DiscoveryProperties discoveryProperties,
                                   FilterGrammarMetrics metrics) {
-        this(sqlPredicateCompiler, unsupportedConstructDetector, jsonPathConverter, jdbcClient,
+        this(sqlPredicateCompiler, unsupportedConstructDetector, jsonPathConverter, dataSource,
                 discoveryProperties, metrics, Ticker.systemTicker());
     }
 
@@ -77,14 +78,14 @@ public class Rfc9535FilterCompiler {
     Rfc9535FilterCompiler(Rfc9535SqlPredicateCompiler sqlPredicateCompiler,
                           UnsupportedConstructDetector unsupportedConstructDetector,
                           JsonPathConverter jsonPathConverter,
-                          JdbcClient jdbcClient,
+                          DataSource dataSource,
                           DiscoveryProperties discoveryProperties,
                           FilterGrammarMetrics metrics,
                           Ticker ticker) {
         this.sqlPredicateCompiler = sqlPredicateCompiler;
         this.unsupportedConstructDetector = unsupportedConstructDetector;
         this.jsonPathConverter = jsonPathConverter;
-        this.jdbcClient = jdbcClient;
+        this.dataSource = dataSource;
         this.discoveryProperties = discoveryProperties;
         this.metrics = metrics;
         this.verdictCache = Caffeine.newBuilder()
@@ -190,27 +191,30 @@ public class Rfc9535FilterCompiler {
     /**
      * Parse-only probe against Postgres — no table access. Mirrors the pre-existing behavior.
      *
-     * <p>{@code set_config('statement_timeout', ..., true)} scopes the timeout to this single
-     * statement only (the {@code true} "is_local" argument, Postgres's equivalent of
-     * {@code SET LOCAL} without needing an explicit transaction block — a bare {@code CAST(? AS
-     * jsonpath)} runs in its own implicit autocommit transaction, so a plain {@code SET
-     * statement_timeout} would otherwise leak onto the pooled connection's next unrelated use).
-     * Bounds how long this trivial syntax probe can hold a connection — HikariCP's
-     * {@code connection-timeout} only bounds pool acquisition, not query execution.</p>
+     * <p>The timeout is enforced via the JDBC driver's own {@link java.sql.Statement#setQueryTimeout}
+     * mechanism (set on a dedicated {@link JdbcTemplate} built for this single probe), not by a
+     * Postgres-side {@code set_config('statement_timeout', ...)} bundled into the same statement
+     * as the probe itself — Postgres arms {@code statement_timeout} enforcement from the GUC value
+     * in effect at the *start* of statement processing, before that statement's own target list is
+     * evaluated, so a {@code set_config} call inside the statement being timed has no effect on
+     * that statement's execution. The driver-level timeout has no such ordering pitfall and cannot
+     * leak session state onto the pooled connection's next use, since it is enforced by the driver
+     * canceling the query rather than by mutating a session GUC. A fresh, single-use
+     * {@code JdbcTemplate} is built per probe (cheap — it only wraps the shared {@link DataSource}
+     * reference) so this tight timeout applies to this probe alone and never affects the shared
+     * {@code JdbcClient} bean used by every other query in this job.</p>
      */
     private boolean probeProcessed(String processed) {
         int timeoutMs = discoveryProperties.getFilterGrammar().getProbeStatementTimeoutMs();
+        JdbcTemplate probeTemplate = new JdbcTemplate(dataSource);
+        probeTemplate.setQueryTimeout(Math.max(1, (timeoutMs + 999) / 1000));
         try {
-            jdbcClient.sql("SELECT set_config('statement_timeout', :timeoutMs, true), CAST(:expression AS jsonpath)")
-                    .param("timeoutMs", String.valueOf(timeoutMs))
-                    .param("expression", processed)
-                    .query()
-                    .listOfRows();
+            probeTemplate.queryForList("SELECT CAST(? AS jsonpath)", processed);
             return true;
         } catch (NonTransientDataAccessException e) {
             return false; // genuine parse failure
         }
-        // TransientDataAccessException (DB down / pool exhausted / timeout) propagates.
+        // TransientDataAccessException (DB down / pool exhausted / probe timeout) propagates.
     }
 
     private static String constructMessage(UnsupportedConstructException.UnsupportedConstruct construct) {

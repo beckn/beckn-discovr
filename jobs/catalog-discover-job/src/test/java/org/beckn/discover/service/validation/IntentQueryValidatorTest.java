@@ -13,13 +13,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.ErrorResponseException;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -27,8 +31,9 @@ import static org.mockito.Mockito.*;
  * Unit tests for {@link IntentQueryValidator} — the JSONPath filter grammar gate.
  *
  * <p>Expressions here are chosen to fail RFC 9535 parsing outright (e.g. {@code "$[??]"}), so
- * the legacy Postgres-jsonpath fallback probe — driven by a mocked {@link JdbcClient} — is what
- * actually gets exercised, mirroring this class's pre-RFC-9535 behaviour:
+ * the legacy Postgres-jsonpath fallback probe — driven by a mocked {@link DataSource}/
+ * {@link PreparedStatement} chain — is what actually gets exercised, mirroring this class's
+ * pre-RFC-9535 behaviour:
  * <ol>
  *   <li>A genuine parse failure under both grammars ({@code NonTransientDataAccessException}
  *       from the legacy probe) → 400 {@code SCH_INVALID_JSONPATH}.</li>
@@ -43,26 +48,26 @@ class IntentQueryValidatorTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
-    private JdbcClient jdbcClient;
-    private JdbcClient.StatementSpec stmt;
-    private JdbcClient.ResultQuerySpec query;
+    private DataSource dataSource;
+    private PreparedStatement preparedStatement;
     private IntentQueryValidator validator;
 
     @BeforeEach
-    void setup() {
-        jdbcClient = mock(JdbcClient.class);
-        stmt = mock(JdbcClient.StatementSpec.class);
-        query = mock(JdbcClient.ResultQuerySpec.class);
-        when(jdbcClient.sql(anyString())).thenReturn(stmt);
-        when(stmt.param(any())).thenReturn(stmt);
-        when(stmt.param(anyString(), any())).thenReturn(stmt);
-        when(stmt.query()).thenReturn(query);
+    void setup() throws SQLException {
+        dataSource = mock(DataSource.class);
+        Connection connection = mock(Connection.class);
+        preparedStatement = mock(PreparedStatement.class);
+        ResultSet resultSet = mock(ResultSet.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+        when(preparedStatement.executeQuery()).thenReturn(resultSet);
+        when(resultSet.next()).thenReturn(false);
 
         Rfc9535FilterCompiler filterCompiler = new Rfc9535FilterCompiler(
                 new Rfc9535SqlPredicateCompiler(),
                 new UnsupportedConstructDetector(),
                 new JsonPathConverter(),
-                jdbcClient,
+                dataSource,
                 new DiscoveryProperties(),
                 new FilterGrammarMetrics(new SimpleMeterRegistry()));
         validator = new IntentQueryValidator(filterCompiler);
@@ -78,19 +83,18 @@ class IntentQueryValidatorTest {
         // Valid RFC 9535 — compiles without ever touching the legacy DB probe.
         assertThatCode(() -> validator.validate(req("$.offers[?(@.price < 100)]")))
                 .doesNotThrowAnyException();
-        verifyNoInteractions(jdbcClient);
+        verifyNoInteractions(dataSource);
     }
 
     @Test
     void legacyOnlyExpression_stillPasses() throws Exception {
         // Not valid RFC 9535 syntax, but the legacy probe (mocked) accepts it.
-        when(query.listOfRows()).thenReturn(java.util.List.of());
         assertThatCode(() -> validator.validate(req(NOT_VALID_RFC9535))).doesNotThrowAnyException();
     }
 
     @Test
     void parseFailure_throws400InvalidJsonpath() throws Exception {
-        when(query.listOfRows()).thenThrow(new InvalidDataAccessApiUsageException("syntax error at or near \"?\""));
+        when(preparedStatement.executeQuery()).thenThrow(new InvalidDataAccessApiUsageException("syntax error at or near \"?\""));
         assertThatThrownBy(() -> validator.validate(req(NOT_VALID_RFC9535)))
                 .isInstanceOf(ErrorResponseException.class)
                 .satisfies(e -> {
@@ -102,7 +106,7 @@ class IntentQueryValidatorTest {
 
     @Test
     void transientDbFailure_propagates_notFalse400() throws Exception {
-        when(query.listOfRows()).thenThrow(new TransientDataAccessResourceException("connection reset"));
+        when(preparedStatement.executeQuery()).thenThrow(new TransientDataAccessResourceException("connection reset"));
         // Must NOT be converted to a 400 — the DB outage propagates to the global handler (→ 5xx).
         assertThatThrownBy(() -> validator.validate(req(NOT_VALID_RFC9535)))
                 .isInstanceOf(TransientDataAccessResourceException.class);
@@ -110,10 +114,9 @@ class IntentQueryValidatorTest {
 
     @Test
     void verdictIsCached_secondCallDoesNotProbeAgain() throws Exception {
-        when(query.listOfRows()).thenReturn(java.util.List.of());
         validator.validate(req(NOT_VALID_RFC9535));
         validator.validate(req(NOT_VALID_RFC9535));
         // Same expression → probed once, served from cache the second time.
-        verify(jdbcClient, times(1)).sql(anyString());
+        verify(dataSource, times(1)).getConnection();
     }
 }

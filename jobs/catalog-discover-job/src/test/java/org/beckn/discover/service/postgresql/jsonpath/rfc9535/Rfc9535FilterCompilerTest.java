@@ -8,14 +8,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.dao.TransientDataAccessResourceException;
-import org.springframework.jdbc.core.simple.JdbcClient;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.contains;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -23,28 +25,30 @@ import static org.mockito.Mockito.*;
  */
 class Rfc9535FilterCompilerTest {
 
-    private JdbcClient jdbcClient;
-    private JdbcClient.StatementSpec stmt;
-    private JdbcClient.ResultQuerySpec query;
+    private DataSource dataSource;
+    private Connection connection;
+    private PreparedStatement preparedStatement;
+    private ResultSet resultSet;
     private DiscoveryProperties properties;
     private Rfc9535FilterCompiler compiler;
 
     @BeforeEach
-    void setup() {
-        jdbcClient = mock(JdbcClient.class);
-        stmt = mock(JdbcClient.StatementSpec.class);
-        query = mock(JdbcClient.ResultQuerySpec.class);
-        when(jdbcClient.sql(anyString())).thenReturn(stmt);
-        when(stmt.param(any())).thenReturn(stmt);
-        when(stmt.param(anyString(), any())).thenReturn(stmt);
-        when(stmt.query()).thenReturn(query);
+    void setup() throws SQLException {
+        dataSource = mock(DataSource.class);
+        connection = mock(Connection.class);
+        preparedStatement = mock(PreparedStatement.class);
+        resultSet = mock(ResultSet.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+        when(preparedStatement.executeQuery()).thenReturn(resultSet);
+        when(resultSet.next()).thenReturn(false);
 
         properties = new DiscoveryProperties();
         compiler = new Rfc9535FilterCompiler(
                 new Rfc9535SqlPredicateCompiler(),
                 new UnsupportedConstructDetector(),
                 new JsonPathConverter(),
-                jdbcClient,
+                dataSource,
                 properties,
                 new FilterGrammarMetrics(new SimpleMeterRegistry()));
     }
@@ -54,29 +58,28 @@ class Rfc9535FilterCompilerTest {
     void validRfc9535_compilesWithoutDbProbe() {
         CompilationResult result = compiler.compile("$.offers[?(@.price < 100)]");
         assertThat(result).isInstanceOf(CompiledPredicate.class);
-        verifyNoInteractions(jdbcClient);
+        verifyNoInteractions(dataSource);
     }
 
     @Test
     @DisplayName("invalid-under-RFC-9535-but-legacy-valid expression falls back, tagged legacy")
     void invalidRfc9535ButLegacyValid_fallsBack() {
-        when(query.listOfRows()).thenReturn(java.util.List.of());
         CompilationResult result = compiler.compile("$ ? (@.x == 1)"); // not valid RFC 9535 (no brackets)
         assertThat(result).isInstanceOf(LegacyCompiledFilter.class);
     }
 
     @Test
     @DisplayName("invalid under both grammars throws InvalidRfc9535SyntaxException")
-    void invalidUnderBothGrammars_throws() {
-        when(query.listOfRows()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
+    void invalidUnderBothGrammars_throws() throws SQLException {
+        when(preparedStatement.executeQuery()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
         assertThatThrownBy(() -> compiler.compile("$[??]"))
                 .isInstanceOf(InvalidRfc9535SyntaxException.class);
     }
 
     @Test
     @DisplayName("denylisted construct (descendant) not valid under legacy either -> UnsupportedConstructException")
-    void unsupportedConstruct_notLegacyValid_throws() {
-        when(query.listOfRows()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
+    void unsupportedConstruct_notLegacyValid_throws() throws SQLException {
+        when(preparedStatement.executeQuery()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
         assertThatThrownBy(() -> compiler.compile("$..offers[?(@.price<1)]"))
                 .isInstanceOf(UnsupportedConstructException.class)
                 .satisfies(e -> assertThat(((UnsupportedConstructException) e).construct())
@@ -86,38 +89,36 @@ class Rfc9535FilterCompilerTest {
     @Test
     @DisplayName("denylisted construct that IS legacy-valid falls back instead of NACK'ing (no regression)")
     void unsupportedConstruct_legacyValid_fallsBack() {
-        when(query.listOfRows()).thenReturn(java.util.List.of());
         CompilationResult result = compiler.compile("$..offers[?(@.price<1)]");
         assertThat(result).isInstanceOf(LegacyCompiledFilter.class);
     }
 
     @Test
     @DisplayName("transient DB failure during legacy fallback propagates, never cached as a rejection")
-    void transientDbFailure_propagates() {
-        when(query.listOfRows()).thenThrow(new TransientDataAccessResourceException("connection reset"));
+    void transientDbFailure_propagates() throws SQLException {
+        when(preparedStatement.executeQuery()).thenThrow(new TransientDataAccessResourceException("connection reset"));
         assertThatThrownBy(() -> compiler.compile("$[??]"))
                 .isInstanceOf(TransientDataAccessResourceException.class);
     }
 
     @Test
     @DisplayName("verdict is cached — repeat compiles of the same expression probe the DB once")
-    void cacheReused_onlyOneProbe() {
-        when(query.listOfRows()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
+    void cacheReused_onlyOneProbe() throws SQLException {
+        when(preparedStatement.executeQuery()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
         assertThatThrownBy(() -> compiler.compile("$[??]")).isInstanceOf(InvalidRfc9535SyntaxException.class);
         assertThatThrownBy(() -> compiler.compile("$[??]")).isInstanceOf(InvalidRfc9535SyntaxException.class);
-        verify(jdbcClient, times(1)).sql(anyString());
+        verify(dataSource, times(1)).getConnection();
     }
 
     @Test
     @DisplayName("rfc9535-enabled=false restores legacy-only behavior even for a valid RFC 9535 expression")
-    void killSwitch_restoresLegacyOnlyBehavior() {
+    void killSwitch_restoresLegacyOnlyBehavior() throws SQLException {
         properties.getFilterGrammar().setRfc9535Enabled(false);
-        when(query.listOfRows()).thenReturn(java.util.List.of());
 
         CompilationResult result = compiler.compile("$.offers[?(@.price < 100)]");
 
         assertThat(result).isInstanceOf(LegacyCompiledFilter.class);
-        verify(jdbcClient, times(1)).sql(anyString());
+        verify(dataSource, times(1)).getConnection();
     }
 
     @Test
@@ -126,23 +127,32 @@ class Rfc9535FilterCompilerTest {
         properties.getFilterGrammar().setLegacyFallbackEnabled(false);
         assertThatThrownBy(() -> compiler.compile("$[??]"))
                 .isInstanceOf(InvalidRfc9535SyntaxException.class);
-        verifyNoInteractions(jdbcClient);
+        verifyNoInteractions(dataSource);
     }
 
-    // ── Hardening fix 3: statement_timeout on the legacy probe ──────────────
+    // ── Hardening fix 3: statement timeout on the legacy probe ──────────────
 
     @Test
-    @DisplayName("legacy probe scopes a statement_timeout to itself via set_config(..., true) — "
-            + "verified via the JdbcClient call shape; the timeout actually firing under load "
-            + "needs a live Postgres connection and is covered at the integration-test level")
-    void legacyProbe_setsScopedStatementTimeout() {
+    @DisplayName("legacy probe applies a JDBC-level query timeout (driver-enforced), derived from "
+            + "the configured probe-statement-timeout-ms, rounded up to whole seconds")
+    void legacyProbe_appliesJdbcLevelQueryTimeout() throws SQLException {
         properties.getFilterGrammar().setProbeStatementTimeoutMs(1500);
-        when(query.listOfRows()).thenReturn(java.util.List.of());
 
         compiler.compile("$ ? (@.x == 1)"); // not valid RFC 9535 -> falls back to legacy probe
 
-        verify(jdbcClient).sql(contains("set_config('statement_timeout'"));
-        verify(stmt).param(eq("timeoutMs"), eq("1500"));
+        // 1500ms rounds up to 2 whole seconds — the JDBC API only supports integer-second timeouts.
+        verify(preparedStatement).setQueryTimeout(2);
+    }
+
+    @Test
+    @DisplayName("a sub-1000ms configured timeout is never rounded down to 0 (which JDBC treats as "
+            + "'no timeout')")
+    void legacyProbe_subSecondTimeout_neverRoundsToZero() throws SQLException {
+        properties.getFilterGrammar().setProbeStatementTimeoutMs(200);
+
+        compiler.compile("$ ? (@.x == 1)");
+
+        verify(preparedStatement).setQueryTimeout(1);
     }
 
     // ── Hardening fix 1: maxLength cap ───────────────────────────────────────
@@ -157,7 +167,7 @@ class Rfc9535FilterCompilerTest {
 
         assertThatThrownBy(() -> compiler.compile(oversized))
                 .isInstanceOf(InvalidRfc9535SyntaxException.class);
-        verifyNoInteractions(jdbcClient);
+        verifyNoInteractions(dataSource);
     }
 
     @Test
@@ -173,31 +183,31 @@ class Rfc9535FilterCompilerTest {
     @Test
     @DisplayName("verdict cache entries expire after the configured TTL, forcing a fresh probe "
             + "instead of growing unboundedly stale")
-    void verdictCacheEntry_expiresAfterConfiguredTtl() {
+    void verdictCacheEntry_expiresAfterConfiguredTtl() throws SQLException {
         properties.getFilterGrammar().setVerdictCacheTtlMinutes(1);
         FakeTicker fakeTicker = new FakeTicker();
         compiler = new Rfc9535FilterCompiler(
                 new Rfc9535SqlPredicateCompiler(),
                 new UnsupportedConstructDetector(),
                 new JsonPathConverter(),
-                jdbcClient,
+                dataSource,
                 properties,
                 new FilterGrammarMetrics(new SimpleMeterRegistry()),
                 fakeTicker);
-        when(query.listOfRows()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
+        when(preparedStatement.executeQuery()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
 
         assertThatThrownBy(() -> compiler.compile("$[??]")).isInstanceOf(InvalidRfc9535SyntaxException.class);
-        verify(jdbcClient, times(1)).sql(anyString());
+        verify(dataSource, times(1)).getConnection();
 
         // Still within TTL: served from cache, no second probe.
         assertThatThrownBy(() -> compiler.compile("$[??]")).isInstanceOf(InvalidRfc9535SyntaxException.class);
-        verify(jdbcClient, times(1)).sql(anyString());
+        verify(dataSource, times(1)).getConnection();
 
         // Advance the fake clock past the configured 1-minute TTL — proves TTL, not size, bounds
         // cache-miss rate over time (maximumSize is 10_000, far larger than one entry).
         fakeTicker.advance(java.time.Duration.ofMinutes(2));
         assertThatThrownBy(() -> compiler.compile("$[??]")).isInstanceOf(InvalidRfc9535SyntaxException.class);
-        verify(jdbcClient, times(2)).sql(anyString());
+        verify(dataSource, times(2)).getConnection();
     }
 
     /** Manually-advanced {@link com.github.benmanes.caffeine.cache.Ticker} for deterministic,
@@ -218,13 +228,13 @@ class Rfc9535FilterCompilerTest {
     @Test
     @DisplayName("a burst of distinct expressions bounds cache growth via maximumSize, each a "
             + "separate probe — no unbounded memory growth")
-    void burstOfDistinctExpressions_eachProbedIndependently() {
-        when(query.listOfRows()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
+    void burstOfDistinctExpressions_eachProbedIndependently() throws SQLException {
+        when(preparedStatement.executeQuery()).thenThrow(new InvalidDataAccessApiUsageException("syntax error"));
         for (int i = 0; i < 50; i++) {
             String expression = "$[?? " + i + "]";
             assertThatThrownBy(() -> compiler.compile(expression))
                     .isInstanceOf(InvalidRfc9535SyntaxException.class);
         }
-        verify(jdbcClient, times(50)).sql(anyString());
+        verify(dataSource, times(50)).getConnection();
     }
 }
