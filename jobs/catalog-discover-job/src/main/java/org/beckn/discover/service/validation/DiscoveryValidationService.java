@@ -73,6 +73,12 @@ public class DiscoveryValidationService {
 
     @PostConstruct
     public void init() {
+        if (!discoveryProperties.getSchema().isValidationEnabled()) {
+            logger.info(LogEvent.VALIDATE_DISABLED + ".discover-action-schema-init",
+                    value("reason", "discovery.schema.validation-enabled=false — Onix performs schema validation upstream"));
+            discoverActionSchema = null; // explicit: disabled-by-config, not failed
+            return;
+        }
         try {
             JSONObject rootSchema = schemaLoaderService.getApiSchema();
             JsonNode rootSchemaNode = objectMapper.readTree(rootSchema.toString());
@@ -235,8 +241,12 @@ public class DiscoveryValidationService {
             return new ValidationResult(false, List.of("Request cannot be null"), List.of("root"));
         }
 
+        boolean schemaValidationEnabled = discoveryProperties.getSchema().isValidationEnabled();
         try {
-            if (discoverActionSchema == null) {
+            if (schemaValidationEnabled && discoverActionSchema == null) {
+                // Enabled by config but not loaded => genuine init failure (should not normally
+                // be reachable since init() throws on failure and fails context startup, but
+                // guards against defensive/future reordering, e.g. lazy re-init).
                 logger.error(LogEvent.VALIDATE_FAILED, value("reason", LogMessages.REASON_SCHEMA_NOT_INITIALIZED));
                 throw new org.beckn.discover.exception.SchemaNotInitializedException(
                         ErrorMessages.NET_DOWNSTREAM_UNAVAILABLE);
@@ -346,24 +356,28 @@ public class DiscoveryValidationService {
             // Single schema validation of the full request body against DiscoverAction/v2.0.
             // This covers: context structure (oneOf V2.0/V1.0), action const "discover",
             // and message.intent structure (anyOf textSearch/filters/spatial).
-            Set<ValidationMessage> schemaErrors = discoverActionSchema.validate(node);
+            // Skipped entirely when validation is disabled by config (Onix already performs
+            // this structural pass upstream) — manual guards above still ran unconditionally.
+            if (schemaValidationEnabled) {
+                Set<ValidationMessage> schemaErrors = discoverActionSchema.validate(node);
 
-            if (schemaErrors.isEmpty()) {
-                return new ValidationResult(true, new ArrayList<>(), new ArrayList<>());
+                if (!schemaErrors.isEmpty()) {
+                    List<String> errors = schemaErrors.stream()
+                            .map(ValidationMessage::getMessage)
+                            .collect(Collectors.toList());
+                    List<String> paths = schemaErrors.stream()
+                            .map(vm -> vm.getPath() != null ? vm.getPath() : "root")
+                            .distinct()
+                            .collect(Collectors.toList());
+
+                    logger.error(LogEvent.VALIDATE_FAILED,
+                            value("errors", errors),
+                            value("paths", paths));
+                    return new ValidationResult(false, errors, paths);
+                }
             }
 
-            List<String> errors = schemaErrors.stream()
-                    .map(ValidationMessage::getMessage)
-                    .collect(Collectors.toList());
-            List<String> paths = schemaErrors.stream()
-                    .map(vm -> vm.getPath() != null ? vm.getPath() : "root")
-                    .distinct()
-                    .collect(Collectors.toList());
-
-            logger.error(LogEvent.VALIDATE_FAILED,
-                    value("errors", errors),
-                    value("paths", paths));
-            return new ValidationResult(false, errors, paths);
+            return new ValidationResult(true, new ArrayList<>(), new ArrayList<>());
 
         } catch (Exception e) {
             logger.error(LogEvent.VALIDATE_FAILED,

@@ -578,6 +578,25 @@ public class DiscoveryProperties {
         private int fetchTimeoutSeconds = 30;
         private int maxRetries = 3;
         private long retryDelayMs = 1000;
+        /**
+         * Master switch for Discovr's own Beckn v2.0 schema validation. Default {@code false}
+         * because the Onix adapter in front of Discovr (discoverReceiver / discoverCaller
+         * pipelines, schemav2validator) already performs full-body v2.0 schema validation —
+         * Discovr's copy is redundant in production and its startup-time remote fetch of
+         * beckn.yaml has caused context-start flakiness under bad network conditions.
+         * Set {@code true} for local/dev use without Onix in front, or as defense-in-depth.
+         * When {@code false}, {@code DiscoveryValidationService.init()} performs no network
+         * fetch at all — {@code discoverActionSchema} stays {@code null} by design.
+         */
+        private boolean validationEnabled = false;
+
+        public boolean isValidationEnabled() {
+            return validationEnabled;
+        }
+
+        public void setValidationEnabled(boolean validationEnabled) {
+            this.validationEnabled = validationEnabled;
+        }
 
         public String getUrl() {
             return url;

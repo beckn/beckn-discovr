@@ -102,6 +102,7 @@ discovery:
     fetch-timeout-seconds: ${SCHEMA_FETCH_TIMEOUT_SECONDS:30}
     max-retries: ${SCHEMA_FETCH_MAX_RETRIES:3}
     retry-delay-ms: ${SCHEMA_FETCH_RETRY_DELAY_MS:1000}
+    validation-enabled: ${SCHEMA_VALIDATION_ENABLED:false}
   
   # ═══ Query routing — which engine serves each J/G/T combination ═══════════
   # A discover intent may carry any mix of: J = JSONPath filter, G = spatial
