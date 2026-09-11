@@ -1,6 +1,7 @@
 package org.beckn.discover.service.postgresql.jsonpath;
 
 import org.beckn.discover.service.postgresql.QueryBuilderHelper.QuerySpec;
+import org.beckn.discover.testsupport.Rfc9535TestFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class JsonPathQueryBuilderTest {
 
     @BeforeEach
     void setUp() {
-        builder = new JsonPathQueryBuilder(new JsonPathConverter());
+        builder = new JsonPathQueryBuilder(Rfc9535TestFixtures.alwaysLegacyValid());
     }
 
     @Test

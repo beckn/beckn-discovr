@@ -178,6 +178,34 @@ public abstract class BaseIntegrationTest {
                     RETURN NULL;
                 END;
                 $$""");
+        // Exception-safe numeric/boolean parses used by the RFC 9535 filter compiler
+        // (prod: publish-job migration V7) — same rationale as try_to_timestamptz above.
+        jdbcTemplate.execute("""
+                CREATE OR REPLACE FUNCTION try_to_numeric(txt text)
+                RETURNS numeric
+                LANGUAGE plpgsql
+                IMMUTABLE
+                PARALLEL SAFE
+                AS $$
+                BEGIN
+                    RETURN txt::numeric;
+                EXCEPTION WHEN others THEN
+                    RETURN NULL;
+                END;
+                $$""");
+        jdbcTemplate.execute("""
+                CREATE OR REPLACE FUNCTION try_to_boolean(txt text)
+                RETURNS boolean
+                LANGUAGE plpgsql
+                IMMUTABLE
+                PARALLEL SAFE
+                AS $$
+                BEGIN
+                    RETURN txt::boolean;
+                EXCEPTION WHEN others THEN
+                    RETURN NULL;
+                END;
+                $$""");
     }
 
     private void loadSampleData() throws IOException {

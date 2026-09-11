@@ -82,6 +82,11 @@ public final class LogEvent {
     public static final String QUERY_PATH_SELECTED      = "query.path.selected";
     public static final String QUERY_PATH_FALLBACK      = "query.path.fallback";
 
+    // ── RFC 9535 filter grammar ────────────────────────────────────────────────
+    public static final String FILTER_GRAMMAR_RFC9535   = "filter.grammar.rfc9535";
+    public static final String FILTER_GRAMMAR_LEGACY    = "filter.grammar.legacy";
+    public static final String FILTER_GRAMMAR_REJECTED  = "filter.grammar.rejected";
+
     // ── Embedding ─────────────────────────────────────────────────────────────
     public static final String EMBEDDING_CLIENT_INIT    = "embedding-client.init";
     public static final String EMBEDDING_RETRY          = "embedding.retry";

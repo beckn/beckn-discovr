@@ -5,8 +5,8 @@ import org.beckn.discover.service.elasticsearch.EsNetworkFilterBuilder;
 import org.beckn.discover.service.engine.QueryRequest;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper.QuerySpec;
-import org.beckn.discover.service.postgresql.jsonpath.JsonPathConverter;
 import org.beckn.discover.service.postgresql.jsonpath.JsonPathQueryBuilder;
+import org.beckn.discover.testsupport.Rfc9535TestFixtures;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class NetworkFilterTest {
 
-    private final JsonPathQueryBuilder jsonPath = new JsonPathQueryBuilder(new JsonPathConverter());
+    private final JsonPathQueryBuilder jsonPath = new JsonPathQueryBuilder(Rfc9535TestFixtures.alwaysLegacyValid());
 
     // ── PostgreSQL: QueryTemplate.networkFilter ──────────────────────────────
 

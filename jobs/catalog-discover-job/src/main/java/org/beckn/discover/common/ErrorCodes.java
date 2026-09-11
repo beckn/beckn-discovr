@@ -22,6 +22,13 @@ public final class ErrorCodes {
     public static final String SCH_SCHEMA_VALIDATION_FAILED = "SCH_SCHEMA_VALIDATION_FAILED";
     public static final String SCH_REQUIRED_FIELD_MISSING = "SCH_REQUIRED_FIELD_MISSING";
     public static final String SCH_INVALID_JSONPATH = "SCH_INVALID_JSONPATH";
+    // RFC 9535 constructs that are valid syntax but not (yet) translatable to typed SQL —
+    // see docs/design/DESIGN-rfc9535-jsonpath-grammar.md "Error handling".
+    public static final String SCH_UNSUPPORTED_JSONPATH_DESCENDANT = "SCH_UNSUPPORTED_JSONPATH_DESCENDANT";
+    public static final String SCH_UNSUPPORTED_JSONPATH_SLICE_STEP = "SCH_UNSUPPORTED_JSONPATH_SLICE_STEP";
+    public static final String SCH_UNSUPPORTED_JSONPATH_COUNT_FUNCTION = "SCH_UNSUPPORTED_JSONPATH_COUNT_FUNCTION";
+    public static final String SCH_UNSUPPORTED_JSONPATH_VALUE_FUNCTION = "SCH_UNSUPPORTED_JSONPATH_VALUE_FUNCTION";
+    public static final String SCH_UNSUPPORTED_JSONPATH_REGEX_FUNCTION = "SCH_UNSUPPORTED_JSONPATH_REGEX_FUNCTION";
 
     // ── Context Field Errors ────────────────────────────────────────────────
     public static final String CTX_INVALID_FIELD = "CTX_INVALID_FIELD";

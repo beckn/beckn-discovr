@@ -375,7 +375,7 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         @Nested
         @TestPropertySource(properties = {
                 "discovery.auth.enabled=true",
-                "discovery.auth.registryBaseUrl=https://api.testnet.beckn.one/registry/dedi/lookup/",
+                "discovery.auth.registryBaseUrl=https://fabric.nfh.global/registry/dedi/lookup",
                 "discovery.auth.registryName=subscribers.beckn.one",
                 "discovery.auth.registryToken=test-token",
                 "discovery.auth.clockSkewSeconds=30",
