@@ -130,7 +130,7 @@ final class FilterPredicateCompiler {
         params.add(path.toArray(String[]::new));
 
         LiteralValue literal = LiteralValue.infer(rawLiteral);
-        String castExtraction = "(" + fieldExtraction + ")::" + literal.sqlCast();
+        String castExtraction = literal.castExtraction(fieldExtraction);
         params.add(literal.boundValue());
 
         return new Sql(castExtraction + " " + toSqlOperator(op) + " ?", params);

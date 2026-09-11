@@ -10,6 +10,16 @@ import java.util.regex.Pattern;
  * <p>Per the design doc's "Translation mapping table": the cast (numeric/timestamptz/text) is
  * chosen from the literal's own shape, and the literal itself is always bound as a {@code ?}
  * parameter — never concatenated into SQL text.</p>
+ *
+ * <p>The cast is chosen from the <i>literal's</i> shape, not from the compared field's actual
+ * JSON type — so a raw {@code ::numeric}/{@code ::timestamptz}/{@code ::boolean} cast throws
+ * whenever the field's real value doesn't parse as that type (e.g. {@code @.name < 5} against a
+ * field that is genuinely a string). {@link #castExtraction} therefore routes non-text casts
+ * through the exception-safe {@code try_to_numeric}/{@code try_to_timestamptz}/{@code
+ * try_to_boolean} SQL functions (see {@code catalog-publish-job}'s Flyway migrations V6/V7),
+ * which return {@code NULL} instead of raising on a type mismatch — making the comparison safely
+ * evaluate to "no match", which is also the RFC 9535-correct behavior (section 2.3.5.2.2: a
+ * comparison between different basic JSON value types is always false, never an error).</p>
  */
 final class LiteralValue {
 
@@ -29,6 +39,20 @@ final class LiteralValue {
 
     Object boundValue() {
         return boundValue;
+    }
+
+    /**
+     * Wraps {@code fieldExtraction} (a {@code #>>} text extraction) in the cast appropriate for
+     * this literal's type — the exception-safe {@code try_to_*} SQL function for
+     * numeric/timestamptz/boolean, or a plain {@code ::text} cast (which can never fail) for text.
+     */
+    String castExtraction(String fieldExtraction) {
+        return switch (sqlCast) {
+            case "numeric" -> "try_to_numeric(" + fieldExtraction + ")";
+            case "timestamptz" -> "try_to_timestamptz(" + fieldExtraction + ")";
+            case "boolean" -> "try_to_boolean(" + fieldExtraction + ")";
+            default -> "(" + fieldExtraction + ")::" + sqlCast;
+        };
     }
 
     static LiteralValue infer(String raw) {

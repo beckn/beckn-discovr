@@ -26,7 +26,7 @@ class Rfc9535SqlPredicateCompilerTest {
         CompiledPredicate predicate = compile("$.resources[?(@.rating.ratingValue >= 4.5)]");
 
         assertThat(predicate.whereFragment()).contains("EXISTS (SELECT 1 FROM jsonb_array_elements(");
-        assertThat(predicate.whereFragment()).contains("::numeric >=");
+        assertThat(predicate.whereFragment()).contains("try_to_numeric(");
         assertThat(predicate.whereFragment()).doesNotContain("4.5"); // literal never concatenated
         // [0]=outer array path, [1]=field-extraction path array, [2]=numeric literal
         assertThat(predicate.whereParameters()).hasSize(3);
@@ -161,7 +161,7 @@ class Rfc9535SqlPredicateCompilerTest {
         assertThat(predicate.whereFragment())
                 .contains("jsonb_array_elements(i.payload #> ?::text[]) e0")
                 .contains("jsonb_array_elements(e0 #> ?::text[]) e1")
-                .contains("::timestamptz >=");
+                .contains("try_to_timestamptz(");
         assertThat(predicate.whereFragment()).doesNotContain("2025-01-01");
 
         // Offers-projection still triggers, anchored at the nested "offers" level, and is
@@ -183,7 +183,7 @@ class Rfc9535SqlPredicateCompilerTest {
                 .contains("jsonb_array_elements(i.payload #> ?::text[]) e0")
                 .contains("jsonb_array_elements(e0 #> ?::text[]) e1")
                 .contains("jsonb_array_elements(e1 #> ?::text[]) e2")
-                .contains("::numeric <");
+                .contains("try_to_numeric(");
         // [0]=catalogs path, [1]=resources path (relative to e0), [2]=offers path (relative to
         // e1), [3]=field-extraction path (relative to e2), [4]=numeric literal
         assertThat(predicate.whereParameters()).hasSize(5);

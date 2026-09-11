@@ -89,7 +89,7 @@ class FilterPredicateCompilerTest {
     @DisplayName("ordinary comparisons, existence checks, and boolean combinations still compile "
             + "as before — the function-call detection must not weaken supported syntax")
     void supportedPredicates_stillCompile() {
-        assertThat(compile("@.price < 100").fragment()).contains("::numeric <");
+        assertThat(compile("@.price < 100").fragment()).contains("try_to_numeric(");
         assertThat(compile("@.price < 100 && @.currency == 'INR'").fragment()).contains(" AND ");
         assertThat(compile("@.descriptor.name").fragment()).contains("IS NOT NULL");
         assertThat(compile("!(@.price < 100)").fragment()).startsWith("NOT (");
@@ -124,7 +124,7 @@ class FilterPredicateCompilerTest {
             + "reject reasonable, real-world predicates")
     void moderateNesting_stillCompiles() {
         String reasonable = "((((@.price < 100))))";
-        assertThat(compile(reasonable).fragment()).contains("::numeric <");
+        assertThat(compile(reasonable).fragment()).contains("try_to_numeric(");
     }
 
     // ── Tokenizer forward-progress guard (infinite-loop DoS fix) ─────────────
