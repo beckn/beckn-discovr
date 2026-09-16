@@ -145,8 +145,9 @@ services:
   # No host port bindings — Nginx is the only public entry point.
 
   catalog-publish:
-    image: fidedocker/catalog-publish-job:v1.6.0@sha256:3ea4951be85b1defeedff2142c0615197f0a11e02351ec83b1cef7aeb367bae9
-    platform: linux/amd64
+    # fidedocker/catalog-publish-job:1.7.0 — same validated build as v1.6.0, retagged
+    # onto the 1.7.0 release line for consistency with the other Discovr services.
+    image: fidedocker/catalog-publish-job:1.7.0@sha256:3ea4951be85b1defeedff2142c0615197f0a11e02351ec83b1cef7aeb367bae9
     container_name: catalog-publish
     expose:
       - "8080"
@@ -244,8 +245,11 @@ services:
       start_period: 60s
 
   catalog-discover-job:
-    image: fidedocker/catalog-discover-job:v1.6.0@sha256:da3dfd9066ffb861a639bea0c85fc1d3b358cfb3392f72f7b8e3abf73c112d19
-    platform: linux/amd64
+    # fidedocker/catalog-discover-job:1.7.0 — public promotion of the v1.7.0-rc3
+    # build validated on stage (RFC 9535 JSONPath filter grammar fixes). Requires
+    # the V7__add_try_cast_numeric_boolean.sql functions in discover_db (applied
+    # manually here since the VM has no Flyway migration Job like GKE).
+    image: fidedocker/catalog-discover-job:1.7.0@sha256:522589e43f2b272148c48d27a617e200a90dce41766db1cd21f6cefb12851ce0
     container_name: catalog-discover-job
     expose:
       - "8080"
@@ -349,8 +353,9 @@ services:
       start_period: 60s
 
   response-dispatcher:
-    image: fidedocker/response-dispatcher:v1.6.0@sha256:a5023a077e13a641325995598a6ba42fe7726bed1f05fa39b6e8e127838d40e4
-    platform: linux/amd64
+    # fidedocker/response-dispatcher:1.7.0 — same validated build as v1.6.0, retagged
+    # onto the 1.7.0 release line for consistency with the other Discovr services.
+    image: fidedocker/response-dispatcher:1.7.0@sha256:a5023a077e13a641325995598a6ba42fe7726bed1f05fa39b6e8e127838d40e4
     container_name: response-dispatcher
     expose:
       - "8080"
@@ -409,12 +414,9 @@ services:
   #                       routes /catalog/push   → catalog-publish
   # caller    (internal): signs outbound on_discover responses + routes to context.bapUri
   onix-discover:
-    # fidedocker/onix-adapter:1.9.0 is now an official public release that
-    # includes the catalogcrawler plugin (verified: beckn-onix's v1.9.0 tag has
-    # commit f75f6f1 as an ancestor, and the built image's binary carries the
-    # catalogCrawl handler strings) -- no longer need a custom GCR build.
-    # Digest-pinned multi-arch index digest.
-    image: fidedocker/onix-adapter:1.9.0@sha256:d49cff8f47fa0422fa1fdb2c34d42454672d20651129108c2f5ae117e34d5e74
+    # fidedocker/onix-adapter:1.9.1 — official public release, promoted from the
+    # custom 1.9.1-rc1 build validated on stage. Digest-pinned multi-arch index digest.
+    image: fidedocker/onix-adapter:1.9.1@sha256:d6883949095796e1a8e3a0a06c900f97672b6dcddafc4737456f569bc8075ebd
     container_name: onix-discover
     platform: linux/amd64
     expose:

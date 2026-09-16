@@ -40,7 +40,7 @@ pluginManager:
   root: ./plugins
 
 # Catalog crawler — application-level background job (beckn-onix main /
-# fidedocker/onix-adapter:1.9.0, pkg/plugin/implementation/catalogcrawler),
+# fidedocker/onix-adapter:1.9.1, pkg/plugin/implementation/catalogcrawler),
 # started once at boot, independent of any module/request. Migrations are
 # self-applied, idempotent, and run on every startup (no Flyway) — verified
 # safe against this VM's existing crawler_catalog/crawler_index/crawler_queue
