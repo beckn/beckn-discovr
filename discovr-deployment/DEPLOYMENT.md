@@ -156,6 +156,10 @@ Key settings:
 
 Healthcheck hits `/actuator/health` (not under `/beckn` — Spring's actuator endpoints are excluded from the Beckn API prefix).
 
+> **Owns the Flyway migrations for `discover_db`** — including `V7__add_try_cast_numeric_boolean.sql`,
+> required by `catalog-discover-job` 1.7.0+. See §9 (Upgrading) before bumping `catalog-discover-job`
+> without also restarting this service.
+
 ### 5.3 `catalog-discover-job`
 
 Runs the actual discover query against Postgres/Elasticsearch and publishes the result to
@@ -172,6 +176,10 @@ Key settings:
 - `BECKN_PROTOCOL_API_SCHEMA_URL` / `SCHEMA_CACHE_TTL_HOURS` — same schema-fetch dependency as catalog-publish.
 
 Healthcheck: `/actuator/health`.
+
+> **1.7.0+ requires `try_to_numeric`/`try_to_boolean` in `discover_db`** (added by `catalog-publish`'s
+> `V7__add_try_cast_numeric_boolean.sql` — see §9, Upgrading) for its RFC 9535 JSONPath filter
+> comparisons to fail safely instead of throwing on type-mismatched literals.
 
 ### 5.4 `response-dispatcher`
 
@@ -501,7 +509,7 @@ in DeDi before signature verification/signing will work.
   outbound connectivity/firewall rules specifically for the JVM process, not just `curl`.
 - **`onix-discover` fails with `invalid module: crawl` or `unknown handler type: catalogCrawl`**:
   the image predates the built-in crawler plugin — confirm you're running
-  `fidedocker/onix-adapter:1.9.0` or later.
+  `fidedocker/onix-adapter:1.9.1` or later.
 - **Signature verification fails for all inbound requests**: check that `subscriberId`
   is identical across every module's handler config, every `keyManager.config`, and
   `DISCOVERY_BPP_ID` on `catalog-discover-job` — and that the DeDi record for that
@@ -511,7 +519,69 @@ in DeDi before signature verification/signing will work.
   if the caller module never receives it, check `STATIC_CALLBACK_URL` and that
   `onix-discover` is reachable from `response-dispatcher` on `beckn-network`.
 
-## 9. Rollback
+## 9. Upgrading
+
+### 9.1 `catalog-discover-job` 1.7.0 — `try_to_numeric` / `try_to_boolean` migration
+
+`catalog-discover-job` 1.7.0 ships the RFC 9535 JSONPath filter grammar. Its comparison
+compiler (`FilterPredicateCompiler`) picks a SQL cast (`::numeric`, `::boolean`, …) from the
+shape of the filter's literal, and needs two Postgres helper functions in `discover_db` to make
+that cast exception-safe instead of throwing (and failing the whole discover query) whenever a
+field's actual value doesn't parse as the expected type:
+
+```sql
+try_to_numeric(text) RETURNS numeric   -- NULL instead of raising on a bad cast
+try_to_boolean(text) RETURNS boolean   -- same, for boolean casts
+```
+
+These are defined in
+[`V7__add_try_cast_numeric_boolean.sql`](../jobs/catalog-publish-job/src/main/resources/db/migration/V7__add_try_cast_numeric_boolean.sql).
+
+**Why this is a `catalog-publish` migration, not a `catalog-discover-job` one:** `catalog-discover-job`
+has no Flyway/schema-migration machinery of its own — `catalog-publish` is the sole owner of
+`discover_db`'s schema (`SPRING_FLYWAY_BASELINE_ON_MIGRATE`, §5.2) and applies every
+`V*__*.sql` file under its own `db/migration` classpath directory automatically, in order, the
+moment its container process starts up. `catalog-discover-job` only ever *reads* the resulting
+functions at query time; it does not and cannot apply them itself.
+
+**New deployment (first `docker compose -f discovr-stack.yml up -d` on a fresh `discover_db`):**
+nothing to do. `catalog-publish` starts, Flyway applies `V1` through `V7` (and anything later)
+against the empty database in one pass, and both helper functions exist before
+`catalog-discover-job` ever serves a request. No manual step is required for a clean install.
+
+**Existing deployment being upgraded in place (already running v1.6.0 or earlier):** this is
+the case that needs a manual step, because on the VM stack — unlike GKE, which runs a
+dedicated one-shot Flyway migration Job ahead of the app rollout — there is no separate
+migration step; Flyway only runs embedded inside `catalog-publish`'s own container startup.
+If you upgrade `catalog-discover-job` to `1.7.0` (per §5, image bump) **without also
+restarting/redeploying `catalog-publish`**, `V7` never applies, and RFC 9535 filter
+comparisons against mismatched-type literals will throw instead of failing safely.
+
+To upgrade safely:
+
+```bash
+# 1. Bump image tags for catalog-publish, catalog-discover-job, response-dispatcher,
+#    and onix-discover in discovr-stack.yml (per §2/§5), then:
+docker compose -f discovr-stack.yml up -d --force-recreate catalog-publish
+
+# 2. Confirm V7 applied before bringing up the rest:
+docker compose -f discovr-stack.yml logs catalog-publish | grep -i "Successfully applied.*V7"
+
+# 3. Then recreate the remaining services:
+docker compose -f discovr-stack.yml up -d
+```
+
+If you'd rather not restart `catalog-publish` as part of this rollout, apply the two functions
+directly instead:
+
+```bash
+docker compose -f discovr-stack.yml exec -T postgres \
+  psql -U discover_user -d discover_db < ../jobs/catalog-publish-job/src/main/resources/db/migration/V7__add_try_cast_numeric_boolean.sql
+```
+
+Either path is idempotent (`CREATE OR REPLACE FUNCTION`) and safe to re-run.
+
+## 10. Rollback
 
 ```bash
 # Revert image tags in discovr-stack.yml to the previous known-good version, then:
