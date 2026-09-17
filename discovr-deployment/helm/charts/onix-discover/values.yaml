@@ -1,0 +1,114 @@
+replicaCount: 1
+
+image:
+  registry: ""
+  repository: "fidedocker/onix-adapter"
+  tag: ""
+  digest: ""
+  pullPolicy: ""
+
+global:
+  image:
+    registry: ""
+    pullPolicy: ""
+  imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+resources: {}
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+nodeSelector: {}
+tolerations: []
+
+terminationGracePeriodSeconds: 45
+
+# onix-adapter exposes /health
+probes:
+  liveness:
+    enabled: false
+    path: /health
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: false
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    enabled: false
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 12
+
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: 1
+
+# ---------------------------------------------------------------------------
+# Adapter behavior — rendered into config/discover-adapter.yaml.
+# ---------------------------------------------------------------------------
+adapter:
+  appName: "onix-discover"
+  logLevel: "info"
+  environment: "production"
+
+  # Your BPP identity as registered in the Beckn network registry (DeDi or
+  # equivalent). Required — the adapter signs and receives on this identity.
+  subscriberId: ""
+
+  # Network registry lookup URL used to resolve counterparty public keys.
+  registryUrl: ""
+
+  schemaValidator:
+    type: "url"
+    location: "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/tags/core-v2.0.0-lts/api/v2.0.0/beckn.yaml"
+    cacheTtlSeconds: 3600
+
+  # Redis (or compatible) address used for payload/message correlation between
+  # the receiver and caller modules. Point at your own Redis — not bundled here.
+  cache:
+    addr: ""
+
+  # Where the adapter routes inbound/outbound traffic. Left empty, these default
+  # to the sibling catalog-discover-job / catalog-publish-job services deployed
+  # by this same Helm release (see templates/configmap.yaml) — override only if
+  # you're fronting services deployed under a different release/namespace, or an
+  # external catalog registry for catalog/subscription + catalog/pull routing.
+  routing:
+    discoverJobUrl: ""
+    catalogPublishJobUrl: ""
+    catalogRegistryUrl: ""
+
+  otel:
+    enabled: false
+    endpoint: ""
+    serviceVersion: "1.0.0"
+
+# credentials — merged into a <release>-onix-discover-keyset Secret and injected
+# by an init container into the rendered config in place of ${...} placeholders.
+# NEVER commit real keys here. Use CHANGE_ME placeholders in any values file
+# committed to a public repo; supply real values via a private values file kept
+# out of version control, or a secrets manager (External Secrets Operator,
+# sealed-secrets, etc).
+credentials:
+  keyId: "CHANGE_ME"
+  signingPrivateKey: "CHANGE_ME"
+  signingPublicKey: "CHANGE_ME"
+  # X25519 keys — the discover flow doesn't use encryption, but the adapter
+  # requires non-empty values. Reusing the signing keys as placeholders is a
+  # common (documented) workaround if you have no separate encryption keypair.
+  encrPrivateKey: "CHANGE_ME"
+  encrPublicKey: "CHANGE_ME"

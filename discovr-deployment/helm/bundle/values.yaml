@@ -1,0 +1,209 @@
+# Discovr bundle — shared defaults for a full discover-pipeline deployment.
+# YAML anchors define each shared setting once (host, port, topic names) and
+# every chart below references the anchor — change it in one place.
+#
+# This file has NO secrets and NO network-specific identity (subscriber IDs,
+# signing keys, network IDs). Those belong in a private, per-deployment
+# overlay you keep OUT of version control (see ../values/envs/*.yaml.example
+# for the shape) — never commit real values here or in any file in this repo.
+
+# ---------------------------------------------------------------------------
+# Enable/disable individual charts in this bundle.
+# Infra (postgresql/kafka/elasticsearch/redis) defaults ON so `helm install`
+# gives you a complete, working stack out of the box. Turn any of these off
+# if you already run that infra elsewhere and point the app charts at it
+# instead (see the env overlay examples).
+# ---------------------------------------------------------------------------
+charts:
+  postgresql: true
+  kafka: true
+  elasticsearch: true
+  redis: true
+  catalog-discover-job: true
+  catalog-publish-job: true
+  response-dispatcher: true
+  onix-discover: true   # recommended: fronts the stack with Beckn signing/routing
+
+# Bitnami charts (postgresql/kafka/elasticsearch/redis) require this since
+# their free images moved off the default `bitnami/*` rolling tags.
+global:
+  security:
+    allowInsecureImages: true
+
+# ---------------------------------------------------------------------------
+# Shared defaults — anchors referenced by both infra and app service env vars.
+# ---------------------------------------------------------------------------
+defaults:
+  namespace: &namespace "discovery"
+
+  postgres:
+    host: &pg-host "discovr-postgresql.discovery.svc.cluster.local"
+    port: &pg-port "5432"
+    database: &pg-database "discovr_db"
+    username: &pg-username "discovery_user"
+    jdbcUrl: &pg-jdbc-url "jdbc:postgresql://discovr-postgresql.discovery.svc.cluster.local:5432/discovr_db"
+
+  kafka:
+    bootstrapServers: &kafka-bootstrap-servers "discovr-kafka.discovery.svc.cluster.local:9092"
+    topics:
+      discoverRequest: &topic-discover-request "discovr.discover.in.requests"
+      discoverResponse: &topic-discover-response "discovr.discover.out.responses"
+      dispatcherDlt: &topic-dispatcher-dlt "discovr.dispatcher.dlt.responses"
+
+  elasticsearch:
+    url: &es-url "http://discovr-elasticsearch.discovery.svc.cluster.local:9200"
+    alias: &es-alias "beckn-catalog"
+
+  redis:
+    addr: &redis-addr "discovr-redis-master.discovery.svc.cluster.local:6379"
+
+# ---------------------------------------------------------------------------
+# PostgreSQL — Bitnami subchart. NOTE: the discover job needs PostGIS, which
+# the stock Bitnami postgresql image does NOT include. Either:
+#   a) set charts.postgresql=false and point the app charts (below) at your
+#      own PostGIS-enabled Postgres, or
+#   b) override postgresql.image.repository/tag here to a PostGIS-enabled
+#      image built from bitnami/postgresql (add the postgis extension package
+#      on top — same base image, same entrypoint scripts) and hosted in your
+#      own registry.
+# This bundle does not ship such an image, since we don't control image
+# publishing for a stock Bitnami base — this is a required override before
+# a real deployment, not a bug in this chart.
+# ---------------------------------------------------------------------------
+postgresql:
+  fullnameOverride: "discovr-postgresql"
+  namespaceOverride: *namespace
+  auth:
+    username: *pg-username
+    database: *pg-database
+    # existingSecret avoids putting a real password in this public file —
+    # create a Secret named below with key `password` before installing, e.g.:
+    #   kubectl create secret generic discovr-postgresql-auth \
+    #     --from-literal=password='<your-password>' -n discovery
+    existingSecret: "discovr-postgresql-auth"
+  primary:
+    initdb:
+      scripts:
+        01-create-extension.sql: |
+          CREATE EXTENSION IF NOT EXISTS postgis;
+
+# ---------------------------------------------------------------------------
+# Kafka — Bitnami subchart. Single-broker, no auth — fine for a self-contained
+# dev/test deployment. Tighten replication/auth for production use.
+# ---------------------------------------------------------------------------
+kafka:
+  fullnameOverride: "discovr-kafka"
+  namespaceOverride: *namespace
+  listeners:
+    client:
+      protocol: PLAINTEXT
+  controller:
+    replicaCount: 1
+  kraft:
+    enabled: true
+
+# ---------------------------------------------------------------------------
+# Elasticsearch — Bitnami subchart. Single node, security disabled — fine for
+# a self-contained dev/test deployment.
+# ---------------------------------------------------------------------------
+elasticsearch:
+  fullnameOverride: "discovr-elasticsearch"
+  namespaceOverride: *namespace
+  security:
+    enabled: false
+  master:
+    replicaCount: 1
+  data:
+    replicaCount: 0
+  coordinating:
+    replicaCount: 0
+  ingest:
+    replicaCount: 0
+
+# ---------------------------------------------------------------------------
+# Redis — Bitnami subchart. Used by onix-discover for payload/message
+# correlation between the receiver and caller modules.
+# ---------------------------------------------------------------------------
+redis:
+  fullnameOverride: "discovr-redis"
+  namespaceOverride: *namespace
+  architecture: standalone
+  auth:
+    enabled: false
+
+# ---------------------------------------------------------------------------
+# catalog-discover-job
+# ---------------------------------------------------------------------------
+catalog-discover-job:
+  probes:
+    liveness: { enabled: true, path: /actuator/health/liveness, initialDelaySeconds: 60, periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3 }
+    readiness: { enabled: true, path: /actuator/health/readiness, initialDelaySeconds: 30, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 3 }
+    startup: { enabled: true, path: /actuator/health, initialDelaySeconds: 10, periodSeconds: 5, failureThreshold: 24 }
+  # existingSecret-style password is set per-environment (see values/envs/*.yaml.example) —
+  # left unset here so nothing with a real credential ships in this shared file.
+  credentials: {}
+  env:
+    - { name: SPRING_PROFILES_ACTIVE, value: "docker" }
+    - { name: KAFKA_BOOTSTRAP_SERVERS, value: *kafka-bootstrap-servers }
+    - { name: KAFKA_REQUEST_TOPIC, value: *topic-discover-request }
+    - { name: KAFKA_RESPONSE_TOPIC, value: *topic-discover-response }
+    - { name: POSTGRES_HOST, value: *pg-host }
+    - { name: POSTGRES_PORT, value: *pg-port }
+    - { name: POSTGRES_DATABASE, value: *pg-database }
+    - { name: POSTGRES_USERNAME, value: *pg-username }
+    - { name: ES_HOSTS, value: *es-url }
+    - { name: ES_ALIAS, value: *es-alias }
+    - { name: DISCOVERY_SPATIAL_ENGINE, value: "elasticsearch" }
+    - { name: DISCOVERY_TEXT_SEARCH_ENGINE, value: "native-els" }
+    - { name: SCHEMA_VALIDATION_ENABLED, value: "false" }
+    - { name: SIGNATURE_AUTH_ENABLED, value: "false" }
+
+# ---------------------------------------------------------------------------
+# catalog-publish-job
+# ---------------------------------------------------------------------------
+catalog-publish-job:
+  probes:
+    liveness: { enabled: true, path: /actuator/health/liveness, initialDelaySeconds: 60, periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3 }
+    readiness: { enabled: true, path: /actuator/health/readiness, initialDelaySeconds: 30, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 3 }
+    startup: { enabled: true, path: /actuator/health, initialDelaySeconds: 10, periodSeconds: 5, failureThreshold: 24 }
+  credentials: {}
+  env:
+    - { name: SPRING_PROFILES_ACTIVE, value: "docker" }
+    - { name: APP_DATASOURCE_URL, value: *pg-jdbc-url }
+    - { name: APP_DATASOURCE_USERNAME, value: *pg-username }
+    - { name: APP_MESSAGING_BROKER_SERVERS, value: *kafka-bootstrap-servers }
+    - { name: ES_HOSTS, value: *es-url }
+    - { name: ES_MAPPING_TEMPLATE_FILE, value: "/config/es-index-template.json" }
+    - { name: APP_CATALOG_ELASTICSEARCH_ALIAS_NAME, value: *es-alias }
+    - { name: SIGNATURE_AUTH_ENABLED, value: "false" }
+
+# ---------------------------------------------------------------------------
+# response-dispatcher
+# ---------------------------------------------------------------------------
+response-dispatcher:
+  probes:
+    liveness: { enabled: true, path: /actuator/health/liveness, initialDelaySeconds: 60, periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3 }
+    readiness: { enabled: true, path: /actuator/health/readiness, initialDelaySeconds: 30, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 3 }
+    startup: { enabled: true, path: /actuator/health, initialDelaySeconds: 10, periodSeconds: 5, failureThreshold: 24 }
+  credentials: {}
+  env:
+    - { name: SPRING_PROFILES_ACTIVE, value: "docker" }
+    - { name: SPRING_KAFKA_BOOTSTRAP_SERVERS, value: *kafka-bootstrap-servers }
+    - { name: TOPICS_INPUT, value: *topic-discover-response }
+    - { name: TOPICS_DLT, value: *topic-dispatcher-dlt }
+    # When onix-discover is enabled, response-dispatcher routes its outbound
+    # on_discover through the adapter's caller endpoint rather than signing
+    # and calling the BAP directly.
+    - { name: SIGNING_ENABLED, value: "false" }
+
+# ---------------------------------------------------------------------------
+# onix-discover — fronts the stack. subscriberId/registryUrl/credentials are
+# deployment-specific identity — never set here (see values/envs examples).
+# ---------------------------------------------------------------------------
+onix-discover:
+  probes:
+    liveness: { enabled: true }
+    readiness: { enabled: true }
+  adapter:
+    cache:
+      addr: *redis-addr

@@ -1,0 +1,39 @@
+apiVersion: v2
+name: discovr
+description: Umbrella chart deploying the full Beckn Discovr discover pipeline (app services + optional infra)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: catalog-discover-job
+    version: "0.1.0"
+    repository: "file://../charts/catalog-discover-job"
+    condition: charts.catalog-discover-job
+  - name: catalog-publish-job
+    version: "0.1.0"
+    repository: "file://../charts/catalog-publish-job"
+    condition: charts.catalog-publish-job
+  - name: response-dispatcher
+    version: "0.1.0"
+    repository: "file://../charts/response-dispatcher"
+    condition: charts.response-dispatcher
+  - name: onix-discover
+    version: "0.1.0"
+    repository: "file://../charts/onix-discover"
+    condition: charts.onix-discover
+  - name: postgresql
+    version: "18.11.3"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: charts.postgresql
+  - name: kafka
+    version: "32.4.3"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: charts.kafka
+  - name: elasticsearch
+    version: "22.1.6"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: charts.elasticsearch
+  - name: redis
+    version: "28.2.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: charts.redis
