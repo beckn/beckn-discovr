@@ -1,0 +1,157 @@
+# Example values for catalog-publish-job.
+# Copy to my-values.yaml, fill in real hosts/secrets, then:
+#   helm install catalog-publish-job ./discovr-deployment/helm-charts/catalog-publish-job -f my-values.yaml
+#
+# NOTE: the env var names below are exactly what the Spring Boot app reads via
+# ${VAR_NAME} placeholders in application.yml (property prefix `app.*`, mapped
+# to relaxed-binding env names APP_*).
+
+replicaCount: 2
+
+image:
+  repository: beckn/catalog-publish-job
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "docker"
+
+  # ── Flyway — DB migration bookkeeping (keep in step with existing schema) ──
+  - name: SPRING_FLYWAY_BASELINE_ON_MIGRATE
+    value: "true"
+  - name: SPRING_FLYWAY_BASELINE_VERSION
+    value: "0"
+  - name: SPRING_FLYWAY_TABLE
+    value: "flyway_schema_history_publish_no_dist"
+
+  # ── PostgreSQL — catalog index database (app.datasource.*) ───────────────
+  - name: APP_DATASOURCE_URL
+    value: "jdbc:postgresql://postgres-discovery.data.svc.cluster.local:5432/catalog_db"
+  - name: APP_DATASOURCE_USERNAME
+    value: "catalog_user"
+  # APP_DATASOURCE_PASSWORD / DB_PASSWORD supplied via `credentials` below
+  # (app.datasource.password reads DB_PASSWORD directly; APP_DATASOURCE_PASSWORD
+  # is the relaxed-binding form Spring also accepts for the same property)
+
+  # ── Kafka ──────────────────────────────────────────────────────────────
+  - name: APP_MESSAGING_BROKER_SERVERS
+    value: "kafka.kafka.svc.cluster.local:9092"
+  - name: APP_MESSAGING_TOPICS_INGESTION_REQUESTS
+    value: "discovr.publish.in.requests"
+  - name: APP_MESSAGING_TOPICS_CATALOG_EVENTS
+    value: "discovr.publish.out.events"
+  - name: APP_MESSAGING_TOPICS_RESPONSES
+    value: "discovr.publish.out.responses"
+  - name: APP_MESSAGING_TOPICS_FAILED
+    value: "discovr.publish.dlt.requests"
+
+  # ── Catalog ingestion / validation ────────────────────────────────────────
+  - name: APP_CATALOG_VALIDATION_ENABLED
+    value: "true"
+  - name: BECKN_PROTOCOL_API_SCHEMA_URL
+    value: "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/main/api/v2.0.0/beckn.yaml"
+  - name: CATALOG_MAX_PAYLOAD_SIZE
+    value: "10485760" # 10 MiB — keep <= Kafka broker message.max.bytes
+
+  # ── Elasticsearch indexing ────────────────────────────────────────────────
+  - name: APP_CATALOG_ELASTICSEARCH_ENABLED
+    value: "true"
+  - name: ES_HOSTS
+    value: "http://elasticsearch.data.svc.cluster.local:9200"
+  - name: APP_CATALOG_ELASTICSEARCH_INDEX_PREFIX
+    value: "beckn-catalog"
+  - name: APP_CATALOG_ELASTICSEARCH_ALIAS_NAME
+    value: "beckn-catalog"
+  - name: APP_CATALOG_ELASTICSEARCH_FAILURE_TOPIC
+    value: "discovr.publish.es.failures"
+  - name: APP_CATALOG_ELASTICSEARCH_FINAL_DLQ_TOPIC
+    value: "discovr.publish.es.dlt"
+  - name: APP_CATALOG_ELASTICSEARCH_BULK_BATCH_SIZE
+    value: "100"
+  # Path to the ES index mapping template mounted from the chart's `files/es-index-template.json`
+  - name: ES_MAPPING_TEMPLATE_FILE
+    value: "/config/es-index-template.json"
+
+  # ── Semantic text-search indexing (optional; must match DISCOVERY_TEXT_SEARCH_* on discover job) ──
+  - name: CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED
+    value: "false"
+  - name: CATALOG_TEXT_SEARCH_EMBEDDING_NAME
+    value: "text-embedding-3-small"
+  - name: CATALOG_TEXT_SEARCH_EMBEDDING_BASE_URL
+    value: "https://api.openai.com"
+  # CATALOG_TEXT_SEARCH_EMBEDDING_API_KEY supplied via `credentials` below (only if enabled=true)
+
+  # ── Beckn Auth SDK — HTTP signature verification on /catalog/push ────────
+  - name: SIGNATURE_AUTH_ENABLED
+    value: "true"
+  - name: SIGNATURE_REGISTRY_BASE_URL
+    value: "https://your-registry.example.org/registry/dedi/lookup"
+  - name: SIGNATURE_REGISTRY_NAME
+    value: "subscribers.beckn.one"
+  # SIGNATURE_REGISTRY_TOKEN supplied via `credentials` below
+  - name: SIGNATURE_WHITELISTED_ENDPOINTS
+    value: ""
+
+  - name: JAVA_OPTS
+    value: "-Xmx756m -Xms256m -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+# Enable only if this deployment sits behind an ONIX/Beckn-ONE adapter.
+onix:
+  enabled: false
+  env: []
+
+# Secrets — merged into <release>-credentials Secret (stringData) and mounted
+# into the container as plain env vars via envFrom. Replace CHANGE_ME with
+# real values; never commit real secrets to this file.
+credentials:
+  DB_PASSWORD: "CHANGE_ME"
+  APP_DATASOURCE_PASSWORD: "CHANGE_ME"
+  SIGNATURE_REGISTRY_TOKEN: "CHANGE_ME"
+  # Only needed when CATALOG_TEXT_SEARCH_EMBEDDING_ENABLED=true
+  CATALOG_TEXT_SEARCH_EMBEDDING_API_KEY: "CHANGE_ME"
+
+# Mount the chart's bundled ES index mapping template — referenced by
+# ES_MAPPING_TEMPLATE_FILE above. If your chart's configmap/deployment
+# templates don't already wire up files/es-index-template.json as a volume,
+# supply your own template via `config` instead.
+config: {}
+
+probes:
+  liveness:
+    enabled: true
+    path: /actuator/health/liveness
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /actuator/health/readiness
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    enabled: true
+    path: /actuator/health
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 24
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1

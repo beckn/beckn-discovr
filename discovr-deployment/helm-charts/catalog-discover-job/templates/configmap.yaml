@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "beckn-service.fullname" . }}-config
+  labels:
+    {{- include "beckn-service.labels" . | nindent 4 }}
+data:
+  application.yml: |
+    {{- toYaml .Values.config | nindent 4 }}

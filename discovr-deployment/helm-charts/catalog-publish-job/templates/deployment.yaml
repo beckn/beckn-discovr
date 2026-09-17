@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "beckn-service.fullname" . }}
+  labels:
+    {{- include "beckn-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ ternary .Values.replicaCount 1 (kindIs "float64" .Values.replicaCount) }}
+  selector:
+    matchLabels:
+      {{- include "beckn-service.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      labels:
+        {{- include "beckn-service.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "beckn-service.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 45 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "beckn-service.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default .Values.global.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort | default 8080 }}
+              protocol: TCP
+          {{- if or .Values.env (and .Values.onix .Values.onix.enabled) }}
+          env:
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if and .Values.onix .Values.onix.enabled }}
+            {{- toYaml .Values.onix.env | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          # Always mount <release>-credentials — produced by this chart's secret.yaml
+          # (plaintext, pre-cutover) OR by ESO+reflector (post-cutover). Decoupled from
+          # .Values.credentials so removing the plaintext block doesn't drop the mount.
+          envFrom:
+            - secretRef:
+                name: {{ include "beckn-service.fullname" . }}-credentials
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+          {{- if .Values.probes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.startup.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds | default 10 }}
+            periodSeconds: {{ .Values.probes.startup.periodSeconds | default 5 }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold | default 24 }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold | default 3 }}
+          {{- end }}
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds | default 60 }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds | default 30 }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold | default 3 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+            - name: tmp
+              mountPath: /tmp
+            - name: config
+              mountPath: /config/es-index-template.json
+              subPath: es-index-template.json
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "beckn-service.fullname" . }}-config
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

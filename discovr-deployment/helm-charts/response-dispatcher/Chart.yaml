@@ -1,0 +1,6 @@
+apiVersion: v2
+name: response-dispatcher
+description: Kafka consumer that dispatches discovery responses to BAP/BPP HTTP endpoints
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

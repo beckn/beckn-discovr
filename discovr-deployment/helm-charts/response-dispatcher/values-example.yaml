@@ -1,0 +1,112 @@
+# Example values for response-dispatcher.
+# Copy to my-values.yaml, fill in real hosts/secrets, then:
+#   helm install response-dispatcher ./discovr-deployment/helm-charts/response-dispatcher -f my-values.yaml
+#
+# NOTE: the env var names below are exactly what the Spring Boot app reads via
+# ${VAR_NAME} placeholders in application.yml / application-docker.yml.
+
+replicaCount: 2
+
+image:
+  repository: beckn/response-dispatcher
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "docker"
+
+  # ── Kafka ──────────────────────────────────────────────────────────────
+  - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+    value: "kafka.kafka.svc.cluster.local:9092"
+  - name: SPRING_KAFKA_CONSUMER_GROUP_ID
+    value: "seeker-notifier-group"
+  - name: SPRING_KAFKA_LISTENER_CONCURRENCY
+    value: "1"
+  - name: TOPICS_INPUT
+    value: "discovr.discover.out.responses"
+  - name: TOPICS_DLT
+    value: "discovr.dispatcher.dlt.responses"
+
+  # ── DeDi Registry — resolves the BAP's callback base URL at delivery time ──
+  - name: REGISTRY_BASE_URL
+    value: "https://your-registry.example.org/registry/dedi/lookup"
+  - name: REGISTRY_NAME
+    value: "subscribers.beckn.one"
+
+  # ── Beckn HTTP Signature — signs outbound on_discover callbacks (Ed25519 + BLAKE-512) ──
+  - name: SIGNING_ENABLED
+    value: "true"
+  - name: SIGNING_SUBSCRIBER_ID
+    value: "your-subscriber-id"
+  - name: SIGNING_KEY_ID_SUFFIX
+    value: ""
+  - name: SIGNING_EXPIRY_SECONDS
+    value: "3600"
+  # SIGNING_PRIVATE_KEY supplied via `credentials` below (raw 32-byte seed or PKCS#8 PEM)
+
+  # ── Static callback routing — bypass DeDi and post every callback to a
+  # fixed URL (e.g. an ONIX adapter). Leave disabled to use DeDi resolution. ──
+  - name: STATIC_CALLBACK_ENABLED
+    value: "false"
+  - name: STATIC_CALLBACK_URL
+    value: ""
+
+  # SSRF guard on outbound callback URLs — keep true except in isolated
+  # dev/test networks with no public DNS.
+  - name: CALLBACK_URL_VALIDATION_ENABLED
+    value: "true"
+
+  - name: LOGGING_LEVEL_ORG_BECKN_SEEKER
+    value: "INFO"
+
+# Enable only if this deployment routes callbacks through an ONIX/Beckn-ONE
+# adapter (STATIC_CALLBACK_* / SIGNING_ENABLED=false) instead of direct-to-BAP.
+onix:
+  enabled: false
+  env: []
+
+# Secrets — merged into <release>-credentials Secret (stringData) and mounted
+# into the container as plain env vars via envFrom. Replace CHANGE_ME with
+# real values; never commit real secrets to this file.
+credentials:
+  SIGNING_PRIVATE_KEY: "CHANGE_ME"
+
+probes:
+  liveness:
+    enabled: true
+    path: /actuator/health/liveness
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /actuator/health/readiness
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    enabled: true
+    path: /actuator/health
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 24
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1

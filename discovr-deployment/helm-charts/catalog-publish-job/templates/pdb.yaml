@@ -1,0 +1,13 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "beckn-service.fullname" . }}
+  labels:
+    {{- include "beckn-service.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "beckn-service.selectorLabels" . | nindent 6 }}
+{{- end }}
