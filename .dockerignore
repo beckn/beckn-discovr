@@ -8,10 +8,6 @@
 **/target/
 **/out/
 
-# Node.js artefacts (reference-apps/) — irrelevant to Java service builds
-reference-apps/beckn-demo-ui/node_modules/
-reference-apps/beckn-demo-ui/.next/
-
 # IDE and editor files
 **/.idea/
 **/*.iml

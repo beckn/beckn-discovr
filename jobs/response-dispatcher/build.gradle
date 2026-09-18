@@ -1,7 +1,7 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.2.0'
-    id 'io.spring.dependency-management' version '1.1.4'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.7'
     id 'jacoco'
     id 'org.cyclonedx.bom' version '3.2.2'
 }
@@ -15,14 +15,22 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+// Security overrides for transitive CVEs (bump Spring Boot BOM-managed versions).
+// jackson → CVE-2026-54515 · logback → CVE-2026-10532 · commons-lang3 → CVE-2025-48924
+ext['jackson-bom.version'] = '2.21.5'
+ext['logback.version'] = '1.5.35'
+ext['commons-lang3.version'] = '3.18.0'
+
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    // BOM for version management
-    implementation platform('org.testcontainers:testcontainers-bom:1.19.3')
-    
+    // Testcontainers version is managed by the Spring Boot BOM.
+    // (An explicit 1.19.3 pin shipped docker-java built against the removed
+    //  org.apache.commons.codec.Charsets API, which breaks against the
+    //  commons-codec version Spring Boot 3.5.x now resolves.)
+
     // Spring Boot Starters
     implementation 'org.springframework.boot:spring-boot-starter'
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -33,17 +41,18 @@ dependencies {
     implementation 'org.springframework.retry:spring-retry'
     implementation 'org.springframework:spring-aspects'
 
-    // Kafka
-    implementation 'org.springframework.kafka:spring-kafka:3.1.0'
-    implementation 'org.apache.kafka:kafka-clients:3.6.0'
+    // Kafka (versions managed by Spring Boot BOM)
+    implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'org.apache.kafka:kafka-clients'
 
-    // JSON Processing
-    implementation 'com.fasterxml.jackson.core:jackson-core:2.15.2'
+    // JSON Processing (jackson-core provided transitively by jackson-databind)
     implementation 'com.fasterxml.jackson.core:jackson-databind'
 
     // Beckn Auth SDK (composite build — signing via Ed25519 + BLAKE-512)
+    // BouncyCastle (bcprov) is provided transitively by the auth SDK — no direct use here.
     implementation 'org.beckn:beckn-auth-sdk'
-    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    // Runtime Cache impl the BecknAuth SDK needs for signature caching (no direct
+    // import, so grep-based "unused" checks miss it — do not remove).
     implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
 
     // Metrics
@@ -63,6 +72,14 @@ dependencies {
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:kafka'
     testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+    // docker-java (Testcontainers) needs commons-codec at runtime; it is not otherwise
+    // on this job's test classpath. Version managed by the Spring Boot BOM.
+    testImplementation 'commons-codec:commons-codec'
+
+    // Transitive CVE constraint — commons-compress (via testcontainers), CVE-2024-25710
+    constraints {
+        testImplementation 'org.apache.commons:commons-compress:1.26.0'
+    }
 }
 
 test {
