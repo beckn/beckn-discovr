@@ -9,7 +9,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -105,7 +104,7 @@ class Rfc9535ProbeStatementTimeoutIntegrationTest {
      *
      * <p>Spring's {@code SQLStateSQLExceptionTranslator} classification of this cancellation is
      * not stable across Spring versions — it has surfaced as both
-     * {@link DataAccessResourceFailureException} (a {@code NonTransientDataAccessException}
+     * {@code org.springframework.dao.DataAccessResourceFailureException} (a {@code NonTransientDataAccessException}
      * subtype) and {@code QueryTimeoutException}/other {@code TransientDataAccessException}
      * subtypes depending on the Spring Framework version. This is exactly why production code
      * ({@code Rfc9535FilterCompiler#probeProcessed}) never branches on the concrete exception
