@@ -27,7 +27,6 @@ on:
       - main
       - 'release-*'
       - development
-      - security/dependency-vulns   # integration branch for this rollout
     paths:
       - '**/Dockerfile*'
       - 'docker-compose*.yml'
