@@ -1,0 +1,223 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "beckn-service.fullname" . }}-config
+  labels:
+    {{- include "beckn-service.labels" . | nindent 4 }}
+data:
+  # discover-adapter.yaml — keyManager fields are left as ${...} placeholders,
+  # substituted at pod startup by the render-config init container (see
+  # templates/deployment.yaml) from the <release>-keyset Secret. Real key
+  # material never lands in this ConfigMap.
+  discover-adapter.yaml: |
+    appName: {{ .Values.adapter.appName | quote }}
+
+    log:
+      level: {{ .Values.adapter.logLevel | quote }}
+      destinations:
+        - type: stdout
+      contextKeys:
+        - transaction_id
+        - message_id
+
+    http:
+      port: "8080"
+      timeout:
+        read: 30
+        write: 30
+        idle: 30
+
+    pluginManager:
+      root: ./plugins
+
+    plugins:
+      {{- if .Values.adapter.otel.enabled }}
+      otelsetup:
+        id: otelsetup
+        config:
+          serviceName: {{ .Values.adapter.appName | quote }}
+          serviceVersion: {{ .Values.adapter.otel.serviceVersion | quote }}
+          environment: {{ .Values.adapter.environment | quote }}
+          otlpEndpoint: {{ .Values.adapter.otel.endpoint | quote }}
+          enableMetrics: true
+          enableTracing: true
+          enableLogs: true
+          timeInterval: 5
+      {{- end }}
+
+    modules:
+      # ─── becknReceiver — public endpoint, receives inbound Beckn actions ───
+      - name: becknReceiver
+        path: /beckn/
+        handler:
+          type: std
+          role: "bpp"
+          subscriberId: {{ .Values.adapter.subscriberId | quote }}
+          httpClientConfig:
+            maxIdleConns: 1000
+            maxIdleConnsPerHost: 200
+            idleConnTimeout: 300s
+            responseHeaderTimeout: 5s
+          plugins:
+            registry:
+              id: dediregistry
+              config:
+                url: {{ .Values.adapter.registryUrl | quote }}
+                timeout: "10"
+                retry_max: "3"
+                retry_wait_min: "100ms"
+                retry_wait_max: "500ms"
+            keyManager:
+              id: simplekeymanager
+              config:
+                subscriberId: "${subscriberId}"
+                keyId: "${keyId}"
+                signingPrivateKey: "${signingPrivateKey}"
+                signingPublicKey: "${signingPublicKey}"
+                encrPrivateKey: "${encrPrivateKey}"
+                encrPublicKey: "${encrPublicKey}"
+            cache:
+              id: cache
+              config:
+                addr: {{ .Values.adapter.cache.addr | quote }}
+            payloadStore:
+              id: payloadstore
+              config:
+                ttl: "24h"
+                indexTTL: "25h"
+                maxBodyBytes: "1048576"
+                storeBody: "true"
+                storeSignature: "true"
+                compress: "true"
+            schemaValidator:
+              id: schemav2validator
+              config:
+                type: {{ .Values.adapter.schemaValidator.type | quote }}
+                location: {{ .Values.adapter.schemaValidator.location | quote }}
+                cacheTTL: {{ .Values.adapter.schemaValidator.cacheTtlSeconds | quote }}
+            signValidator:
+              id: signvalidator
+            signer:
+              id: signer
+            router:
+              id: router
+              config:
+                routingConfig: ./config/routing-discover-receiver.yaml
+            middleware:
+              - id: reqpreprocessor
+                config:
+                  contextKeys: transaction_id,message_id
+                  role: "bpp"
+          steps:
+            - validateSign
+            - validateSchema
+            - addRoute
+            - storePayload
+            - signAck
+
+      # ─── discoverCaller — internal endpoint, signs and sends outbound actions ───
+      - name: discoverCaller
+        path: /caller/
+        handler:
+          type: std
+          role: "bpp"
+          subscriberId: {{ .Values.adapter.subscriberId | quote }}
+          httpClientConfig:
+            maxIdleConns: 1000
+            maxIdleConnsPerHost: 200
+            idleConnTimeout: 300s
+            responseHeaderTimeout: 5s
+          plugins:
+            registry:
+              id: dediregistry
+              config:
+                url: {{ .Values.adapter.registryUrl | quote }}
+                timeout: "10"
+                retry_max: "3"
+                retry_wait_min: "100ms"
+                retry_wait_max: "500ms"
+            keyManager:
+              id: simplekeymanager
+              config:
+                subscriberId: "${subscriberId}"
+                keyId: "${keyId}"
+                signingPrivateKey: "${signingPrivateKey}"
+                signingPublicKey: "${signingPublicKey}"
+                encrPrivateKey: "${encrPrivateKey}"
+                encrPublicKey: "${encrPublicKey}"
+            cache:
+              id: cache
+              config:
+                addr: {{ .Values.adapter.cache.addr | quote }}
+            payloadStore:
+              id: payloadstore
+              config:
+                ttl: "24h"
+                indexTTL: "25h"
+                maxBodyBytes: "1048576"
+                storeBody: "true"
+                storeSignature: "true"
+                compress: "true"
+            schemaValidator:
+              id: schemav2validator
+              config:
+                type: {{ .Values.adapter.schemaValidator.type | quote }}
+                location: {{ .Values.adapter.schemaValidator.location | quote }}
+                cacheTTL: {{ .Values.adapter.schemaValidator.cacheTtlSeconds | quote }}
+            signValidator:
+              id: signvalidator
+            signer:
+              id: signer
+            router:
+              id: router
+              config:
+                routingConfig: ./config/routing-discover-caller.yaml
+            middleware:
+              - id: reqpreprocessor
+                config:
+                  contextKeys: transaction_id,message_id
+                  role: "bpp"
+          steps:
+            - addRoute
+            - sign
+            - validateSchema
+            - storePayload
+            - validateAckSign
+
+  # routing-discover-receiver.yaml — inbound: BAP discover -> catalog-discover-job,
+  # Catalg catalog/push + catalog/on_pull -> catalog-publish-job.
+  routing-discover-receiver.yaml: |
+    routingRules:
+      - version: "2.0.0"
+        targetType: "url"
+        target:
+          url: {{ include "onix-discover.discoverJobUrl" . | quote }}
+        endpoints:
+          - discover
+
+      - version: "2.0.0"
+        targetType: "url"
+        target:
+          url: {{ include "onix-discover.catalogPublishJobUrl" . | quote }}
+        endpoints:
+          - catalog/push
+          - catalog/on_pull
+
+  # routing-discover-caller.yaml — outbound: on_discover -> BAP (from context.bapUri),
+  # catalog/subscription + catalog/pull -> your catalog registry (e.g. Beckn Catalg).
+  routing-discover-caller.yaml: |
+    routingRules:
+      - version: "2.0.0"
+        targetType: "bap"
+        endpoints:
+          - on_discover
+
+      {{- if .Values.adapter.routing.catalogRegistryUrl }}
+      - version: "2.0.0"
+        targetType: "url"
+        target:
+          url: {{ .Values.adapter.routing.catalogRegistryUrl | quote }}
+        endpoints:
+          - catalog/subscription
+          - catalog/pull
+      {{- end }}

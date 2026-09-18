@@ -1,0 +1,27 @@
+dependencies:
+- name: catalog-discover-job
+  repository: file://../charts/catalog-discover-job
+  version: 0.1.0
+- name: catalog-publish-job
+  repository: file://../charts/catalog-publish-job
+  version: 0.1.0
+- name: response-dispatcher
+  repository: file://../charts/response-dispatcher
+  version: 0.1.0
+- name: onix-discover
+  repository: file://../charts/onix-discover
+  version: 0.1.0
+- name: postgresql
+  repository: https://charts.bitnami.com/bitnami
+  version: 18.11.3
+- name: kafka
+  repository: https://charts.bitnami.com/bitnami
+  version: 32.4.3
+- name: elasticsearch
+  repository: https://charts.bitnami.com/bitnami
+  version: 22.1.6
+- name: redis
+  repository: https://charts.bitnami.com/bitnami
+  version: 28.2.0
+digest: sha256:373eb054b254c74fb9e5135b27639030e775c71b6fa30f2922a5bab83948832a
+generated: "2026-09-17T20:02:12.181289+05:30"

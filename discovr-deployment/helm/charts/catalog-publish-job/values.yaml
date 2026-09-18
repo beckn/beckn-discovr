@@ -1,0 +1,70 @@
+replicaCount: 1
+
+image:
+  registry: ""
+  repository: ""
+  tag: ""
+  digest: ""
+  pullPolicy: ""
+
+global:
+  image:
+    registry: ""
+    pullPolicy: ""
+  imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+resources: {}
+
+env: []
+
+config: {}
+
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+nodeSelector: {}
+tolerations: []
+
+terminationGracePeriodSeconds: 45
+
+probes:
+  liveness:
+    enabled: false
+    path: /actuator/health/liveness
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: false
+    path: /actuator/health/readiness
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    enabled: false
+    path: /actuator/health
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 24
+
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: 1
+
+credentials: {}
+
+# Optional env vars appended to env when onix.enabled=true, for deployments
+# fronted by an ONIX/Beckn-ONE adapter.
+onix:
+  enabled: false
+  env: []

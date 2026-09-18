@@ -1,0 +1,6 @@
+apiVersion: v2
+name: onix-discover
+description: Beckn ONIX adapter (BPP receiver + caller) deployed in front of the Discovr discover pipeline
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

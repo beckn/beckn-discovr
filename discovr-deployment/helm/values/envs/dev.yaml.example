@@ -1,0 +1,75 @@
+# Example per-deployment overlay — copy to a PRIVATE file (e.g. dev.yaml, kept
+# out of version control / in a private repo or secrets manager) and fill in
+# real values. Never commit a filled-in copy of this file to a public repo.
+#
+# Only the things that differ per-deployment go here: secrets, network
+# identity, resource sizing, image tags. Shared infra wiring (hosts, ports,
+# topic names) already lives in bundle/values.yaml and doesn't need repeating.
+#
+# Install with both files layered:
+#   helm dependency update discovr-deployment/helm/bundle
+#   helm install discovr discovr-deployment/helm/bundle \
+#     -f discovr-deployment/helm/bundle/values.yaml \
+#     -f dev.yaml
+
+# ---------------------------------------------------------------------------
+# PostgreSQL password — see bundle/values.yaml's postgresql.auth.existingSecret
+# comment; create the Secret out-of-band instead of setting a password here
+# if you want it to never touch a values file at all.
+# ---------------------------------------------------------------------------
+postgresql:
+  auth:
+    password: "CHANGE_ME"
+
+# ---------------------------------------------------------------------------
+# catalog-discover-job — real DB password + your network's Beckn registry
+# ---------------------------------------------------------------------------
+catalog-discover-job:
+  image:
+    repository: beckn/catalog-discover
+    tag: "1.0.0"
+  credentials:
+    POSTGRES_PASSWORD: "CHANGE_ME"
+  env:
+    - name: SIGNATURE_AUTH_ENABLED
+      value: "true"
+    - name: SIGNATURE_REGISTRY_BASE_URL
+      value: "https://your-registry.example.org/registry/dedi/lookup"
+
+# ---------------------------------------------------------------------------
+# catalog-publish-job
+# ---------------------------------------------------------------------------
+catalog-publish-job:
+  image:
+    repository: beckn/catalog-publish-job
+    tag: "1.0.0"
+  credentials:
+    APP_DATASOURCE_PASSWORD: "CHANGE_ME"
+
+# ---------------------------------------------------------------------------
+# response-dispatcher
+# ---------------------------------------------------------------------------
+response-dispatcher:
+  image:
+    repository: beckn/response-dispatcher
+    tag: "1.0.0"
+
+# ---------------------------------------------------------------------------
+# onix-discover — your BPP identity on the network. subscriberId/keyId/keys
+# come from your network registry (DeDi) enrollment — never invented locally.
+# networkId-style scoping (which networks this participant belongs to) is
+# whatever your registry/router config requires — set it via adapter.registry
+# / adapter.routing values as your network mandates.
+# ---------------------------------------------------------------------------
+onix-discover:
+  image:
+    tag: "1.0.0"
+  adapter:
+    subscriberId: "your-participant.example.org"
+    registryUrl: "https://your-registry.example.org/registry/dedi/lookup"
+  credentials:
+    keyId: "CHANGE_ME"
+    signingPrivateKey: "CHANGE_ME"
+    signingPublicKey: "CHANGE_ME"
+    encrPrivateKey: "CHANGE_ME"
+    encrPublicKey: "CHANGE_ME"
