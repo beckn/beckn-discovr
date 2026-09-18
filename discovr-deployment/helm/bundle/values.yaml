@@ -80,6 +80,14 @@ postgresql:
     # create a Secret named below with key `password` before installing, e.g.:
     #   kubectl create secret generic discovr-postgresql-auth \
     #     --from-literal=password='<your-password>' -n discovery
+    #
+    # IMPORTANT: this is the ONLY place the actual Postgres password is set.
+    # catalog-discover-job's POSTGRES_PASSWORD and catalog-publish-job's
+    # APP_DATASOURCE_PASSWORD (set per-deployment in values/envs/*.yaml) are a
+    # separate credential path into a separate Secret — they are NOT read from
+    # this Secret automatically. Whatever password you put in
+    # discovr-postgresql-auth's `password` key must be copied into both of
+    # those app credentials fields manually, or the apps will fail to connect.
     existingSecret: "discovr-postgresql-auth"
   primary:
     initdb:
@@ -99,8 +107,6 @@ kafka:
       protocol: PLAINTEXT
   controller:
     replicaCount: 1
-  kraft:
-    enabled: true
 
 # ---------------------------------------------------------------------------
 # Elasticsearch — Bitnami subchart. Single node, security disabled — fine for
