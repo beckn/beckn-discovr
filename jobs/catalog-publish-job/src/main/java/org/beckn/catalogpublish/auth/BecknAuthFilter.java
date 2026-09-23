@@ -90,6 +90,7 @@ public class BecknAuthFilter extends OncePerRequestFilter {
 
         byte[] bodyBytes = request.getInputStream().readAllBytes();
         String rawBody = new String(bodyBytes, StandardCharsets.UTF_8);
+        // Never log authHeader (or any part of it) — it carries signature material. Log subscriberId/code only.
         String authHeader = request.getHeader("Authorization");
 
         log.info(LogEvent.AUTH_VERIFY_START, value("path", sanitizedPath));
@@ -111,7 +112,7 @@ public class BecknAuthFilter extends OncePerRequestFilter {
             log.error(LogEvent.AUTH_VERIFY_FAILED,
                     value("path", sanitizedPath),
                     value("code", code),
-                    value("message", e.getMessage()));
+                    value("message", ErrorSanitizer.sanitize(e.getMessage())));
             // Emit the canonical Beckn v2.0 AUT_* ErrorCode (beckn.yaml), translated from the
             // SDK's legacy SEC_* code, so the client-facing NACK is spec-compliant.
             sendNack(response, httpStatus, toSpecAuthCode(code), messageForSdkCode(code), bodyBytes);
