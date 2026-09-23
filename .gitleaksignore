@@ -25,7 +25,7 @@ aaf9f7a209d6c597b401f948afee075b4c1d9860:jobs/response-dispatcher/src/test/java/
 aaf9f7a209d6c597b401f948afee075b4c1d9860:jobs/response-dispatcher/src/test/java/org/beckn/seeker/service/SignatureServiceTest.java:generic-api-key:47
 
 # --- False positive: PEM header/footer literals with no key body ---------------
-# Constants/Javadoc such as PEM_PRIVATE_KEY_HEADER = "-----BEGIN PRIVATE KEY-----"
+# Constants/Javadoc holding only the PEM "BEGIN/END PRIVATE KEY" header/footer
 # in sdks/beckn-auth-java-sdk CryptoService and the removed dispatcher
 # PrivateKeyLoader; a `${key}` template in the removed dev-kit get-signature.js.
 8e9c511602e8ee4f7881be814f47b8ecdd489f48:sdks/beckn-auth-java-sdk/src/main/java/org/beckn/auth/crypto/CryptoService.java:private-key:54
@@ -52,7 +52,7 @@ abd4d8e7b2925ab76b259c072d3a1c170aab6a2c:jobs/response-dispatcher/src/test/java/
 
 # --- False positive: PEM wrapped around a key generated at test runtime --------
 # sdks/beckn-auth-java-sdk CryptoServiceTest.parsePrivateKey_PemWrapped builds
-# "-----BEGIN PRIVATE KEY-----\n" + b64 from KeyPairGenerator; no literal key.
+# the PEM envelope around a KeyPairGenerator key at runtime; no literal key.
 8e9c511602e8ee4f7881be814f47b8ecdd489f48:sdks/beckn-auth-java-sdk/src/test/java/org/beckn/auth/crypto/CryptoServiceTest.java:private-key:173
 ba5cbc6012d8f2ab1ad93101b586bf8f22702218:sdks/beckn-auth-java-sdk/src/test/java/org/beckn/auth/crypto/CryptoServiceTest.java:private-key:173
 d9dd4e8e74ec90c936ac169f1c6270508bc5059d:sdks/beckn-auth-java-sdk/src/test/java/org/beckn/auth/crypto/CryptoServiceTest.java:private-key:173
