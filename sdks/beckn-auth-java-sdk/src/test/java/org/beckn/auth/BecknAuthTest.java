@@ -307,6 +307,19 @@ class BecknAuthTest {
         }
 
         @Test
+        @DisplayName("Expired signature still logs subscriber and keyId")
+        void expiredSignature_LogsIdentity() {
+            String expired = "Signature keyId=\"example-bap.com|key-1|ed25519\",algorithm=\"ed25519\","
+                    + "created=\"1\",expires=\"2\",headers=\"(created) (expires) digest\",signature=\"c2ln\"";
+
+            String logs = captureLogs(() -> becknAuthVerifier.verifySignature(expired, rawRequestBody));
+
+            assertThat(logs).contains("[VERIFICATION] FAILED")
+                    .contains("subscriber: example-bap.com | keyId: key-1 | authHeader: [REDACTED]")
+                    .doesNotContain("signature=\"c2ln\"");
+        }
+
+        @Test
         @DisplayName("Missing header is logged as absent")
         void missingHeader_LoggedAsAbsent() {
             String logs = captureLogs(() -> becknAuthVerifier.verifySignature(null, rawRequestBody));

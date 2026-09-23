@@ -247,7 +247,9 @@ public final class BecknAuth {
 
         ParsedAuthHeader parsedHeader = null;
         try {
-            parsedHeader = parseAndValidateHeader(authorizationHeader, ctx);
+            // Assign before validating so algorithm/timestamp failures still log subscriber + keyId.
+            parsedHeader = headerParser.parseAuthorizationHeader(authorizationHeader);
+            validateParsedHeader(parsedHeader, ctx);
             var registryEntry = registryService.getRegistryEntry(
                     parsedHeader.subscriberId(), parsedHeader.uniqueKeyId());
             logger.info("[VERIFICATION] Public key resolved"
@@ -362,10 +364,9 @@ public final class BecknAuth {
     }
 
     /**
-     * Parses the Authorization header, validates algorithm, and validates timestamps.
+     * Validates the algorithm and timestamps of an already-parsed Authorization header.
      */
-    private ParsedAuthHeader parseAndValidateHeader(String authorizationHeader, BecknContext ctx) {
-        ParsedAuthHeader parsedHeader = headerParser.parseAuthorizationHeader(authorizationHeader);
+    private void validateParsedHeader(ParsedAuthHeader parsedHeader, BecknContext ctx) {
         headerParser.validateAlgorithm(parsedHeader);
         headerParser.validateTimestamps(parsedHeader, config.getAllowedClockSkewSeconds());
         logger.info("[VERIFICATION] Header parsed"
@@ -373,7 +374,6 @@ public final class BecknAuth {
                 + " | msgId: " + ctx.messageId()
                 + " | subscriber: " + parsedHeader.subscriberId()
                 + " | keyId: " + parsedHeader.uniqueKeyId());
-        return parsedHeader;
     }
 
     /**
