@@ -1,0 +1,13 @@
+# Gitleaks configuration — picked up automatically from the repo root by
+# `gitleaks detect` (CI: .github/workflows/secrets-scan.yml).
+#
+# Uses the default ruleset unchanged. Reviewed findings are suppressed by exact
+# fingerprint in .gitleaksignore (see beckn/beckn-discovr#383). Do not add
+# regex/path allowlists here: an allowlist match on a private-key finding
+# suppresses the whole matched span, which can hide a real key that follows a
+# harmless PEM header in the same file or hunk.
+
+title = "beckn-discovr gitleaks config"
+
+[extend]
+useDefault = true
