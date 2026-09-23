@@ -240,20 +240,23 @@ public final class BecknAuth {
                     + " | txnId: " + ctx.transactionId()
                     + " | msgId: " + ctx.messageId()
                     + " | cause: verification not enabled (registryBaseUrl not set)"
-                    + " | authHeader: " + authorizationHeader);
+                    + credentialContext(isPresent(authorizationHeader), null));
             throw BecknAuthException.internalError(
                     "Verification not configured: registryBaseUrl and registryName are required");
         }
 
+        ParsedAuthHeader parsedHeader = null;
         try {
-            ParsedAuthHeader parsedHeader = parseAndValidateHeader(authorizationHeader, ctx);
+            // Assign before validating so algorithm/timestamp failures still log subscriber + keyId.
+            parsedHeader = headerParser.parseAuthorizationHeader(authorizationHeader);
+            validateParsedHeader(parsedHeader, ctx);
             var registryEntry = registryService.getRegistryEntry(
                     parsedHeader.subscriberId(), parsedHeader.uniqueKeyId());
             logger.info("[VERIFICATION] Public key resolved"
                     + " | txnId: " + ctx.transactionId()
                     + " | msgId: " + ctx.messageId()
                     + " | subscriber: " + parsedHeader.subscriberId());
-            verifyBodySignature(parsedHeader, rawRequestBody, registryEntry.publicKey(), authorizationHeader, ctx);
+            verifyBodySignature(parsedHeader, rawRequestBody, registryEntry.publicKey(), ctx);
 
             logger.info("[VERIFICATION] SUCCESS"
                     + " | txnId: " + ctx.transactionId()
@@ -267,7 +270,7 @@ public final class BecknAuth {
                     + " | txnId: " + ctx.transactionId()
                     + " | msgId: " + ctx.messageId()
                     + " | cause: " + exception.getCode()
-                    + " | authHeader: " + authorizationHeader
+                    + credentialContext(isPresent(authorizationHeader), parsedHeader)
                     + " | error: " + exception.getMessage());
             throw exception;
         } catch (Exception exception) {
@@ -275,7 +278,7 @@ public final class BecknAuth {
                     + " | txnId: " + ctx.transactionId()
                     + " | msgId: " + ctx.messageId()
                     + " | cause: unexpected error"
-                    + " | authHeader: " + authorizationHeader
+                    + credentialContext(isPresent(authorizationHeader), parsedHeader)
                     + " | error: " + exception.getMessage(), exception);
             throw BecknAuthException.internalError(ErrorMessages.INTERNAL_SERVER_ERROR, exception);
         }
@@ -343,10 +346,27 @@ public final class BecknAuth {
     }
 
     /**
-     * Parses the Authorization header, validates algorithm, and validates timestamps.
+     * Builds the credential portion of a verification-failure log line.
+     * <p>
+     * Never logs the raw Authorization header, signature, or created/expires values —
+     * log aggregators are not a credential store. Only the identity parsed from the keyId
+     * (subscriber + unique key id) is logged, which is enough to correlate with the registry.
+     * </p>
      */
-    private ParsedAuthHeader parseAndValidateHeader(String authorizationHeader, BecknContext ctx) {
-        ParsedAuthHeader parsedHeader = headerParser.parseAuthorizationHeader(authorizationHeader);
+    private static String credentialContext(boolean headerPresent, ParsedAuthHeader parsedHeader) {
+        String identity = parsedHeader == null ? ""
+                : " | subscriber: " + parsedHeader.subscriberId() + " | keyId: " + parsedHeader.uniqueKeyId();
+        return identity + " | authHeader: " + (headerPresent ? "[REDACTED]" : "absent");
+    }
+
+    private static boolean isPresent(String authorizationHeader) {
+        return authorizationHeader != null && !authorizationHeader.isBlank();
+    }
+
+    /**
+     * Validates the algorithm and timestamps of an already-parsed Authorization header.
+     */
+    private void validateParsedHeader(ParsedAuthHeader parsedHeader, BecknContext ctx) {
         headerParser.validateAlgorithm(parsedHeader);
         headerParser.validateTimestamps(parsedHeader, config.getAllowedClockSkewSeconds());
         logger.info("[VERIFICATION] Header parsed"
@@ -354,7 +374,6 @@ public final class BecknAuth {
                 + " | msgId: " + ctx.messageId()
                 + " | subscriber: " + parsedHeader.subscriberId()
                 + " | keyId: " + parsedHeader.uniqueKeyId());
-        return parsedHeader;
     }
 
     /**
@@ -365,7 +384,7 @@ public final class BecknAuth {
      *                            signature does not match
      */
     private void verifyBodySignature(ParsedAuthHeader parsedHeader, String rawRequestBody,
-            PublicKey signerPublicKey, String authorizationHeader, BecknContext ctx) {
+            PublicKey signerPublicKey, BecknContext ctx) {
         String bodyDigest = cryptoService.generateBlake2bHash(rawRequestBody);
         String signingString = headerBuilder.buildSigningString(
                 parsedHeader.created(), parsedHeader.expires(), bodyDigest);
@@ -378,7 +397,7 @@ public final class BecknAuth {
                     + " | txnId: " + ctx.transactionId()
                     + " | msgId: " + ctx.messageId()
                     + " | cause: signature cryptographic mismatch"
-                    + " | authHeader: " + authorizationHeader
+                    + credentialContext(true, parsedHeader)
                     + " | error: " + ErrorMessages.AUTH_VERIFICATION_FAILED);
             throw BecknAuthException.signatureVerificationFailed(
                     ErrorMessages.AUTH_VERIFICATION_FAILED, ErrorCodes.SEC_SIGNATURE_INVALID);

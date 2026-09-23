@@ -183,8 +183,9 @@ public final class AuthHeaderParser {
      */
     private void validateSignaturePrefix(String authorizationHeader) {
         if (!authorizationHeader.regionMatches(true, 0, SIGNATURE_PREFIX, 0, SIGNATURE_PREFIX_LENGTH)) {
+            // Never log the header value itself — it may carry credential material (CWE-532).
             logger.error("Authorization header is missing the required 'Signature ' prefix"
-                    + " | received=" + truncate(authorizationHeader, 80));
+                    + " | receivedLength=" + authorizationHeader.length());
             throw BecknAuthException.invalidHeader(
                     ErrorMessages.AUTH_INVALID_FORMAT, ErrorCodes.SEC_SIGNATURE_INVALID);
         }
@@ -352,18 +353,5 @@ public final class AuthHeaderParser {
                     ErrorCodes.SEC_SIGNATURE_INVALID,
                     "authorization/" + fieldName);
         }
-    }
-
-    /**
-     * Truncates a string to {@code maxLength} characters for safe error logging,
-     * appending {@code "..."} if truncated.
-     *
-     * @param value     the string to truncate
-     * @param maxLength the maximum number of characters to include
-     * @return the truncated string
-     */
-    private static String truncate(String value, int maxLength) {
-        if (value == null) return "null";
-        return value.length() <= maxLength ? value : value.substring(0, maxLength) + "...";
     }
 }

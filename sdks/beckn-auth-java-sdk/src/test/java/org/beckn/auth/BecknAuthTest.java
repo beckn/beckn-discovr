@@ -11,6 +11,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PrivateKey;
@@ -247,6 +250,81 @@ class BecknAuthTest {
             var result = bothAuth.verifySignature(authHeader, rawRequestBody);
 
             assertThat(result.parsedHeader().subscriberId()).isEqualTo("example-bap.com");
+        }
+    }
+
+    @Nested
+    @DisplayName("Credential Redaction in Logs")
+    class CredentialRedactionTests {
+
+        /** Runs the action and returns everything slf4j-simple wrote to stderr meanwhile. */
+        private String captureLogs(Runnable action) {
+            PrintStream original = System.err;
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            System.setErr(new PrintStream(buffer, true, StandardCharsets.UTF_8));
+            try {
+                action.run();
+            } catch (BecknAuthException ignored) {
+                // failure is expected — only the log output is under test
+            } finally {
+                System.setErr(original);
+            }
+            return buffer.toString(StandardCharsets.UTF_8);
+        }
+
+        private String signatureOf(String authHeader) {
+            int start = authHeader.indexOf("signature=\"") + "signature=\"".length();
+            return authHeader.substring(start, authHeader.indexOf('"', start));
+        }
+
+        @Test
+        @DisplayName("Signature mismatch logs identity but never the header or signature")
+        void signatureMismatch_DoesNotLogHeader() {
+            stubRegistryLookup();
+            String authHeader = becknAuthSigner.signPayload(rawRequestBody);
+            String tamperedBody = rawRequestBody.replace("msg-456", "msg-999");
+
+            String logs = captureLogs(() -> becknAuthVerifier.verifySignature(authHeader, tamperedBody));
+
+            assertThat(logs).contains("[VERIFICATION] FAILED")
+                    .contains("authHeader: [REDACTED]")
+                    .contains("subscriber: example-bap.com")
+                    .contains("keyId: key-1")
+                    .doesNotContain(authHeader)
+                    .doesNotContain(signatureOf(authHeader));
+        }
+
+        @Test
+        @DisplayName("Unparseable header is never echoed into logs")
+        void malformedHeader_DoesNotLogHeader() {
+            String secretish = "Bearer sk-live-do-not-log-me-0123456789";
+
+            String logs = captureLogs(() -> becknAuthVerifier.verifySignature(secretish, rawRequestBody));
+
+            assertThat(logs).contains("[VERIFICATION] FAILED")
+                    .contains("authHeader: [REDACTED]")
+                    .doesNotContain("sk-live-do-not-log-me");
+        }
+
+        @Test
+        @DisplayName("Expired signature still logs subscriber and keyId")
+        void expiredSignature_LogsIdentity() {
+            String expired = "Signature keyId=\"example-bap.com|key-1|ed25519\",algorithm=\"ed25519\","
+                    + "created=\"1\",expires=\"2\",headers=\"(created) (expires) digest\",signature=\"c2ln\"";
+
+            String logs = captureLogs(() -> becknAuthVerifier.verifySignature(expired, rawRequestBody));
+
+            assertThat(logs).contains("[VERIFICATION] FAILED")
+                    .contains("subscriber: example-bap.com | keyId: key-1 | authHeader: [REDACTED]")
+                    .doesNotContain("signature=\"c2ln\"");
+        }
+
+        @Test
+        @DisplayName("Missing header is logged as absent")
+        void missingHeader_LoggedAsAbsent() {
+            String logs = captureLogs(() -> becknAuthVerifier.verifySignature(null, rawRequestBody));
+
+            assertThat(logs).contains("authHeader: absent");
         }
     }
 

@@ -98,6 +98,7 @@ public class AuthorizationService {
             return AuthIdentity.anonymous();
         }
 
+        // Never log authHeader (or any part of it) — it carries signature material. Log subscriberId/code only.
         String authHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);
         logger.info("{}", LogEvent.AUTH_VERIFY_START);
         try {

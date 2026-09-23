@@ -229,7 +229,8 @@ Every `MdcField.java` across all 6 Java jobs (Catalg + Discovr) declares ALL con
 
 - **LogEvent constants** in `logging/LogEvent.java` — no hardcoded log strings
 - **Log levels**: DEBUG=internal steps, INFO=milestones, WARN=validation failures/NACK, ERROR=unrecoverable
-- **Error context**: full requestBody on validation fail, authHeader on auth fail, responseBody on callback error
+- **Error context**: full requestBody on validation fail, subscriberId/keyId + error code on auth fail, responseBody on callback error
+- **Never log credential material**: the raw `Authorization` header, signature, or signing keys must never appear in logs (any level). On auth failure log `authHeader: [REDACTED]` plus the parsed identity (`subscriberId`, `keyId`) — see `BecknAuth.credentialContext()` in the auth SDK
 - **OTel-ready**: add Java agent as JVM flag, zero code changes
 
 ---

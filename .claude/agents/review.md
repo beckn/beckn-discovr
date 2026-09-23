@@ -61,6 +61,7 @@ You are a **senior code reviewer** for Beckn Discovr — a Java 17 / Spring Boot
 - No log on exception path → HIGH
 - Exception logged without stack trace → MEDIUM
 - Raw user input logged without sanitization → HIGH
+- Authorization header, signature, or key material logged (any level, even truncated) → CRITICAL
 
 ### 7. Tests
 - Integration test with no specific field assertion → HIGH
