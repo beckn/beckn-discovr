@@ -1,0 +1,5 @@
+# Secret-scan suppressions: a PR could otherwise allowlist its own leak.
+# Changes need review from a code owner (beckn/beckn-discovr#383).
+/.gitleaks.toml    @nirmay
+/.gitleaksignore   @nirmay
+/.github/CODEOWNERS @nirmay

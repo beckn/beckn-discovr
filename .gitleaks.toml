@@ -1,24 +1,13 @@
 # Gitleaks configuration — picked up automatically from the repo root by
 # `gitleaks detect` (CI: .github/workflows/secrets-scan.yml).
 #
-# Extends the default ruleset; only adds narrow allowlists for PEM envelope
-# strings that contain no key material. Specific historical findings are
-# suppressed by fingerprint in .gitleaksignore (see beckn/beckn-discovr#383).
+# Uses the default ruleset unchanged. Reviewed findings are suppressed by exact
+# fingerprint in .gitleaksignore (see beckn/beckn-discovr#383). Do not add
+# regex/path allowlists here: an allowlist match on a private-key finding
+# suppresses the whole matched span, which can hide a real key that follows a
+# harmless PEM header in the same file or hunk.
 
 title = "beckn-discovr gitleaks config"
 
 [extend]
 useDefault = true
-
-[allowlist]
-description = "PEM header/footer literals with no key body"
-regexes = [
-  # Header immediately followed by a closing quote, Javadoc brace or <placeholder>:
-  #   "-----BEGIN PRIVATE KEY-----";   {@code -----BEGIN PRIVATE KEY-----}
-  #   -----BEGIN PRIVATE KEY-----<base64-pkcs8-key>-----END PRIVATE KEY-----
-  '''PRIVATE KEY-----["'`}<]''',
-  # Header wrapping a template interpolation: `-----BEGIN PRIVATE KEY-----\n${key}...`
-  '''PRIVATE KEY-----(\\n)?\$\{''',
-  # BFG redaction marker left in rewritten history
-  '''\*\*\*REMOVED-PRIVATE-KEY\*\*\*''',
-]

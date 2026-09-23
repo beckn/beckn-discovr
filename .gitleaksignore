@@ -1,7 +1,8 @@
 # Gitleaks finding fingerprints (<commit>:<file>:<rule>:<line>) reviewed and
 # accepted. Triage record: https://github.com/beckn/beckn-discovr/issues/383
-# Add an entry only with a justification comment. PEM header/footer literals
-# are handled by the allowlist in .gitleaks.toml, not here.
+# Add an entry only with a justification comment, and never a regex/path
+# allowlist in .gitleaks.toml. Fingerprints without a commit prefix apply to
+# `--no-git` / `gitleaks dir` scans of the working tree.
 
 # --- Key A: Ed25519 test key for DeDi test subscriber beckn.bap.dev -----------
 # Public key Z3Hnc8FZDo/7dwWApeRVs6OV560gr7uxPsFUDGUMsBg=. Registered only as the
@@ -22,6 +23,32 @@ ac86a83d10a7abe6cb52d1334e9fabdaa181a3be:onix-discover/discover-adapter.yaml:gen
 aaf9f7a209d6c597b401f948afee075b4c1d9860:jobs/response-dispatcher/src/test/java/org/beckn/seeker/service/signature/PrivateKeyLoaderTest.java:private-key:19
 aaf9f7a209d6c597b401f948afee075b4c1d9860:jobs/response-dispatcher/src/test/java/org/beckn/seeker/service/signature/CryptoServiceTest.java:generic-api-key:24
 aaf9f7a209d6c597b401f948afee075b4c1d9860:jobs/response-dispatcher/src/test/java/org/beckn/seeker/service/SignatureServiceTest.java:generic-api-key:47
+
+# --- False positive: PEM header/footer literals with no key body ---------------
+# Constants/Javadoc such as PEM_PRIVATE_KEY_HEADER = "-----BEGIN PRIVATE KEY-----"
+# in sdks/beckn-auth-java-sdk CryptoService and the removed dispatcher
+# PrivateKeyLoader; a `${key}` template in the removed dev-kit get-signature.js.
+8e9c511602e8ee4f7881be814f47b8ecdd489f48:sdks/beckn-auth-java-sdk/src/main/java/org/beckn/auth/crypto/CryptoService.java:private-key:54
+8e9c511602e8ee4f7881be814f47b8ecdd489f48:sdks/beckn-auth-java-sdk/src/main/java/org/beckn/auth/crypto/CryptoService.java:private-key:227
+ba5cbc6012d8f2ab1ad93101b586bf8f22702218:sdks/beckn-auth-java-sdk/src/main/java/org/beckn/auth/crypto/CryptoService.java:private-key:54
+ba5cbc6012d8f2ab1ad93101b586bf8f22702218:sdks/beckn-auth-java-sdk/src/main/java/org/beckn/auth/crypto/CryptoService.java:private-key:227
+d9dd4e8e74ec90c936ac169f1c6270508bc5059d:sdks/beckn-auth-java-sdk/src/main/java/org/beckn/auth/crypto/CryptoService.java:private-key:54
+d9dd4e8e74ec90c936ac169f1c6270508bc5059d:sdks/beckn-auth-java-sdk/src/main/java/org/beckn/auth/crypto/CryptoService.java:private-key:227
+sdks/beckn-auth-java-sdk/src/main/java/org/beckn/auth/crypto/CryptoService.java:private-key:54
+sdks/beckn-auth-java-sdk/src/main/java/org/beckn/auth/crypto/CryptoService.java:private-key:234
+aaf9f7a209d6c597b401f948afee075b4c1d9860:jobs/response-dispatcher/src/main/java/org/beckn/seeker/service/signature/PrivateKeyLoader.java:private-key:21
+abd4d8e7b2925ab76b259c072d3a1c170aab6a2c:jobs/response-dispatcher/src/main/java/org/beckn/seeker/service/signature/PrivateKeyLoader.java:private-key:21
+2299075a2aea69eed69bdce078ba8f13eed8181f:dev-kit/scripts/get-signature.js:private-key:33
+cc32d0ad5416c9def7f8403b6eb56e5eb6bd8d45:dev-kit/scripts/get-signature.js:private-key:33
+
+# --- False positive: placeholders / redaction markers in example config -------
+# application.yml example line with `<base64-pkcs8-key>` placeholder, and the
+# `***REMOVED-PRIVATE-KEY***` markers left by the BFG rewrite of main history.
+25e17bd3f9302330a6495e8d87f5745671ba1530:jobs/response-dispatcher/src/main/resources/application.yml:private-key:65
+401cfdcdf6bc35c85d665948fe5b1dea3a617a08:jobs/response-dispatcher/src/main/resources/application.yml:private-key:65
+b76d8ccf37443e30990b6162a0f81ef7805dd3fe:jobs/response-dispatcher/src/main/resources/application.yml:private-key:65
+abd4d8e7b2925ab76b259c072d3a1c170aab6a2c:jobs/response-dispatcher/src/main/resources/application.yml:private-key:58
+abd4d8e7b2925ab76b259c072d3a1c170aab6a2c:jobs/response-dispatcher/src/test/java/org/beckn/seeker/service/signature/PrivateKeyLoaderTest.java:private-key:19
 
 # --- False positive: PEM wrapped around a key generated at test runtime --------
 # sdks/beckn-auth-java-sdk CryptoServiceTest.parsePrivateKey_PemWrapped builds
