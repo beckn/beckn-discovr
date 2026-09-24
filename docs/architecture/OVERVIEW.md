@@ -68,7 +68,7 @@ Beckn CATALG                           Beckn DISCOVR
       |                                      |
 Consumer (BAP)                               |
       |                                      |
-      |  GET /beckn/discover                 |
+      |  GET/POST /discover                  |
       |  (text / spatial / JSONPath)         |
       |------------------------------------->|
       |                                      |  Query search + spatial indexes
@@ -95,14 +95,14 @@ The consumer compares offers and proceeds to order from the retailer with the be
 
 ## API Reference
 
-DISCOVR exposes a single, powerful discovery endpoint that supports multiple search modes through the standard Beckn `discover` / `on_discover` flow.
+DISCOVR exposes a single `/discover` endpoint that supports multiple search modes, in two variants — one Beckn-spec-compliant, one an additional convenience mode. A full endpoint table across all three jobs, with spec-compliance status, is in the [Discovery API Guide](../reference/USER_GUIDE.md#api-reference).
 
 ### Discovery APIs (Consumer-facing)
 
-| API | Method | Description |
-|-----|--------|-------------|
-| `/beckn/discover` | GET | Synchronous — returns matching catalogues immediately |
-| `/beckn/discover` | POST | Asynchronous — acknowledges with `ACK`, delivers results via `on_discover` callback |
+| API | Method | Description | Beckn spec status |
+|-----|--------|-------------|--------------------|
+| `/discover` | GET | Synchronous — returns matching catalogues immediately in the HTTP response | Additional, not for production (not in `beckn.yaml`) — for new integrators to get a result inline while wiring up their app, without standing up an `on_discover` receiver first |
+| `/discover` | POST | Asynchronous — acknowledges with `ACK`, delivers results via `on_discover` callback | Beckn-spec-compliant — the production path |
 
 ### Search Modes
 
@@ -113,7 +113,7 @@ DISCOVR exposes a single, powerful discovery endpoint that supports multiple sea
 | **Attribute Filter** | Fine-grained filtering on resource or offer attributes | Flat discount offers under 100 |
 | **Combined** | Mix any of the above in a single request | Coffee search within 5 km radius |
 
-For detailed request/response formats and examples, see the [Discovery API Guide](USER_GUIDE.md).
+For detailed request/response formats and examples, see the [Discovery API Guide](../reference/USER_GUIDE.md).
 
 ### How DISCOVR Stays Updated
 
@@ -123,6 +123,6 @@ DISCOVR does not poll CATALG for changes. Instead, it uses Beckn's subscription 
 2. When a provider publishes or updates a catalogue in CATALG, the evaluator matches active subscriptions
 3. Matching catalogue data is delivered to DISCOVR via `POST {discovrUri}/on_discover` callback
 4. DISCOVR indexes the received catalogue for search and spatial queries
-5. The updated data is immediately searchable via `GET /beckn/discover`
+5. The updated data is immediately searchable via `GET /discover`
 
 For historical data or initial sync, DISCOVR uses the CATALG Pull API (`POST /catalog/pull`) to fetch all existing catalogues.

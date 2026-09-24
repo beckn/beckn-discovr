@@ -10,7 +10,7 @@ Query engine for the Beckn One Catalog Distribution System (CDS). It accepts Bec
 
 ### High-level flow
 
-1. **HTTP** — Requests hit `GET` or `POST` `/beckn/discover`. The controller parses the body, runs **authorization** (Beckn HTTP Signatures, optional), **schema validation** (OpenAPI/NetworkNT), then hands a `DiscoverRequest` to the discovery service.
+1. **HTTP** — Requests hit `GET` (synchronous, additional/non-spec) or `POST` (asynchronous, Beckn-spec-compliant) `/discover`. The controller parses the body, runs **authorization** (Beckn HTTP Signatures, optional), **schema validation** (OpenAPI/NetworkNT), then hands a `DiscoverRequest` to the discovery service.
 2. **Routing** — The service inspects the request and chooses one of four **query paths** (A, B, C, or D) based on whether the request has filters, spatial constraints, and/or text search.
 3. **Query** — The chosen path runs against PostgreSQL (Paths A/B/C) or the NLWeb text-search service (Path D). Results are raw catalogs/items.
 4. **Post-processing** — Every path sends the result through a single **catalog pipeline** (schema filter, dedupe offers, cross-filter items/offers, remove empty catalogs).
@@ -24,7 +24,7 @@ Query engine for the Beckn One Catalog Distribution System (CDS). It accepts Bec
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  GET/POST /beckn/discover  (raw body + headers)                          │
+│  GET/POST /discover  (raw body + headers)                                │
 └─────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -146,7 +146,11 @@ No HTTP signature auth on Kafka; access control is expected at the broker (ACLs)
 
 ## Configuration (high level)
 
-- **Discovery:** `discovery.*` — e.g. `discovery.postgresql.result-limit`, `discovery.postgresql.parallel-query-timeout-seconds`, `discovery.postgresql.parallel-query-workers`, `discovery.registry-auth.enabled`, `discovery.schema.url`, `discovery.nlweb.base-url`, `discovery.text-search.engine` (e.g. `nlweb`).
+- **Discovery:** `discovery.*` — e.g. `discovery.postgresql.result-limit`, `discovery.postgresql.parallel-query-timeout-seconds`, `discovery.postgresql.parallel-query-workers`, `discovery.registry-auth.enabled`, `discovery.schema.url`, `discovery.nlweb.base-url`, `discovery.text-search.engine` (e.g. `nlweb`, `els-semantic-search`).
+- **Semantic search API keys:** when `discovery.text-search.engine=els-semantic-search`, two OpenAI-compatible integrations are configured independently and may each need an API key:
+  - `discovery.text-search.embedding-model.api-key` (env `DISCOVERY_TEXT_SEARCH_EMBEDDING_API_KEY`) — required unless `embedding-model.base-url` points at a keyless local server (default is local Ollama at `http://localhost:11434`, no key needed there).
+  - `discovery.text-search.llm-model.api-key` (env `DISCOVERY_TEXT_SEARCH_LLM_API_KEY`) — used for query enrichment when `discovery.text-search.llm-model.enabled=true` (default); the default base URL is `https://api.openai.com`, so a real OpenAI key **is** required unless this is disabled or repointed to another provider.
+  Set these via env vars, never hardcoded in YAML (see Hard Rules in the repo root `CLAUDE.md`).
 - **Health / metrics:** Actuator (`/actuator/health`, `/actuator/prometheus`). Admin reset of operational stats: `POST /discovery-service/health/reset-stats`.
 - **Kafka:** `discovery.kafka.request-topic`, `spring.kafka.*`.
 
@@ -158,7 +162,7 @@ See `requirements.md` for full functional and non-functional requirements, and `
 
 | Package | Role |
 |---------|------|
-| `controller` | REST entry (`/beckn/discover`), health admin. |
+| `controller` | REST entry (`/discover`), health admin. |
 | `consumer` | Kafka listener for discovery requests. |
 | `service` | `DiscoveryService` (routing), `CacheService`, `NLWebService`, `DiscoveryMetrics`, `DiscoveryHealthIndicator`. |
 | `service.authorization` | Beckn HTTP Signature validation, registry key fetch, crypto. |
