@@ -95,7 +95,7 @@ The consumer compares offers and proceeds to order from the retailer with the be
 
 ## API Reference
 
-DISCOVR exposes a single `/discover` endpoint that supports multiple search modes, in two variants — one Beckn-spec-compliant, one an additional convenience mode. A full endpoint table across all three jobs, with spec-compliance status, is in the [Discovery API Guide](USER_GUIDE.md#api-reference).
+DISCOVR exposes a single `/discover` endpoint that supports multiple search modes, in two variants — one Beckn-spec-compliant, one an additional convenience mode. A full endpoint table across all three jobs, with spec-compliance status, is in the [Discovery API Guide](../reference/USER_GUIDE.md#api-reference).
 
 ### Discovery APIs (Consumer-facing)
 
@@ -113,7 +113,7 @@ DISCOVR exposes a single `/discover` endpoint that supports multiple search mode
 | **Attribute Filter** | Fine-grained filtering on resource or offer attributes | Flat discount offers under 100 |
 | **Combined** | Mix any of the above in a single request | Coffee search within 5 km radius |
 
-For detailed request/response formats and examples, see the [Discovery API Guide](USER_GUIDE.md).
+For detailed request/response formats and examples, see the [Discovery API Guide](../reference/USER_GUIDE.md).
 
 ### How DISCOVR Stays Updated
 
