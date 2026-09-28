@@ -51,7 +51,7 @@ docker compose up -d
 
 See [`docs/reference/USER_GUIDE.md`](docs/reference/USER_GUIDE.md) for sending your first `discover` request.
 
-For standing up a full public-facing VM deployment (Onix adapter in front, Nginx Proxy Manager, DeDi registration, etc.), see [`discovr-deployment/DEPLOYMENT.md`](discovr-deployment/DEPLOYMENT.md).
+For standing up a full public-facing deployment (Onix adapter in front, Nginx Proxy Manager, DeDi registration, etc.), see [`discovr-deployment/DEPLOYMENT.md`](discovr-deployment/DEPLOYMENT.md).
 
 ## License
 
