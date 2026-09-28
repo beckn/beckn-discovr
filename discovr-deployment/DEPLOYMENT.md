@@ -21,7 +21,7 @@ no registry authentication is required to pull them.
 ## 1. Overview
 
 Discovr is a **catalog discovery** service: it answers `discover` requests from a Consumer
-Network (**CN**) participant by querying an already-indexed catalog and returning results via
+(**CN**) participant by querying an already-indexed catalog and returning results via
 an `on_discover` callback. It also owns the indexing side — ingesting catalog data pushed to
 it (or pulled from peers) so that data is available to query.
 
@@ -63,8 +63,10 @@ Infra (all internal-only, 127.0.0.1-bound): Postgres+PostGIS, Elasticsearch, Kaf
   results into `catalog-publish`. The `crawl` module is just an on-demand trigger/status
   endpoint for that background job — it holds no crawler config of its own.
 
-> **Terminology note:** this guide uses **CN** (Consumer Network) and **PN** (Provider
-> Network) in prose in place of the older BAP/BPP naming. The underlying config and code
+> **Terminology note:** this guide uses **CN** (Consumer) and **PN** (Provider) in prose
+> in place of the older BAP/BPP naming, matching the glossary in
+> [`docs/architecture/FANOUT_DISCOVERY_DESIGN.md`](../docs/architecture/FANOUT_DISCOVERY_DESIGN.md#appendix-a--actors--terms).
+> The underlying config and code
 > still use `bap`/`bpp` naming — `context.bapUri`, `context.bppUri`, `DISCOVERY_BPP_ID`,
 > `DISCOVERY_BPP_URI`, the literal `role: bpp` config value, and `bppUri` in the crawler
 > config are field names, not narrative choices, and are left unchanged throughout §3.
@@ -84,14 +86,15 @@ registered as a unit, consisting of:
 - a **key ID**, and the **Ed25519 signing keypair** + **X25519 encryption keypair**
   (base64-encoded) registered against that key ID
 
-These four values always travel together — see your network's registry onboarding docs
-(e.g. `docs.nfh.global`) for the exact registration steps. Once you have them, keep this
-guide open: §2.2's pre-flight checklist tells you every file and field each of these four
-values needs to be entered into before the stack comes up.
+These four values always travel together — see the
+[subscriber onboarding guide](https://docs.nfh.global/build/onboarding) for the exact
+registration steps. Once you have them, keep this guide open: §2.2's pre-flight checklist
+tells you every file and field each of these four values needs to be entered into before
+the stack comes up.
 
 | Item | Where it comes from |
 |---|---|
-| The registry entry above (subscriberId, public base URL, key ID, keypairs) | Your network's registry |
+| The registry entry above (subscriberId, public base URL, key ID, keypairs) | Published in your Beckn subscriber record — see the [onboarding guide](https://docs.nfh.global/build/onboarding) above |
 | A **Postgres password** — generate a strong one, don't use the default `discover_password` | — |
 | Docker + docker compose installed on the host | — |
 | `docker network create beckn-network` run once | — |
@@ -211,8 +214,8 @@ else.
 
 #### Confirm your registry entry is live
 
-The registry entry you obtained in §2.1 (subscriberId, public base URL, keyId, both public
-keys) must already exist in your network's registry before signature verification and
+Your Beckn subscriber record (subscriberId, public base URL, keyId, both public keys —
+the registry entry from §2.1) must already be published before signature verification and
 outbound signing will work — the stack itself has no way to detect a missing or
 mismatched entry other than every signed request failing.
 
