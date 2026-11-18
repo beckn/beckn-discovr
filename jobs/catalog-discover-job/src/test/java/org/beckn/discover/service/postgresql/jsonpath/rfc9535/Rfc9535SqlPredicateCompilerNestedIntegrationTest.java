@@ -89,7 +89,7 @@ class Rfc9535SqlPredicateCompilerNestedIntegrationTest extends BaseIntegrationTe
         String expression = "$.catalogs[0].resources[*].offers[?(@.validity.endDate >= \"2025-01-01T00:00:00Z\")]";
         CompiledPredicate predicate = compile(expression);
 
-        assertThat(predicate.whereFragment()).contains("EXISTS (SELECT 1 FROM jsonb_array_elements(");
+        assertThat(predicate.whereFragment()).contains("EXISTS (SELECT 1 FROM jsonb_path_query(");
         assertThat(predicate.offersProjectionFragment()).isPresent();
 
         assertThat(rowMatches(predicate)).as("item has at least one offer past 2025").isTrue();
@@ -173,6 +173,81 @@ class Rfc9535SqlPredicateCompilerNestedIntegrationTest extends BaseIntegrationTe
 
         assertThat(rowMatches(predicate)).as("Postgres accepts the compiled '=' comparison").isTrue();
         assertThat(matchedOfferIds(predicate)).containsExactly("offer-future");
+    }
+
+    // ── Selectors applied to objects / primitives (RFC 9535 §2.3.2–§2.3.5) ──────────────────────
+    // Previously every level used jsonb_array_elements(), which aborts the whole statement
+    // ("cannot extract elements from an object") as soon as one row's value is not an array —
+    // an HTTP 500 for e.g. the LTS spec's own $[?(...)] example shape.
+
+    @Test
+    @DisplayName("filter after a wildcard over objects ([*][?(...)]) filters each object's member values: "
+            + "no SQL error, RFC 9535 result")
+    void filterAfterWildcardOverObjects_filtersMemberValues() {
+        // resources[*] yields resource objects; [?()] then tests each resource's member values
+        // (the string id, the offers array) — none has an "id" member, so nothing matches.
+        assertThat(rowMatches(compile("$.catalogs[*].resources[*][?(@.id == \"res-1\")]"))).isFalse();
+
+        // offers[*] yields offer objects; each offer's "validity" member value has an endDate.
+        assertThat(rowMatches(compile(
+                "$.catalogs[*].resources[*].offers[*][?(@.endDate >= \"2025-01-01T00:00:00Z\")]"))).isTrue();
+        assertThat(rowMatches(compile(
+                "$.catalogs[*].resources[*].offers[*][?(@.endDate >= \"2035-01-01T00:00:00Z\")]"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("root filter $[?(...)] iterates the root object's member values: no SQL error, RFC 9535 result")
+    void rootFilter_iteratesRootMembers() {
+        // The root's only member is the "catalogs" array: @[0].id is the first catalog's id.
+        assertThat(rowMatches(compile("$[?(@[0].id == \"" + CATALOG_ID + "\")]"))).isTrue();
+        assertThat(rowMatches(compile("$[?(@.resourceAttributes.connectorType == \"CCS2\")]"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("filter on an object reached by name/index iterates its member values")
+    void filterOnNamedObject_iteratesMembers() {
+        // catalogs[0] is an object; its "resources" member value is an array whose [1] is res-2.
+        assertThat(rowMatches(compile("$.catalogs[0][?(@[1].id == \"res-2\")]"))).isTrue();
+        assertThat(rowMatches(compile("$.catalogs[0][?(@[1].id == \"res-9\")]"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("wildcard on a primitive selects nothing (no SQL error)")
+    void wildcardOnPrimitive_selectsNothing() {
+        assertThat(rowMatches(compile("$.catalogs[0].id[*]"))).isFalse();
+        assertThat(rowMatches(compile("$.catalogs[0].id[?(@.x == 1)]"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("index / last / slice on an object select nothing (no SQL error); on arrays unchanged")
+    void ordinalSelectors_onObjectSelectNothing_onArrayUnchanged() {
+        for (String onObject : List.of("$.catalogs[0][0]", "$.catalogs[0][-1]", "$.catalogs[0][last]",
+                "$.catalogs[0][0:2]", "$.catalogs[0].id[0]")) {
+            assertThat(rowMatches(compile(onObject))).as(onObject).isFalse();
+        }
+        assertThat(rowMatches(compile("$.catalogs[0].resources[-1]"))).isTrue();
+        assertThat(rowMatches(compile("$.catalogs[0].resources[last].offers[?(@.price < 40)]"))).isTrue();
+        assertThat(rowMatches(compile("$.catalogs[0].resources[1:5]"))).isTrue();
+        assertThat(rowMatches(compile("$.catalogs[0].resources[5]"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("chained filters (filter → filter) bind parameters in SQL order and match correctly")
+    void chainedFilters_matchCorrectly() {
+        // Previously the second level's path array bound into the first filter's literal slot:
+        // "operator does not exist: text = character varying[]".
+        assertThat(rowMatches(compile(
+                "$.catalogs[?(@.id == \"" + CATALOG_ID + "\")].resources[?(@.id == \"res-2\")]"))).isTrue();
+        assertThat(rowMatches(compile(
+                "$.catalogs[?(@.id == \"other-catalog\")].resources[?(@.id == \"res-2\")]"))).isFalse();
+        assertThat(rowMatches(compile(
+                "$.catalogs[0].resources[?(@.id == \"res-1\")].offers[?(@.price > 100)]"))).isTrue();
+        assertThat(rowMatches(compile(
+                "$.catalogs[0].resources[?(@.id == \"res-2\")].offers[?(@.price > 100)]"))).isFalse();
+
+        assertThat(matchedOfferIds(compile(
+                "$.catalogs[0].resources[?(@.id == \"res-1\")].offers[?(@.price < 100)]")))
+                .containsExactly("offer-future");
     }
 
     private CompiledPredicate compile(String expression) {

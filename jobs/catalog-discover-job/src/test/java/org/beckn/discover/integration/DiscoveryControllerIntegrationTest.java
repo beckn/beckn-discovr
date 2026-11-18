@@ -259,6 +259,39 @@ class DiscoveryControllerIntegrationTest extends BaseIntegrationTest {
         }
 
         @Test
+        void getDiscoverWithRfc9535FilterAndSpatialReturnsMatchingCatalogs() throws Exception {
+                // Regression: an RFC 9535 filter combined with a spatial constraint (the shape of the
+                // DEG EV "within boundary with connection spec" example) returned 500 NET_INTERNAL_ERROR
+                // because the combined route bound the expression as a Postgres jsonpath.
+                String payload = readFixture("ev_charging_combined_rfc9535_spatial.json");
+
+                ResultActions result = mockMvc.perform(get(DISCOVER_PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(payload));
+
+                result.andExpect(status().isOk())
+                                .andExpect(jsonPath("$.message.catalogs[*].resources[*].id",
+                                                containsInAnyOrder("ev-charger-ccs2-001", "ev-charger-ccs2-002")));
+        }
+
+        @Test
+        void getDiscoverWithFilterSelectorAfterWildcardIsNotAServerError() throws Exception {
+                // Regression: "...resources[*][?(...)]" applies the filter to each resource object's
+                // member values (RFC 9535); the compiled SQL used to abort with "cannot extract
+                // elements from an object" (500). It is now a normal query that matches nothing here.
+                String payload = readFixture("ev_charging_combined_rfc9535_spatial.json")
+                                .replace("e3a9c7b1-2d4f-4c8e-a6b0-91f2d3c4e5a7", "4f1e2d3c-5b6a-4798-8a9b-0c1d2e3f4a5b")
+                                .replace("$.catalogs[*].resources[?(", "$.catalogs[*].resources[*][?(");
+
+                ResultActions result = mockMvc.perform(get(DISCOVER_PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(payload));
+
+                result.andExpect(status().isOk())
+                                .andExpect(jsonPath("$.message.catalogs", hasSize(0)));
+        }
+
+        @Test
         void postDiscoverWithEmptyFiltersReturnsBadRequest() throws Exception {
                 // Empty message {} fails schema validation - requires intent with at least one of
                 // textSearch, filters, or spatial

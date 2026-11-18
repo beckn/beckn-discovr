@@ -287,10 +287,10 @@ The AST walked here is `snack4-jsonpath`'s public `JsonPath.getSegments(): List<
 |--------------------|--------------------------------------|-------|
 | Root `$` | base `payload` reference | identical |
 | Name selector `.name` / `['name']` | `payload->?` / `payload #>> ?::text[]` with the name bound as a `?` parameter | name is a bound parameter, never concatenated into the SQL text (see hard rule above) |
-| Wildcard `*` / `[*]` | `EXISTS (SELECT 1 FROM jsonb_array_elements(...) e WHERE ...)` | mirrors `SpatialQueryBuilder`'s `EXISTS` pattern |
+| Wildcard `*` / `[*]` | `EXISTS (SELECT 1 FROM jsonb_path_query(<input>, '$.**{1}') e WHERE ...)` | iterates the input's **children**: array elements, or an object's member values (RFC 9535 §2.3.2); a primitive has none. Not `jsonb_array_elements`, which aborts the whole statement on an object (see 2026-11 note below) |
 | Index `[n]` (non-negative) | `payload #> ?::text[]` with the path array (including `n` as text) bound as a `?` parameter | direct positional path, still parameterized — `n` is compiler-controlled but the path array itself must not be built by concatenation |
-| Index `[last]`, `[-k]` | `jsonb_array_elements(...) WITH ORDINALITY` filtered on computed offset (`jsonb_array_length(...) - k`) | negative-index arithmetic in SQL, not a Postgres-jsonpath rewrite (see Risks) |
-| Filter `?(...)` | `EXISTS (...)` wrapping a typed comparison | |
+| Index `[last]`, `[-k]` | `jsonb_path_query(<input>, 'strict $[*]', '{}', true) WITH ORDINALITY` filtered on computed offset (`jsonb_array_length(...) - k`) | negative-index arithmetic in SQL, not a Postgres-jsonpath rewrite (see Risks); selects nothing on a non-array (silent strict `$[*]`) |
+| Filter `?(...)` | `EXISTS (...)` wrapping a typed comparison | iterates the input's children like the wildcard: `$.catalogs[*].resources[?(...)]` filters the resources array, while `$.catalogs[*].resources[*][?(...)]` filters each resource **object's member values** (RFC 9535 §2.3.5) |
 | Logical `&&` `\|\|` `!` | SQL `AND`/`OR`/`NOT`, grouped with parens | mirrors `schemaFiltersPaired`'s OR-grouping pattern |
 | Comparison `== != < <= > >=` | `= != < <= > >=` with an inferred type cast (`::numeric`, `::text`, `::timestamptz`) on the extracted value, value bound as a `?` parameter | typed cast chosen from the RHS literal's shape; the literal itself is always a bound parameter |
 | **Descendant `..`** | — | **DENYLIST → NACK** (no generic recursive-descent primitive in plain `jsonb` operators — see spike + DECISION above) |
@@ -411,6 +411,40 @@ All four gaps and the CTS regression corpus above were implemented as described,
 - This test intentionally does not assert a 100% pass rate — per the design doc's own instruction, its job is to surface exactly this class of gap. The 30 classifier-gap and 219 leniency-gap case names are logged (WARN) on every run rather than silently dropped; fixing them is out of this pass's scope (no changes to parsing/compilation logic) and is left as a follow-up.
 
 ---
+
+### Selectors over objects, and filters combined with spatial — 2026-11 fix
+
+Three defects found while verifying the DEG EV-charging LTS examples against discovr v1.7.1:
+
+1. **J+G and J+G+T bypassed this compiler.** `SpatialQueryBuilder.combinedBaseTemplate` bound the
+   raw expression as `CAST(? AS jsonpath)` (after `JsonPathConverter.processFilter`'s quote rewrite
+   only), so every RFC 9535 filter selector failed in Postgres (`syntax error at or near "?" of
+   jsonpath input`, HTTP 500) as soon as a spatial constraint was added — the acceptance criterion
+   "J, J+G, and chain paths still build correct combined SQL for supported RFC 9535 filters" was not
+   actually met. `SpatialQueryBuilder` now starts from `JsonPathQueryBuilder.filterTemplate()`, the
+   same compile step the J and J+T routes use, so a filter compiles to the same SQL with or without
+   spatial.
+2. **Every array-producing level used `jsonb_array_elements`,** which aborts the statement on an
+   object or primitive (`cannot extract elements from an object`). RFC 9535 applies wildcard and
+   filter selectors to the *children* of a value — array elements or object member values — so
+   `…resources[*][?(…)]`, `$.catalogs[*][?(…)]` and the LTS spec's own `$[?(…)]` example shape were
+   HTTP 500s. Wildcard/filter levels now iterate `jsonb_path_query(<input>, '$.**{1}')` (level-1
+   children of an array or object, nothing for a primitive or NULL); index/`last`/slice levels use
+   `jsonb_path_query(<input>, 'strict $[*]', '{}', true)` (array elements in order, nothing for a
+   non-array). Both jsonpath strings are fixed constants; no part of the request reaches Postgres's
+   jsonpath dialect, and for arrays the rows produced are identical to `jsonb_array_elements`.
+   Chosen over rejecting these shapes with a 400 because the input type is only known at runtime
+   (`$.catalogs[*].provider[?(…)]` reaches an object through a name), so no static check could
+   remove the 500s, and the RFC semantics is what the wire contract promises. Note for clients: the
+   Jayway-style `…resources[*][?(…)]` therefore filters member values and usually matches nothing —
+   write `…resources[?(…)]` to filter the resources themselves.
+3. **Parameters of chained levels were bound out of order.** The compiled SQL is
+   `FROM <every level's source> WHERE <every level's condition>`, but parameters were appended per
+   level (source, then condition). Any level with WHERE parameters — a filter, `[last]`, `[-k]`,
+   `[a:]` — followed by another level bound a `text[]` path into a literal slot (e.g.
+   `$.catalogs[?(@.provider.id == 'x')].resources[?(…)]` → `operator does not exist: text =
+   character varying[]`, HTTP 500 on every route). `buildLevelPlan` now collects FROM and WHERE
+   parameters separately and binds all FROM parameters first.
 
 ## Risks / open questions
 
