@@ -178,6 +178,8 @@ Query resources and offers using JSONPath expressions for fine-grained attribute
 
 This finds all offers with a flat discount where the price is under 100. Note the RFC 9535 filter selector `[?( ... )]` sits inside brackets right after the segment it filters (`offers[?(...)]`), and string literals are double-quoted.
 
+The same filter can be combined with `spatial` and/or `textSearch` in one intent; it is evaluated the same way on every route. Do not put `[*]` in front of the filter selector: under RFC 9535, `$.catalogs[*].offers[*][?(...)]` tests the member values of each offer object rather than the offers themselves, so it usually matches nothing.
+
 > **Migrating from the legacy PostgreSQL jsonpath dialect?** Older integrations may still send expressions in Postgres's own `jsonpath` dialect (predicate trailing the path as `? (...)`, single-quoted strings, e.g. `$.catalogs[*].offers[*] ? (@.price < 100)`). The engine auto-detects and still accepts this legacy form as a fallback, but it is not the standard and will not be extended — new integrations should use RFC 9535 syntax as shown above. Some newer RFC 9535 constructs are not supported (e.g. `..` descendant segments, `[a:b:s]` slices with a step, or the `count()`/`value()`/`match()`/`search()` functions) — see [DESIGN-rfc9535-jsonpath-grammar.md](../design/DESIGN-rfc9535-jsonpath-grammar.md) for the full grammar and denylist.
 
 ---

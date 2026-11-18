@@ -3,7 +3,8 @@ package org.beckn.discover.service.postgresql.spatial;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper.QuerySpec;
-import org.beckn.discover.service.postgresql.jsonpath.JsonPathConverter;
+import org.beckn.discover.service.postgresql.jsonpath.JsonPathQueryBuilder;
+import org.beckn.discover.testsupport.Rfc9535TestFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,7 +35,8 @@ class SpatialQueryBuilderCatalogScopeTest {
 
     @BeforeEach
     void setUp() {
-        builder = new SpatialQueryBuilder(new ObjectMapper(), new JsonPathConverter());
+        builder = new SpatialQueryBuilder(new ObjectMapper(),
+                new JsonPathQueryBuilder(Rfc9535TestFixtures.alwaysLegacyValid()));
     }
 
     private static List<DiscoverRequest.SpatialConstraint> dwithin() {

@@ -22,8 +22,9 @@ import static org.beckn.discover.service.postgresql.jsonpath.rfc9535.Unsupported
  * negative-index) at arbitrary nesting depth — e.g. {@code $.resources[*].offers[?(@.price <
  * 100)]} ("does any resource's offers satisfy X") or {@code $.catalogs[*].resources[*]
  * .offers[?(...)]}. Every array-producing selector that is followed by further segments
- * contributes a correlated {@code jsonb_array_elements(...)} level (aliased {@code e0}, {@code
- * e1}, ...) that the remaining segments are compiled against — not a forced-terminal
+ * contributes a correlated set-returning level (aliased {@code e0}, {@code
+ * e1}, ...; see {@link #CHILDREN_OF} / {@link #ARRAY_ELEMENTS_OF}) that the remaining segments
+ * are compiled against — not a forced-terminal
  * restriction. Only a genuinely terminal segment (the last segment overall) resolves to the
  * final boolean condition (or, for a terminal filter anchored under {@code offers}, the
  * offers-projection fragment); every intermediate array-producing selector narrows which
@@ -41,8 +42,8 @@ public class Rfc9535SqlPredicateCompiler {
 
     /**
      * Defensive cap on the total number of segments processed for one compiled expression — see
-     * design doc risk 9. Since every nested array-level ({@code EXISTS}/{@code
-     * jsonb_array_elements}) is opened by processing one segment, this single counter bounds both
+     * design doc risk 9. Since every nested level (one set-returning {@code FROM} item inside the
+     * {@code EXISTS}) is opened by processing one segment, this single counter bounds both
      * flat path-component accumulation and nested-level depth, so a pathological/adversarial
      * expression is rejected rather than generating unbounded SQL.
      */
@@ -54,6 +55,28 @@ public class Rfc9535SqlPredicateCompiler {
     private static final String WHERE_ELEMENT_ALIAS_PREFIX = "e";
     private static final String PROJECTION_ELEMENT_ALIAS_PREFIX = "p";
     private static final String PROJECTION_FINAL_ALIAS = "po";
+
+    /**
+     * Set-returning source for a wildcard {@code [*]} or filter {@code [?(...)]} level. Per RFC 9535
+     * §2.3.2 / §2.3.5 these selectors apply to the <em>children</em> of the input value: the elements
+     * of an array, or the member values of an object; a primitive has none. PostgreSQL's
+     * {@code jsonb_array_elements} only accepts arrays and aborts the whole statement on an object
+     * or scalar ("cannot extract elements from an object") — which turned e.g.
+     * {@code $.catalogs[*].resources[*][?(...)]} (a filter over the members of each resource
+     * object) or {@code $[?(...)]} (the root is an object) into an HTTP 500 for every request.
+     * The jsonpath item {@code $.**{1}} returns exactly the level-1 children of an array (in
+     * order) or an object, and nothing for a primitive or SQL NULL. The jsonpath literal is a
+     * fixed constant — the request's own expression never reaches Postgres's jsonpath dialect.
+     */
+    static final String CHILDREN_OF = "jsonb_path_query(%s, '$.**{1}')";
+
+    /**
+     * Set-returning source for an index / {@code last} / slice level, consumed {@code WITH
+     * ORDINALITY}. These selectors only select from arrays (RFC 9535 §2.3.3 / §2.3.4): strict
+     * {@code $[*]} returns the array's elements in order, and {@code silent => true} turns the
+     * structural error on an object or primitive into "no elements" instead of a statement abort.
+     */
+    static final String ARRAY_ELEMENTS_OF = "jsonb_path_query(%s, 'strict $[*]', '{}', true)";
 
     private final BracketSelectorClassifier classifier = new BracketSelectorClassifier();
 
@@ -94,7 +117,14 @@ public class Rfc9535SqlPredicateCompiler {
     private LevelPlan buildLevelPlan(List<Segment> segments, String aliasPrefix, String finalAliasOverride) {
         List<String> fromClauses = new ArrayList<>();
         List<String> whereConditions = new ArrayList<>();
-        List<Object> params = new ArrayList<>();
+        // The emitted SQL is "FROM <every level's source> WHERE <every level's condition>", so the
+        // FROM-item parameters of ALL levels bind before the WHERE parameters of ANY level. They
+        // are collected separately and concatenated at the end; interleaving them per level
+        // mis-bound any level with WHERE parameters (a filter, [last], [-k], [a:]) that is
+        // followed by another level, e.g. $.catalogs[?(@.provider.id == 'x')].resources[?(...)]
+        // bound a String[] path where the 'x' literal belonged ("operator does not exist").
+        List<Object> fromParams = new ArrayList<>();
+        List<Object> whereParams = new ArrayList<>();
         List<String> pathComponents = new ArrayList<>();
         String currentAlias = BASE_ALIAS;
         int depth = 0;
@@ -147,32 +177,33 @@ public class Rfc9535SqlPredicateCompiler {
             }
 
             // From here: an array-producing selector — wildcard, filter, slice, `last`, or a
-            // terminal index — that opens a new correlated jsonb_array_elements(...) level.
+            // terminal index — that opens a new correlated set-returning level. The input may be
+            // an object or a primitive at runtime (see CHILDREN_OF / ARRAY_ELEMENTS_OF).
             String elementAlias = (isLastSegment && finalAliasOverride != null)
                     ? finalAliasOverride
                     : aliasPrefix + depth;
             String[] pathArray = pathComponents.toArray(String[]::new);
             StringBuilder arrayExpr = new StringBuilder();
-            appendArrayExprText(arrayExpr, params, currentAlias, pathArray);
+            appendArrayExprText(arrayExpr, fromParams, currentAlias, pathArray);
 
             boolean usesOrdinality = classification.kind() == Kind.INDEX
                     || classification.kind() == Kind.LAST
                     || classification.kind() == Kind.SLICE;
 
             if (usesOrdinality) {
-                fromClauses.add("jsonb_array_elements(" + arrayExpr + ") WITH ORDINALITY "
+                fromClauses.add(String.format(ARRAY_ELEMENTS_OF, arrayExpr) + " WITH ORDINALITY "
                         + elementAlias + "(value, ord)");
-                appendOrdinalCondition(classification, currentAlias, pathArray, elementAlias, params,
+                appendOrdinalCondition(classification, currentAlias, pathArray, elementAlias, whereParams,
                         whereConditions);
                 currentAlias = elementAlias + ".value";
             } else {
-                fromClauses.add("jsonb_array_elements(" + arrayExpr + ") " + elementAlias);
+                fromClauses.add(String.format(CHILDREN_OF, arrayExpr) + " " + elementAlias);
                 currentAlias = elementAlias;
                 if (classification.kind() == Kind.FILTER) {
                     FilterPredicateCompiler.Sql predicate =
                             new FilterPredicateCompiler(elementAlias, classification.content()).compile();
                     whereConditions.add(predicate.fragment());
-                    params.addAll(predicate.parameters());
+                    whereParams.addAll(predicate.parameters());
                 }
             }
 
@@ -188,6 +219,9 @@ public class Rfc9535SqlPredicateCompiler {
         if (terminalKind == null) {
             throw new InvalidRfc9535SyntaxException("Expression has no filterable terminal selector", null);
         }
+        List<Object> params = new ArrayList<>(fromParams.size() + whereParams.size());
+        params.addAll(fromParams);
+        params.addAll(whereParams);
         return new LevelPlan(fromClauses, whereConditions, params, terminalKind, anchoredUnderOffers,
                 finalElementAlias);
     }

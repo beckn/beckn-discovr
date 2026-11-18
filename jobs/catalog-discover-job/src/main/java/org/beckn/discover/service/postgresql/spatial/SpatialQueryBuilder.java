@@ -7,7 +7,7 @@ import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper.QuerySpec;
 import org.beckn.discover.service.postgresql.QueryBuilderHelper.QueryTemplate;
-import org.beckn.discover.service.postgresql.jsonpath.JsonPathConverter;
+import org.beckn.discover.service.postgresql.jsonpath.JsonPathQueryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -77,11 +77,11 @@ public class SpatialQueryBuilder {
     );
 
     private final ObjectMapper objectMapper;
-    private final JsonPathConverter jsonPathConverter;
+    private final JsonPathQueryBuilder jsonPathQueryBuilder;
 
-    public SpatialQueryBuilder(ObjectMapper objectMapper, JsonPathConverter jsonPathConverter) {
+    public SpatialQueryBuilder(ObjectMapper objectMapper, JsonPathQueryBuilder jsonPathQueryBuilder) {
         this.objectMapper = objectMapper;
-        this.jsonPathConverter = jsonPathConverter;
+        this.jsonPathQueryBuilder = jsonPathQueryBuilder;
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -194,9 +194,9 @@ public class SpatialQueryBuilder {
             return Optional.empty();
         }
 
-        // JSONPath condition drives the GIN index; spatial EXISTS drives GiST.
-        // combinedBaseTemplate picks the SELECT (matching_offers projection for selection
-        // paths) and applies the exists()-wrapped @@ predicate from a single processed filter.
+        // JSONPath condition first, then the spatial EXISTS (GiST on item_location_collection).
+        // combinedBaseTemplate compiles the filter exactly as the J route does (RFC 9535 or
+        // legacy) and picks the SELECT, including the matching_offers projection for offer filters.
         QueryTemplate template = combinedBaseTemplate(filterExpression);
 
         int added = appendSpatialConditions(template, constraints);
@@ -282,46 +282,27 @@ public class SpatialQueryBuilder {
     // ── Filter conversion ─────────────────────────────────────────────────────
 
     /**
-     * Builds the base template for a combined (JSONPath + spatial) query AND applies the
-     * JSONPath {@code @@} predicate. The raw filter is processed <b>once</b> here
-     * ({@link JsonPathConverter#processFilter} is deterministic) and reused for both the
-     * SELECT projection and the WHERE predicate, so the two can never desync.
+     * Builds the base template for a combined (JSONPath + spatial) query: the SELECT and the
+     * JSONPath WHERE condition, before any spatial condition is appended.
      *
-     * <p>When the filter is a selection path (starts with {@code $}) the template projects
-     * the {@code matching_offers} column ({@link QueryBuilderHelper#BASE_SELECT_WITH_FILTER_RESULT},
-     * processed filter bound first so parameter order stays in lockstep with the SQL
-     * placeholders) — mirroring
-     * {@link org.beckn.discover.service.postgresql.jsonpath.JsonPathQueryBuilder} so an
-     * offer-selection filter (e.g. {@code $.catalogs[*].offers[*] ? (...)}) narrows the
-     * returned offers identically whether or not a spatial constraint is present
-     * (Finding 2). Non-selection filters use {@link QueryBuilderHelper#BASE_SELECT}; a
-     * blank filter yields a bare {@code BASE_SELECT} with no JSONPath predicate.</p>
+     * <p>Delegates to {@link JsonPathQueryBuilder#filterTemplate}, the same compile step the
+     * filter-only (J) and J+T routes use, so the filter goes through {@code Rfc9535FilterCompiler}
+     * (RFC 9535 first, legacy Postgres jsonpath as fallback) whether or not a spatial constraint
+     * is present. That gives identical matching and identical offer narrowing (the
+     * {@code matching_offers} projection, Finding 2) on J, J+T, J+G and J+G+T.</p>
+     *
+     * <p>Previously this method bound the expression as {@code CAST(? AS jsonpath)} after only
+     * quote/colon rewriting, so any RFC 9535 filter selector ({@code [?(...)]}) failed in
+     * Postgres with {@code syntax error at or near "?" of jsonpath input} — HTTP 500 for every
+     * RFC 9535 filter combined with a spatial constraint, while the same filter worked alone.</p>
+     *
+     * <p>A blank filter yields a bare {@code BASE_SELECT} with no JSONPath predicate.</p>
      */
     private QueryTemplate combinedBaseTemplate(String filterExpression) {
-        String processed = (filterExpression != null && !filterExpression.isBlank())
-                ? jsonPathConverter.processFilter(filterExpression) : "";
-        String trimmed = processed.trim();
-        boolean selectionPath = trimmed.startsWith("$");
-        QueryTemplate template = selectionPath
-                ? QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT_WITH_FILTER_RESULT, processed)
-                : QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
-        if (!trimmed.isEmpty()) {
-            template.condition(QueryBuilderHelper.JSONPATH_MATCH, existsPredicate(trimmed));
+        if (filterExpression == null || filterExpression.isBlank()) {
+            return QueryBuilderHelper.query(QueryBuilderHelper.BASE_SELECT);
         }
-        return template;
-    }
-
-    /**
-     * Wraps an already-processed jsonpath into the boolean {@code exists(...)} predicate
-     * required by the {@code @@} operator. Absolute paths ({@code $...}) → {@code exists($...)};
-     * relative conditions ({@code @...}) → {@code exists($ ? (...))}.
-     */
-    private static String existsPredicate(String trimmedProcessed) {
-        if (trimmedProcessed.isEmpty()) return QueryBuilderHelper.JSONPATH_EXISTS_ALL;
-        if (trimmedProcessed.startsWith("$")) {
-            return String.format(QueryBuilderHelper.JSONPATH_EXISTS_PATH, trimmedProcessed);
-        }
-        return String.format(QueryBuilderHelper.JSONPATH_EXISTS_CONDITION, trimmedProcessed);
+        return jsonPathQueryBuilder.filterTemplate(filterExpression);
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────────

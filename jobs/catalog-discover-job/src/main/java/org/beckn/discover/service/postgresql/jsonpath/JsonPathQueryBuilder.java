@@ -59,7 +59,7 @@ public class JsonPathQueryBuilder {
 
     public QuerySpec build(String filters, List<String> rawSchemaContextUrls, int limit,
                            String networkId, Boolean activeMatch, Boolean validMatch, Instant now) {
-        QueryTemplate template = baseTemplate(filterCompiler.compile(filters));
+        QueryTemplate template = filterTemplate(filters);
         QuerySpec query = template
                 .schemaFiltersPaired(rawSchemaContextUrls)
                 .networkFilter(networkId)
@@ -94,7 +94,7 @@ public class JsonPathQueryBuilder {
     public QuerySpec buildWithAllowlist(String filters, List<String> rawSchemaContextUrls,
                                         int limit, Collection<String> idAllowlist, String networkId,
                                         Boolean activeMatch, Boolean validMatch, Instant now) {
-        QueryTemplate template = baseTemplate(filterCompiler.compile(filters));
+        QueryTemplate template = filterTemplate(filters);
         QuerySpec query = template
                 .schemaFiltersPaired(rawSchemaContextUrls)
                 .networkFilter(networkId)
@@ -108,9 +108,28 @@ public class JsonPathQueryBuilder {
     }
 
     /**
+     * Compiles {@code filters} with {@link Rfc9535FilterCompiler} (RFC 9535 first, legacy Postgres
+     * jsonpath as fallback) and returns the base {@link QueryTemplate}: the SELECT (plus the
+     * {@code matching_offers} projection when the filter selects offers) and the filter's WHERE
+     * condition. Every PostgreSQL route that applies a JSONPath filter starts from this template —
+     * J and the J+T chain step here, J+G and the J+G+T chain step via
+     * {@link org.beckn.discover.service.postgresql.spatial.SpatialQueryBuilder} — so an expression
+     * compiles to the same SQL whether or not a spatial constraint is present.
+     *
+     * @throws org.beckn.discover.service.postgresql.jsonpath.rfc9535.InvalidRfc9535SyntaxException
+     *         invalid under both grammars (normally already rejected as a 400 by
+     *         {@code IntentQueryValidator} before any query runs)
+     * @throws org.beckn.discover.service.postgresql.jsonpath.rfc9535.UnsupportedConstructException
+     *         denylisted RFC 9535 construct that is not valid legacy syntax either
+     */
+    public QueryTemplate filterTemplate(String filters) {
+        return baseTemplate(filterCompiler.compile(filters));
+    }
+
+    /**
      * Assembles the base {@link QueryTemplate} (SELECT + JSONPath WHERE condition) for either
-     * grammar. Schema/network/active/validity/allowlist conditions are added by the caller —
-     * they are grammar-agnostic and identical for both paths.
+     * grammar. Schema/network/active/validity/allowlist/spatial conditions are added by the
+     * caller — they are grammar-agnostic and identical for both paths.
      */
     private QueryTemplate baseTemplate(CompilationResult result) {
         if (result instanceof CompiledPredicate predicate) {

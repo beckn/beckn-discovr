@@ -1,0 +1,33 @@
+{
+  "context": {
+    "action": "discover",
+    "version": "2.0.0",
+    "networkId": "bap.net/ev-charging",
+    "transactionId": "5d0c2a3e-8f4b-4a61-9c2d-7e1f0b6a9c41",
+    "messageId": "e3a9c7b1-2d4f-4c8e-a6b0-91f2d3c4e5a7",
+    "ttl": "PT10M",
+    "timestamp": "2025-10-14T10:30:00.000Z"
+  },
+  "message": {
+    "intent": {
+      "filters": {
+        "type": "jsonpath",
+        "expression": "$.catalogs[*].resources[?(@.resourceAttributes.connectorType == 'CCS2' && @.resourceAttributes.maxPowerKW >= 50)]"
+      },
+      "spatial": [
+        {
+          "op": "s_dwithin",
+          "targets": "$.catalogs[*].resources[*].availableAt[*].geo",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              77.5946,
+              12.9716
+            ]
+          },
+          "distanceMeters": 5000
+        }
+      ]
+    }
+  }
+}

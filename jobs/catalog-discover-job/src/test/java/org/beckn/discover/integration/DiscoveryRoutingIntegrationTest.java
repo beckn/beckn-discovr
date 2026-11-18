@@ -4,14 +4,18 @@ import org.assertj.core.api.Assertions;
 import org.beckn.discover.model.Context;
 import org.beckn.discover.model.DiscoverRequest;
 import org.beckn.discover.model.DiscoverResponse;
+import org.beckn.discover.model.Catalog;
 import org.beckn.discover.model.Resource;
 import org.beckn.discover.service.DiscoveryService;
+import org.beckn.discover.service.engine.QueryRequest;
+import org.beckn.discover.service.postgresql.PostgreSQLQueryEngine;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -276,8 +280,155 @@ class DiscoveryRoutingIntegrationTest extends BaseIntegrationTest {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    //  RFC 9535 filters on every PostgreSQL route — J, J+G, J+G+T
+    // ──────────────────────────────────────────────────────────────────────────
+    //
+    // Fixture: ev-charger-ccs2-001 (CCS2, 60 kW, at 77.5946/12.9716), ev-charger-ccs2-002 (CCS2,
+    // 120 kW, ~2.8 km away at 77.57/12.98, provider greencharge-koramangala), ev-charger-type2-001
+    // (Type2, no location row). Radius 5 km around ccs2-001 holds both CCS2 chargers; 1.5 km only 001.
+
+    private static final String RFC_CCS2 =
+            "$.catalogs[*].resources[?(@.resourceAttributes.connectorType == 'CCS2')]";
+    private static final String RFC_CCS2_100KW = "$.catalogs[*].resources[?(@.resourceAttributes.connectorType"
+            + " == 'CCS2' && @.resourceAttributes.maxPowerKW >= 100)]";
+    private static final String LEGACY_CCS2 =
+            "$.catalogs[*].resources[*] ? (@.resourceAttributes.connectorType == \"CCS2\")";
+    private static final String RFC_OFFER_60KW = "$.catalogs[*].offers[?(@.id == 'offer-ccs2-60kw-kwh')]";
+    private static final String CCS2_001 = "ev-charger-ccs2-001";
+    private static final String CCS2_002 = "ev-charger-ccs2-002";
+
+    @Autowired
+    private PostgreSQLQueryEngine pgQueryEngine;
+
+    @Nested
+    @DisplayName("RFC 9535 filter — identical results with and without a spatial constraint")
+    class Rfc9535FilterOnEveryRoute {
+
+        @Test
+        @DisplayName("J+G: RFC 9535 filter and radius both applied (regression: was HTTP 500)")
+        void jsonPathAndSpatial_rfc9535_bothPredicatesApplied() {
+            Assertions.assertThat(resourceIds(discover(RFC_CCS2_100KW, 5000.0, null))).containsExactly(CCS2_002);
+            Assertions.assertThat(resourceIds(discover(RFC_CCS2_100KW, 1500.0, null))).isEmpty();
+            Assertions.assertThat(resourceIds(discover(RFC_CCS2, 1500.0, null))).containsExactly(CCS2_001);
+        }
+
+        @Test
+        @DisplayName("J+G: RFC 9535 and legacy Postgres-native forms of the same filter return the same resources")
+        void jsonPathAndSpatial_rfc9535MatchesLegacyForm() {
+            for (double radius : new double[] {1500.0, 5000.0}) {
+                Assertions.assertThat(resourceIds(discover(RFC_CCS2, radius, null)))
+                        .as("radius %s m", radius)
+                        .isEqualTo(resourceIds(discover(LEGACY_CCS2, radius, null)));
+            }
+            Assertions.assertThat(resourceIds(discover(LEGACY_CCS2, 5000.0, null)))
+                    .containsExactly(CCS2_001, CCS2_002);
+        }
+
+        @Test
+        @DisplayName("J and J+G: an RFC 9535 offer filter narrows offers the same way with and without spatial")
+        void rfc9535OfferFilter_narrowsOffersOnBothRoutes() {
+            for (DiscoverResponse response : List.of(
+                    discover(RFC_OFFER_60KW, null, null), discover(RFC_OFFER_60KW, 5000.0, null))) {
+                Assertions.assertThat(resourceIds(response)).containsExactly(CCS2_001);
+                Assertions.assertThat(offerIds(response)).containsExactly("offer-ccs2-60kw-kwh");
+            }
+        }
+
+        @Test
+        @DisplayName("J+G+T without ES (PostgreSQL engine): text dropped, RFC 9535 filter + radius applied")
+        void jsonPathSpatialText_withoutEs_rfc9535() {
+            Assertions.assertThat(resourceIds(discover(RFC_CCS2_100KW, 5000.0, "ev charging")))
+                    .containsExactly(CCS2_002);
+        }
+
+        @Test
+        @DisplayName("J+G+T chain step 2 (ES engine): RFC 9535 filter + radius on the ES id allowlist")
+        void jsonPathSpatialText_chainStep2_rfc9535() throws Exception {
+            List<String> allIds = List.of(CCS2_001, CCS2_002, "ev-charger-type2-001");
+            QueryRequest qr = QueryRequest.from(request(RFC_CCS2_100KW, 5000.0, "ev charging"));
+
+            List<Catalog> catalogs = pgQueryEngine.executeJsonPathAndSpatialQueryByResourceIds(qr, allIds)
+                    .orElseThrow();
+            Assertions.assertThat(resourceIds(catalogs)).containsExactly(CCS2_002);
+
+            List<Catalog> notInAllowlist = pgQueryEngine
+                    .executeJsonPathAndSpatialQueryByResourceIds(qr, List.of(CCS2_001)).orElseThrow();
+            Assertions.assertThat(resourceIds(notInAllowlist)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("chained RFC 9535 filters (catalogs[?()].resources[?()]) on J and J+G")
+        void chainedFilters_onJsonPathAndCombinedRoutes() {
+            String chained = "$.catalogs[?(@.id == 'catalog-ev-charging-001')]"
+                    + ".resources[?(@.resourceAttributes.maxPowerKW >= 100)]";
+            Assertions.assertThat(resourceIds(discover(chained, null, null))).containsExactly(CCS2_002);
+            Assertions.assertThat(resourceIds(discover(chained, 5000.0, null))).containsExactly(CCS2_002);
+            Assertions.assertThat(resourceIds(discover(chained, 1500.0, null))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("filter selector after [*] / at the root follows RFC 9535 (member values), "
+                + "never a SQL error, on J and J+G")
+        void filterOverObjectMembers_rfc9535Semantics() {
+            // [*][?()] filters the member values of each resource object. No member value has a
+            // resourceAttributes member, so nothing matches — a 500 before this fix.
+            String overMembers = "$.catalogs[*].resources[*][?(@.resourceAttributes.connectorType == 'CCS2')]";
+            Assertions.assertThat(resourceIds(discover(overMembers, null, null))).isEmpty();
+            Assertions.assertThat(resourceIds(discover(overMembers, 5000.0, null))).isEmpty();
+
+            // ...but a member value that does satisfy the filter matches: ccs2-002's "provider" member.
+            String providerMember = "$.catalogs[*].resources[*][?(@.id == 'greencharge-koramangala')]";
+            Assertions.assertThat(resourceIds(discover(providerMember, null, null))).containsExactly(CCS2_002);
+            Assertions.assertThat(resourceIds(discover(providerMember, 5000.0, null))).containsExactly(CCS2_002);
+
+            // $[?()] — the LTS Intent.filters example shape — iterates the root object's members.
+            Assertions.assertThat(resourceIds(discover(
+                    "$[?(@.resourceAttributes.connectorType == 'CCS2')]", null, null))).isEmpty();
+        }
+
+        private DiscoverResponse discover(String filter, Double radiusMeters, String text) {
+            DiscoverResponse response = discoveryService.processDiscoveryRequest(request(filter, radiusMeters, text));
+            Assertions.assertThat(response.getMessage()).isNotNull();
+            return response;
+        }
+
+        private DiscoverRequest request(String filter, Double radiusMeters, String text) {
+            DiscoverRequest request = newRequest();
+            request.setFilters(filter);
+            if (radiusMeters != null) {
+                request.setSpatial(List.of(spatialDwithin(77.5946, 12.9716, radiusMeters)));
+            }
+            if (text != null) {
+                request.setTextSearch(text);
+            }
+            return request;
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     //  Helpers
     // ──────────────────────────────────────────────────────────────────────────
+
+    private static List<String> resourceIds(DiscoverResponse response) {
+        return resourceIds(response.getMessage().getCatalogs());
+    }
+
+    private static List<String> resourceIds(List<Catalog> catalogs) {
+        return catalogs.stream()
+                .flatMap(c -> c.getResources() == null ? java.util.stream.Stream.empty() : c.getResources().stream())
+                .map(Resource::getId)
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    private static List<String> offerIds(DiscoverResponse response) {
+        return response.getMessage().getCatalogs().stream()
+                .flatMap(c -> c.getOffers() == null ? java.util.stream.Stream.empty() : c.getOffers().stream())
+                .map(o -> OBJECT_MAPPER.valueToTree(o).path("id").asText(null))
+                .filter(Objects::nonNull)
+                .sorted()
+                .collect(Collectors.toList());
+    }
 
     private DiscoverRequest newRequest() {
         Context context = buildContext(UUID.randomUUID().toString(), UUID.randomUUID().toString());

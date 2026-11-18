@@ -4,6 +4,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.jsonpath.JsonPath;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -25,7 +27,7 @@ class Rfc9535SqlPredicateCompilerTest {
     void flatComparisonFilter() {
         CompiledPredicate predicate = compile("$.resources[?(@.rating.ratingValue >= 4.5)]");
 
-        assertThat(predicate.whereFragment()).contains("EXISTS (SELECT 1 FROM jsonb_array_elements(");
+        assertThat(predicate.whereFragment()).contains("EXISTS (SELECT 1 FROM jsonb_path_query(");
         assertThat(predicate.whereFragment()).contains("try_to_numeric(");
         assertThat(predicate.whereFragment()).doesNotContain("4.5"); // literal never concatenated
         // [0]=outer array path, [1]=field-extraction path array, [2]=numeric literal
@@ -101,7 +103,7 @@ class Rfc9535SqlPredicateCompilerTest {
     void wildcardTerminal() {
         CompiledPredicate predicate = compile("$.resources[*]");
         assertThat(predicate.whereFragment()).isEqualTo(
-                "EXISTS (SELECT 1 FROM jsonb_array_elements(i.payload #> ?::text[]) e0)");
+                "EXISTS (SELECT 1 FROM jsonb_path_query(i.payload #> ?::text[], '$.**{1}') e0)");
         assertThat(predicate.whereParameters()).containsExactly((Object) new String[]{"resources"});
     }
 
@@ -156,11 +158,11 @@ class Rfc9535SqlPredicateCompilerTest {
         CompiledPredicate predicate = compile("$.resources[*].offers[?(@.validity.endDate >= \"2025-01-01T00:00:00Z\")]");
 
         // Two array-producing levels: e0 for resources[*], e1 for the offers filter — the inner
-        // jsonb_array_elements is correlated against e0 (the resources[*] element), not back to
+        // level is correlated against e0 (the resources[*] element), not back to
         // i.payload directly.
         assertThat(predicate.whereFragment())
-                .contains("jsonb_array_elements(i.payload #> ?::text[]) e0")
-                .contains("jsonb_array_elements(e0 #> ?::text[]) e1")
+                .contains("jsonb_path_query(i.payload #> ?::text[], '$.**{1}') e0")
+                .contains("jsonb_path_query(e0 #> ?::text[], '$.**{1}') e1")
                 .contains("try_to_timestamptz(");
         assertThat(predicate.whereFragment()).doesNotContain("2025-01-01");
 
@@ -169,8 +171,8 @@ class Rfc9535SqlPredicateCompilerTest {
         assertThat(predicate.offersProjectionFragment()).isPresent();
         assertThat(predicate.offersProjectionFragment().get())
                 .contains("jsonb_agg(po)")
-                .contains("jsonb_array_elements(i.payload #> ?::text[]) p0")
-                .contains("jsonb_array_elements(p0 #> ?::text[]) po");
+                .contains("jsonb_path_query(i.payload #> ?::text[], '$.**{1}') p0")
+                .contains("jsonb_path_query(p0 #> ?::text[], '$.**{1}') po");
     }
 
     @Test
@@ -180,9 +182,9 @@ class Rfc9535SqlPredicateCompilerTest {
         CompiledPredicate predicate = compile("$.catalogs[*].resources[*].offers[?(@.price < 100)]");
 
         assertThat(predicate.whereFragment())
-                .contains("jsonb_array_elements(i.payload #> ?::text[]) e0")
-                .contains("jsonb_array_elements(e0 #> ?::text[]) e1")
-                .contains("jsonb_array_elements(e1 #> ?::text[]) e2")
+                .contains("jsonb_path_query(i.payload #> ?::text[], '$.**{1}') e0")
+                .contains("jsonb_path_query(e0 #> ?::text[], '$.**{1}') e1")
+                .contains("jsonb_path_query(e1 #> ?::text[], '$.**{1}') e2")
                 .contains("try_to_numeric(");
         // [0]=catalogs path, [1]=resources path (relative to e0), [2]=offers path (relative to
         // e1), [3]=field-extraction path (relative to e2), [4]=numeric literal
@@ -227,6 +229,117 @@ class Rfc9535SqlPredicateCompilerTest {
                 .isInstanceOf(UnsupportedConstructException.class)
                 .satisfies(e -> assertThat(((UnsupportedConstructException) e).construct())
                         .isEqualTo(UnsupportedConstructException.UnsupportedConstruct.REGEX_FUNCTION));
+    }
+
+    @Test
+    @DisplayName("filter after a wildcard ([*][?(...)]) compiles: the filter level iterates the children "
+            + "of each element (RFC 9535 member values for objects), not jsonb_array_elements")
+    void filterAfterWildcard_iteratesChildrenOfEachElement() {
+        CompiledPredicate predicate = compile(
+                "$.catalogs[*].resources[*][?(@.resourceAttributes.connectorType == 'CCS2')]");
+
+        assertThat(predicate.whereFragment())
+                .contains("jsonb_path_query(i.payload #> ?::text[], '$.**{1}') e0")
+                .contains("jsonb_path_query(e0 #> ?::text[], '$.**{1}') e1")
+                .contains("jsonb_path_query(e1 #> ?::text[], '$.**{1}') e2")
+                .contains("(e2 #>> ?::text[])::text = ?");
+        // the filter level sits directly on the wildcard element: empty path array
+        assertThat(predicate.whereParameters().get(2)).isEqualTo(new String[]{});
+    }
+
+    @Test
+    @DisplayName("root filter ($[?(...)], the LTS Intent.filters example shape) compiles against the root's children")
+    void rootFilter_iteratesChildrenOfRoot() {
+        CompiledPredicate predicate = compile("$[?(@.resourceAttributes.connectorType == 'CCS2')]");
+
+        assertThat(predicate.whereFragment())
+                .startsWith("EXISTS (SELECT 1 FROM jsonb_path_query(i.payload #> ?::text[], '$.**{1}') e0 WHERE ");
+        assertThat(predicate.whereParameters().get(0)).isEqualTo(new String[]{});
+    }
+
+    @Test
+    @DisplayName("index / last / slice levels read array elements via strict $[*] with silent errors "
+            + "(no match on an object or primitive, never a statement abort)")
+    void ordinalLevels_useSilentStrictArrayElements() {
+        for (String expression : List.of("$.offers[0]", "$.offers[-1]", "$.offers[last]", "$.offers[1:3]",
+                "$.resources[last].offers[?(@.price < 100)]")) {
+            assertThat(compile(expression).whereFragment())
+                    .as(expression)
+                    .contains("jsonb_path_query(i.payload #> ?::text[], 'strict $[*]', '{}', true) "
+                            + "WITH ORDINALITY e0(value, ord)");
+        }
+    }
+
+    @Test
+    @DisplayName("no compiled level ever calls jsonb_array_elements (it aborts the statement on an object)")
+    void noLevelUsesJsonbArrayElements() {
+        for (String expression : List.of(
+                "$.catalogs[*].resources[?(@.resourceAttributes.connectorType == 'CCS2')]",
+                "$.catalogs[?(@.provider.id == 'ecopower-charging')]",
+                "$.catalogs[*].offers[?(@.validity.startTime <= '07:00:00')]",
+                "$.catalogs[*].resources[*][?(@.id == 'x')]",
+                "$.catalogs[*][?(@.provider.id == 'x')]",
+                "$[?(@.x == 1)]",
+                "$.catalogs[0].offers[1:3]",
+                "$.catalogs[*].resources[*].offers[-1]")) {
+            CompiledPredicate predicate = compile(expression);
+            assertThat(predicate.whereFragment()).as(expression).doesNotContain("jsonb_array_elements");
+            predicate.offersProjectionFragment().ifPresent(projection ->
+                    assertThat(projection).as(expression).doesNotContain("jsonb_array_elements"));
+        }
+    }
+
+    @Test
+    @DisplayName("chained filters: all FROM-item parameters bind before any WHERE parameter, in SQL text order")
+    void chainedFilters_parametersFollowSqlTextOrder() {
+        CompiledPredicate predicate = compile(
+                "$.catalogs[?(@.provider.id == 'x')].resources[?(@.resourceAttributes.connectorType == 'CCS2')]");
+
+        assertThat(predicate.whereFragment()).matches(
+                "EXISTS \\(SELECT 1 FROM jsonb_path_query\\(i\\.payload #> \\?::text\\[\\], '\\$\\.\\*\\*\\{1}'\\) e0, "
+                        + "jsonb_path_query\\(e0 #> \\?::text\\[\\], '\\$\\.\\*\\*\\{1}'\\) e1 WHERE .*");
+        assertThat(predicate.whereParameters()).containsExactly(
+                new String[]{"catalogs"}, new String[]{"resources"},
+                new String[]{"provider", "id"}, "x",
+                new String[]{"resourceAttributes", "connectorType"}, "CCS2");
+    }
+
+    @Test
+    @DisplayName("every '?::text[]' placeholder binds a path array and every other '?' a literal — "
+            + "for chained filters, mid-path [last]/[-k]/[a:] and the offers projection")
+    void placeholdersAlignWithParameters() {
+        for (String expression : List.of(
+                "$.catalogs[?(@.provider.id == 'x')].resources[?(@.resourceAttributes.maxPowerKW >= 50)]",
+                "$.catalogs[?(@.id == 'c')].offers[?(@.price < 100)]",
+                "$.catalogs[0].resources[last].offers[?(@.price < 40)]",
+                "$.catalogs[0].resources[-2].offers[?(@.price < 40)]",
+                "$.catalogs[0].resources[1:].offers[?(@.price < 40)]",
+                "$.catalogs[0].resources[-3:-1].offers[*]",
+                "$.catalogs[*].resources[?(@.id == 'r')].offers[-1]",
+                "$.catalogs[*].resources[*][?(@.id == 'x')]")) {
+            CompiledPredicate predicate = compile(expression);
+            assertPlaceholdersAligned(expression, predicate.whereFragment(), predicate.whereParameters());
+            predicate.offersProjectionFragment().ifPresent(projection ->
+                    assertPlaceholdersAligned(expression + " (projection)", projection,
+                            predicate.projectionParameters()));
+        }
+    }
+
+    private static void assertPlaceholdersAligned(String label, String sql, List<Object> params) {
+        java.util.regex.Matcher placeholder = java.util.regex.Pattern.compile("\\?(::text\\[])?").matcher(sql);
+        int index = 0;
+        while (placeholder.find()) {
+            assertThat(index).as("%s: more placeholders than parameters", label).isLessThan(params.size());
+            boolean pathSlot = placeholder.group(1) != null;
+            Object bound = params.get(index);
+            assertThat(bound instanceof String[])
+                    .as("%s: placeholder #%d is a %s slot but is bound to %s", label, index,
+                            pathSlot ? "path-array" : "literal",
+                            bound instanceof String[] arr ? java.util.Arrays.toString(arr) : bound)
+                    .isEqualTo(pathSlot);
+            index++;
+        }
+        assertThat(index).as("%s: placeholder count", label).isEqualTo(params.size());
     }
 
     private CompiledPredicate compile(String expression) {
