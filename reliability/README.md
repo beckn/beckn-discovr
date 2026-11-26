@@ -36,15 +36,62 @@ reliability/
   README.md
   config/
     cluster.yaml                   # allowed context, VM, endpoints, namespaces (placeholders)
-    slos.yaml                      # default latency/error/lag/index budgets
+    slos.yaml                      # default latency/error/lag/index budgets (Phase-1)
+    slos-100m.yaml                 # path-split prod targets for S1–S6 sims
+    corpus-profiles.yaml           # 1M | 10M | 50M | 100M ladder
   scenarios/
-    01-..14-*.md                   # one file per scenario
+    01-..14-*.md                   # one file per Phase-1 scenario
+  simulations/                     # S1–S6 + corpus ladder
+    README.md
+    corpus-ladder.md
+    S1-ack-only.md
+    S3-query-engine.md
+    S5-full-e2e.md
+    S6-publish-searchable.md
+    scorecard-template.md
+    fixtures/intents/
+  jmx/
+    s1-ack-only.jmx
+    s3-query-headline.jmx
+    s5-e2e-headline.jmx
+    s6-publish-burst.jmx
   scripts/
     verify-cluster.sh
     jmeter-trigger.sh
     clickstack-query.sh
+    sim-run.sh                     # S1 + corpus-backed S3/S5/S6
+    corpus-generate.py
+    corpus-seed.sh
+    corpus-verify.sh
+    mock-registry.sh
+    pause-discover-consumers.sh
   reports/                         # generated HTML reports (gitignored)
 ```
+
+## Simulation harness + corpus ladder (1M → 100M)
+
+Path-split gates for the 100M / 12k TPM plan. **S1 ACK-only is insufficient alone** —
+measure BM25 + PostGIS against indexed corpus sizes. Design: Agent Store
+`docs/corpus-ladder-simulation.md` + `docs/simulation-harness-design.md`.
+
+```bash
+# Corpus plan / 1M dry-run (no staging credentials required)
+./reliability/scripts/corpus-seed.sh --profile 1M --dry-run
+./reliability/scripts/sim-run.sh S3 --profile 1M --path mix --qps 200 --dry-run
+./reliability/scripts/sim-run.sh S5 --profile 1M --headline-only --qps 200 --dry-run
+
+# Live (fill cluster.yaml; ES_URL + PG_URL; consumers ENABLED for S3/S5)
+./reliability/scripts/corpus-seed.sh --profile 1M --mode bulk
+./reliability/scripts/corpus-verify.sh --profile 1M
+./reliability/scripts/sim-run.sh S3 --profile 1M --path mix --qps 200
+
+# Optional ACK isolation (consumers paused)
+./reliability/scripts/pause-discover-consumers.sh --apply-env
+./reliability/scripts/sim-run.sh S1 --profile 1M --tpm 12000 --registry-mode cache-hit
+```
+
+Operator runbook: [`simulations/corpus-ladder.md`](simulations/corpus-ladder.md).  
+Details: [`simulations/README.md`](simulations/README.md). SLOs: [`config/slos-100m.yaml`](config/slos-100m.yaml).
 
 ## Prerequisites
 
