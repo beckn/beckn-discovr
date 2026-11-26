@@ -36,15 +36,44 @@ reliability/
   README.md
   config/
     cluster.yaml                   # allowed context, VM, endpoints, namespaces (placeholders)
-    slos.yaml                      # default latency/error/lag/index budgets
+    slos.yaml                      # default latency/error/lag/index budgets (Phase-1)
+    slos-100m.yaml                 # path-split prod targets for S1–S6 sims
   scenarios/
-    01-..14-*.md                   # one file per scenario
+    01-..14-*.md                   # one file per Phase-1 scenario
+  simulations/                     # S1–S6 gates (100M plan) — S1 implemented first
+    README.md
+    S1-ack-only.md
+    scorecard-template.md
+    fixtures/intents/
+  jmx/
+    s1-ack-only.jmx
   scripts/
     verify-cluster.sh
     jmeter-trigger.sh
     clickstack-query.sh
+    sim-run.sh                     # sim dispatcher (S1 only in this slice)
+    mock-registry.sh
+    pause-discover-consumers.sh
   reports/                         # generated HTML reports (gitignored)
 ```
+
+## Simulation harness (S1 ACK-only)
+
+Path-split gates for the 100M / 12k TPM plan. Design lives in the Agent Store:
+`docs/simulation-harness-design.md` (parent: `docs/scalability-100m-architecture.md` §11).
+
+```bash
+# Dry-run (no staging credentials required)
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit --dry-run
+
+# Live staging (fill cluster.yaml; pause consumers; point auth at mock registry)
+./reliability/scripts/pause-discover-consumers.sh --apply-env
+./reliability/scripts/mock-registry.sh start --mode cache-hit   # or deploy WireMock in-cluster
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-miss
+```
+
+Details: [`simulations/README.md`](simulations/README.md). SLOs: [`config/slos-100m.yaml`](config/slos-100m.yaml).
 
 ## Prerequisites
 

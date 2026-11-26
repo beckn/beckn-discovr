@@ -1,0 +1,45 @@
+# Path-split production SLO targets for the 100M / 12k TPM simulation suite.
+# Staging baseline SLOs remain in slos.yaml (Phase-1 scenarios 03–13).
+# Source: Agent Store docs/simulation-harness-design.md §6 + scalability-100m-architecture.md §2.3
+#
+# S1 rows are active. S2–S6 are stubs for follow-on PRs — do not assert them yet.
+
+sim:
+  id_prefix: "S"
+  corpus_profiles: ["local-smoke", "1M", "15M", "100M-subset"]
+
+# ─── S1 — ACK-only (auth + schema + Kafka produce) ───────────────────────────
+S1:
+  ack:
+    # Auth cache hit — registry RTT not on the hot path
+    cache_hit_p99_ms: 100
+    # Registry miss — injected RTT (e.g. 80–150 ms) once per key
+    cache_miss_p99_ms: 250
+    error_rate_max: 0.001          # ≤ 0.1%; excl. intentional registry-down cases
+  kafka:
+    produce_p99_ms: 20             # architecture §2.2
+  ramp:
+    avg_qps: 200                   # ~12k TPM
+    peak_qps: 600                  # ×3 diurnal
+    optional_stress_qps: [1000, 2000]
+    sustain_min_per_step: 10
+
+# ─── S2–S6 stubs (follow-on PRs) ─────────────────────────────────────────────
+# S2:
+#   kafka.lag_sustained_max: 1000
+#   kafka.lag_peak_max: 10000
+#   engine.pg_p99_ms: 150
+#   engine.es_bm25_p99_ms: 200
+#   engine.chain_p99_ms: 400
+# S3: same engine targets as S2 + pagination / includeCold drills
+# S4:
+#   callback_http_p99_ms: 500
+#   success_rate_min: 0.999
+# S5:
+#   e2e_headline_p99_ms: 1500      # stretch 1000
+#   e2e_chain_p99_ms: 2000
+#   callback_success_rate_min: 0.999
+# S6:
+#   push_to_searchable_p99_ms_min: 2000
+#   push_to_searchable_p99_ms_max: 5000
+#   es_bulk_reject_rate_max: 0.0

@@ -82,6 +82,9 @@ discovery:
   kafka:
     request-topic: ${KAFKA_REQUEST_TOPIC:discovr.discover.in.requests}
     response-topic: ${KAFKA_RESPONSE_TOPIC:discovr.discover.out.responses}
+    # When false, DiscoveryEventConsumer does not start (ACK path still produces to
+    # the request topic). Used by S1 ACK-only simulation / profile sim-s1.
+    listener-enabled: ${DISCOVERY_KAFKA_LISTENER_ENABLED:true}
     # TTL for the messageId idempotency cache (M10). Duplicate POST requests within
     # this window are ACK'd immediately without re-publishing to Kafka.
     dedup-cache-ttl-seconds: ${DISCOVERY_DEDUP_CACHE_TTL_SECONDS:60}

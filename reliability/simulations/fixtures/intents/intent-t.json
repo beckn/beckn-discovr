@@ -1,0 +1,17 @@
+{
+  "context": {
+    "version": "2.0.0",
+    "action": "discover",
+    "timestamp": "2026-11-26T00:00:00Z",
+    "messageId": "00000000-0000-4000-8000-000000000001",
+    "transactionId": "00000000-0000-4000-8000-000000000101",
+    "networkId": "beckn.one/retail",
+    "bapId": "sim-bap.example.com",
+    "bapUri": "https://sim-bap.example.com/beckn"
+  },
+  "message": {
+    "intent": {
+      "textSearch": "instant coffee powder"
+    }
+  }
+}

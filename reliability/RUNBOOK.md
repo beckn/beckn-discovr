@@ -114,6 +114,29 @@ After all requested scenarios: writes consolidated `index.html` + `scorecard.md`
 
 ---
 
+## 2.4 Simulation harness — S1 ACK-only (100M plan)
+
+Separate from Phase-1 numeric scenarios. Gates path-split SLOs in
+`config/slos-100m.yaml` before a Tier B prod buy. Design:
+Agent Store `docs/simulation-harness-design.md`.
+
+```bash
+# Validate harness files (no staging)
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit --dry-run
+
+# Staging evidence pack (ops — mutates discover env to pause consumers)
+./reliability/scripts/pause-discover-consumers.sh --apply-env
+./reliability/scripts/mock-registry.sh start --mode cache-hit
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-miss
+./reliability/scripts/pause-discover-consumers.sh --resume-env
+```
+
+Artifacts: `reports/<UTC>/sim-S1-<mode>/`. Operator docs: `simulations/S1-ack-only.md`.
+Only **S1** is wired in `sim-run.sh` today; S2–S6 are follow-on PRs.
+
+---
+
 ## 3. Phase 2 — chaos
 
 ### 3.1 Invocations

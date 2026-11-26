@@ -1,0 +1,27 @@
+{
+  "priority": 10,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/subscribers/.*/keys/.*"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "data": [
+        {
+          "state": "live",
+          "signing_public_key": "REPLACE_WITH_SIM_BAP_SPKI_BASE64"
+        }
+      ]
+    },
+    "fixedDelayMilliseconds": 0
+  },
+  "metadata": {
+    "sim": "S1",
+    "mode": "cache-hit",
+    "note": "Prefer mock-registry.sh write-mappings / start — it rewrites key + delay into __generated/"
+  }
+}
