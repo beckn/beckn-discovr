@@ -24,9 +24,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <h3>Pool sizing</h3>
  * <p>Controlled by {@code discovery.postgresql.parallel-query-workers}
- * (default: 4).  Each parallel execution (Path A fallback) spawns exactly
- * 2 tasks (filter + spatial), so a pool of 4 supports 2 concurrent parallel
- * executions without queuing.  Increase if high concurrency is expected.</p>
+ * (default: 16).  Each parallel execution (Path A fallback) spawns exactly
+ * 2 tasks (filter + spatial); size the pool toward Kafka listener concurrency
+ * × fan-out so query work does not queue behind lag spikes.</p>
  *
  * <h3>Thread naming</h3>
  * <p>Threads are named {@code discovery-query-N} for easy identification in
@@ -77,8 +77,8 @@ public class QueryExecutorConfig {
     }
 
     private static int defaultWorkers() {
-        // 2× the available processors, capped at 8 — suitable for I/O-bound DB work
-        return Math.min(Runtime.getRuntime().availableProcessors() * 2, 8);
+        // 2× the available processors, capped at 32 — I/O-bound DB/ES work at peak QPS
+        return Math.min(Runtime.getRuntime().availableProcessors() * 2, 32);
     }
 
     /** Thread factory that creates named, daemon threads. */

@@ -280,7 +280,7 @@ services:
       - TOPICS_INPUT=discovr.discover.out.responses
       - TOPICS_DLT=discovr.dispatcher.dlt.responses
       - SPRING_KAFKA_CONSUMER_GROUP_ID=seeker-notifier-group
-      - SPRING_KAFKA_LISTENER_CONCURRENCY=1
+      - SPRING_KAFKA_LISTENER_CONCURRENCY=4
       # DeDi Registry — callback URL resolution (resolves subscriber base URL at delivery time)
       - REGISTRY_BASE_URL=https://fabric.nfh.global/registry/dedi/lookup
       - REGISTRY_NAME=subscribers.beckn.one

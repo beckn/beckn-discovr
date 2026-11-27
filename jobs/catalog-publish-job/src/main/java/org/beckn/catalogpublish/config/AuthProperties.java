@@ -26,7 +26,7 @@ public record AuthProperties(
         if (registryToken == null) registryToken = "";
         if (clockSkewSeconds <= 0) clockSkewSeconds = 30;
         if (cacheTtlSeconds <= 0) cacheTtlSeconds = 2592000;
-        if (cacheMaxKeys <= 0) cacheMaxKeys = 100;
+        if (cacheMaxKeys <= 0) cacheMaxKeys = 10000;
         if (timeoutSeconds <= 0) timeoutSeconds = 10;
         if (retryAttempts <= 0) retryAttempts = 3;
         if (whitelistedEndpoints == null) whitelistedEndpoints = List.of();

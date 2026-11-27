@@ -32,7 +32,9 @@ spring:
         spring.json.add.type.headers: false
     listener:
       ack-mode: manual_immediate
-      concurrency: 3
+      # Raise toward architecture §3.4 (24–48 partitions / peak QPS). Keep ≤ topic
+      # partition count. Override via SPRING_KAFKA_LISTENER_CONCURRENCY.
+      concurrency: ${SPRING_KAFKA_LISTENER_CONCURRENCY:8}
       missing-topics-fatal: false
 
 # Beckn Auth SDK — signature verification for /beckn/discover
@@ -58,7 +60,9 @@ discovery:
     registry-token: ${SIGNATURE_REGISTRY_TOKEN:}
     clock-skew-seconds: ${SIGNATURE_CLOCK_SKEW_SECONDS:30}
     cache-ttl-seconds: ${SIGNATURE_CACHE_TTL_SECONDS:2592000}
-    cache-max-keys: ${SIGNATURE_CACHE_MAX_KEYS:100}
+    # Registry public-key cache size. 100 evicts under multi-BAP peak and drives
+    # ACK registry-miss storms; 10k matches 100M / 12k TPM architecture §3.5 / §10.
+    cache-max-keys: ${SIGNATURE_CACHE_MAX_KEYS:10000}
     timeout-seconds: ${SIGNATURE_TIMEOUT_SECONDS:10}
     retry-attempts: ${SIGNATURE_RETRY_ATTEMPTS:3}
     # Comma-separated METHOD:PATH pairs that bypass signature verification.
@@ -231,6 +235,10 @@ discovery:
     result-limit: ${MAX_ITEMS_PER_CATALOG:100}
     log-explain-analyze: ${POSTGRES_LOG_EXPLAIN_ANALYZE:false}
     parallel-query-timeout-seconds: ${DISCOVERY_PARALLEL_QUERY_TIMEOUT_SECONDS:10}
+    # Dedicated I/O pool for parallel / chain queries (discoveryQueryExecutor).
+    # Sized toward Kafka listener concurrency × parallel fan-out + headroom
+    # (architecture §3.4 / §3.5). Set 0 to fall back to min(2×CPU, 32).
+    parallel-query-workers: ${DISCOVERY_PARALLEL_QUERY_WORKERS:16}
     # Catalog-level attributes to extract from catalog.payload
     # These attributes will be merged into catalog objects in the response
     catalog-attributes-to-extract:

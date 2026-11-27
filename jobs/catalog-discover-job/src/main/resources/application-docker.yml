@@ -18,7 +18,7 @@ spring:
         spring.json.add.type.headers: false
     listener:
       ack-mode: manual_immediate
-      concurrency: 3
+      concurrency: ${SPRING_KAFKA_LISTENER_CONCURRENCY:8}
       missing-topics-fatal: false
   
   # PostgreSQL datasource configuration

@@ -34,7 +34,7 @@ public class KafkaConsumerConfig {
     public KafkaConsumerConfig(
             @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
             @Value("${spring.kafka.consumer.group-id}") String groupId,
-            @Value("${spring.kafka.listener.concurrency:1}") int listenerConcurrency,
+            @Value("${spring.kafka.listener.concurrency:4}") int listenerConcurrency,
             @Value("${spring.kafka.consumer.properties.max.partition.fetch.bytes:10485760}") int maxPartitionFetchBytes,
             @Value("${spring.kafka.consumer.properties.fetch.max.bytes:52428800}") int fetchMaxBytes) {
         this.bootstrapServers = bootstrapServers;

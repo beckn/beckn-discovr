@@ -163,6 +163,8 @@ public class EsIndexManager {
                   "index_patterns": ["%s-*"],
                   "template": {
                     "settings": {
+                      "index.number_of_shards": 5,
+                      "index.number_of_replicas": 1,
                       "index.mapping.total_fields.limit": %d,
                       "index.mapping.depth.limit": %d,
                       "index.refresh_interval": "5s",

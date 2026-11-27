@@ -30,7 +30,7 @@ public class EventListener {
     @KafkaListener(
         topics = "${topics.input}",
         containerFactory = "kafkaListenerContainerFactory",
-        concurrency = "${spring.kafka.listener.concurrency:1}"
+        concurrency = "${spring.kafka.listener.concurrency:4}"
     )
     public void listen(ConsumerRecord<String, String> record, Acknowledgment ack) {
         String rawValue = record.value();

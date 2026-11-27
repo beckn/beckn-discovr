@@ -43,6 +43,13 @@ class BecknAuthConfigTest {
         }
 
         @Test
+        @DisplayName("Default cache max keys is 10000")
+        void build_DefaultCacheMaxKeys() {
+            BecknAuthConfig config = BecknAuthConfig.builder().build();
+            assertThat(config.getCacheMaxKeys()).isEqualTo(10000);
+        }
+
+        @Test
         @DisplayName("Default retry attempts is 3")
         void build_DefaultRetryAttempts() {
             BecknAuthConfig config = BecknAuthConfig.builder().build();
