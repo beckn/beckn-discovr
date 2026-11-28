@@ -31,9 +31,13 @@ Profiles: `../config/corpus-profiles.yaml`
 
 # Consumers ON — then query sims
 ./reliability/scripts/sim-run.sh S3 --profile 1M --path mix --qps 200 --dry-run
-./reliability/scripts/sim-run.sh S5 --profile 1M --headline-only --qps 200 --dry-run
+./reliability/scripts/sim-run.sh S5 --profile 1M --path T --headline-only --qps 200 --dry-run
 ./reliability/scripts/sim-run.sh S6 --profile 1M --mode sample --dry-run
 ```
+
+Bulk seed attaches the sim index to `ES_ALIAS` (default `beckn-catalog`) and restores
+`refresh_interval`. Verify counts **through the alias** and golden T/G search probes.
+S3/S5 JMeter = ACK; engine/e2e p99 from ClickStack.
 
 Agent VM without datastores: use `--profile local-smoke` and `--dry-run` extensively.
 

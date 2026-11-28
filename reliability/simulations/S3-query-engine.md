@@ -19,11 +19,13 @@
 ## Run
 
 ```bash
-./reliability/scripts/corpus-verify.sh --profile 1M
+export ES_URL=… PG_URL=… ES_ALIAS=beckn-catalog
+./reliability/scripts/corpus-verify.sh --profile 1M   # counts via alias + golden T/G probes
 ./reliability/scripts/sim-run.sh S3 --profile 1M --path T --qps 200 --dry-run
 ./reliability/scripts/sim-run.sh S3 --profile 1M --path mix --qps 200
 ```
 
-`--path mix` rotates intent-t / intent-g / intent-j / intent-jg (synced to JMeter VM).
+`--path mix` runs **sequential weighted** JMeter sub-runs (T / G / J / JG).  
+JMeter JTL = ACK latency; **engine p99 from ClickStack**.
 
 Artifacts: `reliability/reports/<UTC>/sim-S3-<profile>/` with `run-meta.yaml` including `corpus.profile` and `query.path`.

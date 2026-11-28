@@ -325,10 +325,10 @@ def build_resource(
         "indexed_at": datetime.now(timezone.utc).isoformat(),
     }
     if "availableAt" in resource:
-        # geo_shape Point [lon, lat]
-        es_doc["available_at_geo"] = {
-            "type": "Point",
-            "coordinates": [lon, lat],
+        # Match CatalogDocumentAssembler / GeoShapeExtractor: loc_* + *.geo → geo_shape
+        # Discover queries loc_catalogs_resources_availableAt.geo (EsSpatialQueryBuilder).
+        es_doc["loc_catalogs_resources_availableAt"] = {
+            "geo": {"type": "Point", "coordinates": [lon, lat]},
         }
 
     pg_item = {
@@ -342,10 +342,12 @@ def build_resource(
     }
     pg_loc = None
     if "availableAt" in resource:
+        # Wildcard path matches discover ilc.path = ? against request targets
+        # (GeometryExtractor stores [*] wildcards, not concrete indexes).
         pg_loc = {
             "item_id": resource_id,
             "catalog_id": catalog_id,
-            "path": "$.catalogs[0].resources[0].availableAt[0]",
+            "path": "$.catalogs[*].resources[*].availableAt[*].geo",
             "lon": lon,
             "lat": lat,
         }

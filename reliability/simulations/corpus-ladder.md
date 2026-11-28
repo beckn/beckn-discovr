@@ -42,12 +42,19 @@ On a GCP sim VM / staging (not a tiny agent box):
 ./reliability/scripts/corpus-verify.sh --profile 1M
 
 ./reliability/scripts/sim-run.sh S3 --profile 1M --path mix --qps 200
-./reliability/scripts/sim-run.sh S5 --profile 1M --headline-only --qps 200
+# --path mix expands to sequential weighted sub-runs (T45% / G25% / J20% / JG10%)
+# Or run a single path: --path T|G|J|JG
+./reliability/scripts/sim-run.sh S5 --profile 1M --path T --headline-only --qps 200
 ./reliability/scripts/sim-run.sh S6 --profile 1M --mode sample
+
+# Engine / e2e p99: JMeter JTL is ACK-only for S3/S5 — pull ClickStack timers
+# (engine.es / engine.pg / e2e.on_discover) labeled by corpus.profile=1M.
 
 # Optional ACK isolation on the same corpus
 ./reliability/scripts/pause-discover-consumers.sh --apply-env
 ./reliability/scripts/sim-run.sh S1 --profile 1M --registry-mode cache-hit
+# --intent still works on S1 without --path overwriting it:
+# ./reliability/scripts/sim-run.sh S1 --profile 1M --intent intent-j.json --registry-mode cache-hit
 ./reliability/scripts/pause-discover-consumers.sh --resume-env
 ```
 

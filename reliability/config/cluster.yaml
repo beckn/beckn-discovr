@@ -76,9 +76,9 @@ simulation:
   # Corpus ladder for gate evidence: local-smoke | 1M | 10M | 50M | 100M
   # (15M is a legacy alias only — see corpus-profiles.yaml)
   corpus_profile: "1M"
-  # Optional overrides for seed/verify when not using env ES_URL / PG_URL
-  es_url: "<FILL_SIM_ES_URL>"
-  pg_url: "<FILL_SIM_PG_URL>"
+  # Discover ES alias that corpus-seed attaches sim indexes to (env ES_ALIAS overrides)
+  es_alias: "beckn-catalog"
+  # Datastore URLs: set env ES_URL / PG_URL at runtime — do NOT put credentials here.
   s1:
     # Set true only after pause-discover-consumers.sh confirms listener is off
     consumer_paused: false
