@@ -201,7 +201,12 @@ if (regMode == 'cache-miss') {
   keyId = 'sim-key-' + UUID.randomUUID().toString()
 }
 
-def client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()
+// Reuse one HttpClient for the JVM (thread-safe). Creating per sample leaks selector threads.
+def client = props.get('s1SignHttpClient')
+if (client == null) {
+  client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()
+  props.put('s1SignHttpClient', client)
+}
 def signBody = """{"payload":${body},"subscriberId":"${sub}","uniqueKeyId":"${keyId}"}"""
 def req = HttpRequest.newBuilder()
   .uri(URI.create(signUrl))

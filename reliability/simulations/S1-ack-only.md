@@ -41,9 +41,10 @@ absorb registry RTT (TTL alone ≈ 0.5% misses at 200 QPS with one key).
 
 - `catalog-discover-job` + Kafka
 - **Consumers paused** (`DISCOVERY_KAFKA_LISTENER_ENABLED=false` / profile `sim-s1`)
-- On **resume**, offsets reset to **latest** before enabling the listener (avoids
-  replaying ~targetRps×duration messages into query/callbacks). Or use a sim-only
-  `KAFKA_REQUEST_TOPIC`.
+- On **resume**, offsets reset to **latest** for consumer group **`discovery-service`**
+  (`spring.kafka.consumer.group-id`, not the Deployment name) before enabling the
+  listener — avoids replaying ~targetRps×duration messages into query/callbacks.
+  Or use a sim-only `KAFKA_REQUEST_TOPIC`.
 - Registry mock: **in-cluster** Service URL in `simulation.registry_mock_url`
   (not `127.0.0.1` from the laptop)
 

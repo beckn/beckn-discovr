@@ -53,8 +53,10 @@ kafka:
     on_discover_out: "<FILL_ON_DISCOVER_OUT_TOPIC>"
   consumer_groups:
     publish: "catalog-publish-job"
-    discover: "catalog-discover-job"
+    # Must equal spring.kafka.consumer.group-id (application.yml default: discovery-service)
+    discover: "discovery-service"
     dispatcher: "response-dispatcher"
+
 
 # Datastores
 postgres:

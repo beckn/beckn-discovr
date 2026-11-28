@@ -39,8 +39,15 @@ DISCOVER_DEPLOY=$(grep -E '^\s*discover:' "$CONFIG" | head -1 | sed -E 's/^[^:]*
 DISCOVER_DEPLOY=${DISCOVER_DEPLOY:-catalog-discover-job}
 NS=$(grep -A20 '^namespaces:' "$CONFIG" | grep -E '^\s*-\s*"' | head -1 | sed -E 's/^[^"]*"([^"]+)".*/\1/')
 CTX=$(grep -E '^\s*context:' "$CONFIG" | head -1 | sed -E 's/.*:\s*"([^"]+)".*/\1/')
+# Must match spring.kafka.consumer.group-id on catalog-discover-job (default: discovery-service).
+# Do NOT use the Deployment name — resetting the wrong group leaves S1 backlog for the real listener.
 CONSUMER_GROUP=$(grep -A20 'consumer_groups:' "$CONFIG" | grep -E '^\s*discover:' | head -1 | sed -E 's/.*:\s*"([^"]+)".*/\1/')
-CONSUMER_GROUP=${CONSUMER_GROUP:-catalog-discover-job}
+if [[ -z "${CONSUMER_GROUP:-}" || "$CONSUMER_GROUP" == \<FILL_* || "$CONSUMER_GROUP" == "catalog-discover-job" ]]; then
+  # Legacy cluster.yaml used Deployment name; Spring default / application.yml is discovery-service
+  CONSUMER_GROUP="discovery-service"
+fi
+
+
 # Prefer simulation.topics.discover_in; fall back to kafka.topics.discover_events
 TOPIC=$(grep -A10 '^\s*topics:' "$CONFIG" | grep -E '^\s*discover_in:' | head -1 | sed -E 's/.*:\s*"([^"]+)".*/\1/' || true)
 if [[ -z "${TOPIC:-}" || "$TOPIC" == \<FILL_* ]]; then
