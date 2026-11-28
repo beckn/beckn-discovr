@@ -45,7 +45,7 @@ public final class BecknAuthConfig {
     private static final long DEFAULT_EXPIRY_SECONDS = 3600;
     private static final long DEFAULT_ALLOWED_CLOCK_SKEW_SECONDS = 30;
     private static final long DEFAULT_CACHE_TTL_SECONDS = 2592000;
-    private static final int DEFAULT_CACHE_MAX_KEYS = 100;
+    private static final int DEFAULT_CACHE_MAX_KEYS = 10000;
     private static final boolean DEFAULT_CACHE_ENABLED = true;
     private static final long DEFAULT_CACHE_CLEANUP_INTERVAL_SECONDS = 3600;
     private static final int DEFAULT_TIMEOUT_SECONDS = 10;
@@ -271,7 +271,7 @@ public final class BecknAuthConfig {
             return this;
         }
 
-        /** Matches {@code discovery.registry-auth.cache-max-keys}. Default: {@code 100}. */
+        /** Matches {@code discovery.registry-auth.cache-max-keys}. Default: {@code 10000}. */
         public Builder cacheMaxKeys(int cacheMaxKeys) {
             this.cacheMaxKeys = cacheMaxKeys;
             return this;

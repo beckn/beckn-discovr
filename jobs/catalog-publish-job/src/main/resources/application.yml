@@ -129,7 +129,7 @@ app:
     registry-token: ${SIGNATURE_REGISTRY_TOKEN:}
     clock-skew-seconds: ${SIGNATURE_CLOCK_SKEW_SECONDS:30}
     cache-ttl-seconds: ${SIGNATURE_CACHE_TTL_SECONDS:2592000}
-    cache-max-keys: ${SIGNATURE_CACHE_MAX_KEYS:100}
+    cache-max-keys: ${SIGNATURE_CACHE_MAX_KEYS:10000}
     timeout-seconds: ${SIGNATURE_TIMEOUT_SECONDS:10}
     retry-attempts: ${SIGNATURE_RETRY_ATTEMPTS:3}
     # Comma-separated METHOD:PATH pairs that bypass signature verification.

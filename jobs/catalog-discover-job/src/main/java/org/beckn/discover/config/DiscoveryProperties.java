@@ -444,8 +444,9 @@ public class DiscoveryProperties {
         private boolean logExplainAnalyze = false;
         private int parallelQueryTimeoutSeconds = 10;
         /** Size of the dedicated I/O thread pool used for parallel queries (Path A fallback).
-         *  Defaults to min(availableProcessors * 2, 8) when set to 0. */
-        private int parallelQueryWorkers = 4;
+         *  Defaults to {@code 16}; when set to {@code 0}, falls back to
+         *  {@code min(availableProcessors * 2, 32)}. */
+        private int parallelQueryWorkers = 16;
 
         /**
          * List of catalog-level attributes to extract from catalog.payload

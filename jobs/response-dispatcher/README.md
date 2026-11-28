@@ -160,7 +160,7 @@ spring:
     consumer:
       group-id: seeker-notifier-group
     listener:
-      concurrency: 1
+      concurrency: 4
 
 topics:
   input: events.seeker.requests
@@ -183,7 +183,7 @@ spring:
 | `TOPICS_INPUT` | Input topic name | `events.seeker.requests` |
 | `TOPICS_OUTPUT` | Output topic name | `events.seeker.notifications` |
 | `TOPICS_DLT` | Dead letter topic | `events.seeker.dlt` |
-| `SPRING_KAFKA_LISTENER_CONCURRENCY` | Consumer concurrency | `1` |
+| `SPRING_KAFKA_LISTENER_CONCURRENCY` | Consumer concurrency | `4` |
 
 ## Monitoring and Health Checks
 

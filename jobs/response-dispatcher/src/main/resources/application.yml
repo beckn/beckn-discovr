@@ -23,7 +23,9 @@ spring:
         delivery.timeout.ms: 120000
     listener:
       ack-mode: MANUAL_IMMEDIATE
-      concurrency: 1
+      # >1 so a slow BAP/onix callback cannot pin the sole consumer (architecture §3.4).
+      # Keep ≤ response-topic partition count. Override via SPRING_KAFKA_LISTENER_CONCURRENCY.
+      concurrency: ${SPRING_KAFKA_LISTENER_CONCURRENCY:4}
       type: SINGLE
       missing-topics-fatal: false
 
