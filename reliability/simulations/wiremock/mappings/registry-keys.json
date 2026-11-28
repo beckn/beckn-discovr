@@ -1,5 +1,5 @@
 {
-  "priority": 10,
+  "priority": 1,
   "request": {
     "method": "GET",
     "urlPathPattern": "/subscribers/.*/keys/.*"

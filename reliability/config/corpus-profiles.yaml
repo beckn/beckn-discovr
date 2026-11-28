@@ -10,7 +10,7 @@ profiles:
     catalogs: 10
     resources_per_catalog: 100
     catalog_id_prefix: "sim-local-smoke"
-    es_index: "catalogs-sim-local-smoke"
+    es_index: "beckn-catalog-sim-local-smoke"
     hardware_hint: "Compose / agent VM"
     sims_required: ["S3"]
     sims_optional: ["S1", "S6"]
@@ -20,7 +20,7 @@ profiles:
     catalogs: 1000
     resources_per_catalog: 1000
     catalog_id_prefix: "sim-1m"
-    es_index: "catalogs-sim-1m"
+    es_index: "beckn-catalog-sim-1m"
     hardware_hint: "GCP sim VM n2-highmem-8+ / staging; ≥500GB SSD"
     sims_required: ["S3", "S5", "S6"]
     sims_optional: ["S1"]
@@ -30,7 +30,7 @@ profiles:
     catalogs: 10000
     resources_per_catalog: 1000
     catalog_id_prefix: "sim-10m"
-    es_index: "catalogs-sim-10m"
+    es_index: "beckn-catalog-sim-10m"
     hardware_hint: "Staging Tier A-ish ES 3–6 nodes + PG 16vCPU/64Gi+"
     sims_required: ["S3", "S5", "S6"]
     sims_optional: ["S1", "S2"]
@@ -40,7 +40,7 @@ profiles:
     catalogs: 50000
     resources_per_catalog: 1000
     catalog_id_prefix: "sim-50m"
-    es_index: "catalogs-sim-50m"
+    es_index: "beckn-catalog-sim-50m"
     hardware_hint: "Tier B-shaped ES/PG (architecture §4)"
     sims_required: ["S3", "S5", "S6"]
     sims_optional: ["S1", "S2", "S4"]
@@ -50,7 +50,7 @@ profiles:
     catalogs: 100000
     resources_per_catalog: 1000
     catalog_id_prefix: "sim-100m"
-    es_index: "catalogs-sim-100m"
+    es_index: "beckn-catalog-sim-100m"
     hardware_hint: "Prod-like Tier B/C; not agent VM"
     sims_required: ["S3", "S5"]
     sims_optional: ["S1", "S2", "S4", "S6"]
@@ -61,7 +61,7 @@ profiles:
     catalogs: 15000
     resources_per_catalog: 1000
     catalog_id_prefix: "sim-15m"
-    es_index: "catalogs-sim-15m"
+    es_index: "beckn-catalog-sim-15m"
     hardware_hint: "Legacy #79 alias"
     sims_required: ["S3", "S5"]
     sims_optional: ["S1", "S6"]

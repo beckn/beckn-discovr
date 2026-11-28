@@ -243,7 +243,10 @@ def build_resource(
         "rateable": True,
         "rating": {"ratingValue": 4.0 + (idx % 10) / 10.0, "ratingCount": 10 + (idx % 200)},
     }
-    if kind in ("G", "GT", "TAIL") or (golden and golden_meta and golden_meta.get("path") == "G"):
+    # J also gets geo so intent-jg (name==sim-fixture AND nearby geo) matches real docs.
+    if kind in ("G", "GT", "TAIL", "J") or (
+        golden and golden_meta and golden_meta.get("path") in ("G", "J", "JG")
+    ):
         # Prefer GeoJSON Point (production fixtures) + gps string for extractors
         resource["availableAt"] = [
             {

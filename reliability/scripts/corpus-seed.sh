@@ -79,7 +79,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 DRY-RUN — no ES/PG/HTTP writes.
 
 Would:
-  1. Stream ES NDJSON into index '${ES_INDEX}' (${RESOURCES} docs) via \${ES_URL}/_bulk
+  1. Create index '${ES_INDEX}' (beckn-catalog-* prefix + geo_shape/BM25 mappings) then bulk ${RESOURCES} docs
   2. PUT alias '${ES_ALIAS}' → '${ES_INDEX}' (so discover can search it)
   3. Restore refresh_interval to 5s after bulk
   4. COPY ${RESOURCES} rows into PG item (+ locations) via \${PG_URL}
@@ -110,10 +110,58 @@ esac
 load_es_bulk() {
   local es_url="${ES_URL:?ES_URL required for bulk mode}"
   echo "Ensuring index ${ES_INDEX} exists on ${es_url}"
-  # Create if missing; ignore 400 already-exists
+  # Prefer production template (beckn-catalog-*) via index name prefix.
+  # Also embed minimal geo_shape + full_text_blob mappings so a fresh sim ES
+  # without the publish-job template still supports BM25 + geo probes.
   curl -sS -o /tmp/corpus-es-create.json -w "%{http_code}" -X PUT "${es_url}/${ES_INDEX}" \
     -H 'Content-Type: application/json' \
-    -d '{"settings":{"refresh_interval":"-1","number_of_replicas":0}}' >/tmp/corpus-es-create.code || true
+    -d @- >/tmp/corpus-es-create.code <<'EOF' || true
+{
+  "settings": {
+    "refresh_interval": "-1",
+    "number_of_replicas": 0,
+    "analysis": {
+      "filter": {
+        "english_stop": {"type": "stop", "stopwords": "_english_"},
+        "english_stemmer": {"type": "stemmer", "language": "english"}
+      },
+      "analyzer": {
+        "beckn_text": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "english_stop", "english_stemmer"]
+        },
+        "beckn_text_search": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "english_stop", "english_stemmer"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic_templates": [
+      {"geo_fields": {"path_match": "*.geo", "mapping": {"type": "geo_shape"}}}
+    ],
+    "properties": {
+      "catalog_id": {"type": "keyword"},
+      "resource_id": {"type": "keyword"},
+      "network_id": {"type": "keyword"},
+      "resource_name": {"type": "text", "fields": {"raw": {"type": "keyword"}}},
+      "full_text_blob": {
+        "type": "text",
+        "analyzer": "beckn_text",
+        "search_analyzer": "beckn_text_search"
+      },
+      "loc_catalogs_resources_availableAt": {
+        "properties": {
+          "geo": {"type": "geo_shape"}
+        }
+      }
+    }
+  }
+}
+EOF
   echo "  create HTTP $(cat /tmp/corpus-es-create.code)"
 
   # Disable refresh for bulk even when index already existed
