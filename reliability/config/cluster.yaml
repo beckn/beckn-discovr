@@ -53,8 +53,10 @@ kafka:
     on_discover_out: "<FILL_ON_DISCOVER_OUT_TOPIC>"
   consumer_groups:
     publish: "catalog-publish-job"
-    discover: "catalog-discover-job"
+    # Must equal spring.kafka.consumer.group-id (application.yml default: discovery-service)
+    discover: "discovery-service"
     dispatcher: "response-dispatcher"
+
 
 # Datastores
 postgres:
@@ -64,3 +66,32 @@ elasticsearch:
 
 reports:
   dir: "reliability/reports"
+
+# ─── Simulation harness (S1–S6) ───────────────────────────────────────────────
+# See reliability/simulations/README.md and Agent Store simulation-harness-design.md
+simulation:
+  # WireMock (or compatible) registry base URL — same shape as SIGNATURE_REGISTRY_BASE_URL
+  # e.g. "http://mock-registry.discovr-staging.svc.cluster.local:8080/subscribers"
+  registry_mock_url: "<FILL_SIM_REGISTRY_MOCK_URL>"
+  # Optional onix / callback sink (S4/S5 — unused in S1)
+  onix_mock_url: "<FILL_SIM_ONIX_MOCK_URL>"
+  # Corpus profile for gate evidence: local-smoke | 1M | 15M | 100M-subset
+  corpus_profile: "15M"
+  s1:
+    # Set true only after pause-discover-consumers.sh confirms listener is off
+    consumer_paused: false
+    # auth-off (default, measurable without signer) | cache-hit | cache-miss | registry-down
+    registry_mode: "auth-off"
+    # Required for cache-hit/miss/registry-down — signer must digest the per-sample body
+    # (Postman-compatible /sign-payload). Empty = auth-off only.
+    sign_url: "<FILL_SIM_SIGN_URL>"
+    # JMeter open-loop target RPS (ConstantThroughputTimer); users = headroom
+    avg_qps: 200
+    peak_qps: 600
+
+  topics:
+    # Align with discovery.kafka.request-topic / response-topic when filled
+    discover_in: "<FILL_DISCOVER_IN_TOPIC>"    # e.g. discovr.discover.in.requests
+    discover_out: "<FILL_DISCOVER_OUT_TOPIC>"  # e.g. discovr.discover.out.responses
+
+

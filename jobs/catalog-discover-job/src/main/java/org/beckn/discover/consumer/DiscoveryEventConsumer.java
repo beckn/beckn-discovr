@@ -77,7 +77,10 @@ public class DiscoveryEventConsumer {
     @KafkaListener(
         topics = "${discovery.kafka.request-topic}",
         groupId = "${spring.kafka.consumer.group-id}",
-        containerFactory = "kafkaListenerContainerFactory"
+        containerFactory = "kafkaListenerContainerFactory",
+        // S1 ACK-only sims set DISCOVERY_KAFKA_LISTENER_ENABLED=false (or profile sim-s1)
+        // so request-topic produce is measured without query-path backlog.
+        autoStartup = "${discovery.kafka.listener-enabled:true}"
     )
     public void handleDiscoveryEvent(
             @Payload String message,
