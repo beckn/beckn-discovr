@@ -10,7 +10,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Guards the prod Flyway GIN on {@code item.payload} so it stays aligned with
- * discover IT schema ({@code idx_item_payload_gin} / {@code jsonb_path_ops}).
+ * discover IT schema ({@code idx_item_payload_gin} / {@code jsonb_path_ops})
+ * and builds without a long SHARE lock on {@code item}.
  */
 class ItemPayloadGinMigrationTest {
 
@@ -18,10 +19,12 @@ class ItemPayloadGinMigrationTest {
             "src/main/resources/db/migration/V8__add_item_payload_gin.sql");
 
     @Test
-    void v8CreatesPayloadGinWithJsonbPathOps() throws IOException {
+    void v8CreatesPayloadGinConcurrentlyWithJsonbPathOps() throws IOException {
         assertThat(MIGRATION).exists();
         String sql = Files.readString(MIGRATION);
-        assertThat(sql).containsIgnoringCase("CREATE INDEX IF NOT EXISTS idx_item_payload_gin");
+        assertThat(sql).contains("flyway:executeInTransaction=false");
+        assertThat(sql).containsIgnoringCase("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_item_payload_gin");
         assertThat(sql).containsIgnoringCase("USING GIN (payload jsonb_path_ops)");
+        assertThat(sql).containsIgnoringCase("NOT i.indisvalid");
     }
 }

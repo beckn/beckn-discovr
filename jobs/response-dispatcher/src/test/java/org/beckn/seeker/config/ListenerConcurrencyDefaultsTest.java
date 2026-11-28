@@ -24,9 +24,8 @@ class ListenerConcurrencyDefaultsTest {
             Map<String, Object> kafka = (Map<String, Object>) spring.get("kafka");
             @SuppressWarnings("unchecked")
             Map<String, Object> listener = (Map<String, Object>) kafka.get("listener");
-            String concurrency = String.valueOf(listener.get("concurrency"));
-            assertThat(concurrency).contains("4");
-            assertThat(concurrency).doesNotContain(":1}");
+            assertThat(String.valueOf(listener.get("concurrency")))
+                    .isEqualTo("${SPRING_KAFKA_LISTENER_CONCURRENCY:4}");
         }
     }
 

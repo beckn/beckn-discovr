@@ -238,7 +238,10 @@ discovery:
     # Dedicated I/O pool for parallel / chain queries (discoveryQueryExecutor).
     # Sized toward Kafka listener concurrency × parallel fan-out + headroom
     # (architecture §3.4 / §3.5). Set 0 to fall back to min(2×CPU, 32).
-    parallel-query-workers: ${DISCOVERY_PARALLEL_QUERY_WORKERS:16}
+    # Env name matches Spring relaxed binding so pinned images without this
+    # placeholder still pick up DISCOVERY_POSTGRESQL_PARALLEL_QUERY_WORKERS.
+    # Keep Hikari max-pool-size ≥ this value (see POSTGRES_MAX_POOL_SIZE).
+    parallel-query-workers: ${DISCOVERY_POSTGRESQL_PARALLEL_QUERY_WORKERS:16}
     # Catalog-level attributes to extract from catalog.payload
     # These attributes will be merged into catalog objects in the response
     catalog-attributes-to-extract:

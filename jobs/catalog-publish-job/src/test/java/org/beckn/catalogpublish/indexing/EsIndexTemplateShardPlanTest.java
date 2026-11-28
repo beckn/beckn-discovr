@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,39 +12,42 @@ import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 100M / Tier-B shard plan: 5 primaries + 1 replica per catalogs-* index
- * (architecture §3.2 — ~20–50 GB/shard; cluster-wide 80–200 primaries via
- * per-schema indexes).
+ * Shard/replica plan:
+ * <ul>
+ *   <li>Single-node Compose/stack templates: 1 primary / 0 replicas (avoid yellow).</li>
+ *   <li>Helm (multi-node / Tier B prod starting point): 5 primaries / 1 replica.</li>
+ * </ul>
  */
 class EsIndexTemplateShardPlanTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @ParameterizedTest
-    @ValueSource(strings = {
-            "config/es-index-template.json",
-            "discovr-deployment/elasticsearch/es-index-template.json",
-            "discovr-deployment/helm/charts/catalog-publish-job/files/es-index-template.json"
+    @CsvSource({
+            "config/es-index-template.json, 1, 0",
+            "discovr-deployment/elasticsearch/es-index-template.json, 1, 0",
+            "discovr-deployment/helm/charts/catalog-publish-job/files/es-index-template.json, 5, 1"
     })
-    void templateFilesDeclareTierBShardReplicaPlan(String relativePath) throws Exception {
+    void templateFilesDeclareExpectedShardReplicaPlan(String relativePath, int shards, int replicas)
+            throws Exception {
         Path path = resolveFromRepoRoot(relativePath);
         assertThat(path).as(relativePath).exists();
         JsonNode settings = MAPPER.readTree(Files.readString(path))
                 .path("template").path("settings");
         assertThat(settings.path("index.number_of_shards").asInt())
-                .as("%s shards", relativePath).isEqualTo(5);
+                .as("%s shards", relativePath).isEqualTo(shards);
         assertThat(settings.path("index.number_of_replicas").asInt())
-                .as("%s replicas", relativePath).isEqualTo(1);
+                .as("%s replicas", relativePath).isEqualTo(replicas);
     }
 
     @Test
-    void builtInDefaultTemplateSourceDeclaresSameShardReplicaPlan() throws Exception {
+    void builtInDefaultTemplateMatchesSingleNodeOperatorTemplate() throws Exception {
         Path source = resolveFromRepoRoot(
                 "jobs/catalog-publish-job/src/main/java/org/beckn/catalogpublish/indexing/EsIndexManager.java");
         assertThat(source).exists();
         String java = Files.readString(source);
-        assertThat(java).contains("\"index.number_of_shards\": 5");
-        assertThat(java).contains("\"index.number_of_replicas\": 1");
+        assertThat(java).contains("\"index.number_of_shards\": 1");
+        assertThat(java).contains("\"index.number_of_replicas\": 0");
     }
 
     private static Path resolveFromRepoRoot(String relativePath) {
@@ -53,7 +56,6 @@ class EsIndexTemplateShardPlanTest {
         if (Files.exists(direct)) {
             return direct;
         }
-        // Gradle cwd is the job module directory
         Path fromRepo = cwd.resolve("../..").resolve(relativePath).normalize();
         if (Files.exists(fromRepo)) {
             return fromRepo;

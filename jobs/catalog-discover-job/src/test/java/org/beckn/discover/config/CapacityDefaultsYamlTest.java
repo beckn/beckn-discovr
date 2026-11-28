@@ -29,19 +29,19 @@ class CapacityDefaultsYamlTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> listener = (Map<String, Object>) kafka.get("listener");
             assertThat(String.valueOf(listener.get("concurrency")))
-                    .contains("8");
+                    .isEqualTo("${SPRING_KAFKA_LISTENER_CONCURRENCY:8}");
 
             @SuppressWarnings("unchecked")
             Map<String, Object> discovery = (Map<String, Object>) root.get("discovery");
             @SuppressWarnings("unchecked")
             Map<String, Object> auth = (Map<String, Object>) discovery.get("auth");
             assertThat(String.valueOf(auth.get("cache-max-keys")))
-                    .contains("10000");
+                    .isEqualTo("${SIGNATURE_CACHE_MAX_KEYS:10000}");
 
             @SuppressWarnings("unchecked")
             Map<String, Object> postgresql = (Map<String, Object>) discovery.get("postgresql");
             assertThat(String.valueOf(postgresql.get("parallel-query-workers")))
-                    .contains("16");
+                    .isEqualTo("${DISCOVERY_POSTGRESQL_PARALLEL_QUERY_WORKERS:16}");
         }
     }
 
