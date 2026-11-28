@@ -114,6 +114,38 @@ After all requested scenarios: writes consolidated `index.html` + `scorecard.md`
 
 ---
 
+## 2.4 Simulation harness — corpus ladder + S1
+
+Separate from Phase-1 numeric scenarios. Gates path-split SLOs in
+`config/slos-100m.yaml` **against indexed corpus sizes**
+(`1M → 10M → 50M → 100M`) before a Tier B prod buy. Design:
+Agent Store `docs/corpus-ladder-simulation.md`.
+
+```bash
+# Validate harness files (no staging)
+./reliability/scripts/corpus-seed.sh --profile 1M --dry-run
+./reliability/scripts/sim-run.sh S3 --profile 1M --path mix --qps 200 --dry-run
+./reliability/scripts/sim-run.sh S5 --profile 1M --headline-only --qps 200 --dry-run
+
+# Live corpus + query (consumers ENABLED; needs ES_URL + PG_URL)
+./reliability/scripts/corpus-seed.sh --profile 1M --mode bulk
+./reliability/scripts/corpus-verify.sh --profile 1M
+./reliability/scripts/sim-run.sh S3 --profile 1M --path mix --qps 200
+./reliability/scripts/sim-run.sh S5 --profile 1M --headline-only --qps 200
+
+# Optional ACK isolation (pause consumers)
+./reliability/scripts/pause-discover-consumers.sh --apply-env
+./reliability/scripts/mock-registry.sh start --mode cache-hit
+./reliability/scripts/sim-run.sh S1 --profile 1M --tpm 12000 --registry-mode cache-hit
+./reliability/scripts/pause-discover-consumers.sh --resume-env
+```
+
+Next rungs: `CORPUS_ALLOW_LARGE=1` and `--profile 10M|50M|100M` — see
+`simulations/corpus-ladder.md`. Artifacts: `reports/<UTC>/sim-S*/`.
+Scorecard columns by corpus size: `simulations/scorecard-template.md`.
+
+---
+
 ## 3. Phase 2 — chaos
 
 ### 3.1 Invocations

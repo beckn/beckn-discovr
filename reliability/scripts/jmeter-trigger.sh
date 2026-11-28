@@ -36,7 +36,7 @@ LOG="$RUN_DIR/jmeter.log"
 
 EXTRA_ARGS=("$@")
 
-REMOTE_CMD="mkdir -p '$RUN_DIR' && '$JMETER_BIN' -n -t '$SCRIPTS_DIR/$JMX_FILE' -l '$JTL' -e -o '$HTML' -j '$LOG' ${EXTRA_ARGS[*]}"
+REMOTE_CMD="mkdir -p '$RUN_DIR' && cd '$SCRIPTS_DIR' && '$JMETER_BIN' -n -t './$JMX_FILE' -l '$JTL' -e -o '$HTML' -j '$LOG' ${EXTRA_ARGS[*]}"
 
 echo "Triggering JMeter on $VM ($ZONE) as $USER"
 echo "  scenario: $SCENARIO_ID"

@@ -1,0 +1,21 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/subscribers/.*/keys/.*"
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "registry unavailable (S1 registry-down mode)"
+    },
+    "fixedDelayMilliseconds": 50
+  },
+  "metadata": {
+    "sim": "S1",
+    "mode": "registry-down"
+  }
+}

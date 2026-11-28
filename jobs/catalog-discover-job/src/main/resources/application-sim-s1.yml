@@ -1,0 +1,10 @@
+# Profile: sim-s1
+# Pause DiscoveryEventConsumer so S1 ACK-only load measures auth + schema + Kafka
+# produce without query-path backlog. HTTP POST /beckn/discover still ACKs and
+# publishes to the request topic.
+#
+# Activate via SPRING_PROFILES_ACTIVE=sim-s1 (or …,sim-s1) — or set
+# DISCOVERY_KAFKA_LISTENER_ENABLED=false without this profile.
+discovery:
+  kafka:
+    listener-enabled: false

@@ -1,0 +1,31 @@
+{
+  "context": {
+    "version": "2.0.0",
+    "action": "discover",
+    "timestamp": "2026-11-26T00:00:00Z",
+    "messageId": "00000000-0000-4000-8000-000000000004",
+    "transactionId": "00000000-0000-4000-8000-000000000104",
+    "networkId": "beckn.one/retail",
+    "bapId": "sim-bap.example.com",
+    "bapUri": "https://sim-bap.example.com/beckn"
+  },
+  "message": {
+    "intent": {
+      "filters": {
+        "type": "jsonpath",
+        "expression": "$.catalogs[*].resources[*] ? (@.descriptor.name == \"sim-fixture\")"
+      },
+      "spatial": [
+        {
+          "op": "s_dwithin",
+          "targets": "$.catalogs[*].resources[*].availableAt[*].geo",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [77.5946, 12.9716]
+          },
+          "distanceMeters": 10000
+        }
+      ]
+    }
+  }
+}

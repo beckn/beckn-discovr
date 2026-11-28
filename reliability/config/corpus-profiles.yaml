@@ -1,0 +1,98 @@
+# Corpus ladder profiles for corpus-backed simulations (S3/S5/S6).
+# Product lock: 1M → 10M → 50M → 100M distinct resources (not ACK-only).
+# Design: Agent Store docs/corpus-ladder-simulation.md
+#
+# optional_alias 15M retained for issue #79 artifacts — not a scorecard column.
+
+profiles:
+  local-smoke:
+    resources: 1000
+    catalogs: 10
+    resources_per_catalog: 100
+    catalog_id_prefix: "sim-local-smoke"
+    es_index: "beckn-catalog-sim-local-smoke"
+    hardware_hint: "Compose / agent VM"
+    sims_required: ["S3"]
+    sims_optional: ["S1", "S6"]
+
+  1M:
+    resources: 1000000
+    catalogs: 1000
+    resources_per_catalog: 1000
+    catalog_id_prefix: "sim-1m"
+    es_index: "beckn-catalog-sim-1m"
+    hardware_hint: "GCP sim VM n2-highmem-8+ / staging; ≥500GB SSD"
+    sims_required: ["S3", "S5", "S6"]
+    sims_optional: ["S1"]
+
+  10M:
+    resources: 10000000
+    catalogs: 10000
+    resources_per_catalog: 1000
+    catalog_id_prefix: "sim-10m"
+    es_index: "beckn-catalog-sim-10m"
+    hardware_hint: "Staging Tier A-ish ES 3–6 nodes + PG 16vCPU/64Gi+"
+    sims_required: ["S3", "S5", "S6"]
+    sims_optional: ["S1", "S2"]
+
+  50M:
+    resources: 50000000
+    catalogs: 50000
+    resources_per_catalog: 1000
+    catalog_id_prefix: "sim-50m"
+    es_index: "beckn-catalog-sim-50m"
+    hardware_hint: "Tier B-shaped ES/PG (architecture §4)"
+    sims_required: ["S3", "S5", "S6"]
+    sims_optional: ["S1", "S2", "S4"]
+
+  100M:
+    resources: 100000000
+    catalogs: 100000
+    resources_per_catalog: 1000
+    catalog_id_prefix: "sim-100m"
+    es_index: "beckn-catalog-sim-100m"
+    hardware_hint: "Prod-like Tier B/C; not agent VM"
+    sims_required: ["S3", "S5"]
+    sims_optional: ["S1", "S2", "S4", "S6"]
+
+  # Optional — issue #79 / older harness drafts. Not a Praveen scorecard column.
+  15M:
+    resources: 15000000
+    catalogs: 15000
+    resources_per_catalog: 1000
+    catalog_id_prefix: "sim-15m"
+    es_index: "beckn-catalog-sim-15m"
+    hardware_hint: "Legacy #79 alias"
+    sims_required: ["S3", "S5"]
+    sims_optional: ["S1", "S6"]
+    deprecated_for_scorecard: true
+
+# Path mix for generation (approximate)
+path_mix:
+  text_bm25: 0.40
+  geo_postgis: 0.25
+  jsonpath_j: 0.20
+  geo_text: 0.10
+  long_tail: 0.05
+
+# Golden catalogs — always emitted first; used by corpus-verify.sh
+golden:
+  - id: sim-golden-t
+    path: T
+    text: "instant coffee powder"
+  - id: sim-golden-g
+    path: G
+    lat: 12.9716
+    lon: 77.5946
+  - id: sim-golden-j
+    path: J
+    attribute_name: "simLadderMarker"
+    attribute_value: "corpus-golden-j"
+
+verify:
+  count_tolerance: 0.001   # ≥ 99.9% of target
+  require_golden_hits: true
+
+network_id: "beckn.one/retail"
+schema_context: "https://schema.org/"
+schema_type: "Product"
