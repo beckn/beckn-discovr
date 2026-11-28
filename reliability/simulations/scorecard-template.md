@@ -26,11 +26,13 @@ decision: BLOCK        # APPROVE_TIER_B only when all required = PASS
 |-------|-------|
 | Sim | S1 ACK-only |
 | Corpus profile | |
-| Registry mode | cache-hit / cache-miss |
-| QPS steps | 200 → 600 (→ optional 1k) |
+| Registry / auth mode | auth-off / cache-hit / cache-miss |
+| Target RPS steps | 200 → 600 (→ optional 1k); achieved RPS ≈ target? |
 | Consumers paused | yes / no |
-| ACK p99 (hit) ms | ≤ 100? |
-| ACK p99 (miss) ms | ≤ 250? |
+| Offsets reset on resume | yes / no |
+| ACK p99 (auth-off) ms | ≤ 100? |
+| ACK p99 (hit) ms | ≤ 100? (needs --sign-url) |
+| ACK p99 (miss) ms | ≤ 250? (needs --sign-url + key rotation) |
 | ACK error rate | ≤ 0.1%? |
 | Kafka produce p99 ms | ≤ 20? |
 | Artifact dir | `reliability/reports/.../sim-S1-...` |

@@ -3,4 +3,5 @@ reports/
 *.log
 simulations/wiremock/__generated/
 simulations/wiremock/.wiremock.pid
+simulations/wiremock/wiremock.log
 

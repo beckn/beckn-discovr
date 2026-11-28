@@ -12,100 +12,99 @@ duration_min: 40
 ## Goal
 
 Prove discover **ACK p99** under contractual TPM / peak without waiting on the async
-query → `on_discover` path. Measures Tomcat/thread pool, Beckn auth (+ registry cache
-hit/miss), schema validation, and Kafka request-topic produce.
+query → `on_discover` path. Measures Tomcat/thread pool, schema validation, Kafka
+request-topic produce, and (when signed) Beckn auth + registry cache hit/miss.
 
 ## Entry / exit
 
 | | |
 |--|--|
-| **Entry** | `POST /beckn/discover` (auth + schema + Kafka produce) |
+| **Entry** | `POST /beckn/discover` |
 | **Exit** | Synchronous ACK/NACK HTTP response |
 | **Not measured** | Engine query, dispatcher, callback delivery |
 
+## Auth modes (important)
+
+BecknAuth verifies `created`/`expires` (clock skew) and a **BLAKE2b digest of the
+request body**. The JMX mutates `messageId` / `transactionId` / `timestamp` on every
+sample, so a **static Authorization header always NACKs**.
+
+| Mode | How | Gate use |
+|------|-----|----------|
+| **`auth-off` (default)** | `SIGNATURE_AUTH_ENABLED=false`; no `Authorization` header | S1 v1 ACK/Kafka evidence |
+| **`cache-hit` / `cache-miss` / `registry-down`** | `--sign-url` signer digests **this** sample body; in-cluster registry mock | Auth/registry SLO rows |
+
+`cache-miss` rotates `uniqueKeyId` per sample so the discover auth cache cannot
+absorb registry RTT (TTL alone ≈ 0.5% misses at 200 QPS with one key).
+
 ## Infra
 
-- `catalog-discover-job` + Kafka + **mocked registry**
-- **Consumers paused** so query backlog does not pollute ACK timings:
-  - Prefer `DISCOVERY_KAFKA_LISTENER_ENABLED=false` or Spring profile `sim-s1`
-  - Or scale discover consumer replicas / pause listener (see `scripts/pause-discover-consumers.sh`)
-- Response / dispatcher path may be ignored for this sim
-
-## Pre-condition
-
-1. `reliability/config/cluster.yaml` filled (same guardrails as Phase-1)
-2. Discover consumers paused (`simulation.s1.consumer_paused: true` after pause)
-3. Registry mock URL in `cluster.yaml` → `simulation.registry_mock_url`
-4. Mock mode set: `cache-hit` | `cache-miss` | `registry-down` (see `scripts/mock-registry.sh`)
-5. JMeter VM has `s1-ack-only.jmx` synced (`sim-run.sh` copies from `reliability/jmx/`)
+- `catalog-discover-job` + Kafka
+- **Consumers paused** (`DISCOVERY_KAFKA_LISTENER_ENABLED=false` / profile `sim-s1`)
+- On **resume**, offsets reset to **latest** before enabling the listener (avoids
+  replaying ~targetRps×duration messages into query/callbacks). Or use a sim-only
+  `KAFKA_REQUEST_TOPIC`.
+- Registry mock: **in-cluster** Service URL in `simulation.registry_mock_url`
+  (not `127.0.0.1` from the laptop)
 
 ## Load shape
 
-| Step | Target QPS | Sustain |
+Open-loop via JMeter `ConstantThroughputTimer` (`-JtargetRps`).
+
+| Step | Target RPS | Sustain |
 |------|------------|---------|
 | 1 | 200 (~12k TPM) | 10–20 min |
 | 2 | 600 (×3 peak) | 10–20 min |
 | 3 (optional) | 1k–2k | 5–10 min |
 
-Path mix is irrelevant to the exit metric; bodies stay valid discover intents.
-Default template: cheap T (`fixtures/intents/intent-t.json`). Optional J template also shipped.
+Record **achieved RPS** from the JTL summary; gate evidence requires ≈ target (±10%).
 
-## JMeter
+## How to run
 
 ```bash
-./reliability/scripts/sim-run.sh S1 \
-  --profile 15M \
-  --tpm 12000 \
-  --registry-mode cache-hit
+# Default — auth-off (measurable without signer)
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --dry-run
+./reliability/scripts/pause-discover-consumers.sh --apply-env
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000
 
-./reliability/scripts/sim-run.sh S1 \
-  --profile 15M \
-  --tpm 12000 \
-  --registry-mode cache-miss
+# Registry drills (require signer + in-cluster mock)
+./reliability/scripts/mock-registry.sh write-mappings --mode cache-hit
+# deploy mappings to cluster WireMock; set SIGNATURE_* on discover
+./reliability/scripts/sim-run.sh S1 --registry-mode cache-hit \
+  --sign-url https://signer.example/sign-payload --tpm 12000
+./reliability/scripts/sim-run.sh S1 --registry-mode cache-miss \
+  --sign-url https://signer.example/sign-payload --tpm 12000
+
+./reliability/scripts/pause-discover-consumers.sh --resume-env
 ```
 
-Equivalent direct trigger (after sync):
+Direct JMeter props (after sync):
 
 ```text
 jmeter-trigger.sh S1 s1-ack-only.jmx \
-  -Jusers=<N> -Jduration=<sec> -Jramp=<sec> \
+  -Jusers=<headroom> -Jduration=<sec> -JtargetRps=200 \
   -JdiscoverUrl=<endpoints.discovr_discover> \
-  -JintentFile=intent-t.json \
-  -JregistryMode=cache-hit
+  -JintentPath=intent-t.json \
+  -JauthMode=auth-off -JregistryMode=auth-off
 ```
 
-No callback listener — HTTP sample timers only.
-
-## Metrics to capture
-
-- ACK p50 / p95 / p99 (HTTP sample)
-- ACK error rate (non-2xx / NACK), excluding intentional `registry-down`
-- Kafka produce p99 (ClickStack / Micrometer `discovery.publishing.*` if available)
-- Tomcat thread / reject signals
-- Auth cache dimension: `ack.auth.cache=hit|miss` when labeled
+Property name is **`intentPath`** (not `intentFile`).
 
 ## SLOs (`slos-100m.yaml`)
 
 | Metric | Pass |
 |--------|------|
+| ACK p99 auth-off | ≤ **100 ms** |
 | ACK p99 cache-hit | ≤ **100 ms** |
 | ACK p99 cache-miss | ≤ **250 ms** |
-| ACK error rate | ≤ **0.1%** |
+| ACK error rate | ≤ **0.1%** (excl. registry-down) |
 | Kafka produce p99 | ≤ **20 ms** |
+| Achieved RPS | ≈ target (±10%) |
 
 ## Fail fast
 
-- ACK p99 > 250 ms on miss mode
+- ACK p99 over budget for the active mode
 - Error rate > 0.1% (healthy modes)
-- Kafka produce errors
-- Thread pool exhaustion / accept-count saturation
-
-## Artifacts
-
-`reliability/reports/<UTC>/sim-S1-<mode>/` → `pre.json`, `post.json`, `timeseries.jsonl`,
-JTL/HTML, `verdict.md`.
-
-## Cousins / out of scope
-
-- Phase-1 scenarios 07/08/11 exercise full query or e2e — keep them; S1 is ACK-only.
-- S2+ (kafka-inject, engine ITs, dispatcher, e2e, publish) are **follow-on PRs**.
+- Kafka produce errors / thread pool exhaustion
+- Achieved RPS far below target (timer/misconfig)
+- Signed mode without working `--sign-url` (every sample NACK)

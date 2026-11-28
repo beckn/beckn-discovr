@@ -4,19 +4,21 @@
   No callback listener. Sync to JMeter VM via sim-run.sh.
 
   Properties (-J):
-    discoverUrl   — full URL (default from cluster endpoints.discovr_discover)
-    users         — concurrent threads (size for target QPS)
+    discoverUrl   — full discover URL
+    users         — thread pool size (headroom above targetRps)
     ramp          — ramp-up seconds
-    duration      — test duration seconds (per step)
-    thinkTimeMs   — pacing between samples (0 = as fast as possible)
-    intentPath    — relative path under scripts_dir for body JSON
-    authHeader    — optional Authorization: Signature ... (empty = omit; auth-off staging)
-    contentType   — default application/json
+    duration      — test duration seconds
+    targetRps     — open-loop target requests/sec (ConstantThroughputTimer)
+    intentPath    — body JSON filename under scripts_dir
+    authMode      — auth-off | signed  (default auth-off)
+    signUrl       — required when authMode=signed: POST body → returns Authorization value
+                    (same shape as Postman buyer-signer /sign-payload)
+    registryMode  — auth-off | cache-hit | cache-miss | registry-down (label + miss key rotation)
 -->
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
   <hashTree>
     <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="S1 ACK-only" enabled="true">
-      <stringProp name="TestPlan.comments">ACK path only — auth + schema + Kafka produce. Consumers must be paused.</stringProp>
+      <stringProp name="TestPlan.comments">ACK path only. Default auth-off. signed mode signs each sample via signUrl after body mutation.</stringProp>
       <boolProp name="TestPlan.functional_mode">false</boolProp>
       <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
       <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
@@ -28,7 +30,7 @@
           </elementProp>
           <elementProp name="users" elementType="Argument">
             <stringProp name="Argument.name">users</stringProp>
-            <stringProp name="Argument.value">${__P(users,50)}</stringProp>
+            <stringProp name="Argument.value">${__P(users,100)}</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="ramp" elementType="Argument">
@@ -41,9 +43,9 @@
             <stringProp name="Argument.value">${__P(duration,600)}</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
-          <elementProp name="thinkTimeMs" elementType="Argument">
-            <stringProp name="Argument.name">thinkTimeMs</stringProp>
-            <stringProp name="Argument.value">${__P(thinkTimeMs,0)}</stringProp>
+          <elementProp name="targetRps" elementType="Argument">
+            <stringProp name="Argument.name">targetRps</stringProp>
+            <stringProp name="Argument.value">${__P(targetRps,200)}</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="intentPath" elementType="Argument">
@@ -51,14 +53,29 @@
             <stringProp name="Argument.value">${__P(intentPath,intent-t.json)}</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
-          <elementProp name="authHeader" elementType="Argument">
-            <stringProp name="Argument.name">authHeader</stringProp>
-            <stringProp name="Argument.value">${__P(authHeader,)}</stringProp>
+          <elementProp name="authMode" elementType="Argument">
+            <stringProp name="Argument.name">authMode</stringProp>
+            <stringProp name="Argument.value">${__P(authMode,auth-off)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="signUrl" elementType="Argument">
+            <stringProp name="Argument.name">signUrl</stringProp>
+            <stringProp name="Argument.value">${__P(signUrl,)}</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="registryMode" elementType="Argument">
             <stringProp name="Argument.name">registryMode</stringProp>
-            <stringProp name="Argument.value">${__P(registryMode,cache-hit)}</stringProp>
+            <stringProp name="Argument.value">${__P(registryMode,auth-off)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="subscriberId" elementType="Argument">
+            <stringProp name="Argument.name">subscriberId</stringProp>
+            <stringProp name="Argument.value">${__P(subscriberId,sim-bap.example.com)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="uniqueKeyId" elementType="Argument">
+            <stringProp name="Argument.name">uniqueKeyId</stringProp>
+            <stringProp name="Argument.value">${__P(uniqueKeyId,sim-key-001)}</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
         </collectionProp>
@@ -80,6 +97,12 @@
         <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
       </ThreadGroup>
       <hashTree>
+        <ConstantThroughputTimer guiclass="TestBeanGUI" testclass="ConstantThroughputTimer" testname="Target RPS" enabled="true">
+          <intProp name="calcMode">1</intProp>
+          <!-- samples per minute across the thread group = targetRps * 60 -->
+          <stringProp name="throughput">${__jexl3(${targetRps}*60)}</stringProp>
+        </ConstantThroughputTimer>
+        <hashTree/>
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST /beckn/discover" enabled="true">
           <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
@@ -124,57 +147,115 @@
                 <stringProp name="Header.name">X-Sim-Registry-Mode</stringProp>
                 <stringProp name="Header.value">${registryMode}</stringProp>
               </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">X-Sim-Auth-Mode</stringProp>
+                <stringProp name="Header.value">${authMode}</stringProp>
+              </elementProp>
             </collectionProp>
           </HeaderManager>
           <hashTree/>
-          <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Fresh UUIDs + optional auth" enabled="true">
+          <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Fresh UUIDs + optional per-request sign" enabled="true">
             <stringProp name="scriptLanguage">groovy</stringProp>
             <stringProp name="parameters"></stringProp>
             <stringProp name="filename"></stringProp>
             <stringProp name="cacheKey">true</stringProp>
             <stringProp name="script">
 import java.util.UUID
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.net.URI
+import java.time.Duration
+
 def body = sampler.getArguments().getArgument(0).getValue()
 def mid = UUID.randomUUID().toString()
 def tid = UUID.randomUUID().toString()
+def ts = new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
 body = body.replaceAll(/"messageId"\s*:\s*"[^"]*"/, "\"messageId\": \"${mid}\"")
 body = body.replaceAll(/"transactionId"\s*:\s*"[^"]*"/, "\"transactionId\": \"${tid}\"")
-body = body.replaceAll(/"timestamp"\s*:\s*"[^"]*"/, "\"timestamp\": \"${new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))}\"")
+body = body.replaceAll(/"timestamp"\s*:\s*"[^"]*"/, "\"timestamp\": \"${ts}\"")
 sampler.getArguments().getArgument(0).setValue(body)
-def auth = props.get('authHeader') ?: vars.get('authHeader')
-if (auth != null &amp;&amp; !auth.toString().trim().isEmpty()) {
-  sampler.getHeaderManager()?.removeHeaderNamed('Authorization')
-  sampler.getHeaderManager()?.add(new org.apache.jmeter.protocol.http.control.Header('Authorization', auth.toString()))
-}
 vars.put('simMessageId', mid)
+
+def hm = sampler.getHeaderManager()
+if (hm != null) {
+  hm.removeHeaderNamed('Authorization')
+}
+
+def mode = (props.get('authMode') ?: vars.get('authMode') ?: 'auth-off').toString()
+def regMode = (props.get('registryMode') ?: vars.get('registryMode') ?: 'auth-off').toString()
+if (mode == 'auth-off') {
+  // SIGNATURE_AUTH_ENABLED=false on discover — no Authorization header
+  return
+}
+
+def signUrl = (props.get('signUrl') ?: vars.get('signUrl') ?: '').toString().trim()
+if (signUrl.isEmpty()) {
+  throw new IllegalStateException('authMode=signed requires -JsignUrl=... (signer must digest THIS sample body)')
+}
+
+// cache-miss: rotate uniqueKeyId every sample so discover auth cache never hits
+def sub = (props.get('subscriberId') ?: vars.get('subscriberId') ?: 'sim-bap.example.com').toString()
+def keyId = (props.get('uniqueKeyId') ?: vars.get('uniqueKeyId') ?: 'sim-key-001').toString()
+if (regMode == 'cache-miss') {
+  keyId = 'sim-key-' + UUID.randomUUID().toString()
+}
+
+def client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()
+def signBody = """{"payload":${body},"subscriberId":"${sub}","uniqueKeyId":"${keyId}"}"""
+def req = HttpRequest.newBuilder()
+  .uri(URI.create(signUrl))
+  .timeout(Duration.ofSeconds(5))
+  .header('Content-Type', 'application/json')
+  .POST(HttpRequest.BodyPublishers.ofString(signBody))
+  .build()
+def resp = client.send(req, HttpResponse.BodyHandlers.ofString())
+if (resp.statusCode() &lt; 200 || resp.statusCode() &gt;= 300) {
+  throw new IllegalStateException('signUrl returned HTTP ' + resp.statusCode())
+}
+def auth = resp.body().trim()
+// Accept raw Signature header value or {"authorization":"..."} / {"signature":"..."}
+if (auth.startsWith('{')) {
+  def m = (auth =~ /"(?:authorization|signature)"\s*:\s*"([^"]+)"/)
+  if (!m.find()) throw new IllegalStateException('signUrl JSON missing authorization/signature field')
+  auth = m.group(1)
+}
+if (hm != null) {
+  hm.add(new org.apache.jmeter.protocol.http.control.Header('Authorization', auth))
+}
+// Never log auth / signature material
             </stringProp>
           </JSR223PreProcessor>
           <hashTree/>
-          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 2xx" enabled="true">
-            <collectionProp name="Asserion.test_strings">
-              <stringProp name="49586">200</stringProp>
-              <stringProp name="49587">202</stringProp>
-            </collectionProp>
-            <stringProp name="Assertion.custom_message"></stringProp>
-            <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
-            <boolProp name="Assertion.assume_success">false</boolProp>
-            <intProp name="Assertion.test_type">40</intProp>
-          </ResponseAssertion>
-          <hashTree/>
-          <JSONPathAssertion guiclass="JSONPathAssertionGui" testclass="JSONPathAssertion" testname="ACK status" enabled="true">
-            <stringProp name="JSON_PATH">$.message.status</stringProp>
-            <stringProp name="EXPECTED_VALUE">ACK</stringProp>
-            <boolProp name="JSONVALIDATION">true</boolProp>
-            <boolProp name="EXPECT_NULL">false</boolProp>
-            <boolProp name="INVERT">false</boolProp>
-            <boolProp name="ISREGEX">false</boolProp>
-          </JSONPathAssertion>
+          <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Mode-aware ACK/NACK assert" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">
+def code = prev.getResponseCode() as int
+def body = prev.getResponseDataAsString() ?: ''
+def regMode = (props.get('registryMode') ?: vars.get('registryMode') ?: 'auth-off').toString()
+if (regMode == 'registry-down') {
+  // Expect fail-closed: non-2xx or NACK — not a hang / empty success ACK
+  def nack = body.contains('"NACK"') || body.contains('"status":"NACK"')
+  if ((code &gt;= 200 &amp;&amp; code &lt; 300) &amp;&amp; !nack) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage("registry-down expected NACK/error, got HTTP ${code}")
+  }
+  return
+}
+if (code != 200 &amp;&amp; code != 202) {
+  AssertionResult.setFailure(true)
+  AssertionResult.setFailureMessage("expected HTTP 200/202, got ${code}")
+  return
+}
+if (!(body.contains('"ACK"') || body.contains('"status":"ACK"'))) {
+  AssertionResult.setFailure(true)
+  AssertionResult.setFailureMessage('expected message.status ACK')
+}
+            </stringProp>
+          </JSR223Assertion>
           <hashTree/>
         </hashTree>
-        <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think time" enabled="true">
-          <stringProp name="ConstantTimer.delay">${thinkTimeMs}</stringProp>
-        </ConstantTimer>
-        <hashTree/>
         <ResultCollector guiclass="SummaryReport" testclass="ResultCollector" testname="Summary Report" enabled="true">
           <boolProp name="ResultCollector.error_logging">false</boolProp>
           <objProp>

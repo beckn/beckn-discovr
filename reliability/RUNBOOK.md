@@ -121,19 +121,19 @@ Separate from Phase-1 numeric scenarios. Gates path-split SLOs in
 Agent Store `docs/simulation-harness-design.md`.
 
 ```bash
-# Validate harness files (no staging)
-./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit --dry-run
+# Validate harness files (no staging) — default auth-off
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --dry-run
 
-# Staging evidence pack (ops — mutates discover env to pause consumers)
+# Staging evidence (ops — verify-cluster + pause consumers)
 ./reliability/scripts/pause-discover-consumers.sh --apply-env
-./reliability/scripts/mock-registry.sh start --mode cache-hit
-./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit
-./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-miss
-./reliability/scripts/pause-discover-consumers.sh --resume-env
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000
+# Optional registry drills: --registry-mode cache-hit|cache-miss --sign-url <signer>
+./reliability/scripts/pause-discover-consumers.sh --resume-env  # offset reset → enable
 ```
 
 Artifacts: `reports/<UTC>/sim-S1-<mode>/`. Operator docs: `simulations/S1-ack-only.md`.
-Only **S1** is wired in `sim-run.sh` today; S2–S6 are follow-on PRs.
+Only **S1** is wired in `sim-run.sh` today; S2–S6 are follow-on PRs. Open-loop QPS via
+`ConstantThroughputTimer`; record achieved RPS from the JTL.
 
 ---
 

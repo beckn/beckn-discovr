@@ -3,20 +3,25 @@
 #
 # Registry URL shape (Beckn auth SDK):
 #   {SIGNATURE_REGISTRY_BASE_URL}/{subscriberId}/{registryName}/{uniqueKeyId}
-# Example base: http://mock-registry:8080/subscribers
-# Lookup:      GET /subscribers/{subscriberId}/keys/{uniqueKeyId}
+# Lookup: GET /subscribers/{subscriberId}/keys/{uniqueKeyId}
 #
 # Modes (design §4.4):
-#   cache-hit      — 0 ms fixed delay; prime discover auth cache with a warm-up
-#   cache-miss     — fixed delay 80–150 ms (default 120); use unique keyIds or
-#                    short SIGNATURE_CACHE_TTL_SECONDS so each ACK pays RTT
-#   registry-down  — HTTP 503; expect NACK / fail-closed, not hang
+#   cache-hit      — 0 ms delay; JMX uses stable uniqueKeyId after warm cache
+#   cache-miss     — fixed delay 80–150 ms (default 120); JMX rotates uniqueKeyId
+#                    every sample so discover auth cache cannot absorb RTT
+#   registry-down  — HTTP 503; expect NACK / fail-closed
+#
+# WireMock reads <root-dir>/mappings/*.json — generated files go to
+#   reliability/simulations/wiremock/__generated/mappings/
+# Templates under wiremock/templates/ are NOT mounted (avoids priority collisions).
+#
+# Staging: point simulation.registry_mock_url at an **in-cluster** WireMock Service.
+# 127.0.0.1 from this laptop is not reachable from discover pods.
 #
 # Usage:
 #   mock-registry.sh start --mode cache-hit [--port 8089] [--key-b64 <spki>]
-#   mock-registry.sh stop
-#   mock-registry.sh status
-#   mock-registry.sh print-env --mode cache-miss
+#   mock-registry.sh write-mappings --mode cache-miss
+#   mock-registry.sh stop | status | print-env
 #
 # Never logs Authorization headers or signing private keys.
 
@@ -24,12 +29,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WM_DIR="${ROOT}/reliability/simulations/wiremock"
+GEN_ROOT="${WM_DIR}/__generated"
+GEN_MAP="${GEN_ROOT}/mappings"
 PID_FILE="${WM_DIR}/.wiremock.pid"
 LOG_FILE="${WM_DIR}/wiremock.log"
+CONFIG="${ROOT}/reliability/config/cluster.yaml"
 MODE="cache-hit"
 PORT="${MOCK_REGISTRY_PORT:-8089}"
-# Ed25519 SPKI (X.509) base64 — replace in staging with the sim BAP's real public key
-# when auth is enabled. Default is a non-secret test placeholder for dry-run wiring.
 KEY_B64="${MOCK_REGISTRY_KEY_B64:-MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqoltrGCBjr+A6vxHTw=}"
 MISS_DELAY_MS="${MOCK_REGISTRY_MISS_DELAY_MS:-120}"
 ACTION="${1:-}"
@@ -51,12 +57,11 @@ case "$MODE" in
 esac
 
 write_mappings() {
-  local out="${WM_DIR}/__generated"
-  mkdir -p "$out"
-  rm -f "$out"/*.json
+  mkdir -p "$GEN_MAP"
+  rm -f "$GEN_MAP"/*.json
 
   if [[ "$MODE" == "registry-down" ]]; then
-    cat >"$out/registry-down.json" <<'EOF'
+    cat >"$GEN_MAP/registry.json" <<'EOF'
 {
   "priority": 1,
   "request": { "method": "GET", "urlPathPattern": "/subscribers/.*/keys/.*" },
@@ -68,6 +73,7 @@ write_mappings() {
   }
 }
 EOF
+    echo "Wrote single mapping $GEN_MAP/registry.json (mode=registry-down)"
     return
   fi
 
@@ -76,7 +82,7 @@ EOF
     delay="$MISS_DELAY_MS"
   fi
 
-  cat >"$out/registry-keys.json" <<EOF
+  cat >"$GEN_MAP/registry.json" <<EOF
 {
   "priority": 1,
   "request": { "method": "GET", "urlPathPattern": "/subscribers/.*/keys/.*" },
@@ -92,18 +98,32 @@ EOF
   }
 }
 EOF
+  echo "Wrote single mapping $GEN_MAP/registry.json (mode=$MODE delayMs=$delay)"
+}
+
+cluster_mock_url() {
+  local u
+  u=$(grep -E '^\s*registry_mock_url:' "$CONFIG" 2>/dev/null | head -1 | sed -E 's/.*:\s*"([^"]+)".*/\1/' || true)
+  if [[ -n "$u" && "$u" != \<FILL_* ]]; then
+    echo "$u"
+  else
+    echo "http://mock-registry.<discovr-ns>.svc.cluster.local:8080/subscribers"
+  fi
 }
 
 print_env() {
-  local base="http://127.0.0.1:${PORT}/subscribers"
+  local base
+  base="$(cluster_mock_url)"
   cat <<EOF
-# Point catalog-discover-job at the mock (never commit secrets):
+# Point catalog-discover-job at the **in-cluster** mock (not 127.0.0.1 from laptop):
+# simulation.registry_mock_url / SIGNATURE_REGISTRY_BASE_URL=${base}
 export SIGNATURE_AUTH_ENABLED=true
 export SIGNATURE_REGISTRY_BASE_URL=${base}
 export SIGNATURE_REGISTRY_NAME=keys
-# cache-miss drills: keep TTL short or rotate uniqueKeyId so RTT is paid
+# cache-miss: JMX rotates uniqueKeyId per sample; TTL alone is insufficient at 200 QPS
 export SIGNATURE_CACHE_TTL_SECONDS=$([ "$MODE" = "cache-miss" ] && echo 1 || echo 2592000)
-# Optional: SPRING_PROFILES_ACTIVE=sim-s1  (pauses DiscoveryEventConsumer)
+# Local docker-only smoke (Compose on same host as discover):
+#   SIGNATURE_REGISTRY_BASE_URL=http://127.0.0.1:${PORT}/subscribers
 EOF
 }
 
@@ -112,33 +132,35 @@ start_local() {
   if command -v docker >/dev/null 2>&1; then
     local name="discovr-s1-mock-registry"
     docker rm -f "$name" >/dev/null 2>&1 || true
+    # Official image loads /home/wiremock/mappings — mount only the generated mappings dir
     docker run -d --name "$name" -p "${PORT}:8080" \
-      -v "${WM_DIR}/__generated:/home/wiremock/mappings:ro" \
-      wiremock/wiremock:3.3.1 --global-response-templating >/dev/null
+      -v "${GEN_MAP}:/home/wiremock/mappings:ro" \
+      wiremock/wiremock:3.3.1 >/dev/null
     echo "Started WireMock container $name on :${PORT} (mode=$MODE)"
-    echo "MOCK_REGISTRY_URL=http://127.0.0.1:${PORT}/subscribers"
+    echo "LOCAL_SMOKE_URL=http://127.0.0.1:${PORT}/subscribers"
+    echo "STAGING_URL=$(cluster_mock_url)  # deploy the same mappings into the cluster Service"
     print_env
     return
   fi
 
   if command -v wiremock >/dev/null 2>&1 || [[ -n "${WIREMOCK_JAR:-}" ]]; then
     local jar="${WIREMOCK_JAR:-}"
+    # --root-dir must contain a mappings/ subdirectory (WireMock convention)
     local cmd
     if [[ -n "$jar" ]]; then
-      cmd=(java -jar "$jar" --port "$PORT" --root-dir "$WM_DIR/__generated")
+      cmd=(java -jar "$jar" --port "$PORT" --root-dir "$GEN_ROOT")
     else
-      cmd=(wiremock --port "$PORT" --root-dir "$WM_DIR/__generated")
+      cmd=(wiremock --port "$PORT" --root-dir "$GEN_ROOT")
     fi
     "${cmd[@]}" >"$LOG_FILE" 2>&1 &
     echo $! >"$PID_FILE"
-    echo "Started local WireMock pid=$(cat "$PID_FILE") on :${PORT} (mode=$MODE)"
+    echo "Started local WireMock pid=$(cat "$PID_FILE") on :${PORT} (mode=$MODE root=$GEN_ROOT)"
     print_env
     return
   fi
 
   echo "WARN: neither docker nor wiremock CLI found." >&2
-  echo "Wrote mappings under ${WM_DIR}/__generated — deploy them to your staging WireMock." >&2
-  echo "Staging: set simulation.registry_mock_url in cluster.yaml to that service." >&2
+  echo "Wrote $GEN_MAP — copy into your in-cluster WireMock mappings volume." >&2
   print_env
 }
 
@@ -168,7 +190,7 @@ case "$ACTION" in
   stop) stop_local ;;
   status) status ;;
   print-env) print_env ;;
-  write-mappings) write_mappings; echo "Wrote ${WM_DIR}/__generated" ;;
+  write-mappings) write_mappings ;;
   *)
     echo "Usage: $0 {start|stop|status|print-env|write-mappings} [--mode cache-hit|cache-miss|registry-down] [--port N]" >&2
     exit 2

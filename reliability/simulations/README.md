@@ -23,33 +23,38 @@ SLOs: `../config/slos-100m.yaml`
 
 1. Fill `../config/cluster.yaml` (same as Phase-1) **and** the `simulation:` block.
 2. `gcloud` / `kubectl` pointed at the staging context in `cluster.yaml`.
-3. Pause discover consumers (required):
+3. Pause discover consumers (required). Mutating scripts call `verify-cluster.sh`
+   and pass `--context` from `cluster.yaml`:
 
 ```bash
 ./reliability/scripts/pause-discover-consumers.sh --check
-# Ops apply (mutates staging — not for the Phase-1 read-only agent):
 ./reliability/scripts/pause-discover-consumers.sh --apply-env
-# or: ./reliability/scripts/pause-discover-consumers.sh --apply-scale
 ```
 
-4. Point discover auth at the registry mock (`SIGNATURE_REGISTRY_BASE_URL` → mock URL)
-   and start / deploy the mock:
-
-```bash
-./reliability/scripts/mock-registry.sh start --mode cache-hit
-# or --mode cache-miss | registry-down
-```
+4. Default path is **auth-off** (`SIGNATURE_AUTH_ENABLED=false`). Registry cache
+   drills need an in-cluster mock + `--sign-url` (per-sample body digest — a static
+   `Authorization` header cannot verify).
 
 5. Sync / run via the dispatcher:
 
 ```bash
 # Dry-run (validates files + prints the JMeter command; no SSH)
-./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit --dry-run
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --dry-run
 
-# Live staging (needs filled cluster.yaml + JMeter VM)
-./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit
-./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-miss
+# Live staging — auth-off ACK/Kafka (default)
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000
+
+# Registry drills (signer + in-cluster mock required)
+./reliability/scripts/sim-run.sh S1 --registry-mode cache-hit \
+  --sign-url https://signer.example/sign-payload --tpm 12000
+./reliability/scripts/sim-run.sh S1 --registry-mode cache-miss \
+  --sign-url https://signer.example/sign-payload --tpm 12000
+
+# Resume: resets consumer offsets to latest, then re-enables the listener
+./reliability/scripts/pause-discover-consumers.sh --resume-env
 ```
+
+QPS is open-loop (`-JtargetRps` + ConstantThroughputTimer). Record achieved RPS from the JTL.
 
 ### Pass / fail
 
@@ -58,8 +63,7 @@ Assert against `../config/slos-100m.yaml` S1 rows. Write `verdict.md` under
 
 ### Local Compose note
 
-S1 can smoke against Docker Compose if auth is disabled
-(`SIGNATURE_AUTH_ENABLED=false`) **or** the registry mock is wired as
-`SIGNATURE_REGISTRY_BASE_URL`. Consumers: set
-`DISCOVERY_KAFKA_LISTENER_ENABLED=false` or `SPRING_PROFILES_ACTIVE=sim-s1`.
-Full 12k TPM evidence still requires staging + filled `cluster.yaml`.
+Auth-off smoke: `SIGNATURE_AUTH_ENABLED=false` +
+`DISCOVERY_KAFKA_LISTENER_ENABLED=false` (or `SPRING_PROFILES_ACTIVE=sim-s1`).
+Local `mock-registry.sh start` is for Compose-on-same-host only — staging pods
+must use `simulation.registry_mock_url` (in-cluster Service).

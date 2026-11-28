@@ -63,14 +63,14 @@ Path-split gates for the 100M / 12k TPM plan. Design lives in the Agent Store:
 `docs/simulation-harness-design.md` (parent: `docs/scalability-100m-architecture.md` §11).
 
 ```bash
-# Dry-run (no staging credentials required)
-./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit --dry-run
+# Dry-run (no staging credentials required) — default auth-off
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --dry-run
 
-# Live staging (fill cluster.yaml; pause consumers; point auth at mock registry)
+# Live staging (fill cluster.yaml; pause consumers; SIGNATURE_AUTH_ENABLED=false)
 ./reliability/scripts/pause-discover-consumers.sh --apply-env
-./reliability/scripts/mock-registry.sh start --mode cache-hit   # or deploy WireMock in-cluster
-./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-hit
-./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000 --registry-mode cache-miss
+./reliability/scripts/sim-run.sh S1 --profile 15M --tpm 12000
+# Registry drills need --sign-url + in-cluster mock (see simulations/README.md)
+./reliability/scripts/pause-discover-consumers.sh --resume-env   # resets offsets first
 ```
 
 Details: [`simulations/README.md`](simulations/README.md). SLOs: [`config/slos-100m.yaml`](config/slos-100m.yaml).

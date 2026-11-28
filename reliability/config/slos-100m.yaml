@@ -11,18 +11,23 @@ sim:
 # ─── S1 — ACK-only (auth + schema + Kafka produce) ───────────────────────────
 S1:
   ack:
-    # Auth cache hit — registry RTT not on the hot path
+    # Default S1 v1 path: SIGNATURE_AUTH_ENABLED=false (schema + Kafka produce)
+    auth_off_p99_ms: 100
+    # Auth cache hit — registry RTT not on the hot path (requires --sign-url + mock)
     cache_hit_p99_ms: 100
-    # Registry miss — injected RTT (e.g. 80–150 ms) once per key
+    # Registry miss — mock delay + per-sample uniqueKeyId rotation (requires --sign-url)
     cache_miss_p99_ms: 250
     error_rate_max: 0.001          # ≤ 0.1%; excl. intentional registry-down cases
   kafka:
     produce_p99_ms: 20             # architecture §2.2
   ramp:
-    avg_qps: 200                   # ~12k TPM
+    avg_qps: 200                   # ~12k TPM — enforced via ConstantThroughputTimer
     peak_qps: 600                  # ×3 diurnal
     optional_stress_qps: [1000, 2000]
     sustain_min_per_step: 10
+    # Record achieved RPS from JTL; must be within ~10% of target for gate evidence
+    achieved_rps_tolerance: 0.10
+
 
 # ─── S2–S6 stubs (follow-on PRs) ─────────────────────────────────────────────
 # S2:
