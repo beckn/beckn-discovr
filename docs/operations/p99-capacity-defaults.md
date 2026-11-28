@@ -7,7 +7,7 @@ Kafka concurrency, registry cache). Not harness-only.
 
 | Area | Default | Override |
 |------|---------|----------|
-| Prod Flyway GIN on `item.payload` | `V8` → `idx_item_payload_gin` via **`CREATE INDEX CONCURRENTLY`** (`jsonb_path_ops`) | N/A (migration) |
+| Prod Flyway GIN on `item.payload` | `V8` → `idx_item_payload_gin` via transactional **`CREATE INDEX IF NOT EXISTS`** (`jsonb_path_ops`) | Pre-create with `CONCURRENTLY` on large live tables before migrate |
 | ES single-node templates (`config/`, `discovr-deployment/elasticsearch/`, EsIndexManager built-in) | **1** shard / **0** replicas | Custom `ES_MAPPING_TEMPLATE_FILE` |
 | ES Helm template (Tier B / multi-node) | **5** shards / **1** replica | Custom template / reindex |
 | Discover Kafka listener concurrency | **8** | `SPRING_KAFKA_LISTENER_CONCURRENCY` |
@@ -69,13 +69,16 @@ WHERE payload @@ '$.resourceAttributes.@type ? (@ == "GroceryItem")'::jsonpath
 LIMIT 20;
 ```
 
-Expect `indisvalid = true`, `indexdef` mentioning `gin` + `jsonb_path_ops` +
-`CONCURRENTLY` build path completed, and `EXPLAIN` using
-`Bitmap Index Scan` / `idx_item_payload_gin` on a non-trivial corpus.
+Expect `indisvalid = true`, `indexdef` mentioning `gin` + `jsonb_path_ops`,
+and `EXPLAIN` using `Bitmap Index Scan` / `idx_item_payload_gin` on a
+non-trivial corpus.
 
-If a prior concurrent build left `indisvalid = false`, V8 drops the INVALID
-index and rebuilds; operators can also
-`DROP INDEX CONCURRENTLY IF EXISTS idx_item_payload_gin` then re-migrate.
+**Large live tables:** V8 uses a transactional `CREATE INDEX` (Flyway-safe;
+avoids mixed-statement errors and startup-probe timeouts). Pre-create with
+`CREATE INDEX CONCURRENTLY IF NOT EXISTS ...` in a maintenance window before
+rolling the job so Flyway no-ops. If an INVALID leftover exists from a prior
+manual concurrent build: `DROP INDEX CONCURRENTLY IF EXISTS idx_item_payload_gin`
+then recreate.
 
 ### 3. ES template settings
 

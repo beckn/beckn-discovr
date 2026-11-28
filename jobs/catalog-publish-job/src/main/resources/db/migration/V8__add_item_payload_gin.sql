@@ -4,25 +4,15 @@
 -- Uses jsonb_path_ops to match @@ / @? jsonpath predicates (not RFC 9535
 -- typed subquery predicates from #489 — measure publish-side cost separately).
 --
--- CONCURRENTLY avoids a long SHARE lock on item during the build (publish
--- startup must not block writers on large tables). Requires non-transactional
--- execution; plain DROP is used only for an INVALID leftover (IF NOT EXISTS
--- would otherwise skip rebuilding a failed concurrent index).
--- flyway:executeInTransaction=false
-
-DO $fix$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM pg_class c
-    JOIN pg_index i ON i.indexrelid = c.oid
-    WHERE c.relname = 'idx_item_payload_gin'
-      AND NOT i.indisvalid
-  ) THEN
-    EXECUTE 'DROP INDEX IF EXISTS idx_item_payload_gin';
-  END IF;
-END
-$fix$;
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_item_payload_gin
+-- Transactional CREATE INDEX (Flyway-safe). A prior attempt used
+-- CREATE INDEX CONCURRENTLY + a DO cleanup block, but Flyway rejects mixing
+-- transactional and non-transactional statements (mixed=false), and a long
+-- concurrent build at publish-job startup can outlast Helm probes → INVALID
+-- index + crash-loop.
+--
+-- Large live tables: pre-create during a maintenance window before rolling
+-- this migration so Flyway's IF NOT EXISTS no-ops:
+--   CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_item_payload_gin
+--     ON item USING GIN (payload jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_item_payload_gin
   ON item USING GIN (payload jsonb_path_ops);
